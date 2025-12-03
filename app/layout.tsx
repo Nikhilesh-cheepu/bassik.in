@@ -24,11 +24,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.className} bg-gradient-to-b from-[#050509] via-[#050509] to-[#020207]`}>
-        {/* Background glow */}
-        <div className="pointer-events-none fixed inset-0 -z-10">
-          <div className="absolute -top-32 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-[#facc15]/5 blur-3xl" />
-          <div className="absolute bottom-0 right-10 h-72 w-72 rounded-full bg-[#22c55e]/5 blur-3xl" />
+      <body className={`${inter.className} bg-[#050509]`}>
+        {/* Background glow - subtle and non-distracting */}
+        <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+          <div className="absolute -top-32 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-[#d4af37]/3 blur-3xl" />
+          <div className="absolute bottom-0 right-10 h-72 w-72 rounded-full bg-[#4FD1C5]/3 blur-3xl" />
         </div>
         {children}
       </body>

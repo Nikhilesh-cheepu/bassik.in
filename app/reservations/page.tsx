@@ -30,7 +30,7 @@ function ReservationsContent() {
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[#050509]">
       <Navbar />
       <main className="py-4 px-3 overflow-y-auto">
         <div className="max-w-md md:max-w-2xl lg:max-w-3xl mx-auto space-y-4 md:space-y-6">
@@ -129,7 +129,7 @@ export default function ReservationsPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen">
+        <div className="min-h-screen bg-[#050509]">
           <Navbar />
           <main className="py-4 px-3 overflow-y-auto">
             <div className="max-w-md md:max-w-2xl lg:max-w-3xl mx-auto space-y-4 md:space-y-6">

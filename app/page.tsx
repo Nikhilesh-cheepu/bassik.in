@@ -18,7 +18,7 @@ const HOMEPAGE_VENUES: HomepageVenue[] = [
   {
     id: "alehouse",
     name: "Alehouse",
-    logoSrc: "/alehouse-logo.png", // TODO: Add Alehouse logo file to /public and update path
+    logoSrc: "/ALEHOUSE CLUB LOGO copy.ai.png",
     tagline: undefined,
   },
   {
@@ -84,7 +84,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[#050509]">
       <Navbar />
       <main className="flex flex-col items-center justify-center min-h-[calc(100vh-64px)] px-4 py-8 md:py-12">
         <div className="w-full max-w-4xl mx-auto space-y-8 md:space-y-10 text-center">
@@ -132,6 +132,8 @@ export default function Home() {
                     fill
                     className="object-contain"
                     sizes="(max-width: 768px) 80px, 96px"
+                    priority={venue.id === "alehouse" || venue.id === "club-rogue"}
+                    loading={venue.id === "alehouse" || venue.id === "club-rogue" ? "eager" : "lazy"}
                   />
                 </div>
                 <div className="text-center">
