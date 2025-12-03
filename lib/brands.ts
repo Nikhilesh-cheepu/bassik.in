@@ -4,6 +4,8 @@ export type Brand = {
   shortName: string;
   accentColor: string;
   exploreUrl: string;
+  instagramUrls: string[]; // Array to support multiple Instagram profiles (e.g., Club Rogue)
+  websiteUrl: string; // Official website URL
 };
 
 export const BRANDS: Brand[] = [
@@ -13,13 +15,17 @@ export const BRANDS: Brand[] = [
     shortName: "Alehouse",
     accentColor: "#d4af37",
     exploreUrl: "https://www.alehouse.club",
+    instagramUrls: ["https://www.instagram.com/alehouse.club/"],
+    websiteUrl: "https://www.alehouse.club",
   },
   {
     id: "c53",
-    name: "C-53 World Cuisine",
-    shortName: "C-53",
+    name: "C53 World Cuisine",
+    shortName: "C53",
     accentColor: "#E4572E",
     exploreUrl: "#",
+    instagramUrls: ["https://www.instagram.com/c53wc/"],
+    websiteUrl: "https://example.com/c53", // TODO: Replace with real website URL
   },
   {
     id: "boiler-room",
@@ -27,6 +33,8 @@ export const BRANDS: Brand[] = [
     shortName: "Boiler Room",
     accentColor: "#ff6b3d",
     exploreUrl: "#",
+    instagramUrls: ["https://www.instagram.com/boilerroomhyd/"],
+    websiteUrl: "https://example.com/boilerroom", // TODO: Replace with real website URL
   },
   {
     id: "skyhy",
@@ -34,6 +42,8 @@ export const BRANDS: Brand[] = [
     shortName: "SkyHy",
     accentColor: "#4FD1C5",
     exploreUrl: "#",
+    instagramUrls: ["https://www.instagram.com/skyhylive/"],
+    websiteUrl: "https://example.com/skyhy", // TODO: Replace with real website URL
   },
   {
     id: "kiik69",
@@ -41,6 +51,10 @@ export const BRANDS: Brand[] = [
     shortName: "KIIK 69",
     accentColor: "#FBBF24",
     exploreUrl: "https://www.kiik69.com",
+    instagramUrls: [
+      "https://www.instagram.com/kiik69sportsbar.gachibowli/",
+    ],
+    websiteUrl: "https://www.kiik69.com",
   },
   {
     id: "club-rogue-gachibowli",
@@ -48,6 +62,8 @@ export const BRANDS: Brand[] = [
     shortName: "Club Rogue Gachibowli",
     accentColor: "#F97316",
     exploreUrl: "#",
+    instagramUrls: ["https://www.instagram.com/clubrogue.gachibowli/"],
+    websiteUrl: "https://example.com/clubrogue", // TODO: Replace with real website URL
   },
   {
     id: "club-rogue-kondapur",
@@ -55,6 +71,8 @@ export const BRANDS: Brand[] = [
     shortName: "Club Rogue Kondapur",
     accentColor: "#EC4899",
     exploreUrl: "#",
+    instagramUrls: ["https://www.instagram.com/clubrogue.kondapur/"],
+    websiteUrl: "https://example.com/clubrogue", // TODO: Replace with real website URL
   },
   {
     id: "club-rogue-jubilee-hills",
@@ -62,6 +80,32 @@ export const BRANDS: Brand[] = [
     shortName: "Club Rogue Jubilee Hills",
     accentColor: "#A855F7",
     exploreUrl: "#",
+    instagramUrls: ["https://www.instagram.com/clubrogue.jubileehills/"],
+    websiteUrl: "https://example.com/clubrogue", // TODO: Replace with real website URL
   },
 ];
 
+// Helper: Get unique brands for homepage "Connect" section
+// Groups Club Rogue locations into one entry
+export const getHomepageConnectBrands = () => {
+  const clubRogueBrands = BRANDS.filter((b) => b.id.startsWith("club-rogue"));
+  const otherBrands = BRANDS.filter((b) => !b.id.startsWith("club-rogue"));
+
+  // Combine all Club Rogue Instagram URLs
+  const clubRogueInstagramUrls = clubRogueBrands.flatMap((b) => b.instagramUrls);
+  const clubRogueWebsiteUrl = clubRogueBrands[0]?.websiteUrl || "";
+
+  return [
+    ...otherBrands,
+    {
+      id: "club-rogue",
+      name: "Club Rogue",
+      shortName: "Club Rogue",
+      accentColor: "#F97316", // Use Gachibowli color as primary
+      exploreUrl: "#",
+      instagramUrls: clubRogueInstagramUrls,
+      websiteUrl: clubRogueWebsiteUrl,
+      locations: ["Gachibowli", "Kondapur", "Jubilee Hills"],
+    },
+  ];
+};

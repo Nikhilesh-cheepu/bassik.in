@@ -35,35 +35,38 @@ export default function BrandTabs({
 
   const renderButton = (brand: Brand) => {
     const isActive = brand.id === activeBrandId;
+    const label =
+      brand.id === "c53" ? "C53" : brand.shortName.toUpperCase();
     return (
       <button
         key={brand.id}
         onClick={() => onBrandChange(brand.id)}
         className={`
-          px-2 py-1.5 rounded-xl text-[10px] font-medium transition-all duration-200
-          flex items-center justify-center h-7
+          px-3 py-2 rounded-full text-[11px] md:text-xs font-medium transition-all duration-200
+          flex items-center justify-center h-8
           whitespace-nowrap flex-1
+          border
           ${
             isActive
-              ? "text-white"
-              : "text-white bg-gray-800/50 border border-gray-700/50 hover:bg-gray-800 hover:border-gray-600"
+              ? "text-slate-950 bg-white shadow-[0_12px_30px_rgba(0,0,0,0.8)] scale-[1.02]"
+              : "text-gray-200/90 bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/30"
           }
         `}
         style={{
           backgroundColor: isActive ? brand.accentColor : undefined,
           boxShadow: isActive
-            ? `0 2px 8px ${brand.accentColor}30`
-            : "none",
+            ? `0 0 0 1px ${brand.accentColor}40, 0 18px 40px rgba(0,0,0,0.8)`
+            : "0 0 0 1px rgba(148,163,184,0.12)",
         }}
       >
-        {brand.shortName}
+        {label}
       </button>
     );
   };
 
   return (
     <div className="w-full">
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2 bg-black/30 border border-white/5 rounded-2xl px-2.5 py-2.5 shadow-[0_20px_50px_rgba(0,0,0,0.85)] backdrop-blur-md">
         {/* Row 1: 4 tabs */}
         <div className="flex gap-1.5 w-full">
           {row1.map((brand) => renderButton(brand))}
