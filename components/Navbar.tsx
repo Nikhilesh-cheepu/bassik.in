@@ -6,7 +6,10 @@ export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
-    <nav className="w-full border-b border-gray-800 bg-[#050509]/95 backdrop-blur-sm sticky top-0 z-50">
+    <nav
+      className="w-full border-b border-gray-800 backdrop-blur-sm sticky top-0 z-50"
+      style={{ backgroundColor: "rgba(5, 5, 9, 0.95)" }}
+    >
       <div className="max-w-7xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           {/* Logo */}

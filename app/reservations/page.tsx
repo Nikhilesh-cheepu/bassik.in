@@ -30,7 +30,10 @@ function ReservationsContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050509]">
+    <div
+      className="min-h-screen"
+      style={{ backgroundColor: "#050509" }}
+    >
       <Navbar />
       <main className="py-4 px-3 overflow-y-auto">
         <div className="max-w-md md:max-w-2xl lg:max-w-3xl mx-auto space-y-4 md:space-y-6">
@@ -129,7 +132,10 @@ export default function ReservationsPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#050509]">
+        <div
+          className="min-h-screen"
+          style={{ backgroundColor: "#050509" }}
+        >
           <Navbar />
           <main className="py-4 px-3 overflow-y-auto">
             <div className="max-w-md md:max-w-2xl lg:max-w-3xl mx-auto space-y-4 md:space-y-6">
@@ -137,9 +143,6 @@ export default function ReservationsPage() {
                 <h1 className="text-xl md:text-2xl font-semibold text-white tracking-tight">
                   Reservations
                 </h1>
-                <p className="mt-1 text-[11px] md:text-xs text-gray-400">
-                  Loading...
-                </p>
               </div>
             </div>
           </main>
