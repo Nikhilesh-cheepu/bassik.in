@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { BRANDS } from "@/lib/brands";
 import BrandTabs from "@/components/BrandTabs";
 import ReservationForm from "@/components/ReservationForm";
 import Navbar from "@/components/Navbar";
 
-export default function ReservationsPage() {
+function ReservationsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -122,6 +122,32 @@ export default function ReservationsPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ReservationsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen">
+          <Navbar />
+          <main className="py-4 px-3 overflow-y-auto">
+            <div className="max-w-md md:max-w-2xl lg:max-w-3xl mx-auto space-y-4 md:space-y-6">
+              <div className="text-center">
+                <h1 className="text-xl md:text-2xl font-semibold text-white tracking-tight">
+                  Reservations
+                </h1>
+                <p className="mt-1 text-[11px] md:text-xs text-gray-400">
+                  Loading...
+                </p>
+              </div>
+            </div>
+          </main>
+        </div>
+      }
+    >
+      <ReservationsContent />
+    </Suspense>
   );
 }
 

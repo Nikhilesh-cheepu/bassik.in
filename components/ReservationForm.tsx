@@ -332,7 +332,6 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
               onClick={() => {
                 if (dateInputRef.current) {
                   // showPicker is not in all browsers but works where supported
-                  // @ts-expect-error showPicker is not in the TS lib yet
                   dateInputRef.current.showPicker?.();
                   dateInputRef.current.focus();
                 }
@@ -369,7 +368,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
             <div
               onClick={() => {
                 if (timeInputRef.current) {
-                  // @ts-expect-error showPicker is not in the TS lib yet
+                  // showPicker is not in all browsers but works where supported
                   timeInputRef.current.showPicker?.();
                   timeInputRef.current.focus();
                 }
