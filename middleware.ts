@@ -14,8 +14,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Only redirect www to non-www - let Vercel handle all SSL/TLS
-  if (hostname === "www.bassik.in") {
+  // Only redirect www to non-www for custom domain
+  // Skip for Vercel default domains to avoid TLS issues
+  if (hostname === "www.bassik.in" && !hostname.includes("vercel.app")) {
     const redirectUrl = new URL(request.url);
     redirectUrl.hostname = "bassik.in";
     redirectUrl.protocol = "https:";
