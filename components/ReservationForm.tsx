@@ -284,7 +284,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
           numberOfWomen: formData.numberOfWomen || "0",
           numberOfCouples: formData.numberOfCouples || "0",
           date: formData.date,
-          time: formData.timeSlot,
+          timeSlot: formData.timeSlot,
           notes: formData.notes,
           selectedDiscounts: formData.selectedDiscounts,
           brandId: brand.id,
