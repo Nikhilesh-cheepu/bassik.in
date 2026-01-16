@@ -5,8 +5,6 @@ import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import { getHomepageConnectBrands } from "@/lib/brands";
 
-// Homepage venue configuration with logo paths
-// TODO: Update logo paths here if filenames change
 type HomepageVenue = {
   id: string;
   name: string;
@@ -91,7 +89,6 @@ export default function Home() {
       <Navbar />
       <main className="flex flex-col items-center justify-center min-h-[calc(100vh-64px)] px-4 py-8 md:py-12">
         <div className="w-full max-w-4xl mx-auto space-y-8 md:space-y-10 text-center">
-          {/* Top praise section */}
           <section className="space-y-4 md:space-y-5">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-[10px] md:text-xs text-gray-200 border border-white/10 shadow-[0_18px_40px_rgba(0,0,0,0.7)]">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -101,12 +98,10 @@ export default function Home() {
             </div>
 
             <div className="space-y-3 md:space-y-4">
-              {/* TODO: Update main heading here */}
               <h1 className="text-3xl md:text-5xl lg:text-6xl font-semibold tracking-tight text-white">
                 8 Venues. One Command Point.
               </h1>
 
-              {/* TODO: Update subheading here */}
               <div className="space-y-2 text-xs md:text-sm text-gray-300 leading-relaxed max-w-2xl mx-auto">
                 <p>
                   Alehouse, C53, Boiler Room, SkyHy, KIIK 69 &amp; Club Rogue
@@ -121,7 +116,6 @@ export default function Home() {
             </div>
           </section>
 
-          {/* Logo strip */}
           <section className="flex flex-wrap items-center justify-center gap-4 md:gap-6">
             {HOMEPAGE_VENUES.map((venue) => (
               <div
@@ -135,8 +129,8 @@ export default function Home() {
                     fill
                     className="object-contain"
                     sizes="(max-width: 768px) 80px, 96px"
-                    unoptimized
                     priority={venue.id === "alehouse" || venue.id === "club-rogue"}
+                    loading={venue.id === "alehouse" || venue.id === "club-rogue" ? "eager" : "lazy"}
                   />
                 </div>
                 <div className="text-center">
@@ -153,7 +147,6 @@ export default function Home() {
             ))}
           </section>
 
-          {/* Single main CTA */}
           <section className="space-y-4">
             <button
               type="button"
@@ -164,14 +157,12 @@ export default function Home() {
               <span className="ml-2 text-base">→</span>
             </button>
 
-            {/* Supportive text */}
             <p className="text-[10px] md:text-xs text-gray-400 max-w-xl mx-auto">
               You can reserve for any venue with one quick form on the next
               page.
             </p>
           </section>
 
-          {/* Connect with our venues section */}
           <section className="space-y-4 md:space-y-5 text-left">
             <div className="text-center space-y-1">
               <h2 className="text-base md:text-lg font-semibold text-white">
@@ -194,7 +185,6 @@ export default function Home() {
                     key={brand.id}
                     className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl bg-white/5 backdrop-blur border border-white/5 px-4 py-3 md:px-5 md:py-4 shadow-[0_16px_40px_rgba(0,0,0,0.8)] hover:border-white/10 transition-all duration-200"
                   >
-                    {/* Brand name */}
                     <div className="flex-shrink-0">
                       <p className="text-xs md:text-sm font-semibold text-gray-100">
                         {brand.shortName}
@@ -206,9 +196,7 @@ export default function Home() {
                       </p>
                     </div>
 
-                    {/* Buttons group */}
                     <div className="flex flex-wrap items-center gap-2">
-                      {/* Instagram button */}
                       {brand.instagramUrls.length > 0 && (
                         <button
                           type="button"
@@ -221,7 +209,6 @@ export default function Home() {
                         </button>
                       )}
 
-                      {/* Website button */}
                       {brand.websiteUrl &&
                         brand.websiteUrl !== "#" &&
                         !brand.websiteUrl.startsWith("https://example.com") && (
@@ -245,34 +232,3 @@ export default function Home() {
     </div>
   );
 }
-
-/*
- * QUICK REFERENCE FOR CUSTOMIZATION:
- *
- * 1. COPY CHANGES:
- *    - Main heading (H1): Line ~82
- *    - Subheading paragraphs: Lines ~87-96
- *    - Supportive text below CTA: Line ~154
- *    - "Connect" section title: Line ~163
- *    - "Connect" section subtitle: Line ~166
- *
- * 2. LOGO PATHS:
- *    - Update HOMEPAGE_VENUES array (lines ~16-53)
- *    - Each venue has a `logoSrc` field pointing to /public folder
- *    - Note: Alehouse logo path is currently placeholder - add logo file and update path
- *
- * 3. CTA BUTTON:
- *    - Primary button text: Line ~144
- *    - Button action: handlePrimaryCTA() function
- *
- * 4. BRAND CONFIG:
- *    - Instagram URLs: lib/brands.ts (instagramUrls array)
- *    - Website URLs: lib/brands.ts (websiteUrl field)
- *    - TODO comments mark placeholder website URLs that need real links
- *
- * 5. STYLING:
- *    - All Tailwind classes are in the JSX
- *    - Primary button uses Alehouse gold gradient (from-amber-300 via-amber-400 to-amber-500)
- *    - Instagram buttons use pink/purple gradient
- *    - Website buttons use outline/ghost style
- */

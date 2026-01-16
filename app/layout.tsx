@@ -9,7 +9,6 @@ export const metadata: Metadata = {
   description: "Book your table at any of our venues in one place.",
 };
 
-// Prevent mobile zoom on input focus and ensure proper scaling
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
