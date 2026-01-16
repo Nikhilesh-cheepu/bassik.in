@@ -5,6 +5,7 @@ export function middleware(request: NextRequest) {
   const hostname = request.headers.get("host") || "";
   const pathname = request.nextUrl.pathname;
 
+  // Skip middleware for API routes, static files, and Next.js internals
   if (
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
@@ -13,6 +14,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Only redirect www to non-www - let Vercel handle all SSL/TLS
   if (hostname === "www.bassik.in") {
     const redirectUrl = new URL(request.url);
     redirectUrl.hostname = "bassik.in";
