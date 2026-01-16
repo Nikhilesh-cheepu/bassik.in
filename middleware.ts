@@ -15,12 +15,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Only handle www redirect for bassik.in domain
-  // This prevents conflicts with Vercel's domain configuration
+  // Optional: Redirect www to non-www if www domain is still configured
+  // If you remove www.bassik.in from Vercel, this won't trigger
   if (hostname === "www.bassik.in") {
     url.hostname = "bassik.in";
     url.protocol = "https:";
-    // Preserve the full path and query string
     return NextResponse.redirect(url, 301);
   }
 
