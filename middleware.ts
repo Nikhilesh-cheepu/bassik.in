@@ -15,25 +15,21 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Optional: Redirect www to non-www if www domain is still configured
-  // If you remove www.bassik.in from Vercel, this won't trigger
+  // Only redirect www to non-www for bassik.in domain
+  // This prevents redirect loops and TLS issues on mobile
   if (hostname === "www.bassik.in") {
-    url.hostname = "bassik.in";
-    url.protocol = "https:";
-    return NextResponse.redirect(url, 301);
+    // Build the redirect URL using the original request URL
+    const redirectUrl = new URL(request.url);
+    redirectUrl.hostname = "bassik.in";
+    redirectUrl.protocol = "https:";
+    // Preserve pathname and search params
+    return NextResponse.redirect(redirectUrl, 301);
   }
 
-  // Ensure HTTPS in production (Vercel usually handles this, but just in case)
-  if (
-    process.env.NODE_ENV === "production" &&
-    url.protocol === "http:" &&
-    !hostname.includes("localhost") &&
-    !hostname.includes("127.0.0.1") &&
-    request.headers.get("x-forwarded-proto") !== "https"
-  ) {
-    url.protocol = "https:";
-    return NextResponse.redirect(url, 301);
-  }
+  // Don't enforce HTTPS here - Vercel handles SSL/TLS automatically
+  // This prevents TLS errors on mobile browsers
+  // Mobile browsers are stricter about SSL certificate validation
+  // Let Vercel's edge network handle all SSL/TLS termination
 
   return NextResponse.next();
 }
