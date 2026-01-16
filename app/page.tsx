@@ -46,24 +46,24 @@ const HOMEPAGE_VENUES: HomepageVenue[] = [
     tagline: undefined,
   },
   {
-    id: "club-rogue",
+    id: "club-rogue-gachibowli",
     name: "Club Rogue",
     logoSrc: "/CLUB rogue logo all inone.png",
-    tagline: "Gachibowli • Kondapur • Jubilee Hills",
+    tagline: "Gachibowli",
+  },
+  {
+    id: "club-rogue-kondapur",
+    name: "Club Rogue",
+    logoSrc: "/CLUB rogue logo all inone.png",
+    tagline: "Kondapur",
+  },
+  {
+    id: "club-rogue-jubilee-hills",
+    name: "Club Rogue",
+    logoSrc: "/CLUB rogue logo all inone.png",
+    tagline: "Jubilee Hills",
   },
 ];
-
-// Extract location name from Instagram URL
-// e.g., "clubrogue.gachibowli" -> "Gachibowli"
-const getLocationFromInstagramUrl = (url: string): string => {
-  const match = url.match(/instagram\.com\/([^/]+)\//);
-  if (!match) return "Instagram";
-  const username = match[1];
-  if (username.includes("gachibowli")) return "Gachibowli";
-  if (username.includes("kondapur")) return "Kondapur";
-  if (username.includes("jubileehills")) return "Jubilee Hills";
-  return "Instagram";
-};
 
 export default function Home() {
   const router = useRouter();
@@ -184,8 +184,10 @@ export default function Home() {
 
             <div className="space-y-2.5 md:space-y-3">
               {connectBrands.map((brand) => {
-                const isClubRogue = brand.id === "club-rogue";
-                const locations = (brand as any).locations || [];
+                const isClubRogue = brand.id.startsWith("club-rogue");
+                // Extract location from brand name (e.g., "Club Rogue – Gachibowli" -> "Gachibowli")
+                const locationMatch = brand.name.match(/–\s*(.+)$/);
+                const location = locationMatch ? locationMatch[1] : null;
 
                 return (
                   <div
@@ -196,9 +198,9 @@ export default function Home() {
                     <div className="flex-shrink-0">
                       <p className="text-xs md:text-sm font-semibold text-gray-100">
                         {brand.shortName}
-                        {isClubRogue && (
+                        {isClubRogue && location && (
                           <span className="block mt-0.5 text-[10px] md:text-xs font-normal text-gray-400">
-                            ({locations.join(" · ")})
+                            ({location})
                           </span>
                         )}
                       </p>
@@ -206,8 +208,8 @@ export default function Home() {
 
                     {/* Buttons group */}
                     <div className="flex flex-wrap items-center gap-2">
-                      {/* Instagram button(s) */}
-                      {brand.instagramUrls.length === 1 ? (
+                      {/* Instagram button */}
+                      {brand.instagramUrls.length > 0 && (
                         <button
                           type="button"
                           onClick={() => handleInstagramClick(brand.instagramUrls[0])}
@@ -217,24 +219,6 @@ export default function Home() {
                           <span>Instagram</span>
                           <span>→</span>
                         </button>
-                      ) : (
-                        // Multiple Instagram buttons (Club Rogue)
-                        <div className="flex flex-wrap gap-2">
-                          {brand.instagramUrls.map((url, idx) => {
-                            const location = getLocationFromInstagramUrl(url);
-                            return (
-                              <button
-                                key={idx}
-                                type="button"
-                                onClick={() => handleInstagramClick(url)}
-                                className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-pink-500/20 to-purple-500/20 border border-pink-500/30 px-3 py-1.5 text-[10px] md:text-xs font-medium text-gray-100 hover:border-pink-500/50 hover:bg-pink-500/30 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-pink-500/50"
-                              >
-                                <span>📷</span>
-                                <span>{location}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
                       )}
 
                       {/* Website button */}

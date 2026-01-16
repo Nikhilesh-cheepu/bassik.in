@@ -23,16 +23,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="bg-[#050509]" style={{ backgroundColor: "#050509" }}>
+    <html lang="en">
       <body
-        className={`${inter.className} bg-[#050509] text-white antialiased`}
-        style={{ backgroundColor: "#050509", margin: 0, padding: 0 }}
+        className={`${inter.className} antialiased`}
+        style={{ margin: 0, padding: 0 }}
       >
-        {/* Background glow - subtle and non-distracting */}
-        <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-          <div className="absolute -top-32 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-[#d4af37]/3 blur-3xl" />
-          <div className="absolute bottom-0 right-10 h-72 w-72 rounded-full bg-[#4FD1C5]/3 blur-3xl" />
-        </div>
         {children}
       </body>
     </html>

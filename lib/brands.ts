@@ -86,26 +86,7 @@ export const BRANDS: Brand[] = [
 ];
 
 // Helper: Get unique brands for homepage "Connect" section
-// Groups Club Rogue locations into one entry
+// Returns all brands separately, including all 3 Club Rogue locations
 export const getHomepageConnectBrands = () => {
-  const clubRogueBrands = BRANDS.filter((b) => b.id.startsWith("club-rogue"));
-  const otherBrands = BRANDS.filter((b) => !b.id.startsWith("club-rogue"));
-
-  // Combine all Club Rogue Instagram URLs
-  const clubRogueInstagramUrls = clubRogueBrands.flatMap((b) => b.instagramUrls);
-  const clubRogueWebsiteUrl = clubRogueBrands[0]?.websiteUrl || "";
-
-  return [
-    ...otherBrands,
-    {
-      id: "club-rogue",
-      name: "Club Rogue",
-      shortName: "Club Rogue",
-      accentColor: "#F97316", // Use Gachibowli color as primary
-      exploreUrl: "#",
-      instagramUrls: clubRogueInstagramUrls,
-      websiteUrl: clubRogueWebsiteUrl,
-      locations: ["Gachibowli", "Kondapur", "Jubilee Hills"],
-    },
-  ];
+  return BRANDS;
 };

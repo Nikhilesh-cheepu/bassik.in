@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
       date,
       time,
       notes,
+      selectedDiscounts,
       brandId,
       brandName,
     } = body;
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Format the message for WhatsApp/SMS
+    // Format the message for WhatsApp
     const totalGuests =
       parseInt(numberOfMen) + parseInt(numberOfWomen) + parseInt(numberOfCouples) * 2;
 
@@ -55,34 +56,27 @@ export async function POST(request: NextRequest) {
 
 ${notes ? `📝 Notes: ${notes}` : ""}
 
+${selectedDiscounts && Array.isArray(selectedDiscounts) && selectedDiscounts.length > 0 ? `🎁 Selected Offers:\n${selectedDiscounts.map((discount: string) => `   • ${discount}`).join('\n')}\n` : ""}
 ---
 Sent from Bassik Reservations Hub`;
 
-    // In a production environment, you would:
-    // 1. Send this via WhatsApp Business API
-    // 2. Send via SMS API (Twilio, etc.)
-    // 3. Store in a database
-    // 4. Send email notification
+    // Encode message for WhatsApp URL
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${RESERVATION_PHONE_NUMBER}?text=${encodedMessage}`;
 
-    // For now, we'll just log it and return success
-    // You can integrate with your preferred messaging service here
+    // Log for debugging
     console.log("Reservation Details:", {
       phone: RESERVATION_PHONE_NUMBER,
       message,
+      whatsappUrl,
       reservationData: body,
     });
-
-    // TODO: Integrate with actual messaging service
-    // Example with WhatsApp Business API or Twilio:
-    // await sendWhatsAppMessage(RESERVATION_PHONE_NUMBER, message);
-    // or
-    // await sendSMS(RESERVATION_PHONE_NUMBER, message);
 
     return NextResponse.json(
       {
         success: true,
         message: "Reservation submitted successfully",
-        // In production, you might want to return a reservation ID
+        whatsappUrl: whatsappUrl,
       },
       { status: 200 }
     );
