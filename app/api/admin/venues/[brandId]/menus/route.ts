@@ -96,7 +96,7 @@ export async function POST(
 // DELETE - Delete menu
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { brandId: string } }
+  { params }: { params: Promise<{ brandId: string }> }
 ) {
   try {
     const admin = await verifyAdminToken(request);
