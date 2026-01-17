@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
       where.brandId = venueId;
       // Check permission for this venue
       if (admin.role !== "MAIN_ADMIN") {
-        if (!admin.venuePermissions.includes(venueId)) {
+      const permissions: string[] = admin.venuePermissions || [];
+      if (!permissions.includes(venueId)) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
       }

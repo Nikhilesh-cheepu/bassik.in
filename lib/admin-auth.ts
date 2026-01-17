@@ -1,11 +1,21 @@
 import { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
-import { prisma } from "./db";
-import { AdminRole } from "./auth";
 
 const SECRET = new TextEncoder().encode(
   process.env.NEXTAUTH_SECRET || "your-secret-key-change-in-production"
 );
+
+// Hardcoded admin credentials - matching lib/auth.ts
+const HARDCODED_ADMINS = [
+  {
+    id: "admin-1",
+    username: "bassik.in",
+    password: "bassik123",
+    role: "MAIN_ADMIN" as const,
+    venuePermissions: [], // Empty array means all venues for MAIN_ADMIN
+  },
+  // Add more admins here if needed
+];
 
 export async function verifyAdminToken(request: NextRequest) {
   try {
@@ -17,24 +27,14 @@ export async function verifyAdminToken(request: NextRequest) {
 
     const { payload } = await jwtVerify(token, SECRET);
     const adminId = (payload as { id: string }).id;
+    const username = (payload as { username?: string }).username;
 
-    const admin = await prisma.admin.findUnique({
-      where: { id: adminId },
-      include: {
-        venuePermissions: {
-          include: {
-            venue: true,
-          },
-        },
-      },
-    });
+    // Find admin from hardcoded list using ID or username
+    const admin = HARDCODED_ADMINS.find(
+      (a) => a.id === adminId || a.username === username
+    );
 
     if (!admin) {
-      return null;
-    }
-
-    // Check if admin is active (only if active field exists, otherwise allow)
-    if ('active' in admin && admin.active === false) {
       return null;
     }
 
@@ -42,7 +42,7 @@ export async function verifyAdminToken(request: NextRequest) {
       id: admin.id,
       username: admin.username,
       role: admin.role,
-      venuePermissions: admin.venuePermissions.map((p: { venue: { brandId: string } }) => p.venue.brandId),
+      venuePermissions: admin.venuePermissions as string[],
     };
   } catch (error) {
     console.error("Error verifying admin token:", error);

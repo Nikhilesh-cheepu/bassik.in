@@ -49,87 +49,49 @@ export async function createAdmin(
   return admin;
 }
 
+// Hardcoded admin credentials - no database required
+const HARDCODED_ADMINS = [
+  {
+    id: "admin-1",
+    username: "bassik.in",
+    password: "bassik123",
+    role: "MAIN_ADMIN" as AdminRole,
+    venuePermissions: [], // Empty array means all venues for MAIN_ADMIN
+  },
+  // Add more admins here if needed
+];
+
 export async function verifyAdmin(username: string, password: string) {
   try {
     console.log(`[VERIFY] Starting verification for username: ${username}`);
     
-    // Start with simplest query - just get admin credentials, no relations
-    // This avoids any issues with venuePermissions or venue relations
-    let admin: any;
-    let venuePermissions: string[] = [];
-    
-    console.log(`[VERIFY] Querying admin from database...`);
-    admin = await prisma.admin.findUnique({
-      where: { username },
-      select: {
-        id: true,
-        username: true,
-        password: true,
-        role: true,
-      },
-    });
-    
-    console.log(`[VERIFY] Basic admin query completed. Found: ${!!admin}`);
+    // Check hardcoded admins
+    const admin = HARDCODED_ADMINS.find((a) => a.username === username);
 
     if (!admin) {
-      console.log(`[VERIFY] Admin not found in database: ${username}`);
+      console.log(`[VERIFY] Admin not found: ${username}`);
       return null;
     }
 
-    console.log(`[VERIFY] Admin found - ID: ${admin.id}, Role: ${admin.role}`);
+    console.log(`[VERIFY] Admin found - Username: ${admin.username}, Role: ${admin.role}`);
 
-    // Check if admin is active (only if active field exists and is false, otherwise allow)
-    // This handles the case where the migration hasn't been run yet
-    const adminData = admin as any;
-    if (adminData.active !== undefined && adminData.active === false) {
-      console.log(`[VERIFY] Admin is marked as inactive: ${username}`);
-      return null;
-    }
-
-    console.log(`[VERIFY] Verifying password for: ${username}`);
-    const isValid = await verifyPassword(password, admin.password);
-    if (!isValid) {
+    // Simple password comparison (no bcrypt needed for hardcoded)
+    if (password !== admin.password) {
       console.log(`[VERIFY] Password verification failed for: ${username}`);
       return null;
     }
 
-    console.log(`[VERIFY] Password verified successfully for: ${username}`);
-    
-    // Get venue permissions separately to avoid include issues
-    if (!venuePermissions.length) {
-      try {
-        const permissions = await prisma.adminVenuePermission.findMany({
-          where: { adminId: admin.id },
-          include: {
-            venue: {
-              select: { brandId: true },
-            },
-          },
-        });
-        venuePermissions = permissions
-          .map((p: any) => p?.venue?.brandId || p?.venueId)
-          .filter((id: string | null | undefined) => id != null) as string[];
-      } catch (permError: any) {
-        console.log(`[VERIFY] Could not fetch permissions (non-fatal):`, permError?.code);
-        venuePermissions = [];
-      }
-    }
-
-    console.log(`[VERIFY] Login successful for: ${username}, permissions: ${venuePermissions.length} venues`);
+    console.log(`[VERIFY] Login successful for: ${username}`);
     return {
       id: admin.id,
       username: admin.username,
       role: admin.role,
-      venuePermissions,
+      venuePermissions: admin.venuePermissions,
     };
   } catch (error: any) {
-    console.error(`[VERIFY] CRITICAL ERROR verifying admin for ${username}:`, {
+    console.error(`[VERIFY] Error verifying admin for ${username}:`, {
       message: error?.message,
-      code: error?.code,
-      name: error?.name,
-      meta: error?.meta,
     });
-    // Don't swallow the error - let it propagate so API can handle it
-    throw error;
+    return null;
   }
 }
