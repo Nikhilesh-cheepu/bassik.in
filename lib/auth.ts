@@ -50,30 +50,40 @@ export async function createAdmin(
 }
 
 export async function verifyAdmin(username: string, password: string) {
-  const admin = await prisma.admin.findUnique({
-    where: { username },
-    include: {
-      venuePermissions: {
-        include: {
-          venue: true,
+  try {
+    const admin = await prisma.admin.findUnique({
+      where: { username },
+      include: {
+        venuePermissions: {
+          include: {
+            venue: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  if (!admin) {
+    if (!admin) {
+      return null;
+    }
+
+    // Check if admin is active (only if active field exists, otherwise allow)
+    if ('active' in admin && admin.active === false) {
+      return null;
+    }
+
+    const isValid = await verifyPassword(password, admin.password);
+    if (!isValid) {
+      return null;
+    }
+
+    return {
+      id: admin.id,
+      username: admin.username,
+      role: admin.role,
+      venuePermissions: admin.venuePermissions.map((p: { venue: { brandId: string } }) => p.venue.brandId),
+    };
+  } catch (error) {
+    console.error("Error verifying admin:", error);
     return null;
   }
-
-  const isValid = await verifyPassword(password, admin.password);
-  if (!isValid) {
-    return null;
-  }
-
-  return {
-    id: admin.id,
-    username: admin.username,
-    role: admin.role,
-    venuePermissions: admin.venuePermissions.map((p: { venue: { brandId: string } }) => p.venue.brandId),
-  };
 }

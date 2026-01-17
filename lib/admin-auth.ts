@@ -33,6 +33,11 @@ export async function verifyAdminToken(request: NextRequest) {
       return null;
     }
 
+    // Check if admin is active (only if active field exists, otherwise allow)
+    if ('active' in admin && admin.active === false) {
+      return null;
+    }
+
     return {
       id: admin.id,
       username: admin.username,
@@ -40,6 +45,7 @@ export async function verifyAdminToken(request: NextRequest) {
       venuePermissions: admin.venuePermissions.map((p: { venue: { brandId: string } }) => p.venue.brandId),
     };
   } catch (error) {
+    console.error("Error verifying admin token:", error);
     return null;
   }
 }
