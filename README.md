@@ -4,7 +4,7 @@ A modern, mobile-first booking hub for venue reservations.
 
 ## Tech Stack
 
-- Next.js 14 (App Router)
+- Next.js 15 (App Router)
 - TypeScript
 - Tailwind CSS
 - React 18

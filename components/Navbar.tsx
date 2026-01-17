@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -18,18 +19,18 @@ export default function Navbar() {
 
           {/* Desktop Menu */}
           <div className="hidden md:flex items-center gap-6">
-            <a
+            <Link
               href="/"
               className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors"
             >
               Home
-            </a>
-            <a
+            </Link>
+            <Link
               href="/reservations"
               className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors"
             >
               Reservations
-            </a>
+            </Link>
             <a
               href="#"
               className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors"
@@ -72,20 +73,20 @@ export default function Navbar() {
         {isMenuOpen && (
           <div className="md:hidden mt-4 pb-2 border-t border-gray-200">
             <div className="flex flex-col gap-3 pt-3">
-              <a
+              <Link
                 href="/"
                 className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors py-2"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Home
-              </a>
-              <a
+              </Link>
+              <Link
                 href="/reservations"
                 className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors py-2"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Reservations
-              </a>
+              </Link>
               <a
                 href="#"
                 className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors py-2"
