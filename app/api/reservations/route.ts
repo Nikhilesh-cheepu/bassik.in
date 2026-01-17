@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 
 const RESERVATION_PHONE_NUMBER = "7013884485";
 
@@ -131,23 +132,54 @@ export async function POST(request: NextRequest) {
 
 Reservation submitted via bassik.in`;
 
+    // Find or create venue
+    let venue = await prisma.venue.findUnique({
+      where: { brandId },
+    });
+
+    if (!venue) {
+      // Create venue if it doesn't exist
+      venue = await prisma.venue.create({
+        data: {
+          brandId,
+          name: brandName,
+          shortName: brandName,
+          address: "Address to be updated",
+        },
+      });
+    }
+
+    // Save to database
+    const reservation = await prisma.reservation.create({
+      data: {
+        venueId: venue.id,
+        brandId,
+        brandName,
+        fullName,
+        contactNumber,
+        numberOfMen: numberOfMen || "0",
+        numberOfWomen: numberOfWomen || "0",
+        numberOfCouples: numberOfCouples || "0",
+        date,
+        timeSlot: timeSlot || time || "",
+        notes: notes || null,
+        selectedDiscounts: selectedDiscounts
+          ? JSON.stringify(selectedDiscounts)
+          : null,
+        status: "PENDING",
+      },
+    });
+
     // Encode message for WhatsApp URL
     const encodedMessage = encodeURIComponent(message);
     const whatsappUrl = `https://wa.me/${RESERVATION_PHONE_NUMBER}?text=${encodedMessage}`;
-
-    // Log for debugging
-    console.log("Reservation Details:", {
-      phone: RESERVATION_PHONE_NUMBER,
-      message,
-      whatsappUrl,
-      reservationData: body,
-    });
 
     return NextResponse.json(
       {
         success: true,
         message: "Reservation submitted successfully",
         whatsappUrl: whatsappUrl,
+        reservationId: reservation.id,
       },
       { status: 200 }
     );

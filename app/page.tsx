@@ -6,58 +6,6 @@ import { BRANDS } from "@/lib/brands";
 import MenuModal from "@/components/MenuModal";
 import GalleryModal from "@/components/GalleryModal";
 
-// Premium restaurant/bar themed images
-const getVenueData = (brandId: string) => {
-  const defaultData = {
-    coverImages: [
-      "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&h=600&fit=crop",
-      "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&h=600&fit=crop",
-      "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=1200&h=600&fit=crop",
-    ],
-    galleryImages: [
-      "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=800&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1552569973-610b7b3b3b3b?w=800&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1552568031-326ec43e3e5a?w=800&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1552568031-326ec43e3e5a?w=800&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1552569973-610b7b3b3b3b?w=800&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=800&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=800&fit=crop",
-    ],
-    menus: [
-      {
-        id: "food",
-        name: "Food Menu",
-        thumbnail: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&h=800&fit=crop",
-        images: [
-          "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=1000&fit=crop",
-          "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=1000&fit=crop",
-          "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=800&h=1000&fit=crop",
-          "https://images.unsplash.com/photo-1552569973-610b7b3b3b3b?w=800&h=1000&fit=crop",
-        ],
-      },
-      {
-        id: "beverage",
-        name: "Liquor Menu",
-        thumbnail: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&h=800&fit=crop",
-        images: [
-          "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=1000&fit=crop",
-          "https://images.unsplash.com/photo-1552568031-326ec43e3e5a?w=800&h=1000&fit=crop",
-          "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=800&h=1000&fit=crop",
-          "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=1000&fit=crop",
-        ],
-      },
-    ],
-    location: {
-      address: "Hoysala Inn, Kompally, Hyderabad",
-      mapUrl: "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
-      embedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3806.1234567890!2d78.4867!3d17.3850!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTfCsDIzJzA2LjAiTiA3OMKwMjknMTIuMSJF!5e0!3m2!1sen!2sin!4v1234567890123!5m2!1sen!2sin",
-    },
-  };
-  return defaultData;
-};
 
 export default function Home() {
   const router = useRouter();
@@ -67,11 +15,66 @@ export default function Home() {
   const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
   const [galleryStartIndex, setGalleryStartIndex] = useState(0);
   const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
+  const [venueData, setVenueData] = useState({
+    coverImages: [] as string[],
+    galleryImages: [] as string[],
+    menus: [] as any[],
+    location: { address: "", mapUrl: "" },
+  });
+  const [loading, setLoading] = useState(true);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
-  const venueData = getVenueData(selectedBrandId);
   const coverImages = venueData.coverImages.slice(0, 3);
+
+  // Load venue data when brand changes
+  useEffect(() => {
+    const loadVenueData = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/venues/${selectedBrandId}`, {
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setVenueData({
+            coverImages: data.venue.coverImages || [],
+            galleryImages: data.venue.galleryImages || [],
+            menus: data.venue.menus || [],
+            location: {
+              address: data.venue.address || "",
+              mapUrl: data.venue.mapUrl || "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
+            },
+          });
+        } else {
+          // Fallback to empty data
+          setVenueData({
+            coverImages: [],
+            galleryImages: [],
+            menus: [],
+            location: {
+              address: "",
+              mapUrl: "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
+            },
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching venue data:", error);
+        setVenueData({
+          coverImages: [],
+          galleryImages: [],
+          menus: [],
+          location: {
+            address: "",
+            mapUrl: "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
+          },
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadVenueData();
+  }, [selectedBrandId]);
 
   // Auto-scroll cover images
   useEffect(() => {
@@ -95,23 +98,33 @@ export default function Home() {
     <div className="min-h-screen bg-gray-50">
       <main className="pb-24">
         {/* Hero Image - Starts from top */}
-        <div className="relative w-full h-[50vh] md:h-[60vh] overflow-hidden">
-          {coverImages.map((image, index) => (
-            <div
-              key={index}
-              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-                index === currentImageIndex ? "opacity-100 z-10" : "opacity-0 z-0"
-              }`}
-            >
-              <img
-                src={image}
-                alt={`${selectedBrand.shortName} cover ${index + 1}`}
-                className="w-full h-full object-cover"
-              />
-              {/* Gradient overlay for better text readability */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+        <div className="relative w-full h-[50vh] md:h-[60vh] overflow-hidden bg-gray-200">
+          {loading ? (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
             </div>
-          ))}
+          ) : coverImages.length > 0 ? (
+            coverImages.map((image, index) => (
+              <div
+                key={index}
+                className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                  index === currentImageIndex ? "opacity-100 z-10" : "opacity-0 z-0"
+                }`}
+              >
+                <img
+                  src={image}
+                  alt={`${selectedBrand.shortName} cover ${index + 1}`}
+                  className="w-full h-full object-cover"
+                />
+                {/* Gradient overlay for better text readability */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+              </div>
+            ))
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-200">
+              <p className="text-gray-500">No cover images available</p>
+            </div>
+          )}
           
           {/* Outlet Dropdown - Overlay on hero */}
           <div className="absolute top-4 left-0 right-0 z-20 px-4">
@@ -162,7 +175,7 @@ export default function Home() {
                       />
                     </svg>
                   </div>
-                </div>
+            </div>
               </div>
             </div>
           </div>
@@ -282,7 +295,7 @@ export default function Home() {
                     <p className="text-sm text-gray-600 font-medium group-hover:text-orange-500 transition-colors">Click to view location</p>
                     <p className="text-xs text-gray-500 mt-1">Opens in Google Maps</p>
                   </div>
-                </div>
+            </div>
               </a>
               <div className="p-4">
                 <div className="flex items-start gap-2">

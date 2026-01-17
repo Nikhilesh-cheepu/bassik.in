@@ -1,0 +1,143 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AdminRole {
+  MAIN_ADMIN
+  ADMIN
+}
+
+model Admin {
+  id        String      @id @default(cuid())
+  username  String      @unique
+  password  String
+  role      AdminRole   @default(ADMIN)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  
+  // Permissions for which venues this admin can manage (only for ADMIN role)
+  venuePermissions AdminVenuePermission[]
+  
+  // Created by (for tracking who created this admin)
+  createdById String?
+  createdBy   Admin?   @relation("AdminCreatedBy", fields: [createdById], references: [id])
+  createdAdmins Admin[] @relation("AdminCreatedBy")
+}
+
+model AdminVenuePermission {
+  id        String   @id @default(cuid())
+  adminId   String
+  venueId   String
+  createdAt DateTime @default(now())
+  
+  admin     Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  venue     Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  
+  @@unique([adminId, venueId])
+  @@index([adminId])
+  @@index([venueId])
+}
+
+model Venue {
+  id          String   @id @default(cuid())
+  brandId     String   @unique // Matches brand.id from brands.ts
+  name        String
+  shortName   String
+  address     String
+  mapUrl      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  images      VenueImage[]
+  menus       Menu[]
+  permissions AdminVenuePermission[]
+  reservations Reservation[]
+  
+  @@index([brandId])
+}
+
+model VenueImage {
+  id          String   @id @default(cuid())
+  venueId     String
+  url         String
+  type        ImageType // COVER or GALLERY
+  order       Int      @default(0) // For ordering images
+  createdAt   DateTime @default(now())
+  
+  venue       Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  
+  @@index([venueId, type])
+  @@index([venueId, type, order])
+}
+
+enum ImageType {
+  COVER
+  GALLERY
+}
+
+model Menu {
+  id          String   @id @default(cuid())
+  venueId     String
+  name        String   // "Food Menu" or "Liquor Menu"
+  thumbnailUrl String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  venue       Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  images      MenuImage[]
+  
+  @@index([venueId])
+}
+
+model MenuImage {
+  id          String   @id @default(cuid())
+  menuId      String
+  url         String
+  order       Int      @default(0) // For ordering menu pages
+  createdAt   DateTime @default(now())
+  
+  menu        Menu     @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  
+  @@index([menuId, order])
+}
+
+model Reservation {
+  id                String   @id @default(cuid())
+  venueId           String
+  brandId           String   // Keep for quick lookup
+  brandName         String
+  fullName          String
+  contactNumber     String
+  numberOfMen       String
+  numberOfWomen     String
+  numberOfCouples   String
+  date              String
+  timeSlot          String
+  notes             String?
+  selectedDiscounts String? // JSON array of discount IDs
+  status            ReservationStatus @default(PENDING)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  venue             Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  
+  @@index([venueId])
+  @@index([brandId])
+  @@index([date])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
