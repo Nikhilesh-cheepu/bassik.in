@@ -62,9 +62,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { brandId, name, shortName, address, mapUrl } = body;
 
-    if (!brandId || !name || !shortName || !address) {
+    if (!brandId) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Missing required fields: brandId" },
         { status: 400 }
       );
     }
@@ -76,22 +76,46 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const venue = await prisma.venue.upsert({
+    // Check if venue exists
+    const existingVenue = await prisma.venue.findUnique({
       where: { brandId },
-      update: {
-        name,
-        shortName,
-        address,
-        mapUrl: mapUrl || null,
-      },
-      create: {
-        brandId,
-        name,
-        shortName,
-        address,
-        mapUrl: mapUrl || null,
-      },
     });
+
+    // Build update data - only include fields that are provided
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (shortName !== undefined) updateData.shortName = shortName;
+    if (address !== undefined) updateData.address = address;
+    if (mapUrl !== undefined) updateData.mapUrl = mapUrl || null;
+
+    let venue;
+    if (existingVenue) {
+      // Update existing venue
+      if (Object.keys(updateData).length === 0) {
+        return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+      }
+      venue = await prisma.venue.update({
+        where: { brandId },
+        data: updateData,
+      });
+    } else {
+      // Create new venue - all fields are required for creation
+      if (!name || !shortName || !address) {
+        return NextResponse.json(
+          { error: "Missing required fields: name, shortName, and address are required for new venues" },
+          { status: 400 }
+        );
+      }
+      venue = await prisma.venue.create({
+        data: {
+          brandId,
+          name,
+          shortName,
+          address: address || "Address to be updated",
+          mapUrl: mapUrl || null,
+        },
+      });
+    }
 
     return NextResponse.json({ venue });
   } catch (error) {

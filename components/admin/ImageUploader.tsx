@@ -84,7 +84,10 @@ export default function ImageUploader({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ image: base64, venueId }),
           });
-          if (!res.ok) throw new Error("Upload failed");
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.error || `Upload failed: ${res.statusText}`);
+          }
           return res.json();
         })
       );
@@ -106,9 +109,11 @@ export default function ImageUploader({
 
       if (saveRes.ok) {
         setMessage({ type: "success", text: "Images uploaded successfully!" });
+        // Reload images from the response or parent
         onUpdate();
       } else {
-        throw new Error("Failed to save images");
+        const errorData = await saveRes.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to save images");
       }
     } catch (error: any) {
       setMessage({

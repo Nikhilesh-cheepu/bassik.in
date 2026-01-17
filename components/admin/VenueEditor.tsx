@@ -31,9 +31,9 @@ interface VenueEditorProps {
 
 export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEditorProps) {
   const [formData, setFormData] = useState({
-    name: venue.name,
-    shortName: venue.shortName,
-    address: venue.address,
+    name: venue.name || "",
+    shortName: venue.shortName || "",
+    address: venue.address || "",
     mapUrl: venue.mapUrl || "",
   });
   const [activeTab, setActiveTab] = useState<"details" | "cover" | "gallery" | "menus" | "location">("details");
