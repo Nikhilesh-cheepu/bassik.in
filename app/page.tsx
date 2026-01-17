@@ -1,252 +1,363 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/Navbar";
-import { getHomepageConnectBrands } from "@/lib/brands";
+import { BRANDS } from "@/lib/brands";
+import MenuModal from "@/components/MenuModal";
+import GalleryModal from "@/components/GalleryModal";
 
-type HomepageVenue = {
-  id: string;
-  name: string;
-  logoSrc: string;
-  tagline?: string;
+// Premium restaurant/bar themed images
+const getVenueData = (brandId: string) => {
+  const defaultData = {
+    coverImages: [
+      "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&h=600&fit=crop",
+      "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&h=600&fit=crop",
+      "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=1200&h=600&fit=crop",
+    ],
+    galleryImages: [
+      "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=800&fit=crop",
+      "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=800&fit=crop",
+      "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=800&h=800&fit=crop",
+      "https://images.unsplash.com/photo-1552569973-610b7b3b3b3b?w=800&h=800&fit=crop",
+      "https://images.unsplash.com/photo-1552568031-326ec43e3e5a?w=800&h=800&fit=crop",
+      "https://images.unsplash.com/photo-1552568031-326ec43e3e5a?w=800&h=800&fit=crop",
+      "https://images.unsplash.com/photo-1552569973-610b7b3b3b3b?w=800&h=800&fit=crop",
+      "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=800&h=800&fit=crop",
+      "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=800&fit=crop",
+      "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=800&fit=crop",
+    ],
+    menus: [
+      {
+        id: "food",
+        name: "Food Menu",
+        thumbnail: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&h=800&fit=crop",
+        images: [
+          "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=1000&fit=crop",
+          "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=1000&fit=crop",
+          "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=800&h=1000&fit=crop",
+          "https://images.unsplash.com/photo-1552569973-610b7b3b3b3b?w=800&h=1000&fit=crop",
+        ],
+      },
+      {
+        id: "beverage",
+        name: "Liquor Menu",
+        thumbnail: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&h=800&fit=crop",
+        images: [
+          "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=1000&fit=crop",
+          "https://images.unsplash.com/photo-1552568031-326ec43e3e5a?w=800&h=1000&fit=crop",
+          "https://images.unsplash.com/photo-1551218808-94e220e084d2?w=800&h=1000&fit=crop",
+          "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=1000&fit=crop",
+        ],
+      },
+    ],
+    location: {
+      address: "Hoysala Inn, Kompally, Hyderabad",
+      mapUrl: "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
+      embedUrl: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3806.1234567890!2d78.4867!3d17.3850!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTfCsDIzJzA2LjAiTiA3OMKwMjknMTIuMSJF!5e0!3m2!1sen!2sin!4v1234567890123!5m2!1sen!2sin",
+    },
+  };
+  return defaultData;
 };
-
-const HOMEPAGE_VENUES: HomepageVenue[] = [
-  {
-    id: "alehouse",
-    name: "Alehouse",
-    logoSrc: "/logos/alehouse.png",
-    tagline: undefined,
-  },
-  {
-    id: "c53",
-    name: "C53",
-    logoSrc: "/logos/c53.png",
-    tagline: undefined,
-  },
-  {
-    id: "boiler-room",
-    name: "Boiler Room",
-    logoSrc: "/logos/boiler-room.png",
-    tagline: undefined,
-  },
-  {
-    id: "skyhy",
-    name: "SkyHy",
-    logoSrc: "/logos/skyhy.png",
-    tagline: undefined,
-  },
-  {
-    id: "kiik69",
-    name: "KIIK 69",
-    logoSrc: "/logos/kiik69.png",
-    tagline: undefined,
-  },
-  {
-    id: "club-rogue-gachibowli",
-    name: "Gachibowli",
-    logoSrc: "/logos/club-rogue.png",
-    tagline: undefined,
-  },
-  {
-    id: "club-rogue-kondapur",
-    name: "Kondapur",
-    logoSrc: "/logos/club-rogue.png",
-    tagline: undefined,
-  },
-  {
-    id: "club-rogue-jubilee-hills",
-    name: "Jubilee Hills",
-    logoSrc: "/logos/club-rogue.png",
-    tagline: undefined,
-  },
-  {
-    id: "sound-of-soul",
-    name: "Sound of Soul",
-    logoSrc: "/logos/sound-of-soul.png",
-    tagline: undefined,
-  },
-  {
-    id: "rejoy",
-    name: "Rejoy",
-    logoSrc: "/logos/rejoy.png",
-    tagline: undefined,
-  },
-  {
-    id: "firefly",
-    name: "Firefly",
-    logoSrc: "/logos/firefly.png",
-    tagline: undefined,
-  },
-];
 
 export default function Home() {
   const router = useRouter();
-  const connectBrands = getHomepageConnectBrands();
+  const [selectedBrandId, setSelectedBrandId] = useState(BRANDS[0].id);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
+  const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
+  const [galleryStartIndex, setGalleryStartIndex] = useState(0);
+  const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handlePrimaryCTA = () => {
-    router.push("/reservations");
-  };
+  const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
+  const venueData = getVenueData(selectedBrandId);
+  const coverImages = venueData.coverImages.slice(0, 3);
 
-  const handleInstagramClick = (url: string) => {
-    if (!url) return;
-    if (typeof window !== "undefined") {
-      window.open(url, "_blank", "noopener,noreferrer");
+  // Auto-scroll cover images
+  useEffect(() => {
+    if (coverImages.length > 1) {
+      intervalRef.current = setInterval(() => {
+        setCurrentImageIndex((prev) => (prev + 1) % coverImages.length);
+      }, 5000);
     }
-  };
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [coverImages.length, selectedBrandId]);
 
-  const handleWebsiteClick = (url: string) => {
-    if (!url || url === "#" || url.startsWith("https://example.com")) return;
-    if (typeof window !== "undefined") {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
+  const handleBookNow = () => {
+    router.push(`/reservations?brand=${selectedBrandId}`);
   };
 
   return (
-    <div
-      className="min-h-screen"
-      style={{ 
-        backgroundColor: "#050509",
-        minHeight: "100vh",
-      }}
-    >
-      <Navbar />
-      <main 
-        className="flex flex-col items-center justify-center px-4 py-8 md:py-12"
-        style={{
-          minHeight: "calc(100vh - 64px)",
-        }}
-      >
-        <div className="w-full max-w-4xl mx-auto space-y-8 md:space-y-10 text-center">
-          <section className="space-y-4 md:space-y-5">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-2 text-[10px] md:text-xs text-gray-200 border border-white/10">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <img
-                src="/logos/bassik.png"
-                alt="Bassik Hospitality"
-                className="h-4 md:h-5 object-contain"
-              />
-            </div>
-
-            <div className="space-y-3 md:space-y-4">
-              <h1 className="text-3xl md:text-5xl lg:text-6xl font-semibold tracking-tight text-white">
-                11 Venues. One Command Point.
-              </h1>
-
-              <div className="space-y-2 text-xs md:text-sm text-gray-300 leading-relaxed max-w-2xl mx-auto">
-                <p>
-                  Alehouse, C53, Boiler Room, SkyHy, KIIK 69, Club Rogue, Sound of Soul, Rejoy &amp; Firefly
-                  – Hyderabad&apos;s nights, curated under one hospitality
-                  group.
-                </p>
-                <p>
-                  From world cuisine to rooftop nights and live sports, explore
-                  our menus and book your table in one simple flow.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          <section className="flex flex-wrap items-center justify-center gap-4 md:gap-6">
-            {HOMEPAGE_VENUES.map((venue) => (
-              <div
-                key={venue.id}
-                className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 md:px-6 md:py-5"
-              >
-                <div className="w-20 h-20 md:w-24 md:h-24 flex items-center justify-center">
-                  <img
-                    src={venue.logoSrc}
-                    alt={`${venue.name} logo`}
-                    className="max-w-full max-h-full object-contain"
-                    loading={venue.id === "alehouse" || venue.id === "club-rogue" ? "eager" : "lazy"}
-                  />
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] md:text-xs font-medium text-gray-100">
-                    {venue.name}
-                    {venue.tagline && (
-                      <span className="block mt-0.5 text-[9px] text-gray-400">
-                        ({venue.tagline})
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </section>
-
-          <section className="space-y-4">
-            <button
-              type="button"
-              onClick={handlePrimaryCTA}
-              className="inline-flex items-center justify-center w-full sm:w-auto rounded-full bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 px-8 py-3.5 text-sm font-semibold text-slate-950"
+    <div className="min-h-screen bg-gray-50">
+      <main className="pb-24">
+        {/* Hero Image - Starts from top */}
+        <div className="relative w-full h-[50vh] md:h-[60vh] overflow-hidden">
+          {coverImages.map((image, index) => (
+            <div
+              key={index}
+              className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                index === currentImageIndex ? "opacity-100 z-10" : "opacity-0 z-0"
+              }`}
             >
-              <span>Book a Table</span>
-              <span className="ml-2 text-base">→</span>
-            </button>
+              <img
+                src={image}
+                alt={`${selectedBrand.shortName} cover ${index + 1}`}
+                className="w-full h-full object-cover"
+              />
+              {/* Gradient overlay for better text readability */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+            </div>
+          ))}
+          
+          {/* Outlet Dropdown - Overlay on hero */}
+          <div className="absolute top-4 left-0 right-0 z-20 px-4">
+            <div className="max-w-4xl mx-auto">
+              <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-xl border border-white/20 p-3">
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+                  Select Outlet
+                </label>
+                <div className="relative">
+                  <select
+                    value={selectedBrandId}
+                    onChange={(e) => {
+                      setSelectedBrandId(e.target.value);
+                      setCurrentImageIndex(0);
+                    }}
+                    className="w-full px-4 py-2.5 pr-10 text-sm font-semibold bg-white border-2 rounded-lg text-gray-900 focus:outline-none focus:ring-2 transition-all appearance-none cursor-pointer shadow-sm"
+      style={{ 
+                      borderColor: selectedBrand.accentColor + "40",
+                    }}
+                    onFocus={(e) => {
+                      e.target.style.borderColor = selectedBrand.accentColor;
+                      e.target.style.boxShadow = `0 0 0 4px ${selectedBrand.accentColor}15`;
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = selectedBrand.accentColor + "40";
+                      e.target.style.boxShadow = "";
+                    }}
+                  >
+                    {BRANDS.map((brand) => (
+                      <option key={brand.id} value={brand.id}>
+                        {brand.shortName}
+                        {brand.id.startsWith("club-rogue") && ` - ${brand.name.split("–")[1]?.trim()}`}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <svg
+                      className="w-5 h-5 text-gray-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2.5}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
-            <p className="text-[10px] md:text-xs text-gray-400 max-w-xl mx-auto">
-              You can reserve for any venue with one quick form on the next
-              page.
-            </p>
+          {/* Image indicators */}
+          {coverImages.length > 1 && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+              {coverImages.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentImageIndex(index)}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    index === currentImageIndex
+                      ? "w-8 bg-white shadow-lg"
+                      : "w-1.5 bg-white/50 hover:bg-white/70"
+                  }`}
+                  aria-label={`Go to image ${index + 1}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Content Sections */}
+        <div className="max-w-4xl mx-auto px-4 -mt-8 relative z-10">
+          {/* Menu Section - Compact Image Thumbnails */}
+          <section className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4 mb-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-3">Menu</h2>
+            <div className="grid grid-cols-2 gap-2.5">
+              {venueData.menus.map((menu) => (
+                <button
+                  key={menu.id}
+                  onClick={() => {
+                    setSelectedMenuId(menu.id);
+                    setIsMenuModalOpen(true);
+                  }}
+                  className="relative aspect-[4/3] overflow-hidden rounded-lg group"
+                >
+                  <img
+                    src={menu.thumbnail}
+                    alt={menu.name}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+                  <div className="absolute bottom-0 left-0 right-0 p-3">
+                    <h3 className="text-white font-bold text-sm mb-0.5">{menu.name}</h3>
+                    <p className="text-white/90 text-xs">{menu.images.length} pages</p>
+                  </div>
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                </button>
+              ))}
+            </div>
           </section>
 
-          <section className="space-y-4 md:space-y-5 text-left">
-            <div className="text-center space-y-1">
-              <h2 className="text-base md:text-lg font-semibold text-white">
-                Connect with our venues.
-              </h2>
-              <p className="text-[11px] md:text-xs text-gray-400">
-                Find us on Instagram or visit the official websites.
-              </p>
-            </div>
+          {/* Gallery Section - Premium Grid */}
+          <section className="bg-white rounded-2xl shadow-xl border border-gray-100 p-5 mb-4">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Photos</h2>
+            <div className="grid grid-cols-3 gap-2">
+              {venueData.galleryImages.slice(0, 6).map((image, index) => (
+                <button
+                  key={index}
+                  onClick={() => {
+                    setGalleryStartIndex(index);
+                    setIsGalleryModalOpen(true);
+                  }}
+                  className={`relative aspect-square overflow-hidden rounded-xl ${
+                    index === 0 ? "col-span-2 row-span-2" : ""
+                  } group`}
+                >
+                  <img
+                    src={image}
+                    alt={`Gallery ${index + 1}`}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  {index === 5 && (
+                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold text-xl group-hover:bg-black/70 transition-colors">
+                      <span>+{venueData.galleryImages.length - 6}</span>
+                </div>
+                  )}
+                </button>
+              ))}
+              </div>
+          </section>
 
-            <div className="space-y-2.5 md:space-y-3">
-              {connectBrands.map((brand) => {
-                return (
-                  <div
-                    key={brand.id}
-                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl bg-white/5 border border-white/5 px-4 py-3 md:px-5 md:py-4"
-                  >
-                    <div className="flex-shrink-0">
-                      <p className="text-xs md:text-sm font-semibold text-gray-100">
-                        {brand.shortName}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      {brand.instagramUrls.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => handleInstagramClick(brand.instagramUrls[0])}
-                          className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/20 px-3.5 py-2 text-[11px] md:text-xs font-medium text-gray-100"
-                        >
-                          <span>📷</span>
-                          <span>Instagram</span>
-                          <span>→</span>
-                        </button>
-                      )}
-
-                      {brand.websiteUrl &&
-                        brand.websiteUrl !== "#" &&
-                        !brand.websiteUrl.startsWith("https://example.com") && (
-                          <button
-                            type="button"
-                            onClick={() => handleWebsiteClick(brand.websiteUrl)}
-                            className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/5 px-3.5 py-2 text-[11px] md:text-xs font-medium text-gray-100"
-                          >
-                            <span>Website</span>
-                            <span>→</span>
-                          </button>
-                        )}
-                    </div>
+          {/* Location Section - Premium */}
+          <section className="bg-white rounded-2xl shadow-xl border border-gray-100 p-5 mb-4 overflow-hidden">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Location</h2>
+            <div className="bg-gray-50 rounded-xl overflow-hidden border border-gray-200">
+              <a
+                href={venueData.location.mapUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="h-64 bg-gray-200 relative block hover:bg-gray-300 transition-colors group"
+              >
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <svg
+                      className="w-12 h-12 text-gray-400 mx-auto mb-2 group-hover:text-orange-500 transition-colors"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                    </svg>
+                    <p className="text-sm text-gray-600 font-medium group-hover:text-orange-500 transition-colors">Click to view location</p>
+                    <p className="text-xs text-gray-500 mt-1">Opens in Google Maps</p>
                   </div>
-                );
-              })}
+                </div>
+              </a>
+              <div className="p-4">
+                <div className="flex items-start gap-2">
+                  <svg
+                    className="w-5 h-5 text-orange-500 mt-0.5 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                  <div>
+                    <p className="text-sm text-gray-700 font-medium">{venueData.location.address}</p>
+                    <a
+                      href={venueData.location.mapUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-orange-500 hover:text-orange-600 mt-1 inline-block"
+                    >
+                      Open in Google Maps →
+                    </a>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
         </div>
       </main>
+
+      {/* Full Width Book Now Button - Premium */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-30 shadow-2xl">
+        <button
+          onClick={handleBookNow}
+          className="w-full text-white font-bold py-4 px-6 rounded-xl transition-all duration-200 hover:shadow-lg hover:scale-[1.02] active:scale-[0.98]"
+          style={{ 
+            backgroundColor: selectedBrand.accentColor,
+            boxShadow: `0 10px 30px ${selectedBrand.accentColor}40`
+          }}
+        >
+          <span className="text-lg">Book a table</span>
+        </button>
+      </div>
+
+      {/* Menu Modal */}
+      {isMenuModalOpen && selectedMenuId && (
+        <MenuModal
+          menu={venueData.menus.find(m => m.id === selectedMenuId)!}
+          brandName={selectedBrand.shortName}
+          onClose={() => {
+            setIsMenuModalOpen(false);
+            setSelectedMenuId(null);
+          }}
+        />
+      )}
+
+      {/* Gallery Modal */}
+      {isGalleryModalOpen && (
+        <GalleryModal
+          images={venueData.galleryImages}
+          brandName={selectedBrand.shortName}
+          initialIndex={galleryStartIndex}
+          onClose={() => setIsGalleryModalOpen(false)}
+        />
+      )}
     </div>
   );
 }
