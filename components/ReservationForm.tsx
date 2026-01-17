@@ -369,45 +369,69 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
 
   return (
     <div className="w-full">
-      {/* Step Indicator - Swiggy Style - Mobile Optimized */}
-      <div className="mb-4 sm:mb-6">
-        <div className="flex items-center justify-between mb-3 sm:mb-4">
+      {/* Modern Step Indicator */}
+      <div className="mb-8 sm:mb-10">
+        <div className="flex items-center justify-between">
           {steps.map((step, index) => (
             <div key={step.number} className="flex items-center flex-1">
-              <div className="flex flex-col items-center flex-1">
-                <div
-                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-semibold transition-all ${
-                    currentStep >= step.number
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-200 text-gray-500"
-                  }`}
-                  style={{
-                    backgroundColor:
-                      currentStep >= step.number ? brand.accentColor : undefined,
-                  }}
-                >
-                  {step.number}
+              <div className="flex flex-col items-center flex-1 relative">
+                {/* Step Circle - Modern with shadow */}
+                <div className="relative">
+                  <div
+                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-sm sm:text-base font-bold transition-all duration-300 shadow-lg ${
+                      currentStep >= step.number
+                        ? "text-white scale-110"
+                        : "bg-gray-100 text-gray-400 scale-100"
+                    }`}
+                    style={{
+                      backgroundColor:
+                        currentStep >= step.number ? brand.accentColor : undefined,
+                      boxShadow:
+                        currentStep >= step.number
+                          ? `0 4px 14px ${brand.accentColor}40`
+                          : undefined,
+                    }}
+                  >
+                    {currentStep > step.number ? (
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      step.number
+                    )}
+                  </div>
+                  {/* Pulse animation for current step */}
+                  {currentStep === step.number && (
+                    <div
+                      className="absolute inset-0 rounded-full animate-ping opacity-75"
+                      style={{ backgroundColor: brand.accentColor }}
+                    />
+                  )}
                 </div>
+                {/* Step Label */}
                 <span
-                  className={`text-[10px] sm:text-xs mt-1 ${
+                  className={`text-xs sm:text-sm mt-2 font-medium transition-all ${
                     currentStep >= step.number
-                      ? "text-gray-900 font-medium"
+                      ? "text-gray-900"
                       : "text-gray-500"
                   }`}
                 >
                   {step.title}
                 </span>
               </div>
+              {/* Progress Line */}
               {index < steps.length - 1 && (
                 <div
-                  className={`h-0.5 flex-1 mx-1 sm:mx-2 ${
+                  className={`h-1 flex-1 mx-2 sm:mx-4 rounded-full transition-all duration-300 ${
                     currentStep > step.number
-                      ? "bg-blue-600"
+                      ? "bg-gradient-to-r"
                       : "bg-gray-200"
                   }`}
                   style={{
-                    backgroundColor:
-                      currentStep > step.number ? brand.accentColor : undefined,
+                    background:
+                      currentStep > step.number
+                        ? `linear-gradient(to right, ${brand.accentColor}, ${brand.accentColor}80)`
+                        : undefined,
                   }}
                 />
               )}
@@ -419,39 +443,45 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Step 1: Date & Time Slot Selection */}
         {currentStep === 1 && (
-          <div className="space-y-4 sm:space-y-5">
+          <div className="space-y-6 sm:space-y-8">
             <div>
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1 flex items-center gap-2">
+                <span className="w-1 h-6 rounded-full" style={{ backgroundColor: brand.accentColor }} />
                 Select Date & Time
               </h3>
+              <p className="text-sm text-gray-500 mb-6">Choose when you'd like to visit us</p>
 
-              {/* Date Selection - Fully Clickable */}
-              <div className="mb-4 sm:mb-5">
+              {/* Date Selection - Modern Style */}
+              <div className="mb-6">
                 <label 
                   htmlFor="date-input"
-                  className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2 cursor-pointer"
+                  className="block text-sm font-semibold text-gray-700 mb-2 cursor-pointer"
                 >
                   Select Date <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
                   <input
                     id="date-input"
                     type="date"
                     value={formData.date}
                     onChange={handleDateChange}
                     min={todayStr}
-                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:border-transparent transition-all cursor-pointer"
+                    className="w-full pl-12 pr-4 py-3.5 text-sm font-medium bg-white border-2 border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 transition-all cursor-pointer shadow-sm hover:shadow-md"
                     style={{ cursor: "pointer" }}
                     onFocus={(e) => {
                       e.target.style.borderColor = brand.accentColor;
-                      e.target.style.boxShadow = `0 0 0 3px ${brand.accentColor}20`;
+                      e.target.style.boxShadow = `0 0 0 4px ${brand.accentColor}15`;
                     }}
                     onBlur={(e) => {
                       e.target.style.borderColor = "";
                       e.target.style.boxShadow = "";
                     }}
                     onClick={(e) => {
-                      // Ensure calendar opens on click anywhere
                       e.currentTarget.showPicker?.();
                     }}
                   />
@@ -461,29 +491,33 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
               {/* Time Slot Selection */}
               {formData.date && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
                     Select Time Slot <span className="text-red-500">*</span>
                   </label>
                   
-                  {/* Lunch/Dinner Tabs */}
-                  <div className="flex gap-2 mb-3">
+                  {/* Lunch/Dinner Tabs - Modern */}
+                  <div className="flex gap-3 mb-4 bg-gray-100 p-1 rounded-xl">
                     <button
                       type="button"
                       onClick={() => {
                         setTimeSlotTab("lunch");
                         setFormData((prev) => ({ ...prev, timeSlot: "" }));
                       }}
-                      className={`flex-1 py-2 sm:py-2.5 px-3 sm:px-4 text-xs sm:text-sm font-medium rounded-lg border transition-all ${
+                      className={`flex-1 py-3 px-4 text-sm font-semibold rounded-lg transition-all duration-200 ${
                         timeSlotTab === "lunch"
-                          ? "text-white border-transparent shadow-sm"
-                          : "bg-white text-gray-700 border-gray-300 hover:border-gray-400"
+                          ? "text-white shadow-lg scale-105"
+                          : "text-gray-600 hover:text-gray-900"
                       }`}
                       style={{
                         backgroundColor:
                           timeSlotTab === "lunch" ? brand.accentColor : undefined,
+                        boxShadow:
+                          timeSlotTab === "lunch"
+                            ? `0 4px 14px ${brand.accentColor}40`
+                            : undefined,
                       }}
                     >
-                      Lunch
+                      🍽️ Lunch
                     </button>
                     <button
                       type="button"
@@ -491,22 +525,26 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                         setTimeSlotTab("dinner");
                         setFormData((prev) => ({ ...prev, timeSlot: "" }));
                       }}
-                      className={`flex-1 py-2 sm:py-2.5 px-3 sm:px-4 text-xs sm:text-sm font-medium rounded-lg border transition-all ${
+                      className={`flex-1 py-3 px-4 text-sm font-semibold rounded-lg transition-all duration-200 ${
                         timeSlotTab === "dinner"
-                          ? "text-white border-transparent shadow-sm"
-                          : "bg-white text-gray-700 border-gray-300 hover:border-gray-400"
+                          ? "text-white shadow-lg scale-105"
+                          : "text-gray-600 hover:text-gray-900"
                       }`}
                       style={{
                         backgroundColor:
                           timeSlotTab === "dinner" ? brand.accentColor : undefined,
+                        boxShadow:
+                          timeSlotTab === "dinner"
+                            ? `0 4px 14px ${brand.accentColor}40`
+                            : undefined,
                       }}
                     >
-                      Dinner
+                      🌙 Dinner
                     </button>
                   </div>
 
-                  {/* Time Slot Grid - Mobile Optimized */}
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5 sm:gap-2 max-h-56 sm:max-h-64 overflow-y-auto p-2 sm:p-3 border border-gray-200 rounded-lg bg-gray-50">
+                  {/* Time Slot Grid - Modern Styling */}
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 sm:gap-3 max-h-64 sm:max-h-72 overflow-y-auto p-3 sm:p-4 border-2 border-gray-100 rounded-xl bg-gradient-to-br from-gray-50 to-white">
                     {timeSlots.map((slot) => {
                       const isPast = isSlotInPast(formData.date, slot.value24);
                       const isSelected = formData.timeSlot === slot.value24;
@@ -522,17 +560,16 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                             }
                           }}
                           disabled={isPast}
-                          className={`w-full px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm rounded-md sm:rounded-lg border transition-all touch-manipulation ${
+                          className={`w-full px-3 py-2.5 text-xs sm:text-sm font-medium rounded-xl border-2 transition-all touch-manipulation ${
                             isPast
-                              ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                              ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
                               : isSelected
-                              ? "text-white border-transparent shadow-sm cursor-pointer"
-                              : "bg-white text-gray-700 border-gray-300 hover:border-gray-400 cursor-pointer active:scale-95"
+                              ? "text-white border-transparent shadow-lg scale-105 cursor-pointer"
+                              : "bg-white text-gray-700 border-gray-200 hover:border-gray-300 hover:shadow-md cursor-pointer active:scale-95"
                           }`}
                           style={{
-                            backgroundColor: isSelected
-                              ? brand.accentColor
-                              : undefined,
+                            backgroundColor: isSelected ? brand.accentColor : undefined,
+                            boxShadow: isSelected ? `0 4px 14px ${brand.accentColor}40` : undefined,
                             WebkitTapHighlightColor: "transparent",
                           }}
                         >
@@ -614,15 +651,17 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
 
         {/* Step 2: Guests & Discounts */}
         {currentStep === 2 && (
-          <div className="space-y-4 sm:space-y-5">
+          <div className="space-y-6 sm:space-y-8">
             <div>
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1 flex items-center gap-2">
+                <span className="w-1 h-6 rounded-full" style={{ backgroundColor: brand.accentColor }} />
                 Number of Guests
               </h3>
-              <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
+              <p className="text-sm text-gray-500 mb-6">Tell us how many guests to expect</p>
+              <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
-                    Men
+                  <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">
+                    👨 Men
                   </label>
                   <input
                     type="number"
@@ -630,10 +669,10 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     min="0"
                     value={formData.numberOfMen}
                     onChange={handleChange}
-                    className="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:border-transparent transition-all"
+                    className="w-full px-4 py-3 text-sm font-medium bg-white border-2 border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 transition-all shadow-sm hover:shadow-md"
                     onFocus={(e) => {
                       e.target.style.borderColor = brand.accentColor;
-                      e.target.style.boxShadow = `0 0 0 3px ${brand.accentColor}20`;
+                      e.target.style.boxShadow = `0 0 0 4px ${brand.accentColor}15`;
                     }}
                     onBlur={(e) => {
                       e.target.style.borderColor = "";
@@ -643,8 +682,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Women
+                  <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">
+                    👩 Women
                   </label>
                   <input
                     type="number"
@@ -652,10 +691,10 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     min="0"
                     value={formData.numberOfWomen}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 text-sm bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:border-transparent transition-all"
+                    className="w-full px-4 py-3 text-sm font-medium bg-white border-2 border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 transition-all shadow-sm hover:shadow-md"
                     onFocus={(e) => {
                       e.target.style.borderColor = brand.accentColor;
-                      e.target.style.boxShadow = `0 0 0 3px ${brand.accentColor}20`;
+                      e.target.style.boxShadow = `0 0 0 4px ${brand.accentColor}15`;
                     }}
                     onBlur={(e) => {
                       e.target.style.borderColor = "";
@@ -665,8 +704,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Couples
+                  <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">
+                    💑 Couples
                   </label>
                   <input
                     type="number"
@@ -674,10 +713,10 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     min="0"
                     value={formData.numberOfCouples}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 text-sm bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:border-transparent transition-all"
+                    className="w-full px-4 py-3 text-sm font-medium bg-white border-2 border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 transition-all shadow-sm hover:shadow-md"
                     onFocus={(e) => {
                       e.target.style.borderColor = brand.accentColor;
-                      e.target.style.boxShadow = `0 0 0 3px ${brand.accentColor}20`;
+                      e.target.style.boxShadow = `0 0 0 4px ${brand.accentColor}15`;
                     }}
                     onBlur={(e) => {
                       e.target.style.borderColor = "";
@@ -765,60 +804,76 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
 
         {/* Step 3: Contact Details */}
         {currentStep === 3 && (
-          <div className="space-y-4 sm:space-y-5">
+          <div className="space-y-6 sm:space-y-8">
             <div>
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1 flex items-center gap-2">
+                <span className="w-1 h-6 rounded-full" style={{ backgroundColor: brand.accentColor }} />
                 Contact Information
               </h3>
-              <div className="space-y-3 sm:space-y-4">
+              <p className="text-sm text-gray-500 mb-6">We'll use this to confirm your reservation</p>
+              <div className="space-y-4 sm:space-y-5">
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                  <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">
                     Full Name <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    name="fullName"
-                    required
-                    value={formData.fullName}
-                    onChange={handleChange}
-                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:border-transparent transition-all"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = brand.accentColor;
-                      e.target.style.boxShadow = `0 0 0 3px ${brand.accentColor}20`;
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = "";
-                      e.target.style.boxShadow = "";
-                    }}
-                    placeholder="Enter your full name"
-                  />
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="text"
+                      name="fullName"
+                      required
+                      value={formData.fullName}
+                      onChange={handleChange}
+                      className="w-full pl-12 pr-4 py-3.5 text-sm font-medium bg-white border-2 border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 transition-all shadow-sm hover:shadow-md"
+                      onFocus={(e) => {
+                        e.target.style.borderColor = brand.accentColor;
+                        e.target.style.boxShadow = `0 0 0 4px ${brand.accentColor}15`;
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = "";
+                        e.target.style.boxShadow = "";
+                      }}
+                      placeholder="Enter your full name"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                  <label className="block text-xs sm:text-sm font-semibold text-gray-700 mb-2">
                     Contact Number <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="tel"
-                    name="contactNumber"
-                    required
-                    value={formData.contactNumber}
-                    onChange={handleChange}
-                    className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm bg-white border rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:border-transparent transition-all ${
-                      formData.contactNumber && !validateIndianPhoneNumber(formData.contactNumber)
-                        ? "border-red-500"
-                        : "border-gray-300"
-                    }`}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = brand.accentColor;
-                      e.target.style.boxShadow = `0 0 0 3px ${brand.accentColor}20`;
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = formData.contactNumber && !validateIndianPhoneNumber(formData.contactNumber) ? "#ef4444" : "";
-                      e.target.style.boxShadow = "";
-                    }}
-                    placeholder="10 digit mobile number"
-                    maxLength={10}
-                  />
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                      </svg>
+                    </div>
+                    <input
+                      type="tel"
+                      name="contactNumber"
+                      required
+                      value={formData.contactNumber}
+                      onChange={handleChange}
+                      className={`w-full pl-12 pr-4 py-3.5 text-sm font-medium bg-white border-2 rounded-xl text-gray-900 focus:outline-none focus:ring-2 transition-all shadow-sm hover:shadow-md ${
+                        formData.contactNumber && !validateIndianPhoneNumber(formData.contactNumber)
+                          ? "border-red-500"
+                          : "border-gray-200"
+                      }`}
+                      onFocus={(e) => {
+                        e.target.style.borderColor = brand.accentColor;
+                        e.target.style.boxShadow = `0 0 0 4px ${brand.accentColor}15`;
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = formData.contactNumber && !validateIndianPhoneNumber(formData.contactNumber) ? "#ef4444" : "";
+                        e.target.style.boxShadow = "";
+                      }}
+                      placeholder="10 digit mobile number"
+                      maxLength={10}
+                    />
+                  </div>
                   {formData.contactNumber && !validateIndianPhoneNumber(formData.contactNumber) && (
                     <p className="text-xs text-red-500 mt-1">Please enter a valid 10-digit Indian mobile number (starts with 6-9)</p>
                   )}
@@ -830,12 +885,14 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
 
         {/* Step 4: Review */}
         {currentStep === 4 && (
-          <div className="space-y-4 sm:space-y-5">
+          <div className="space-y-6 sm:space-y-8">
             <div>
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1 flex items-center gap-2">
+                <span className="w-1 h-6 rounded-full" style={{ backgroundColor: brand.accentColor }} />
                 Review Your Booking
               </h3>
-              <div className="bg-gray-50 rounded-lg p-3 sm:p-5 space-y-3 sm:space-y-4">
+              <p className="text-sm text-gray-500 mb-6">Please review your details before confirming</p>
+              <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl border-2 border-gray-100 p-5 sm:p-6 space-y-4 shadow-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Date & Time:</span>
                   <span className="font-medium text-gray-900">
@@ -934,15 +991,18 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
           </div>
         )}
 
-        {/* Navigation Buttons - Mobile Optimized */}
-        <div className="flex items-center justify-between pt-3 sm:pt-4 border-t border-gray-200 gap-2 sm:gap-0">
+        {/* Navigation Buttons - Modern */}
+        <div className="flex items-center justify-between pt-6 sm:pt-8 border-t-2 border-gray-100 gap-3 sm:gap-4">
           {currentStep > 1 ? (
             <button
               type="button"
               onClick={handleBack}
-              className="px-4 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-6 py-3 text-sm font-semibold text-gray-700 bg-white border-2 border-gray-200 rounded-xl hover:bg-gray-50 hover:shadow-md transition-all duration-200 flex items-center gap-2"
             >
-              ← Back
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back
             </button>
           ) : (
             <div />
@@ -952,25 +1012,43 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
             <button
               type="button"
               onClick={handleNext}
-              className="px-4 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90 flex-1 sm:flex-initial"
+              className="px-8 py-3.5 text-sm font-bold text-white rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-2 shadow-lg"
               style={{
                 backgroundColor: brand.accentColor,
+                boxShadow: `0 4px 14px ${brand.accentColor}40`,
               }}
             >
-              Continue →
+              Continue
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </button>
           ) : (
             <button
               type="submit"
               disabled={isSubmitting || !canSubmit()}
-              className="px-4 sm:px-6 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex-1 sm:flex-initial"
+              className="px-8 py-3.5 text-sm font-bold text-white rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 flex items-center gap-2 shadow-lg"
               style={{
                 backgroundColor: brand.accentColor,
+                boxShadow: !(isSubmitting || !canSubmit()) ? `0 4px 14px ${brand.accentColor}40` : undefined,
               }}
             >
-              {isSubmitting
-                ? "Submitting..."
-                : `Confirm Booking`}
+              {isSubmitting ? (
+                <>
+                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  Confirm Booking
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </>
+              )}
             </button>
           )}
         </div>
