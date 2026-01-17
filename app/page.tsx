@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
 import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import { getHomepageConnectBrands } from "@/lib/brands";
@@ -63,31 +64,78 @@ const HOMEPAGE_VENUES: HomepageVenue[] = [
   },
 ];
 
-export default function Home() {
+function Home() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const connectBrands = getHomepageConnectBrands();
+  
+  // Safe mode detection - disables problematic CSS for iOS
+  const [safeMode, setSafeMode] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    // Detect iOS
+    const iosCheck = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    setIsIOS(iosCheck);
+    
+    // Check for safe mode in URL
+    const safe = searchParams?.get("safe") === "1";
+    setSafeMode(safe || iosCheck);
+  }, [searchParams]);
 
   const handlePrimaryCTA = () => {
     router.push("/reservations");
   };
 
   const handleInstagramClick = (url: string) => {
-    if (!url) return;
+    if (!url || !mounted) return;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const handleWebsiteClick = (url: string) => {
-    if (!url || url === "#" || url.startsWith("https://example.com")) return;
+    if (!mounted || !url || url === "#" || url.startsWith("https://example.com")) return;
     window.open(url, "_blank", "noopener,noreferrer");
   };
+
+  // Don't render until mounted to avoid hydration issues on iOS
+  if (!mounted) {
+    return (
+      <div
+        style={{
+          minHeight: "100dvh",
+          backgroundColor: "#050509",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ color: "#ffffff", fontSize: "1rem" }}>Loading...</div>
+      </div>
+    );
+  }
+
+  // CSS class for backdrop-blur with iOS fallback
+  const backdropBlurClass = safeMode
+    ? "bg-white/5 border border-white/5"
+    : "bg-white/5 backdrop-blur border border-white/5";
 
   return (
     <div
       className="min-h-screen"
-      style={{ backgroundColor: "#050509" }}
+      style={{ 
+        backgroundColor: "#050509",
+        minHeight: "100dvh",
+      }}
     >
       <Navbar />
-      <main className="flex flex-col items-center justify-center min-h-[calc(100vh-64px)] px-4 py-8 md:py-12">
+      <main 
+        className="flex flex-col items-center justify-center px-4 py-8 md:py-12"
+        style={{
+          minHeight: "calc(100dvh - 64px)",
+        }}
+      >
         <div className="w-full max-w-4xl mx-auto space-y-8 md:space-y-10 text-center">
           <section className="space-y-4 md:space-y-5">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-[10px] md:text-xs text-gray-200 border border-white/10 shadow-[0_18px_40px_rgba(0,0,0,0.7)]">
@@ -120,7 +168,7 @@ export default function Home() {
             {HOMEPAGE_VENUES.map((venue) => (
               <div
                 key={venue.id}
-                className="group flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 md:px-6 md:py-5 shadow-[0_18px_45px_rgba(0,0,0,0.8)] hover:border-white/30 hover:bg-white/10 transition-all duration-200"
+                className={`group flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 md:px-6 md:py-5 shadow-[0_18px_45px_rgba(0,0,0,0.8)] hover:border-white/30 hover:bg-white/10 ${safeMode ? "" : "transition-all duration-200"}`}
               >
                 <div className="relative w-20 h-20 md:w-24 md:h-24 flex items-center justify-center">
                   <Image
@@ -183,7 +231,7 @@ export default function Home() {
                 return (
                   <div
                     key={brand.id}
-                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl bg-white/5 backdrop-blur border border-white/5 px-4 py-3 md:px-5 md:py-4 shadow-[0_16px_40px_rgba(0,0,0,0.8)] hover:border-white/10 transition-all duration-200"
+                    className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl ${backdropBlurClass} px-4 py-3 md:px-5 md:py-4 shadow-[0_16px_40px_rgba(0,0,0,0.8)] hover:border-white/10 ${safeMode ? "" : "transition-all duration-200"}`}
                   >
                     <div className="flex-shrink-0">
                       <p className="text-xs md:text-sm font-semibold text-gray-100">
@@ -230,5 +278,27 @@ export default function Home() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            minHeight: "100dvh",
+            backgroundColor: "#050509",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div style={{ color: "#ffffff", fontSize: "1rem" }}>Loading...</div>
+        </div>
+      }
+    >
+      <Home />
+    </Suspense>
   );
 }
