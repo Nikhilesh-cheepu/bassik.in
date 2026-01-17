@@ -63,16 +63,21 @@ export async function verifyAdmin(username: string, password: string) {
     });
 
     if (!admin) {
+      console.log(`Admin not found: ${username}`);
       return null;
     }
 
-    // Check if admin is active (only if active field exists, otherwise allow)
-    if ('active' in admin && admin.active === false) {
+    // Check if admin is active (only if active field exists and is false, otherwise allow)
+    // Use type assertion to safely check active field
+    const adminData = admin as any;
+    if (adminData.active === false) {
+      console.log(`Admin is inactive: ${username}`);
       return null;
     }
 
     const isValid = await verifyPassword(password, admin.password);
     if (!isValid) {
+      console.log(`Invalid password for admin: ${username}`);
       return null;
     }
 
