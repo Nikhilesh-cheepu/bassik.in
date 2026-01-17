@@ -65,28 +65,8 @@ export default function AdminsPage() {
   };
 
   const handleToggleAdmin = async (adminId: string, currentActive: boolean) => {
-    // Prevent disabling yourself
-    if (adminId === admin?.id && currentActive) {
-      alert("Cannot disable your own account");
-      return;
-    }
-
-    try {
-      const res = await fetch("/api/admin/admins", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: adminId, active: !currentActive }),
-      });
-
-      if (res.ok) {
-        loadAdmins();
-      } else {
-        const data = await res.json();
-        alert(data.error || "Failed to update admin");
-      }
-    } catch (error) {
-      alert("An error occurred");
-    }
+    // Admins are hardcoded in code, cannot be toggled
+    alert("Admins are managed in code. To modify admins, edit the HARDCODED_ADMINS array in lib/auth.ts");
   };
 
   if (loading) {
@@ -122,6 +102,11 @@ export default function AdminsPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 mb-4">
+          <p className="text-xs sm:text-sm text-blue-800">
+            <strong>Note:</strong> Admins are managed in code. To add or modify admins, edit the <code className="bg-blue-100 px-1 py-0.5 rounded">HARDCODED_ADMINS</code> array in <code className="bg-blue-100 px-1 py-0.5 rounded">lib/auth.ts</code>
+          </p>
+        </div>
         {/* Card-Based Admins List */}
         <div className="space-y-2 sm:space-y-3">
           {admins.length === 0 ? (
@@ -185,21 +170,11 @@ export default function AdminsPage() {
                     </div>
                   </div>
 
-                  {/* Right: Toggle Switch */}
+                  {/* Right: Status (Read-only) */}
                   <div className="flex items-center gap-3 flex-shrink-0">
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={adminUser.active}
-                        onChange={() => handleToggleAdmin(adminUser.id, adminUser.active)}
-                        disabled={adminUser.id === admin?.id}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
-                      <span className="ml-3 text-xs sm:text-sm font-medium text-gray-700">
-                        {adminUser.active ? "ON" : "OFF"}
-                      </span>
-                    </label>
+                    <div className="px-3 py-1.5 bg-green-100 text-green-800 rounded-lg text-xs sm:text-sm font-medium">
+                      Active
+                    </div>
                   </div>
                 </div>
               </div>

@@ -9,43 +9,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum AdminRole {
-  MAIN_ADMIN
-  ADMIN
-}
-
-model Admin {
-  id        String    @id @default(cuid())
-  username  String    @unique
-  password  String
-  role      AdminRole @default(ADMIN)
-  active    Boolean   @default(true)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  // Permissions for which venues this admin can manage (only for ADMIN role)
-  venuePermissions AdminVenuePermission[]
-
-  // Created by (for tracking who created this admin)
-  createdById   String?
-  createdBy     Admin?  @relation("AdminCreatedBy", fields: [createdById], references: [id])
-  createdAdmins Admin[] @relation("AdminCreatedBy")
-}
-
-model AdminVenuePermission {
-  id        String   @id @default(cuid())
-  adminId   String
-  venueId   String
-  createdAt DateTime @default(now())
-
-  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
-
-  @@unique([adminId, venueId])
-  @@index([adminId])
-  @@index([venueId])
-}
-
 model Venue {
   id        String   @id @default(cuid())
   brandId   String   @unique // Matches brand.id from brands.ts
@@ -58,7 +21,6 @@ model Venue {
 
   images       VenueImage[]
   menus        Menu[]
-  permissions  AdminVenuePermission[]
   reservations Reservation[]
 
   @@index([brandId])
