@@ -31,12 +31,9 @@ interface VenueEditorProps {
 
 export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEditorProps) {
   const [formData, setFormData] = useState({
-    name: venue.name || "",
-    shortName: venue.shortName || "",
-    address: venue.address || "",
     mapUrl: venue.mapUrl || "",
   });
-  const [activeTab, setActiveTab] = useState<"details" | "cover" | "gallery" | "menus" | "location">("details");
+  const [activeTab, setActiveTab] = useState<"cover" | "gallery" | "menus" | "location">("cover");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -50,12 +47,12 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           brandId: venue.brandId,
-          ...formData,
+          mapUrl: formData.mapUrl,
         }),
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: "Venue details saved successfully!" });
+        setMessage({ type: "success", text: "Location saved successfully!" });
         onSave();
       } else {
         const data = await res.json();
@@ -95,7 +92,6 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
         <div className="max-w-7xl mx-auto px-3 sm:px-4">
           <nav className="flex space-x-4 sm:space-x-8 overflow-x-auto scrollbar-hide -mb-px">
             {[
-              { id: "details", label: "Details" },
               { id: "cover", label: "Cover Photos" },
               { id: "gallery", label: "Gallery" },
               { id: "menus", label: "Menus" },
@@ -127,57 +123,6 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
             }`}
           >
             {message.text}
-          </div>
-        )}
-
-        {/* Details Tab */}
-        {activeTab === "details" && (
-          <div className="bg-white rounded-lg shadow p-4 sm:p-6 space-y-4">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Venue Details</h2>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Venue Name
-              </label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Short Name
-              </label>
-              <input
-                type="text"
-                value={formData.shortName}
-                onChange={(e) => setFormData({ ...formData, shortName: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Address
-              </label>
-              <textarea
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
-
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50"
-            >
-              {saving ? "Saving..." : "Save Details"}
-            </button>
           </div>
         )}
 
