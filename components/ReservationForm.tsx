@@ -202,11 +202,29 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     });
   };
 
+  // Validate Indian phone number (10 digits, starts with 6, 7, 8, or 9)
+  const validateIndianPhoneNumber = (phone: string): boolean => {
+    // Remove spaces, dashes, and country code if present
+    const cleaned = phone.replace(/[\s\-+91]/g, '');
+    // Should be exactly 10 digits and start with 6, 7, 8, or 9
+    return /^[6-9]\d{9}$/.test(cleaned);
+  };
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    
+    // Special handling for phone number - only allow digits and format
+    if (name === "contactNumber") {
+      // Remove all non-digits
+      const digitsOnly = value.replace(/\D/g, '');
+      // Limit to 10 digits
+      const limited = digitsOnly.slice(0, 10);
+      setFormData((prev) => ({ ...prev, [name]: limited }));
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   const canProceedToStep2 = () => {
@@ -225,6 +243,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     return (
       formData.fullName &&
       formData.contactNumber &&
+      validateIndianPhoneNumber(formData.contactNumber) &&
       (formData.numberOfMen !== "" ||
         formData.numberOfWomen !== "" ||
         formData.numberOfCouples !== "")
@@ -784,17 +803,25 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     required
                     value={formData.contactNumber}
                     onChange={handleChange}
-                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm bg-white border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:border-transparent transition-all"
+                    className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 text-sm bg-white border rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:border-transparent transition-all ${
+                      formData.contactNumber && !validateIndianPhoneNumber(formData.contactNumber)
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    }`}
                     onFocus={(e) => {
                       e.target.style.borderColor = brand.accentColor;
                       e.target.style.boxShadow = `0 0 0 3px ${brand.accentColor}20`;
                     }}
                     onBlur={(e) => {
-                      e.target.style.borderColor = "";
+                      e.target.style.borderColor = formData.contactNumber && !validateIndianPhoneNumber(formData.contactNumber) ? "#ef4444" : "";
                       e.target.style.boxShadow = "";
                     }}
-                    placeholder="Enter your contact number"
+                    placeholder="10 digit mobile number"
+                    maxLength={10}
                   />
+                  {formData.contactNumber && !validateIndianPhoneNumber(formData.contactNumber) && (
+                    <p className="text-xs text-red-500 mt-1">Please enter a valid 10-digit Indian mobile number (starts with 6-9)</p>
+                  )}
                 </div>
               </div>
             </div>

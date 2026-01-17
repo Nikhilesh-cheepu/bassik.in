@@ -31,7 +31,7 @@ export default function BookingsPage() {
   const [admin, setAdmin] = useState<Admin | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<{ status?: string; brandId?: string; date?: string }>({});
+  const [filter, setFilter] = useState<{ status?: string; brandId?: string; date?: string; dateFrom?: string; dateTo?: string }>({});
 
   const loadBookings = useCallback(async () => {
     try {
@@ -39,6 +39,8 @@ export default function BookingsPage() {
       if (filter.status) queryParams.append("status", filter.status);
       if (filter.brandId) queryParams.append("brandId", filter.brandId);
       if (filter.date) queryParams.append("date", filter.date);
+      if (filter.dateFrom) queryParams.append("dateFrom", filter.dateFrom);
+      if (filter.dateTo) queryParams.append("dateTo", filter.dateTo);
 
       const res = await fetch(`/api/admin/bookings?${queryParams.toString()}`);
       if (res.ok) {
@@ -162,6 +164,42 @@ Reservation ID: ${reservation.id}`;
     window.open(whatsappUrl, "_blank");
   };
 
+  const handleAccept = async (reservationId: string) => {
+    await handleStatusUpdate(reservationId, "CONFIRMED");
+  };
+
+  const handleReject = async (reservationId: string) => {
+    await handleStatusUpdate(reservationId, "CANCELLED");
+  };
+
+  const exportToPDF = () => {
+    // Simple CSV export (can be enhanced to PDF later)
+    const headers = ["Date", "Time", "Name", "Contact", "Venue", "Guests", "Status"];
+    const rows = reservations.map((r) => [
+      formatDate(r.date),
+      r.timeSlot,
+      r.fullName,
+      r.contactNumber,
+      r.brandName,
+      `M:${r.numberOfMen} W:${r.numberOfWomen} C:${r.numberOfCouples}`,
+      r.status,
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${cell}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `bookings-${new Date().toISOString().split("T")[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -205,42 +243,56 @@ Reservation ID: ${reservation.id}`;
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
         {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Filters</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-lg shadow p-4 sm:p-6 mb-4 sm:mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900">Filters</h2>
+            <button
+              onClick={exportToPDF}
+              className="w-full sm:w-auto px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              📥 Export CSV
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Status
-              </label>
-              <select
-                value={filter.status || ""}
-                onChange={(e) => setFilter({ ...filter, status: e.target.value || undefined })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              >
-                <option value="">All Status</option>
-                <option value="PENDING">Pending</option>
-                <option value="CONFIRMED">Confirmed</option>
-                <option value="CANCELLED">Cancelled</option>
-                <option value="COMPLETED">Completed</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Date
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
+                Single Date
               </label>
               <input
                 type="date"
                 value={filter.date || ""}
-                onChange={(e) => setFilter({ ...filter, date: e.target.value || undefined })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                onChange={(e) => setFilter({ ...filter, date: e.target.value || undefined, dateFrom: undefined, dateTo: undefined })}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
+                Date From
+              </label>
+              <input
+                type="date"
+                value={filter.dateFrom || ""}
+                onChange={(e) => setFilter({ ...filter, dateFrom: e.target.value || undefined, date: undefined })}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
+                Date To
+              </label>
+              <input
+                type="date"
+                value={filter.dateTo || ""}
+                onChange={(e) => setFilter({ ...filter, dateTo: e.target.value || undefined, date: undefined })}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
             <div>
               <button
                 onClick={() => setFilter({})}
-                className="mt-6 px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                className="mt-6 px-4 py-2 text-xs sm:text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
               >
                 Clear Filters
               </button>
@@ -248,28 +300,25 @@ Reservation ID: ${reservation.id}`;
           </div>
         </div>
 
-        {/* Bookings List */}
+        {/* Bookings List - Mobile Optimized */}
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Date & Time
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Customer
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Venue
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Guests
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Actions
                   </th>
                 </tr>
@@ -277,66 +326,82 @@ Reservation ID: ${reservation.id}`;
               <tbody className="bg-white divide-y divide-gray-200">
                 {reservations.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                       No bookings found
                     </td>
                   </tr>
                 ) : (
                   reservations.map((reservation) => (
                     <tr key={reservation.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {new Date(reservation.date).toLocaleDateString()}
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <div className="text-xs sm:text-sm font-medium text-gray-900">
+                          {new Date(reservation.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                         </div>
-                        <div className="text-sm text-gray-500">{reservation.timeSlot}</div>
+                        <div className="text-xs text-gray-500">{reservation.timeSlot}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <div className="text-xs sm:text-sm font-medium text-gray-900 truncate max-w-[120px]">
                           {reservation.fullName}
                         </div>
-                        <div className="text-sm text-gray-500">{reservation.contactNumber}</div>
+                        <div className="text-xs text-gray-500">{reservation.contactNumber}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{reservation.brandName}</div>
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <div className="text-xs sm:text-sm text-gray-900 truncate max-w-[100px]">{reservation.brandName}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          Men: {reservation.numberOfMen} | Women: {reservation.numberOfWomen} | Couples: {reservation.numberOfCouples}
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <div className="text-xs sm:text-sm text-gray-900">
+                          <span className="hidden sm:inline">M:{reservation.numberOfMen} </span>
+                          <span className="sm:hidden">{reservation.numberOfMen}M </span>
+                          <span className="hidden sm:inline">W:{reservation.numberOfWomen} </span>
+                          <span className="sm:hidden">{reservation.numberOfWomen}W </span>
+                          <span className="hidden sm:inline">C:{reservation.numberOfCouples}</span>
+                          <span className="sm:hidden">{reservation.numberOfCouples}C</span>
                         </div>
                         {reservation.notes && (
-                          <div className="text-xs text-gray-500 mt-1">{reservation.notes}</div>
+                          <div className="text-xs text-gray-500 mt-1 truncate max-w-[150px]" title={reservation.notes}>
+                            {reservation.notes}
+                          </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            statusColors[reservation.status] || "bg-gray-100 text-gray-800"
-                          }`}
-                        >
-                          {reservation.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <select
-                            value={reservation.status}
-                            onChange={(e) => handleStatusUpdate(reservation.id, e.target.value)}
-                            className="px-3 py-1 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-xs sm:text-sm"
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                        <div className="flex items-center gap-1 sm:gap-2">
+                          <button
+                            onClick={() => handleAccept(reservation.id)}
+                            className={`p-1.5 sm:p-2 rounded-full transition-colors ${
+                              reservation.status === "CONFIRMED"
+                                ? "bg-green-500 text-white"
+                                : "bg-green-100 text-green-600 hover:bg-green-200"
+                            }`}
+                            title="Accept/Confirm"
+                            aria-label="Accept booking"
                           >
-                            <option value="PENDING">Pending</option>
-                            <option value="CONFIRMED">Confirmed</option>
-                            <option value="CANCELLED">Cancelled</option>
-                            <option value="COMPLETED">Completed</option>
-                          </select>
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleReject(reservation.id)}
+                            className={`p-1.5 sm:p-2 rounded-full transition-colors ${
+                              reservation.status === "CANCELLED"
+                                ? "bg-red-500 text-white"
+                                : "bg-red-100 text-red-600 hover:bg-red-200"
+                            }`}
+                            title="Reject/Cancel"
+                            aria-label="Reject booking"
+                          >
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
                           <button
                             onClick={() => handleWhatsAppMessage(reservation)}
-                            className="px-3 py-1 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-xs sm:text-sm flex items-center justify-center gap-1"
-                            title="Send WhatsApp message"
+                            className="p-1.5 sm:p-2 bg-green-500 text-white rounded-full hover:bg-green-600 transition-colors"
+                            title="WhatsApp"
+                            aria-label="Send WhatsApp message"
                           >
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
                               <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
                             </svg>
-                            WhatsApp
                           </button>
                         </div>
                       </td>

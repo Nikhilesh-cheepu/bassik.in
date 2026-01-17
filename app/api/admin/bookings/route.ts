@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
     const venueId = searchParams.get("venueId");
     const status = searchParams.get("status");
     const date = searchParams.get("date");
+    const dateFrom = searchParams.get("dateFrom");
+    const dateTo = searchParams.get("dateTo");
 
     let where: any = {};
 
@@ -45,8 +47,17 @@ export async function GET(request: NextRequest) {
       where.status = status as ReservationStatus;
     }
 
+    // Date filtering - single date or date range
     if (date) {
       where.date = date;
+    } else if (dateFrom || dateTo) {
+      where.date = {};
+      if (dateFrom) {
+        where.date.gte = dateFrom;
+      }
+      if (dateTo) {
+        where.date.lte = dateTo;
+      }
     }
 
     const reservations = await prisma.reservation.findMany({
