@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 
 interface ImageUploaderProps {
@@ -24,6 +24,11 @@ export default function ImageUploader({
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Update images when existingImages changes (after parent reloads data)
+  useEffect(() => {
+    setImages(existingImages);
+  }, [existingImages]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -168,13 +173,13 @@ export default function ImageUploader({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">
+    <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+        <div className="flex-1">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
             {imageType === "COVER" ? "Cover Photos" : "Gallery Images"}
           </h2>
-          <p className="text-sm text-gray-600 mt-1">
+          <p className="text-xs sm:text-sm text-gray-600 mt-1">
             {imageType === "COVER"
               ? "Upload up to 3 cover images (16:9 aspect ratio required)"
               : "Upload gallery images (1:1 recommended)"}
@@ -183,7 +188,7 @@ export default function ImageUploader({
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading || images.length >= maxImages}
-          className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50"
+          className="w-full sm:w-auto px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 text-sm sm:text-base"
         >
           {uploading ? "Uploading..." : `Upload (${images.length}/${maxImages})`}
         </button>
@@ -210,9 +215,9 @@ export default function ImageUploader({
       )}
 
       {images.length === 0 ? (
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center">
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 sm:p-12 text-center">
           <svg
-            className="w-12 h-12 text-gray-400 mx-auto mb-4"
+            className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -224,11 +229,11 @@ export default function ImageUploader({
               d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
             />
           </svg>
-          <p className="text-gray-600">No images uploaded yet</p>
-          <p className="text-sm text-gray-500 mt-1">Click &quot;Upload&quot; to add images</p>
+          <p className="text-sm sm:text-base text-gray-600">No images uploaded yet</p>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">Click &quot;Upload&quot; to add images</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {images.map((image, index) => (
             <div key={image.id} className="relative group">
               <div className={`${imageType === "COVER" ? "aspect-video" : "aspect-square"} rounded-lg overflow-hidden bg-gray-100 relative`}>
@@ -237,17 +242,19 @@ export default function ImageUploader({
                   alt={`${imageType} ${index + 1}`}
                   fill
                   className="object-cover"
+                  unoptimized
                 />
               </div>
               <button
                 onClick={() => handleDelete(image.id)}
-                className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-2 right-2 bg-red-500 text-white p-1.5 sm:p-2 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity z-10"
+                aria-label="Delete image"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-              <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+              <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
                 #{index + 1}
               </div>
             </div>

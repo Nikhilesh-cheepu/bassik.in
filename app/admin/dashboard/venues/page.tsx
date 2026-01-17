@@ -67,9 +67,24 @@ export default function VenuesPage() {
     setSelectedVenue(venue);
   };
 
-  const handleBack = () => {
+  const handleBack = async () => {
     setSelectedVenue(null);
-    loadVenues();
+    await loadVenues();
+  };
+
+  const handleSave = async () => {
+    await loadVenues();
+    // Update selectedVenue if it still exists
+    if (selectedVenue) {
+      const res = await fetch("/api/admin/venues");
+      if (res.ok) {
+        const data = await res.json();
+        const updatedVenue = data.venues?.find((v: Venue) => v.brandId === selectedVenue.brandId);
+        if (updatedVenue) {
+          setSelectedVenue(updatedVenue);
+        }
+      }
+    }
   };
 
   if (loading) {
@@ -93,7 +108,7 @@ export default function VenuesPage() {
         venue={selectedVenue}
         admin={admin}
         onBack={handleBack}
-        onSave={loadVenues}
+        onSave={handleSave}
       />
     );
   }
@@ -101,17 +116,17 @@ export default function VenuesPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Manage Venues</h1>
-              <p className="text-sm text-gray-600 mt-1">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Manage Venues</h1>
+              <p className="text-xs sm:text-sm text-gray-600 mt-1">
                 Select a venue to manage its content
               </p>
             </div>
             <button
               onClick={() => router.push("/admin/dashboard")}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
               ← Back to Dashboard
             </button>
@@ -119,8 +134,8 @@ export default function VenuesPage() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {BRANDS.map((brand) => {
             // Check if admin can access this venue
             const canAccess =
