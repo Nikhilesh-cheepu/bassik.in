@@ -59,7 +59,7 @@ export const BRANDS: Brand[] = [
   {
     id: "club-rogue-gachibowli",
     name: "Club Rogue – Gachibowli",
-    shortName: "Club Rogue Gachibowli",
+    shortName: "Gachibowli",
     accentColor: "#F97316",
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/clubrogue.gachibowli/"],
@@ -68,7 +68,7 @@ export const BRANDS: Brand[] = [
   {
     id: "club-rogue-kondapur",
     name: "Club Rogue – Kondapur",
-    shortName: "Club Rogue Kondapur",
+    shortName: "Kondapur",
     accentColor: "#EC4899",
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/clubrogue.kondapur/"],
@@ -77,11 +77,38 @@ export const BRANDS: Brand[] = [
   {
     id: "club-rogue-jubilee-hills",
     name: "Club Rogue – Jubilee Hills",
-    shortName: "Club Rogue Jubilee Hills",
+    shortName: "Jubilee Hills",
     accentColor: "#A855F7",
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/clubrogue.jubileehills/"],
     websiteUrl: "https://example.com/clubrogue", // TODO: Replace with real website URL
+  },
+  {
+    id: "sound-of-soul",
+    name: "Sound of Soul Club & Kitchen",
+    shortName: "Sound of Soul",
+    accentColor: "#D4A574",
+    exploreUrl: "#",
+    instagramUrls: ["https://www.instagram.com/soundofsoulclub/"],
+    websiteUrl: "https://example.com/soundofsoul", // TODO: Replace with real website URL
+  },
+  {
+    id: "rejoy",
+    name: "Rejoy Club",
+    shortName: "Rejoy",
+    accentColor: "#FBBF24",
+    exploreUrl: "#",
+    instagramUrls: ["https://www.instagram.com/rejoyclub/"],
+    websiteUrl: "https://example.com/rejoy", // TODO: Replace with real website URL
+  },
+  {
+    id: "firefly",
+    name: "Firefly Club & Socialroom",
+    shortName: "Firefly",
+    accentColor: "#D97706",
+    exploreUrl: "#",
+    instagramUrls: ["https://www.instagram.com/fireflyclub/"],
+    websiteUrl: "https://example.com/firefly", // TODO: Replace with real website URL
   },
 ];
 

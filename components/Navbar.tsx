@@ -12,9 +12,15 @@ export default function Navbar() {
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center">
-            <div className="text-gray-900 font-bold text-lg">
-              <span className="text-2xl">B</span>assik
-            </div>
+            <Link href="/" className="block">
+              <div className="bg-gray-900 rounded-lg px-3 py-2 md:px-4 md:py-2.5 overflow-hidden">
+                <img
+                  src="/logos/bassik.png"
+                  alt="Bassik"
+                  className="h-10 md:h-12 object-contain"
+                />
+              </div>
+            </Link>
           </div>
 
           {/* Desktop Menu */}

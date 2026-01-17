@@ -15,50 +15,68 @@ const HOMEPAGE_VENUES: HomepageVenue[] = [
   {
     id: "alehouse",
     name: "Alehouse",
-    logoSrc: "/ALEHOUSE CLUB LOGO copy.ai.png",
+    logoSrc: "/logos/alehouse.png",
     tagline: undefined,
   },
   {
     id: "c53",
     name: "C53",
-    logoSrc: "/C53 LOGO.png",
+    logoSrc: "/logos/c53.png",
     tagline: undefined,
   },
   {
     id: "boiler-room",
     name: "Boiler Room",
-    logoSrc: "/BOILER ROOM - LOGO.png",
+    logoSrc: "/logos/boiler-room.png",
     tagline: undefined,
   },
   {
     id: "skyhy",
     name: "SkyHy",
-    logoSrc: "/SKYHY LOGO.png",
+    logoSrc: "/logos/skyhy.png",
     tagline: undefined,
   },
   {
     id: "kiik69",
     name: "KIIK 69",
-    logoSrc: "/kiik logo.png",
+    logoSrc: "/logos/kiik69.png",
     tagline: undefined,
   },
   {
     id: "club-rogue-gachibowli",
-    name: "Club Rogue",
-    logoSrc: "/CLUB rogue logo all inone.png",
-    tagline: "Gachibowli",
+    name: "Gachibowli",
+    logoSrc: "/logos/club-rogue.png",
+    tagline: undefined,
   },
   {
     id: "club-rogue-kondapur",
-    name: "Club Rogue",
-    logoSrc: "/CLUB rogue logo all inone.png",
-    tagline: "Kondapur",
+    name: "Kondapur",
+    logoSrc: "/logos/club-rogue.png",
+    tagline: undefined,
   },
   {
     id: "club-rogue-jubilee-hills",
-    name: "Club Rogue",
-    logoSrc: "/CLUB rogue logo all inone.png",
-    tagline: "Jubilee Hills",
+    name: "Jubilee Hills",
+    logoSrc: "/logos/club-rogue.png",
+    tagline: undefined,
+  },
+  {
+    id: "sound-of-soul",
+    name: "Sound of Soul",
+    logoSrc: "/logos/sound-of-soul.png",
+    tagline: undefined,
+  },
+  {
+    id: "rejoy",
+    name: "Rejoy",
+    logoSrc: "/logos/rejoy.png",
+    tagline: undefined,
+  },
+  {
+    id: "firefly",
+    name: "Firefly",
+    logoSrc: "/logos/firefly.png",
+    tagline: undefined,
   },
 ];
 
@@ -101,21 +119,23 @@ export default function Home() {
       >
         <div className="w-full max-w-4xl mx-auto space-y-8 md:space-y-10 text-center">
           <section className="space-y-4 md:space-y-5">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-[10px] md:text-xs text-gray-200 border border-white/10">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-2 text-[10px] md:text-xs text-gray-200 border border-white/10">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              <span className="uppercase tracking-[0.18em] text-[9px] md:text-[10px] text-gray-300">
-                Bassik Hospitality
-              </span>
+              <img
+                src="/logos/bassik.png"
+                alt="Bassik Hospitality"
+                className="h-4 md:h-5 object-contain"
+              />
             </div>
 
             <div className="space-y-3 md:space-y-4">
               <h1 className="text-3xl md:text-5xl lg:text-6xl font-semibold tracking-tight text-white">
-                8 Venues. One Command Point.
+                11 Venues. One Command Point.
               </h1>
 
               <div className="space-y-2 text-xs md:text-sm text-gray-300 leading-relaxed max-w-2xl mx-auto">
                 <p>
-                  Alehouse, C53, Boiler Room, SkyHy, KIIK 69 &amp; Club Rogue
+                  Alehouse, C53, Boiler Room, SkyHy, KIIK 69, Club Rogue, Sound of Soul, Rejoy &amp; Firefly
                   – Hyderabad&apos;s nights, curated under one hospitality
                   group.
                 </p>
@@ -183,10 +203,6 @@ export default function Home() {
 
             <div className="space-y-2.5 md:space-y-3">
               {connectBrands.map((brand) => {
-                const isClubRogue = brand.id.startsWith("club-rogue");
-                const locationMatch = brand.name.match(/–\s*(.+)$/);
-                const location = locationMatch ? locationMatch[1] : null;
-
                 return (
                   <div
                     key={brand.id}
@@ -195,11 +211,6 @@ export default function Home() {
                     <div className="flex-shrink-0">
                       <p className="text-xs md:text-sm font-semibold text-gray-100">
                         {brand.shortName}
-                        {isClubRogue && location && (
-                          <span className="block mt-0.5 text-[10px] md:text-xs font-normal text-gray-400">
-                            ({location})
-                          </span>
-                        )}
                       </p>
                     </div>
 

@@ -28,6 +28,9 @@ export default function BrandTabs({
   const clubRogueKondapur = brands.find(
     (b) => b.id === "club-rogue-kondapur"
   )!;
+  const soundOfSoul = brands.find((b) => b.id === "sound-of-soul")!;
+  const rejoy = brands.find((b) => b.id === "rejoy")!;
+  const firefly = brands.find((b) => b.id === "firefly")!;
 
   const orderedBrands = [
     alehouse,
@@ -38,6 +41,9 @@ export default function BrandTabs({
     clubRogueJubileeHills,
     clubRogueGachibowli,
     clubRogueKondapur,
+    soundOfSoul,
+    rejoy,
+    firefly,
   ];
 
   return (
