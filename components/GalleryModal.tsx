@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 
 interface GalleryModalProps {
   images: string[];
@@ -104,11 +105,15 @@ export default function GalleryModal({ images, brandName, initialIndex = 0, onCl
         </div>
 
         {/* Main Image */}
-        <div className="flex-1 flex items-center justify-center overflow-hidden">
-          <img
+        <div className="flex-1 flex items-center justify-center overflow-hidden relative">
+          <Image
             src={images[currentImageIndex]}
             alt={`${brandName} gallery ${currentImageIndex + 1}`}
             className="max-w-full max-h-full object-contain"
+            width={1200}
+            height={800}
+            unoptimized
+            style={{ width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: '100%' }}
           />
         </div>
 
@@ -174,10 +179,13 @@ export default function GalleryModal({ images, brandName, initialIndex = 0, onCl
                       : "border-transparent opacity-60 hover:opacity-100"
                   }`}
                 >
-                  <img
+                  <Image
                     src={image}
                     alt={`Thumbnail ${index + 1}`}
                     className="w-full h-full object-cover"
+                    width={80}
+                    height={80}
+                    unoptimized
                   />
                 </button>
               ))}
