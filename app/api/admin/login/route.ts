@@ -21,7 +21,23 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[LOGIN API] Calling verifyAdmin for: ${username}`);
-    const admin = await verifyAdmin(username, password);
+    let admin;
+    try {
+      admin = await verifyAdmin(username, password);
+    } catch (verifyError: any) {
+      console.error(`[LOGIN API] verifyAdmin threw an error:`, {
+        message: verifyError?.message,
+        code: verifyError?.code,
+        stack: verifyError?.stack?.substring(0, 300),
+      });
+      return NextResponse.json(
+        { 
+          error: "Internal server error during verification",
+          details: process.env.NODE_ENV === "development" ? verifyError?.message : undefined
+        },
+        { status: 500 }
+      );
+    }
 
     if (!admin) {
       console.log(`[LOGIN API] verifyAdmin returned null for: ${username}`);

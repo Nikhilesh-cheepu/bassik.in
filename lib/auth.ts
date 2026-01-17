@@ -53,64 +53,23 @@ export async function verifyAdmin(username: string, password: string) {
   try {
     console.log(`[VERIFY] Starting verification for username: ${username}`);
     
-    // Try to query admin - make it resilient to missing relations
+    // Start with simplest query - just get admin credentials, no relations
+    // This avoids any issues with venuePermissions or venue relations
     let admin: any;
     let venuePermissions: string[] = [];
     
-    try {
-      admin = await prisma.admin.findUnique({
-        where: { username },
-        include: {
-          venuePermissions: {
-            include: {
-              venue: {
-                select: {
-                  brandId: true,
-                },
-              },
-            },
-          },
-        },
-      });
-      console.log(`[VERIFY] Admin query completed. Found: ${!!admin}`);
-      
-      if (admin && admin.venuePermissions) {
-        venuePermissions = admin.venuePermissions.map((p: any) => {
-          if (p?.venue?.brandId) {
-            return p.venue.brandId;
-          }
-          if (p?.venueId) {
-            return p.venueId;
-          }
-          return null;
-        }).filter((id: string | null) => id !== null) as string[];
-      }
-    } catch (dbError: any) {
-      console.error(`[VERIFY] Database query error:`, {
-        code: dbError?.code,
-        message: dbError?.message,
-        stack: dbError?.stack?.substring(0, 500),
-      });
-      
-      // Try simpler query if the complex one fails
-      try {
-        console.log(`[VERIFY] Attempting simpler query without includes`);
-        admin = await prisma.admin.findUnique({
-          where: { username },
-          select: {
-            id: true,
-            username: true,
-            password: true,
-            role: true,
-          },
-        });
-        venuePermissions = []; // Empty permissions for simpler query
-        console.log(`[VERIFY] Simple query completed. Found: ${!!admin}`);
-      } catch (simpleError: any) {
-        console.error(`[VERIFY] Simple query also failed:`, simpleError?.message);
-        throw simpleError;
-      }
-    }
+    console.log(`[VERIFY] Querying admin from database...`);
+    admin = await prisma.admin.findUnique({
+      where: { username },
+      select: {
+        id: true,
+        username: true,
+        password: true,
+        role: true,
+      },
+    });
+    
+    console.log(`[VERIFY] Basic admin query completed. Found: ${!!admin}`);
 
     if (!admin) {
       console.log(`[VERIFY] Admin not found in database: ${username}`);
@@ -135,7 +94,26 @@ export async function verifyAdmin(username: string, password: string) {
     }
 
     console.log(`[VERIFY] Password verified successfully for: ${username}`);
-    console.log(`[VERIFY] Login successful for: ${username}, permissions: ${venuePermissions.length} venues`);
+    
+    // Get venue permissions separately to avoid include issues
+    if (!venuePermissions.length) {
+      try {
+        const permissions = await prisma.adminVenuePermission.findMany({
+          where: { adminId: admin.id },
+          include: {
+            venue: {
+              select: { brandId: true },
+            },
+          },
+        });
+        venuePermissions = permissions
+          .map((p: any) => p?.venue?.brandId || p?.venueId)
+          .filter((id: string | null | undefined) => id != null) as string[];
+      } catch (permError: any) {
+        console.log(`[VERIFY] Could not fetch permissions (non-fatal):`, permError?.code);
+        venuePermissions = [];
+      }
+    }
 
     console.log(`[VERIFY] Login successful for: ${username}, permissions: ${venuePermissions.length} venues`);
     return {
@@ -145,11 +123,13 @@ export async function verifyAdmin(username: string, password: string) {
       venuePermissions,
     };
   } catch (error: any) {
-    console.error(`[VERIFY] Error verifying admin for ${username}:`, {
+    console.error(`[VERIFY] CRITICAL ERROR verifying admin for ${username}:`, {
       message: error?.message,
       code: error?.code,
-      stack: error?.stack?.substring(0, 500),
+      name: error?.name,
+      meta: error?.meta,
     });
-    return null;
+    // Don't swallow the error - let it propagate so API can handle it
+    throw error;
   }
 }
