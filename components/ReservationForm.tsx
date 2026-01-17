@@ -55,14 +55,19 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   }>({ type: null, message: "" });
   const [timeSlotTab, setTimeSlotTab] = useState<"lunch" | "dinner">("lunch");
 
-  // Generate time slots (15 min intervals from 12PM to 12AM) - stored in 24-hour format
-  // Lunch: 12PM-7PM, Dinner: 7PM-12AM
+  // Generate time slots (15 min intervals) - stored in 24-hour format
+  // Club Rogue: 5PM-12AM, Others: 12PM-12AM
+  // Lunch: 12PM-7PM (or 5PM-7PM for Club Rogue), Dinner: 7PM-12AM
   const allTimeSlots = useMemo(() => {
     const slots: { value24: string; display12: string; category: "lunch" | "dinner" }[] = [];
-    for (let hour = 12; hour < 24; hour++) {
+    const isClubRogue = brand.id.startsWith("club-rogue");
+    const startHour = isClubRogue ? 17 : 12; // Club Rogue starts at 5PM (17:00), others at 12PM
+    
+    for (let hour = startHour; hour < 24; hour++) {
       for (let minute = 0; minute < 60; minute += 15) {
         const time24 = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
-        // Lunch: 12:00-18:45 (12PM-6:45PM), Dinner: 19:00-23:45 (7PM-11:45PM)
+        // Lunch: 12:00-18:45 (12PM-6:45PM) or 17:00-18:45 (5PM-6:45PM) for Club Rogue
+        // Dinner: 19:00-23:45 (7PM-11:45PM)
         const category: "lunch" | "dinner" = hour < 19 ? "lunch" : "dinner";
         slots.push({
           value24: time24,
@@ -72,7 +77,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
       }
     }
     return slots;
-  }, []);
+  }, [brand.id]);
 
   // Filter slots based on selected tab
   const timeSlots = useMemo(() => {
@@ -82,8 +87,10 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   // Get available discounts/offers for the brand
   const availableDiscounts = useMemo((): Discount[] => {
     const discounts: Discount[] = [];
+    const isClubRogue = brand.id.startsWith("club-rogue");
+    const lunchStart = isClubRogue ? "17:00" : "12:00"; // Club Rogue starts at 5PM
     const isLunchTime = formData.timeSlot && 
-      formData.timeSlot >= "12:00" && 
+      formData.timeSlot >= lunchStart && 
       ((brand.id === "kiik69" || brand.id === "alehouse" || brand.id === "skyhy") ? formData.timeSlot < "20:00" : formData.timeSlot < "19:00");
 
     // Club Rogue - No discounts
@@ -514,7 +521,9 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
                     {timeSlotTab === "lunch"
-                      ? "Lunch slots: 12:00 PM - 6:45 PM"
+                      ? brand.id.startsWith("club-rogue")
+                        ? "Lunch slots: 5:00 PM - 6:45 PM"
+                        : "Lunch slots: 12:00 PM - 6:45 PM"
                       : "Dinner slots: 7:00 PM - 11:45 PM"}
                   </p>
                 </div>

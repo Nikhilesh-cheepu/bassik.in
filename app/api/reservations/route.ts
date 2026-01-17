@@ -58,14 +58,25 @@ export async function POST(request: NextRequest) {
       return `${hours12}:${minutes.toString().padStart(2, "0")} ${period}`;
     };
 
+    // Format date in short format (e.g., "18 Jan 2026")
+    const formatDateShort = (dateStr: string): string => {
+      const date = new Date(dateStr);
+      const options: Intl.DateTimeFormatOptions = {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      };
+      return date.toLocaleDateString("en-IN", options);
+    };
+
     // Map discount IDs to friendly names
     const discountNames: Record<string, string> = {
       "kiik-10-percent": "10% off on total bill",
-      "kiik-lunch": "Lunch Special @ ₹128 (12PM - 8PM)",
-      "lunch-special": "Lunch Special @ ₹127 (12PM - 7PM)",
-      "alehouse-lunch": "Lunch Special @ ₹128 (12PM - 8PM)",
-      "alehouse-liquor": "50% off on liquor (All day)",
-      "skyhy-lunch": "Lunch Special @ ₹128 (12PM - 8PM)",
+      "kiik-lunch": "Lunch Special @ ₹128",
+      "lunch-special": "Lunch Special @ ₹127",
+      "alehouse-lunch": "Lunch Special @ ₹128",
+      "alehouse-liquor": "50% off on liquor",
+      "skyhy-lunch": "Lunch Special @ ₹128",
     };
 
     const timeToFormat = timeSlot || time;
@@ -75,6 +86,13 @@ export async function POST(request: NextRequest) {
     const totalGuests =
       parseInt(numberOfMen) + parseInt(numberOfWomen) + parseInt(numberOfCouples) * 2;
 
+    // Build guest count string
+    const guestParts: string[] = [];
+    if (parseInt(numberOfMen) > 0) guestParts.push(`${numberOfMen}M`);
+    if (parseInt(numberOfWomen) > 0) guestParts.push(`${numberOfWomen}W`);
+    if (parseInt(numberOfCouples) > 0) guestParts.push(`${numberOfCouples} Couple${parseInt(numberOfCouples) > 1 ? "s" : ""}`);
+    const guestCountStr = `${totalGuests} Guests (${guestParts.join(" / ")})`;
+
     // Build offers section
     let offersSection = "";
     if (selectedDiscounts && Array.isArray(selectedDiscounts) && selectedDiscounts.length > 0) {
@@ -82,33 +100,36 @@ export async function POST(request: NextRequest) {
         .map((discountId: string) => {
           return discountNames[discountId] || discountId;
         })
-        .join("\n   • ");
-      offersSection = `\n\nSPECIAL OFFERS APPLIED:\n   • ${offerList}`;
+        .map((offer: string) => `💸 ${offer}`)
+        .join("\n");
+      offersSection = `\n${offerList}`;
     }
 
-    const message = `✨ NEW TABLE RESERVATION REQUEST ✨
+    // Build notes section
+    let notesSection = "";
+    if (notes && notes.trim()) {
+      // Check if notes contains common event types
+      const notesLower = notes.toLowerCase();
+      if (notesLower.includes("birthday") || notesLower.includes("bday")) {
+        notesSection = "\n🎉 Birthday";
+      } else if (notesLower.includes("anniversary")) {
+        notesSection = "\n🎉 Anniversary";
+      } else if (notesLower.includes("celebration")) {
+        notesSection = "\n🎉 Celebration";
+      } else {
+        notesSection = `\n📝 ${notes}`;
+      }
+    }
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    const message = `🍽️ Table Reservation | ${brandName}
 
-VENUE: ${brandName}
+👤 ${fullName} | 📞 ${contactNumber}
 
-CUSTOMER DETAILS:
-   Name: ${fullName}
-   Contact: ${contactNumber}
+📅 ${formatDateShort(date)} | ⏰ ${formattedTime}
 
-RESERVATION DETAILS:
-   Date: ${formatDate(date)}
-   Time: ${formattedTime}
+👥 ${guestCountStr}${offersSection}${notesSection}
 
-GUEST COUNT:
-   Men: ${numberOfMen}
-   Women: ${numberOfWomen}
-   Couples: ${numberOfCouples}
-   Total Guests: ${totalGuests}${offersSection}${notes ? `\n\nADDITIONAL NOTES:\n   ${notes}` : ""}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-This reservation was submitted through the Bassik Reservations Hub.`;
+Reservation submitted via bassik.in`;
 
     // Encode message for WhatsApp URL
     const encodedMessage = encodeURIComponent(message);
