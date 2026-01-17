@@ -4,10 +4,10 @@ import { prisma } from "@/lib/db";
 // GET - Get venue data for public display
 export async function GET(
   request: NextRequest,
-  { params }: { params: { brandId: string } }
+  { params }: { params: Promise<{ brandId: string }> }
 ) {
   try {
-    const { brandId } = params;
+    const { brandId } = await params;
 
     const venue = await prisma.venue.findUnique({
       where: { brandId },

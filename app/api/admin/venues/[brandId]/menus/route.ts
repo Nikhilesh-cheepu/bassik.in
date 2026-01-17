@@ -6,7 +6,7 @@ import { AdminRole } from "@prisma/client";
 // POST - Create or update menu
 export async function POST(
   request: NextRequest,
-  { params }: { params: { brandId: string } }
+  { params }: { params: Promise<{ brandId: string }> }
 ) {
   try {
     const admin = await verifyAdminToken(request);
@@ -14,7 +14,7 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { brandId } = params;
+    const { brandId } = await params;
     const body = await request.json();
     const { menuId, name, thumbnailUrl, images } = body;
 
