@@ -31,21 +31,47 @@ export default function BookingsPage() {
   const [admin, setAdmin] = useState<Admin | null>(null);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<{ status?: string; brandId?: string; date?: string; dateFrom?: string; dateTo?: string }>({});
+  
+  // Get today's date in YYYY-MM-DD format
+  const getToday = () => {
+    const today = new Date();
+    return today.toISOString().split("T")[0];
+  };
+
+  // Get yesterday's date
+  const getYesterday = () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return yesterday.toISOString().split("T")[0];
+  };
+
+  // Get tomorrow's date
+  const getTomorrow = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split("T")[0];
+  };
+
+  const [filter, setFilter] = useState<{ dateFrom?: string; dateTo?: string }>({
+    dateFrom: getToday(),
+    dateTo: getToday(),
+  });
 
   const loadBookings = useCallback(async () => {
     try {
       const queryParams = new URLSearchParams();
-      if (filter.status) queryParams.append("status", filter.status);
-      if (filter.brandId) queryParams.append("brandId", filter.brandId);
-      if (filter.date) queryParams.append("date", filter.date);
-      if (filter.dateFrom) queryParams.append("dateFrom", filter.dateFrom);
-      if (filter.dateTo) queryParams.append("dateTo", filter.dateTo);
+      // Always send dateFrom and dateTo (default to today if not set)
+      const dateFrom = filter.dateFrom || getToday();
+      const dateTo = filter.dateTo || getToday();
+      queryParams.append("dateFrom", dateFrom);
+      queryParams.append("dateTo", dateTo);
 
       const res = await fetch(`/api/admin/bookings?${queryParams.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setReservations(data.reservations || []);
+      } else {
+        console.error("Failed to load bookings:", res.status);
       }
     } catch (error) {
       console.error("Error loading bookings:", error);
@@ -235,34 +261,50 @@ Reservation ID: ${reservation.id}`;
       <main className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
         {/* Compact Filters */}
         <div className="bg-white rounded-xl shadow-sm p-3 sm:p-4 mb-3 sm:mb-4 border border-gray-100">
+          {/* Date Shortcuts */}
+          <div className="flex flex-wrap items-center gap-2 mb-3 pb-3 border-b border-gray-200">
+            <span className="text-xs sm:text-sm text-gray-600 font-medium">Quick:</span>
+            <button
+              onClick={() => setFilter({ dateFrom: getYesterday(), dateTo: getYesterday() })}
+              className="px-3 py-1.5 text-xs sm:text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Yesterday
+            </button>
+            <button
+              onClick={() => setFilter({ dateFrom: getToday(), dateTo: getToday() })}
+              className="px-3 py-1.5 text-xs sm:text-sm text-white bg-orange-500 rounded-lg hover:bg-orange-600 transition-colors font-medium"
+            >
+              Today
+            </button>
+            <button
+              onClick={() => setFilter({ dateFrom: getTomorrow(), dateTo: getTomorrow() })}
+              className="px-3 py-1.5 text-xs sm:text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Tomorrow
+            </button>
+          </div>
+          
+          {/* Date Range Picker */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <label className="text-xs sm:text-sm text-gray-600 font-medium">From:</label>
             <input
               type="date"
-              value={filter.date || ""}
-              onChange={(e) => setFilter({ ...filter, date: e.target.value || undefined, dateFrom: undefined, dateTo: undefined })}
-              placeholder="Date"
+              value={filter.dateFrom || getToday()}
+              onChange={(e) => setFilter({ ...filter, dateFrom: e.target.value || getToday() })}
               className="px-2 py-1.5 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
-            <span className="text-gray-400 hidden sm:inline">to</span>
+            <label className="text-xs sm:text-sm text-gray-600 font-medium">To:</label>
             <input
               type="date"
-              value={filter.dateFrom || ""}
-              onChange={(e) => setFilter({ ...filter, dateFrom: e.target.value || undefined, date: undefined })}
-              placeholder="From"
-              className="px-2 py-1.5 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
-            <input
-              type="date"
-              value={filter.dateTo || ""}
-              onChange={(e) => setFilter({ ...filter, dateTo: e.target.value || undefined, date: undefined })}
-              placeholder="To"
+              value={filter.dateTo || getToday()}
+              onChange={(e) => setFilter({ ...filter, dateTo: e.target.value || getToday() })}
               className="px-2 py-1.5 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
             <button
-              onClick={() => setFilter({})}
+              onClick={() => setFilter({ dateFrom: getToday(), dateTo: getToday() })}
               className="px-3 py-1.5 text-xs text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
             >
-              Clear
+              Reset
             </button>
             <div className="flex-1"></div>
             <button

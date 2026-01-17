@@ -47,16 +47,24 @@ export async function GET(request: NextRequest) {
       where.status = status as ReservationStatus;
     }
 
-    // Date filtering - single date or date range
+    // Date filtering - default to today if no date filters
+    const today = new Date().toISOString().split("T")[0];
+    
     if (date) {
       where.date = date;
-    } else if (dateFrom || dateTo) {
+    } else {
       where.date = {};
       if (dateFrom) {
         where.date.gte = dateFrom;
+      } else {
+        // Default "from" to today if not specified
+        where.date.gte = today;
       }
       if (dateTo) {
         where.date.lte = dateTo;
+      } else {
+        // Default "to" to today if not specified
+        where.date.lte = today;
       }
     }
 
