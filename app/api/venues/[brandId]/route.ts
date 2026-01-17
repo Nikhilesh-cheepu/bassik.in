@@ -32,12 +32,12 @@ export async function GET(
 
     // Format data for frontend
     const coverImages = venue.images
-      .filter((img) => img.type === "COVER")
-      .map((img) => img.url);
+      .filter((img: { type: string }) => img.type === "COVER")
+      .map((img: { url: string }) => img.url);
     
     const galleryImages = venue.images
-      .filter((img) => img.type === "GALLERY")
-      .map((img) => img.url);
+      .filter((img: { type: string }) => img.type === "GALLERY")
+      .map((img: { url: string }) => img.url);
 
     const menus = venue.menus.map((menu) => ({
       id: menu.id,
