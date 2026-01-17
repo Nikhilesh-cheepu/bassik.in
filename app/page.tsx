@@ -204,61 +204,81 @@ export default function Home() {
           {/* Menu Section - Compact Image Thumbnails */}
           <section className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4 mb-4">
             <h2 className="text-xl font-bold text-gray-900 mb-3">Menu</h2>
-            <div className="grid grid-cols-2 gap-2.5">
-              {venueData.menus.map((menu) => (
-                <button
-                  key={menu.id}
-                  onClick={() => {
-                    setSelectedMenuId(menu.id);
-                    setIsMenuModalOpen(true);
-                  }}
-                  className="relative aspect-[4/3] overflow-hidden rounded-lg group"
-                >
-                  <img
-                    src={menu.thumbnail}
-                    alt={menu.name}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
-                  <div className="absolute bottom-0 left-0 right-0 p-3">
-                    <h3 className="text-white font-bold text-sm mb-0.5">{menu.name}</h3>
-                    <p className="text-white/90 text-xs">{menu.images.length} pages</p>
-                  </div>
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                </button>
-              ))}
-            </div>
+            {venueData.menus.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-lg font-medium">Menu section is empty</p>
+                <p className="text-sm mt-1">Upload menu images via admin panel</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5">
+                {venueData.menus.map((menu) => (
+                  <button
+                    key={menu.id}
+                    onClick={() => {
+                      setSelectedMenuId(menu.id);
+                      setIsMenuModalOpen(true);
+                    }}
+                    className="relative aspect-[4/3] overflow-hidden rounded-lg group"
+                  >
+                    <img
+                      src={menu.thumbnail}
+                      alt={menu.name}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-3">
+                      <h3 className="text-white font-bold text-sm mb-0.5">{menu.name}</h3>
+                      <p className="text-white/90 text-xs">{menu.images.length} pages</p>
+                    </div>
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Gallery Section - Premium Grid */}
           <section className="bg-white rounded-2xl shadow-xl border border-gray-100 p-5 mb-4">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Photos</h2>
-            <div className="grid grid-cols-3 gap-2">
-              {venueData.galleryImages.slice(0, 6).map((image, index) => (
-                <button
-                  key={index}
-                  onClick={() => {
-                    setGalleryStartIndex(index);
-                    setIsGalleryModalOpen(true);
-                  }}
-                  className={`relative aspect-square overflow-hidden rounded-xl ${
-                    index === 0 ? "col-span-2 row-span-2" : ""
-                  } group`}
-                >
-                  <img
-                    src={image}
-                    alt={`Gallery ${index + 1}`}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  {index === 5 && (
-                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold text-xl group-hover:bg-black/70 transition-colors">
-                      <span>+{venueData.galleryImages.length - 6}</span>
-                </div>
-                  )}
-                </button>
-              ))}
+            {venueData.galleryImages.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">
+                <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <p className="text-lg font-medium">Gallery is empty</p>
+                <p className="text-sm mt-1">Upload gallery images via admin panel</p>
               </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2">
+                {venueData.galleryImages.slice(0, 6).map((image, index) => (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      setGalleryStartIndex(index);
+                      setIsGalleryModalOpen(true);
+                    }}
+                    className={`relative aspect-square overflow-hidden rounded-xl ${
+                      index === 0 ? "col-span-2 row-span-2" : ""
+                    } group`}
+                  >
+                    <img
+                      src={image}
+                      alt={`Gallery ${index + 1}`}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    {index === 5 && venueData.galleryImages.length > 6 && (
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-bold text-xl group-hover:bg-black/70 transition-colors">
+                        <span>+{venueData.galleryImages.length - 6}</span>
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Location Section - Premium */}
