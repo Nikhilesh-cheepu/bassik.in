@@ -301,17 +301,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
 
       if (response.ok) {
         const data = await response.json();
-        setSubmitStatus({
-          type: "success",
-          message: "Reservation request sent! Our team will reach out shortly.",
-        });
-
-        // Open WhatsApp with the reservation message
-        if (data.whatsappUrl) {
-          window.open(data.whatsappUrl, "_blank", "noopener,noreferrer");
-        }
-
-        // Reset form
+        
+        // Reset form first
         setFormData({
           fullName: "",
           contactNumber: "",
@@ -324,6 +315,18 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
           notes: "",
         });
         setCurrentStep(1);
+
+        // Redirect to WhatsApp with the reservation message
+        if (data.whatsappUrl) {
+          // Redirect directly to WhatsApp (works better than window.open)
+          window.location.href = data.whatsappUrl;
+        } else {
+          // Fallback if whatsappUrl is not provided
+          setSubmitStatus({
+            type: "success",
+            message: "Reservation request sent! Our team will reach out shortly.",
+          });
+        }
       } else {
         throw new Error("Failed to submit reservation");
       }
