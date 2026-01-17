@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -13,11 +14,12 @@ export default function Navbar() {
           {/* Logo */}
           <div className="flex items-center">
             <Link href="/" className="block">
-              <div className="bg-gray-900 rounded-lg px-3 py-2 md:px-4 md:py-2.5 overflow-hidden">
-                <img
+              <div className="bg-gray-900 rounded-lg px-3 py-2 md:px-4 md:py-2.5 overflow-hidden relative h-10 md:h-12">
+                <Image
                   src="/logos/bassik.png"
                   alt="Bassik"
-                  className="h-10 md:h-12 object-contain"
+                  fill
+                  className="object-contain"
                 />
               </div>
             </Link>

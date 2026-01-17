@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Image from "next/image";
 
 interface MenuManagerProps {
   venueId: string;
@@ -157,7 +158,7 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Menu Name (e.g., "Food Menu", "Liquor Menu")
+              Menu Name (e.g., &quot;Food Menu&quot;, &quot;Liquor Menu&quot;)
             </label>
             <input
               type="text"
@@ -174,10 +175,11 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
             </label>
             {editingMenu.thumbnailUrl ? (
               <div className="relative w-32 h-32 rounded-lg overflow-hidden mb-2">
-                <img
+                <Image
                   src={editingMenu.thumbnailUrl}
                   alt="Thumbnail"
-                  className="w-full h-full object-cover"
+                  fill
+                  className="object-cover"
                 />
                 <button
                   onClick={() => setEditingMenu({ ...editingMenu, thumbnailUrl: "" })}
@@ -238,11 +240,12 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
             />
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
               {editingMenu.images.map((img: string, idx: number) => (
-                <div key={idx} className="relative group">
-                  <img
+                <div key={idx} className="relative group aspect-[3/4] rounded-lg overflow-hidden">
+                  <Image
                     src={img}
                     alt={`Page ${idx + 1}`}
-                    className="w-full aspect-[3/4] object-cover rounded-lg"
+                    fill
+                    className="object-cover rounded-lg"
                   />
                   <button
                     onClick={() => {
@@ -307,7 +310,7 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
       {menus.length === 0 ? (
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center">
           <p className="text-gray-600">No menus created yet</p>
-          <p className="text-sm text-gray-500 mt-1">Click "Create Menu" to add a menu</p>
+          <p className="text-sm text-gray-500 mt-1">Click &quot;Create Menu&quot; to add a menu</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -330,11 +333,12 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
                   </button>
                 </div>
               </div>
-              <div className="aspect-[3/4] rounded-lg overflow-hidden bg-gray-100 mb-2">
-                <img
+              <div className="aspect-[3/4] rounded-lg overflow-hidden bg-gray-100 mb-2 relative">
+                <Image
                   src={menu.thumbnailUrl}
                   alt={menu.name}
-                  className="w-full h-full object-cover"
+                  fill
+                  className="object-cover"
                 />
               </div>
               <p className="text-sm text-gray-600">{menu.images?.length || 0} pages</p>

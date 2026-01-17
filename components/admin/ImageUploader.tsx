@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Image from "next/image";
 
 interface ImageUploaderProps {
   venueId: string;
@@ -219,17 +220,18 @@ export default function ImageUploader({
             />
           </svg>
           <p className="text-gray-600">No images uploaded yet</p>
-          <p className="text-sm text-gray-500 mt-1">Click "Upload" to add images</p>
+          <p className="text-sm text-gray-500 mt-1">Click &quot;Upload&quot; to add images</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {images.map((image, index) => (
             <div key={image.id} className="relative group">
-              <div className={`${imageType === "COVER" ? "aspect-video" : "aspect-square"} rounded-lg overflow-hidden bg-gray-100`}>
-                <img
+              <div className={`${imageType === "COVER" ? "aspect-video" : "aspect-square"} rounded-lg overflow-hidden bg-gray-100 relative`}>
+                <Image
                   src={image.url}
                   alt={`${imageType} ${index + 1}`}
-                  className="w-full h-full object-cover"
+                  fill
+                  className="object-cover"
                 />
               </div>
               <button

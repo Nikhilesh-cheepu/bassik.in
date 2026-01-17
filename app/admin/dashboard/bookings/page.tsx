@@ -74,6 +74,7 @@ export default function BookingsPage() {
     if (admin) {
       loadBookings();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, admin]);
 
   const handleStatusUpdate = async (reservationId: string, newStatus: string) => {

@@ -169,7 +169,7 @@ export default function AdminDashboard() {
             <p className="text-3xl font-bold text-orange-500 mt-2">{stats.pendingBookings}</p>
           </div>
           <div className="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
-            <h3 className="text-sm font-medium text-gray-600">Today's Bookings</h3>
+            <h3 className="text-sm font-medium text-gray-600">Today&apos;s Bookings</h3>
             <p className="text-3xl font-bold text-gray-900 mt-2">{stats.todayBookings}</p>
           </div>
         </div>
