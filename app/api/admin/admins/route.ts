@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
         id: newAdmin.id,
         username: newAdmin.username,
         role: newAdmin.role,
-        venuePermissions: newAdmin.venuePermissions.map((p) => ({
+        venuePermissions: newAdmin.venuePermissions.map((p: { venue: { brandId: string; name: string } }) => ({
           brandId: p.venue.brandId,
           name: p.venue.name,
         })),
