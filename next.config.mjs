@@ -61,6 +61,13 @@ const nextConfig = {
             key: "Referrer-Policy",
             value: "strict-origin-when-cross-origin",
           },
+          {
+            // CRITICAL: Allow unsafe-eval ONLY for Next.js runtime (required for code splitting)
+            // Without this, iOS Safari blocks Next.js's internal eval() and crashes
+            // This is the minimal CSP needed - unsafe-eval is only for Next.js chunks
+            key: "Content-Security-Policy",
+            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:;",
+          },
         ],
       },
       {
