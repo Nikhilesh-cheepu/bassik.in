@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { BRANDS } from "@/lib/brands";
 import MenuModal from "@/components/MenuModal";
 import GalleryModal from "@/components/GalleryModal";
@@ -111,10 +112,12 @@ export default function Home() {
                   index === currentImageIndex ? "opacity-100 z-10" : "opacity-0 z-0"
                 }`}
               >
-                <img
+                <Image
                   src={image}
                   alt={`${selectedBrand.shortName} cover ${index + 1}`}
-                  className="w-full h-full object-cover"
+                  fill
+                  className="object-cover"
+                  unoptimized
                 />
                 {/* Gradient overlay for better text readability */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
@@ -227,10 +230,12 @@ export default function Home() {
                     }}
                     className="relative aspect-[4/3] overflow-hidden rounded-lg group"
                   >
-                    <img
+                    <Image
                       src={menu.thumbnail}
                       alt={menu.name}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      fill
+                      className="object-cover group-hover:scale-110 transition-transform duration-500"
+                      unoptimized
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
                     <div className="absolute bottom-0 left-0 right-0 p-3">
@@ -268,10 +273,12 @@ export default function Home() {
                       index === 0 ? "col-span-2 row-span-2" : ""
                     } group`}
                   >
-                    <img
+                    <Image
                       src={image}
                       alt={`Gallery ${index + 1}`}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      fill
+                      className="object-cover group-hover:scale-110 transition-transform duration-500"
+                      unoptimized
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                     {index === 5 && venueData.galleryImages.length > 6 && (

@@ -74,6 +74,6 @@ export async function verifyAdmin(username: string, password: string) {
     id: admin.id,
     username: admin.username,
     role: admin.role,
-    venuePermissions: admin.venuePermissions.map((p) => p.venue.brandId),
+    venuePermissions: admin.venuePermissions.map((p: { venue: { brandId: string } }) => p.venue.brandId),
   };
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { BRANDS } from "@/lib/brands";
 import VenueEditor from "@/components/admin/VenueEditor";
 
@@ -156,10 +157,12 @@ export default function VenuesPage() {
               >
                 <div className="flex items-center justify-between mb-4">
                   <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <img
+                    <Image
                       src={`/logos/${brand.id}.png`}
                       alt={brand.shortName}
-                      className="w-12 h-12 object-contain"
+                      width={48}
+                      height={48}
+                      className="object-contain"
                       onError={(e) => {
                         (e.target as HTMLImageElement).style.display = "none";
                       }}

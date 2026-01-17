@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 interface Admin {
@@ -33,27 +33,7 @@ export default function BookingsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<{ status?: string; brandId?: string; date?: string }>({});
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const res = await fetch("/api/admin/me");
-        if (!res.ok) {
-          router.push("/admin");
-          return;
-        }
-        const data = await res.json();
-        setAdmin(data.admin);
-        loadBookings();
-      } catch (error) {
-        router.push("/admin");
-      } finally {
-        setLoading(false);
-      }
-    };
-    checkAuth();
-  }, [router]);
-
-  const loadBookings = async () => {
+  const loadBookings = useCallback(async () => {
     try {
       const queryParams = new URLSearchParams();
       if (filter.status) queryParams.append("status", filter.status);
@@ -68,14 +48,32 @@ export default function BookingsPage() {
     } catch (error) {
       console.error("Error loading bookings:", error);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const res = await fetch("/api/admin/me");
+        if (!res.ok) {
+          router.push("/admin");
+          return;
+        }
+        const data = await res.json();
+        setAdmin(data.admin);
+      } catch (error) {
+        router.push("/admin");
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkAuth();
+  }, [router]);
 
   useEffect(() => {
     if (admin) {
       loadBookings();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, admin]);
+  }, [filter, admin, loadBookings]);
 
   const handleStatusUpdate = async (reservationId: string, newStatus: string) => {
     try {
