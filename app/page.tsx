@@ -104,7 +104,7 @@ function Home() {
     return (
       <div
         style={{
-          minHeight: "100dvh",
+          minHeight: "100vh",
           backgroundColor: "#050509",
           display: "flex",
           alignItems: "center",
@@ -126,14 +126,14 @@ function Home() {
       className="min-h-screen"
       style={{ 
         backgroundColor: "#050509",
-        minHeight: "100dvh",
+        minHeight: "100vh",
       }}
     >
       <Navbar />
       <main 
         className="flex flex-col items-center justify-center px-4 py-8 md:py-12"
         style={{
-          minHeight: "calc(100dvh - 64px)",
+          minHeight: "calc(100vh - 64px)",
         }}
       >
         <div className="w-full max-w-4xl mx-auto space-y-8 md:space-y-10 text-center">
@@ -287,7 +287,7 @@ export default function HomePage() {
       fallback={
         <div
           style={{
-            minHeight: "100dvh",
+            minHeight: "100vh",
             backgroundColor: "#050509",
             display: "flex",
             alignItems: "center",
