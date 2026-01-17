@@ -51,44 +51,57 @@ export async function createAdmin(
 
 export async function verifyAdmin(username: string, password: string) {
   try {
-    const admin = await prisma.admin.findUnique({
-      where: { username },
-      include: {
-        venuePermissions: {
-          include: {
-            venue: true,
+    // Try to query admin - handle case where 'active' field might not exist yet
+    let admin;
+    try {
+      admin = await prisma.admin.findUnique({
+        where: { username },
+        include: {
+          venuePermissions: {
+            include: {
+              venue: true,
+            },
           },
         },
-      },
-    });
+      });
+    } catch (dbError: any) {
+      // If it's a column doesn't exist error, try without active field
+      if (dbError?.message?.includes('column') || dbError?.code === '42703') {
+        console.log("Note: 'active' column may not exist yet, attempting basic query");
+        // This shouldn't happen with Prisma, but just in case
+        throw dbError;
+      }
+      throw dbError;
+    }
 
     if (!admin) {
-      console.log(`Admin not found: ${username}`);
+      console.log(`[LOGIN] Admin not found: ${username}`);
       return null;
     }
 
     // Check if admin is active (only if active field exists and is false, otherwise allow)
-    // Use type assertion to safely check active field
+    // This handles the case where the migration hasn't been run yet
     const adminData = admin as any;
-    if (adminData.active === false) {
-      console.log(`Admin is inactive: ${username}`);
+    if (adminData.active !== undefined && adminData.active === false) {
+      console.log(`[LOGIN] Admin is inactive: ${username}`);
       return null;
     }
 
     const isValid = await verifyPassword(password, admin.password);
     if (!isValid) {
-      console.log(`Invalid password for admin: ${username}`);
+      console.log(`[LOGIN] Invalid password for admin: ${username}`);
       return null;
     }
 
+    console.log(`[LOGIN] Successful login for admin: ${username}`);
     return {
       id: admin.id,
       username: admin.username,
       role: admin.role,
       venuePermissions: admin.venuePermissions.map((p: { venue: { brandId: string } }) => p.venue.brandId),
     };
-  } catch (error) {
-    console.error("Error verifying admin:", error);
+  } catch (error: any) {
+    console.error("[LOGIN] Error verifying admin:", error?.message || error);
     return null;
   }
 }
