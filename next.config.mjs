@@ -4,6 +4,23 @@ const nextConfig = {
   compress: true,
   poweredByHeader: false,
   
+  // CRITICAL: Disable eval-source-map in production to prevent iOS Safari crashes
+  // Next.js uses eval-source-map by default which triggers CSP violations on iOS
+  productionBrowserSourceMaps: false,
+  
+  // Webpack config to prevent eval() usage in production
+  webpack: (config, { dev, isServer }) => {
+    // Disable eval-source-map in production - use source-map instead
+    if (!dev && !isServer) {
+      config.devtool = 'source-map';
+      // Ensure no eval-based source maps
+      if (config.optimization) {
+        config.optimization.minimize = true;
+      }
+    }
+    return config;
+  },
+  
   // Image optimization
   images: {
     formats: ['image/avif', 'image/webp'],
@@ -33,10 +50,6 @@ const nextConfig = {
           {
             key: "Referrer-Policy",
             value: "strict-origin-when-cross-origin",
-          },
-          {
-            key: "Content-Security-Policy",
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' *.vercel.app; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' *.vercel.app;",
           },
         ],
       },
