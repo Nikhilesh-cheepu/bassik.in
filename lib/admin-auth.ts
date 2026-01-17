@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 import { prisma } from "./db";
-import { AdminRole } from "@prisma/client";
+import { AdminRole } from "./auth";
 
 const SECRET = new TextEncoder().encode(
   process.env.NEXTAUTH_SECRET || "your-secret-key-change-in-production"
@@ -45,11 +45,11 @@ export async function verifyAdminToken(request: NextRequest) {
 }
 
 export async function canAccessVenue(
-  admin: { role: AdminRole; venuePermissions: string[] },
+  admin: { role: string; venuePermissions: string[] },
   brandId: string
 ): Promise<boolean> {
   // Main admin can access all venues
-  if (admin.role === AdminRole.MAIN_ADMIN) {
+  if (admin.role === "MAIN_ADMIN") {
     return true;
   }
 

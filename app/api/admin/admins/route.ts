@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyAdminToken, canAccessVenue } from "@/lib/admin-auth";
-import { createAdmin } from "@/lib/auth";
-import { AdminRole } from "@prisma/client";
+import { createAdmin, AdminRole } from "@/lib/auth";
 
 // GET - Get all admins (only MAIN_ADMIN)
 export async function GET(request: NextRequest) {
@@ -12,7 +11,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (admin.role !== AdminRole.MAIN_ADMIN) {
+    if (admin.role !== "MAIN_ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -51,7 +50,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (admin.role !== AdminRole.MAIN_ADMIN) {
+    if (admin.role !== "MAIN_ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -65,10 +64,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const adminRole = role === "MAIN_ADMIN" ? AdminRole.MAIN_ADMIN : AdminRole.ADMIN;
+    const adminRole = role === "MAIN_ADMIN" ? "MAIN_ADMIN" : "ADMIN";
 
     // If creating a regular admin, venueIds are required
-    if (adminRole === AdminRole.ADMIN && (!venueIds || venueIds.length === 0)) {
+    if (adminRole === "ADMIN" && (!venueIds || venueIds.length === 0)) {
       return NextResponse.json(
         { error: "Venue permissions are required for regular admins" },
         { status: 400 }
@@ -111,7 +110,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (admin.role !== AdminRole.MAIN_ADMIN) {
+    if (admin.role !== "MAIN_ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

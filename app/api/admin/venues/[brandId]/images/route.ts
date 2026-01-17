@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyAdminToken, canAccessVenue } from "@/lib/admin-auth";
-import { ImageType, AdminRole } from "@prisma/client";
+import { AdminRole } from "@/lib/auth";
+
+// Define ImageType enum
+enum ImageType {
+  COVER = "COVER",
+  GALLERY = "GALLERY",
+}
 
 // POST - Add images to venue
 export async function POST(
@@ -34,7 +40,7 @@ export async function POST(
     }
 
     // Check permission
-    if (admin.role !== AdminRole.MAIN_ADMIN) {
+    if (admin.role !== "MAIN_ADMIN") {
       if (!(await canAccessVenue(admin, brandId))) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }

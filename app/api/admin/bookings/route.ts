@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyAdminToken, canAccessVenue } from "@/lib/admin-auth";
-import { AdminRole, ReservationStatus } from "@prisma/client";
+import { AdminRole } from "@/lib/auth";
+
+// Define ReservationStatus enum
+enum ReservationStatus {
+  PENDING = "PENDING",
+  CONFIRMED = "CONFIRMED",
+  CANCELLED = "CANCELLED",
+  COMPLETED = "COMPLETED",
+}
 
 // GET - Get all bookings (filtered by admin permissions)
 export async function GET(request: NextRequest) {
@@ -19,14 +27,14 @@ export async function GET(request: NextRequest) {
     let where: any = {};
 
     // If main admin, can see all. Otherwise, filter by permissions
-    if (admin.role !== AdminRole.MAIN_ADMIN) {
+    if (admin.role !== "MAIN_ADMIN") {
       where.brandId = { in: admin.venuePermissions };
     }
 
     if (venueId) {
       where.brandId = venueId;
       // Check permission for this venue
-      if (admin.role !== AdminRole.MAIN_ADMIN) {
+      if (admin.role !== "MAIN_ADMIN") {
         if (!admin.venuePermissions.includes(venueId)) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
@@ -102,7 +110,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Check permission
-    if (admin.role !== AdminRole.MAIN_ADMIN) {
+    if (admin.role !== "MAIN_ADMIN") {
       if (!admin.venuePermissions.includes(reservation.brandId)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }

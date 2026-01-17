@@ -1,6 +1,12 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
-import { AdminRole } from "@prisma/client";
+
+// Define AdminRole type to match Prisma enum
+export type AdminRole = "MAIN_ADMIN" | "ADMIN";
+export const AdminRole = {
+  MAIN_ADMIN: "MAIN_ADMIN" as const,
+  ADMIN: "ADMIN" as const,
+};
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);

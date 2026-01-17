@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyAdminToken, canAccessVenue } from "@/lib/admin-auth";
-import { AdminRole } from "@prisma/client";
+import { AdminRole } from "@/lib/auth";
 
 // POST - Create or update menu
 export async function POST(
@@ -34,7 +34,7 @@ export async function POST(
     }
 
     // Check permission
-    if (admin.role !== AdminRole.MAIN_ADMIN) {
+    if (admin.role !== "MAIN_ADMIN") {
       if (!(await canAccessVenue(admin, brandId))) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }

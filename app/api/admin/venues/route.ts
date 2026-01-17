@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyAdminToken, canAccessVenue } from "@/lib/admin-auth";
-import { ImageType, AdminRole } from "@prisma/client";
+import { AdminRole } from "@/lib/auth";
+
+// Define ImageType enum
+enum ImageType {
+  COVER = "COVER",
+  GALLERY = "GALLERY",
+}
 
 // GET - Get all venues with their data (filtered by permissions)
 export async function GET(request: NextRequest) {
@@ -14,7 +20,7 @@ export async function GET(request: NextRequest) {
     let where: any = {};
     
     // If not main admin, filter by permissions
-    if (admin.role !== AdminRole.MAIN_ADMIN) {
+    if (admin.role !== "MAIN_ADMIN") {
       where.brandId = { in: admin.venuePermissions };
     }
 
@@ -64,7 +70,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check permission
-    if (admin.role !== AdminRole.MAIN_ADMIN) {
+    if (admin.role !== "MAIN_ADMIN") {
       if (!(await canAccessVenue(admin, brandId))) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
