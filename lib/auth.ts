@@ -51,57 +51,105 @@ export async function createAdmin(
 
 export async function verifyAdmin(username: string, password: string) {
   try {
-    // Try to query admin - handle case where 'active' field might not exist yet
-    let admin;
+    console.log(`[VERIFY] Starting verification for username: ${username}`);
+    
+    // Try to query admin - make it resilient to missing relations
+    let admin: any;
+    let venuePermissions: string[] = [];
+    
     try {
       admin = await prisma.admin.findUnique({
         where: { username },
         include: {
           venuePermissions: {
             include: {
-              venue: true,
+              venue: {
+                select: {
+                  brandId: true,
+                },
+              },
             },
           },
         },
       });
-    } catch (dbError: any) {
-      // If it's a column doesn't exist error, try without active field
-      if (dbError?.message?.includes('column') || dbError?.code === '42703') {
-        console.log("Note: 'active' column may not exist yet, attempting basic query");
-        // This shouldn't happen with Prisma, but just in case
-        throw dbError;
+      console.log(`[VERIFY] Admin query completed. Found: ${!!admin}`);
+      
+      if (admin && admin.venuePermissions) {
+        venuePermissions = admin.venuePermissions.map((p: any) => {
+          if (p?.venue?.brandId) {
+            return p.venue.brandId;
+          }
+          if (p?.venueId) {
+            return p.venueId;
+          }
+          return null;
+        }).filter((id: string | null) => id !== null) as string[];
       }
-      throw dbError;
+    } catch (dbError: any) {
+      console.error(`[VERIFY] Database query error:`, {
+        code: dbError?.code,
+        message: dbError?.message,
+        stack: dbError?.stack?.substring(0, 500),
+      });
+      
+      // Try simpler query if the complex one fails
+      try {
+        console.log(`[VERIFY] Attempting simpler query without includes`);
+        admin = await prisma.admin.findUnique({
+          where: { username },
+          select: {
+            id: true,
+            username: true,
+            password: true,
+            role: true,
+          },
+        });
+        venuePermissions = []; // Empty permissions for simpler query
+        console.log(`[VERIFY] Simple query completed. Found: ${!!admin}`);
+      } catch (simpleError: any) {
+        console.error(`[VERIFY] Simple query also failed:`, simpleError?.message);
+        throw simpleError;
+      }
     }
 
     if (!admin) {
-      console.log(`[LOGIN] Admin not found: ${username}`);
+      console.log(`[VERIFY] Admin not found in database: ${username}`);
       return null;
     }
+
+    console.log(`[VERIFY] Admin found - ID: ${admin.id}, Role: ${admin.role}`);
 
     // Check if admin is active (only if active field exists and is false, otherwise allow)
     // This handles the case where the migration hasn't been run yet
     const adminData = admin as any;
     if (adminData.active !== undefined && adminData.active === false) {
-      console.log(`[LOGIN] Admin is inactive: ${username}`);
+      console.log(`[VERIFY] Admin is marked as inactive: ${username}`);
       return null;
     }
 
+    console.log(`[VERIFY] Verifying password for: ${username}`);
     const isValid = await verifyPassword(password, admin.password);
     if (!isValid) {
-      console.log(`[LOGIN] Invalid password for admin: ${username}`);
+      console.log(`[VERIFY] Password verification failed for: ${username}`);
       return null;
     }
 
-    console.log(`[LOGIN] Successful login for admin: ${username}`);
+    console.log(`[VERIFY] Password verified successfully for: ${username}`);
+    console.log(`[VERIFY] Login successful for: ${username}, permissions: ${venuePermissions.length} venues`);
+
+    console.log(`[VERIFY] Login successful for: ${username}, permissions: ${venuePermissions.length} venues`);
     return {
       id: admin.id,
       username: admin.username,
       role: admin.role,
-      venuePermissions: admin.venuePermissions.map((p: { venue: { brandId: string } }) => p.venue.brandId),
+      venuePermissions,
     };
   } catch (error: any) {
-    console.error("[LOGIN] Error verifying admin:", error?.message || error);
+    console.error(`[VERIFY] Error verifying admin for ${username}:`, {
+      message: error?.message,
+      code: error?.code,
+      stack: error?.stack?.substring(0, 500),
+    });
     return null;
   }
 }
