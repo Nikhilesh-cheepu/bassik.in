@@ -1,0 +1,28 @@
+============================================
+VERCEL ENVIRONMENT VARIABLES SETUP
+============================================
+
+Add these 3 variables in Vercel:
+Project Settings → Environment Variables → Add New
+
+1. DATABASE_URL
+   Value: [Your Railway PostgreSQL connection string]
+   (Same as your local .env.local DATABASE_URL)
+
+2. NEXTAUTH_SECRET
+   Value: a569e8397369c96b8514f460854da881a66f4bc121520d278b2d83ef199551a5
+
+3. NEXTAUTH_URL
+   Value: https://bassik.in
+
+============================================
+QUICK COPY-PASTE:
+============================================
+
+DATABASE_URL=postgresql://postgres:password@hostname:port/railway
+NEXTAUTH_SECRET=a569e8397369c96b8514f460854da881a66f4bc121520d278b2d83ef199551a5
+NEXTAUTH_URL=https://bassik.in
+
+⚠️ Replace DATABASE_URL with your actual Railway connection string!
+
+============================================
