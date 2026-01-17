@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import { getHomepageConnectBrands } from "@/lib/brands";
 
@@ -134,14 +133,12 @@ export default function Home() {
                 key={venue.id}
                 className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 md:px-6 md:py-5"
               >
-                <div className="relative w-20 h-20 md:w-24 md:h-24 flex items-center justify-center">
-                  <Image
+                <div className="w-20 h-20 md:w-24 md:h-24 flex items-center justify-center">
+                  <img
                     src={venue.logoSrc}
                     alt={`${venue.name} logo`}
-                    fill
-                    className="object-contain"
-                    sizes="(max-width: 768px) 80px, 96px"
-                    priority={venue.id === "alehouse" || venue.id === "club-rogue"}
+                    className="max-w-full max-h-full object-contain"
+                    loading={venue.id === "alehouse" || venue.id === "club-rogue" ? "eager" : "lazy"}
                   />
                 </div>
                 <div className="text-center">
