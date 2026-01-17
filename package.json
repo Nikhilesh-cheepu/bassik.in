@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
-    "create-admin": "tsx scripts/create-admin.ts"
+    "create-admin": "tsx scripts/create-admin.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.2.0",
