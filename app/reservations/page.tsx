@@ -93,7 +93,7 @@ function ReservationsContent() {
         </div>
 
         {/* Booking Form Section - Premium Card */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 overflow-x-hidden">
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 sm:p-8 md:p-10 relative overflow-hidden">
             {/* Decorative gradient circle */}
             <div className="absolute -top-32 -right-32 w-64 h-64 bg-gradient-to-br from-orange-100/50 to-transparent rounded-full blur-3xl pointer-events-none" />

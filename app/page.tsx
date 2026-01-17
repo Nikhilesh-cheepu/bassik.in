@@ -7,153 +7,6 @@ import { BRANDS } from "@/lib/brands";
 import MenuModal from "@/components/MenuModal";
 import GalleryModal from "@/components/GalleryModal";
 
-// Book Now Slider Component with Micro-interactions
-function BookNowSlider({ onSlideComplete, brandColor }: { onSlideComplete: () => void; brandColor: string }) {
-  const [sliderPosition, setSliderPosition] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const sliderRef = useRef<HTMLDivElement>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    setStartX(e.clientX - sliderPosition);
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setIsDragging(true);
-    setStartX(e.touches[0].clientX - sliderPosition);
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isDragging || !trackRef.current) return;
-    const trackWidth = trackRef.current.offsetWidth;
-    const thumbWidth = 64;
-    const maxPosition = trackWidth - thumbWidth;
-    const newPosition = Math.min(Math.max(0, e.clientX - startX), maxPosition);
-    setSliderPosition(newPosition);
-
-    // Complete when slider reaches end (90% threshold)
-    if (newPosition >= maxPosition * 0.9) {
-      setIsDragging(false);
-      setSliderPosition(0);
-      onSlideComplete();
-    }
-  };
-
-  const handleTouchMove = (e: TouchEvent) => {
-    if (!isDragging || !trackRef.current) return;
-    const trackWidth = trackRef.current.offsetWidth;
-    const thumbWidth = 64;
-    const maxPosition = trackWidth - thumbWidth;
-    const newPosition = Math.min(Math.max(0, e.touches[0].clientX - startX), maxPosition);
-    setSliderPosition(newPosition);
-
-    // Complete when slider reaches end (90% threshold)
-    if (newPosition >= maxPosition * 0.9) {
-      setIsDragging(false);
-      setSliderPosition(0);
-      onSlideComplete();
-    }
-  };
-
-  const handleMouseUp = () => {
-    if (isDragging) {
-      setIsDragging(false);
-      // Reset to start with smooth animation if not completed
-      if (sliderPosition < (trackRef.current?.offsetWidth || 0) - 64) {
-        setSliderPosition(0);
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (isDragging) {
-      window.addEventListener("mousemove", handleMouseMove);
-      window.addEventListener("mouseup", handleMouseUp);
-      window.addEventListener("touchmove", handleTouchMove);
-      window.addEventListener("touchend", handleMouseUp);
-      return () => {
-        window.removeEventListener("mousemove", handleMouseMove);
-        window.removeEventListener("mouseup", handleMouseUp);
-        window.removeEventListener("touchmove", handleTouchMove);
-        window.removeEventListener("touchend", handleMouseUp);
-      };
-    }
-  }, [isDragging, sliderPosition, startX]);
-
-  return (
-    <div className="relative w-full">
-      <div
-        ref={trackRef}
-        className="relative w-full h-16 bg-gray-100 rounded-2xl overflow-hidden cursor-pointer group"
-        style={{ backgroundColor: `${brandColor}15` }}
-        onClick={() => {
-          // Quick click to jump forward a bit
-          if (!isDragging && trackRef.current) {
-            const trackWidth = trackRef.current.offsetWidth;
-            const thumbWidth = 64;
-            const maxPosition = trackWidth - thumbWidth;
-            const newPosition = Math.min(sliderPosition + (trackWidth * 0.2), maxPosition);
-            setSliderPosition(newPosition);
-            if (newPosition >= maxPosition * 0.9) {
-              setSliderPosition(0);
-              onSlideComplete();
-            }
-          }
-        }}
-      >
-        {/* Background gradient fill */}
-        <div
-          className="absolute inset-0 transition-all duration-300 ease-out"
-          style={{
-            width: `${(sliderPosition / (trackRef.current?.offsetWidth || 1 - 64)) * 100}%`,
-            backgroundColor: brandColor,
-            opacity: 0.3,
-          }}
-        />
-        
-        {/* Text */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-          <span className="text-lg font-bold text-gray-900 transition-colors group-hover:text-gray-700">
-            Slide to Book a Table
-          </span>
-        </div>
-
-        {/* Slider Thumb */}
-        <div
-          ref={sliderRef}
-          onMouseDown={handleMouseDown}
-          onTouchStart={handleTouchStart}
-          className={`absolute top-1 left-1 w-14 h-14 rounded-xl flex items-center justify-center text-white font-bold shadow-xl transition-all duration-200 z-20 cursor-grab active:cursor-grabbing ${
-            isDragging ? "scale-110" : "scale-100 hover:scale-105"
-          }`}
-          style={{
-            backgroundColor: brandColor,
-            transform: `translateX(${sliderPosition}px)`,
-            boxShadow: `0 4px 14px ${brandColor}60`,
-            transition: isDragging ? "none" : "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-          }}
-        >
-          <svg
-            className={`w-6 h-6 transition-transform duration-200 ${isDragging ? "scale-110" : ""}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={3}
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -529,12 +382,27 @@ function HomeContent() {
         </div>
       </main>
 
-      {/* Book Now Slider - Premium with Micro-interactions */}
+      {/* Animated Book Now Button */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-30 shadow-2xl">
-        <BookNowSlider 
-          onSlideComplete={handleBookNow}
-          brandColor={selectedBrand.accentColor}
-        />
+        <button
+          onClick={handleBookNow}
+          className="w-full text-white font-bold py-4 px-6 rounded-xl transition-all duration-300 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transform animate-pulse hover:animate-none relative overflow-hidden group"
+          style={{ 
+            backgroundColor: selectedBrand.accentColor,
+            boxShadow: `0 10px 30px ${selectedBrand.accentColor}40`
+          }}
+        >
+          {/* Shine animation effect */}
+          <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/20 to-transparent"></span>
+          
+          {/* Button content */}
+          <span className="relative z-10 flex items-center justify-center gap-2 text-lg">
+            <svg className="w-6 h-6 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            Book a table
+          </span>
+        </button>
       </div>
 
       {/* Menu Modal */}

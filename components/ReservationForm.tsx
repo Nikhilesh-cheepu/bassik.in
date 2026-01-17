@@ -473,7 +473,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
               </h3>
               <p className="text-sm text-gray-500 mb-6">Choose when you'd like to visit us</p>
 
-              {/* Date Selection - Modern Style */}
+              {/* Date Selection - Modern Style with Overflow Fix */}
               <div className="mb-6">
                 <label 
                   htmlFor="date-input"
@@ -481,7 +481,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                 >
                   Select Date <span className="text-red-500">*</span>
                 </label>
-                <div className="relative">
+                <div className="relative max-w-full overflow-hidden">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -493,8 +493,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     value={formData.date}
                     onChange={handleDateChange}
                     min={todayStr}
-                    className="w-full pl-12 pr-4 py-3.5 text-sm font-medium bg-white border-2 border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 transition-all cursor-pointer shadow-sm hover:shadow-md"
-                    style={{ cursor: "pointer" }}
+                    className="w-full pl-12 pr-4 py-3.5 text-sm font-medium bg-white border-2 border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 transition-all cursor-pointer shadow-sm hover:shadow-md max-w-full"
+                    style={{ cursor: "pointer", maxWidth: "100%" }}
                     onFocus={(e) => {
                       e.target.style.borderColor = brand.accentColor;
                       e.target.style.boxShadow = `0 0 0 4px ${brand.accentColor}15`;
