@@ -359,26 +359,27 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     }
   };
 
-  // Step indicator
+  // Step indicator - Shorter labels to prevent wrapping
   const steps = [
     { number: 1, title: "Date & Time" },
-    { number: 2, title: "Guests & Offers" },
-    { number: 3, title: "Contact Details" },
+    { number: 2, title: "Guests" },
+    { number: 3, title: "Contact" },
     { number: 4, title: "Review" },
   ];
 
   return (
     <div className="w-full">
-      {/* Modern Step Indicator */}
+      {/* Modern Step Indicator - Fixed Alignment */}
       <div className="mb-8 sm:mb-10">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start w-full">
           {steps.map((step, index) => (
-            <div key={step.number} className="flex items-center flex-1">
-              <div className="flex flex-col items-center flex-1 relative">
-                {/* Step Circle - Modern with shadow */}
-                <div className="relative">
+            <div key={step.number} className="flex items-center flex-1" style={{ minWidth: 0 }}>
+              {/* Step Circle and Label Container */}
+              <div className="flex flex-col items-center flex-1 min-w-0">
+                {/* Step Circle */}
+                <div className="relative mb-2">
                   <div
-                    className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-sm sm:text-base font-bold transition-all duration-300 shadow-lg ${
+                    className={`w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all duration-300 shadow-md ${
                       currentStep >= step.number
                         ? "text-white scale-110"
                         : "bg-gray-100 text-gray-400 scale-100"
@@ -393,7 +394,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     }}
                   >
                     {currentStep > step.number ? (
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                       </svg>
                     ) : (
@@ -403,37 +404,40 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   {/* Pulse animation for current step */}
                   {currentStep === step.number && (
                     <div
-                      className="absolute inset-0 rounded-full animate-ping opacity-75"
+                      className="absolute inset-0 rounded-full animate-ping opacity-75 -z-10"
                       style={{ backgroundColor: brand.accentColor }}
                     />
                   )}
                 </div>
-                {/* Step Label */}
+                {/* Step Label - Fixed to prevent wrapping */}
                 <span
-                  className={`text-xs sm:text-sm mt-2 font-medium transition-all ${
+                  className={`text-[10px] sm:text-xs font-semibold text-center transition-all leading-tight px-0.5 ${
                     currentStep >= step.number
                       ? "text-gray-900"
                       : "text-gray-500"
                   }`}
+                  style={{
+                    color: currentStep >= step.number ? brand.accentColor : undefined,
+                  }}
                 >
                   {step.title}
                 </span>
               </div>
-              {/* Progress Line */}
+              {/* Progress Line - Between circles */}
               {index < steps.length - 1 && (
-                <div
-                  className={`h-1 flex-1 mx-2 sm:mx-4 rounded-full transition-all duration-300 ${
-                    currentStep > step.number
-                      ? "bg-gradient-to-r"
-                      : "bg-gray-200"
-                  }`}
-                  style={{
-                    background:
-                      currentStep > step.number
+                <div className="flex items-center px-2 sm:px-3 relative" style={{ top: '-22px' }}>
+                  <div
+                    className="h-1 rounded-full transition-all duration-300"
+                    style={{
+                      width: "100%",
+                      minWidth: "24px",
+                      backgroundColor: currentStep > step.number ? brand.accentColor : "#e5e7eb",
+                      background: currentStep > step.number
                         ? `linear-gradient(to right, ${brand.accentColor}, ${brand.accentColor}80)`
                         : undefined,
-                  }}
-                />
+                    }}
+                  />
+                </div>
               )}
             </div>
           ))}
