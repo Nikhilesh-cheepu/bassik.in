@@ -12,8 +12,8 @@ async function createAdmin() {
     await client.connect();
     console.log('✅ Connected to database');
 
-    const username = process.env.ADMIN_USERNAME || 'admin';
-    const password = process.env.ADMIN_PASSWORD || 'changeme123';
+    const username = process.env.ADMIN_USERNAME || 'bassik.in';
+    const password = process.env.ADMIN_PASSWORD || 'bassik123';
     const role = process.env.ADMIN_ROLE || 'MAIN_ADMIN';
 
     // Hash password
