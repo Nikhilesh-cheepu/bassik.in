@@ -44,21 +44,21 @@ export default function ImageUploader({
       const uploadPromises = Array.from(files).map(async (file) => {
         // Validate aspect ratio for cover images
         if (imageType === "COVER" && aspectRatio === "16:9") {
-          const img = new Image();
+          const imgElement = new window.Image();
           const objectUrl = URL.createObjectURL(file);
           await new Promise((resolve, reject) => {
-            img.onload = () => {
-              const ratio = img.width / img.height;
+            imgElement.onload = () => {
+              const ratio = imgElement.width / imgElement.height;
               const targetRatio = 16 / 9;
               if (Math.abs(ratio - targetRatio) > 0.1) {
-                reject(new Error(`Image must be 16:9 aspect ratio. Current: ${img.width}x${img.height}`));
+                reject(new Error(`Image must be 16:9 aspect ratio. Current: ${imgElement.width}x${imgElement.height}`));
               } else {
                 resolve(null);
               }
               URL.revokeObjectURL(objectUrl);
             };
-            img.onerror = reject;
-            img.src = objectUrl;
+            imgElement.onerror = reject;
+            imgElement.src = objectUrl;
           });
         }
 
