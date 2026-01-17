@@ -8,14 +8,24 @@ const nextConfig = {
   // Next.js uses eval-source-map by default which triggers CSP violations on iOS
   productionBrowserSourceMaps: false,
   
-  // Webpack config to prevent eval() usage in production
+  // Webpack config to completely disable eval() usage in production
   webpack: (config, { dev, isServer }) => {
-    // Disable eval-source-map in production - use source-map instead
+    // Completely disable source maps in production to prevent eval() usage
     if (!dev && !isServer) {
-      config.devtool = 'source-map';
-      // Ensure no eval-based source maps
+      // Disable devtool completely - no source maps = no eval()
+      config.devtool = false;
+      
+      // Ensure optimization doesn't use eval
       if (config.optimization) {
         config.optimization.minimize = true;
+        // Disable source maps in minimizers
+        if (Array.isArray(config.optimization.minimizer)) {
+          config.optimization.minimizer.forEach((minimizer) => {
+            if (minimizer && minimizer.options) {
+              minimizer.options.sourceMap = false;
+            }
+          });
+        }
       }
     }
     return config;
