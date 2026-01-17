@@ -114,28 +114,24 @@ export default function VenuesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      {/* Compact Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Manage Venues</h1>
-              <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                Select a venue to manage its content
-              </p>
-            </div>
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900">Manage Venues</h1>
             <button
               onClick={() => router.push("/admin/dashboard")}
-              className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
             >
-              ← Back to Dashboard
+              ← Back
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
           {BRANDS.map((brand) => {
             // Check if admin can access this venue
             const canAccess =
@@ -147,6 +143,9 @@ export default function VenuesPage() {
             }
 
             const venue = venues.find((v) => v.brandId === brand.id);
+            const coverCount = venue?.images.filter((i) => i.type === "COVER").length || 0;
+            const galleryCount = venue?.images.filter((i) => i.type === "GALLERY").length || 0;
+            const menuCount = venue?.menus.length || 0;
 
             return (
               <button
@@ -168,39 +167,49 @@ export default function VenuesPage() {
                     });
                   }
                 }}
-                className="bg-white rounded-lg shadow p-6 text-left hover:shadow-lg transition-shadow"
+                className="bg-white rounded-xl shadow-sm p-3 sm:p-4 border border-gray-100 hover:shadow-md transition-all text-left"
               >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center">
+                <div className="flex flex-col items-center text-center space-y-2">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
                     <Image
                       src={`/logos/${brand.id}.png`}
                       alt={brand.shortName}
-                      width={48}
-                      height={48}
+                      width={40}
+                      height={40}
                       className="object-contain"
                       onError={(e) => {
                         (e.target as HTMLImageElement).style.display = "none";
                       }}
                     />
                   </div>
-                  <span
-                    className="px-2 py-1 rounded text-xs font-medium text-white"
-                    style={{ backgroundColor: brand.accentColor }}
-                  >
-                    {venue ? "Configured" : "New"}
-                  </span>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                  {brand.shortName}
-                </h3>
-                <p className="text-sm text-gray-600 mb-2">{brand.name}</p>
-                {venue && (
-                  <div className="text-xs text-gray-500 space-y-1">
-                    <p>Cover: {venue.images.filter((i) => i.type === "COVER").length} images</p>
-                    <p>Gallery: {venue.images.filter((i) => i.type === "GALLERY").length} images</p>
-                    <p>Menus: {venue.menus.length} menus</p>
+                  <div className="flex-1 min-w-0 w-full">
+                    <h3 className="text-xs sm:text-sm font-semibold text-gray-900 truncate mb-0.5">
+                      {brand.shortName}
+                    </h3>
+                    <span
+                      className="px-1.5 py-0.5 rounded text-xs font-medium text-white"
+                      style={{ backgroundColor: brand.accentColor }}
+                    >
+                      {venue ? "✓" : "New"}
+                    </span>
                   </div>
-                )}
+                  {venue && (
+                    <div className="text-xs text-gray-500 space-y-0.5 w-full">
+                      <div className="flex justify-between">
+                        <span>C:</span>
+                        <span className="font-medium">{coverCount}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>G:</span>
+                        <span className="font-medium">{galleryCount}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>M:</span>
+                        <span className="font-medium">{menuCount}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </button>
             );
           })}

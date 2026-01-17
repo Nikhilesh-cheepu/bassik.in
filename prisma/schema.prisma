@@ -15,19 +15,20 @@ enum AdminRole {
 }
 
 model Admin {
-  id        String      @id @default(cuid())
-  username  String      @unique
+  id        String    @id @default(cuid())
+  username  String    @unique
   password  String
-  role      AdminRole   @default(ADMIN)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  
+  role      AdminRole @default(ADMIN)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
   // Permissions for which venues this admin can manage (only for ADMIN role)
   venuePermissions AdminVenuePermission[]
-  
+
   // Created by (for tracking who created this admin)
-  createdById String?
-  createdBy   Admin?   @relation("AdminCreatedBy", fields: [createdById], references: [id])
+  createdById   String?
+  createdBy     Admin?  @relation("AdminCreatedBy", fields: [createdById], references: [id])
   createdAdmins Admin[] @relation("AdminCreatedBy")
 }
 
@@ -36,43 +37,43 @@ model AdminVenuePermission {
   adminId   String
   venueId   String
   createdAt DateTime @default(now())
-  
-  admin     Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  venue     Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  
+
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
   @@unique([adminId, venueId])
   @@index([adminId])
   @@index([venueId])
 }
 
 model Venue {
-  id          String   @id @default(cuid())
-  brandId     String   @unique // Matches brand.id from brands.ts
-  name        String
-  shortName   String
-  address     String
-  mapUrl      String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  images      VenueImage[]
-  menus       Menu[]
-  permissions AdminVenuePermission[]
+  id        String   @id @default(cuid())
+  brandId   String   @unique // Matches brand.id from brands.ts
+  name      String
+  shortName String
+  address   String
+  mapUrl    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  images       VenueImage[]
+  menus        Menu[]
+  permissions  AdminVenuePermission[]
   reservations Reservation[]
-  
+
   @@index([brandId])
 }
 
 model VenueImage {
-  id          String   @id @default(cuid())
-  venueId     String
-  url         String
-  type        ImageType // COVER or GALLERY
-  order       Int      @default(0) // For ordering images
-  createdAt   DateTime @default(now())
-  
-  venue       Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  
+  id        String    @id @default(cuid())
+  venueId   String
+  url       String
+  type      ImageType // COVER or GALLERY
+  order     Int       @default(0) // For ordering images
+  createdAt DateTime  @default(now())
+
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
   @@index([venueId, type])
   @@index([venueId, type, order])
 }
@@ -83,35 +84,35 @@ enum ImageType {
 }
 
 model Menu {
-  id          String   @id @default(cuid())
-  venueId     String
-  name        String   // "Food Menu" or "Liquor Menu"
+  id           String   @id @default(cuid())
+  venueId      String
+  name         String // "Food Menu" or "Liquor Menu"
   thumbnailUrl String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  venue       Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  images      MenuImage[]
-  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  venue  Venue       @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  images MenuImage[]
+
   @@index([venueId])
 }
 
 model MenuImage {
-  id          String   @id @default(cuid())
-  menuId      String
-  url         String
-  order       Int      @default(0) // For ordering menu pages
-  createdAt   DateTime @default(now())
-  
-  menu        Menu     @relation(fields: [menuId], references: [id], onDelete: Cascade)
-  
+  id        String   @id @default(cuid())
+  menuId    String
+  url       String
+  order     Int      @default(0) // For ordering menu pages
+  createdAt DateTime @default(now())
+
+  menu Menu @relation(fields: [menuId], references: [id], onDelete: Cascade)
+
   @@index([menuId, order])
 }
 
 model Reservation {
-  id                String   @id @default(cuid())
+  id                String            @id @default(cuid())
   venueId           String
-  brandId           String   // Keep for quick lookup
+  brandId           String // Keep for quick lookup
   brandName         String
   fullName          String
   contactNumber     String
@@ -123,11 +124,11 @@ model Reservation {
   notes             String?
   selectedDiscounts String? // JSON array of discount IDs
   status            ReservationStatus @default(PENDING)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  venue             Venue    @relation(fields: [venueId], references: [id], onDelete: Cascade)
-  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
   @@index([venueId])
   @@index([brandId])
   @@index([date])

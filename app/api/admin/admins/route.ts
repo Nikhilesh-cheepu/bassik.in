@@ -29,7 +29,10 @@ export async function GET(request: NextRequest) {
           },
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [
+        { active: "desc" },
+        { createdAt: "desc" },
+      ],
     });
 
     return NextResponse.json({ admins });
@@ -102,8 +105,8 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE - Delete admin (only MAIN_ADMIN)
-export async function DELETE(request: NextRequest) {
+// PATCH - Toggle admin active status (only MAIN_ADMIN)
+export async function PATCH(request: NextRequest) {
   try {
     const admin = await verifyAdminToken(request);
     if (!admin) {
@@ -114,31 +117,45 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const adminId = searchParams.get("id");
+    const body = await request.json();
+    const { id, active } = body;
 
-    if (!adminId) {
+    if (!id || typeof active !== "boolean") {
       return NextResponse.json(
-        { error: "Admin ID required" },
+        { error: "Admin ID and active status are required" },
         { status: 400 }
       );
     }
 
-    // Prevent deleting yourself
-    if (adminId === admin.id) {
+    // Prevent disabling yourself
+    if (id === admin.id && !active) {
       return NextResponse.json(
-        { error: "Cannot delete your own account" },
+        { error: "Cannot disable your own account" },
         { status: 400 }
       );
     }
 
-    await prisma.admin.delete({
-      where: { id: adminId },
+    const updated = await prisma.admin.update({
+      where: { id },
+      data: { active },
+      include: {
+        venuePermissions: {
+          include: {
+            venue: true,
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            username: true,
+          },
+        },
+      },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ admin: updated });
   } catch (error) {
-    console.error("Error deleting admin:", error);
+    console.error("Error updating admin:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
