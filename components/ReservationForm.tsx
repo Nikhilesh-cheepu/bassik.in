@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent, useMemo } from "react";
+import { useState, FormEvent, useMemo, useEffect } from "react";
 import { Brand } from "@/lib/brands";
 
 interface ReservationFormProps {
@@ -54,6 +54,24 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     message: string;
   }>({ type: null, message: "" });
   const [timeSlotTab, setTimeSlotTab] = useState<"lunch" | "dinner">("lunch");
+
+  // Reset form when brand changes
+  useEffect(() => {
+    setCurrentStep(1);
+    setFormData({
+      fullName: "",
+      contactNumber: "",
+      numberOfMen: "",
+      numberOfWomen: "",
+      numberOfCouples: "",
+      date: "",
+      timeSlot: "",
+      selectedDiscounts: [],
+      notes: "",
+    });
+    setTimeSlotTab("lunch");
+    setSubmitStatus({ type: null, message: "" });
+  }, [brand.id]);
 
   // Generate time slots (15 min intervals) - stored in 24-hour format
   // Club Rogue: 5PM-12AM, Others: 12PM-12AM

@@ -33,7 +33,7 @@ function ReservationsContent() {
               {/* Back button - Modern */}
               <button
                 type="button"
-                onClick={() => router.push("/")}
+                onClick={() => router.push(`/?brand=${activeBrandId}`)}
                 className="inline-flex items-center justify-center gap-2 text-gray-700 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-xl px-3 py-2 transition-all duration-200 hover:scale-105 active:scale-95"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

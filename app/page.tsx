@@ -1,16 +1,23 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { BRANDS } from "@/lib/brands";
 import MenuModal from "@/components/MenuModal";
 import GalleryModal from "@/components/GalleryModal";
 
-
-export default function Home() {
+function HomeContent() {
   const router = useRouter();
-  const [selectedBrandId, setSelectedBrandId] = useState(BRANDS[0].id);
+  const searchParams = useSearchParams();
+  
+  // Get brand from URL params, default to first brand
+  const brandFromUrl = searchParams.get("brand");
+  const initialBrandId = brandFromUrl && BRANDS.find(b => b.id === brandFromUrl) 
+    ? brandFromUrl 
+    : BRANDS[0].id;
+  
+  const [selectedBrandId, setSelectedBrandId] = useState<string>(initialBrandId);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
@@ -27,6 +34,14 @@ export default function Home() {
 
   const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
   const coverImages = venueData.coverImages.slice(0, 3);
+
+  // Update selectedBrandId when URL param changes
+  useEffect(() => {
+    const brandFromUrl = searchParams.get("brand");
+    if (brandFromUrl && BRANDS.find(b => b.id === brandFromUrl)) {
+      setSelectedBrandId(brandFromUrl);
+    }
+  }, [searchParams]);
 
   // Load venue data when brand changes
   useEffect(() => {
@@ -403,5 +418,22 @@ export default function Home() {
         />
       )}
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading...</p>
+          </div>
+        </div>
+      }
+    >
+      <HomeContent />
+    </Suspense>
   );
 }
