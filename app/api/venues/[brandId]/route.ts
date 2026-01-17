@@ -39,11 +39,11 @@ export async function GET(
       .filter((img: { type: string }) => img.type === "GALLERY")
       .map((img: { url: string }) => img.url);
 
-    const menus = venue.menus.map((menu) => ({
+    const menus = venue.menus.map((menu: { id: string; name: string; thumbnailUrl: string; images: { url: string }[] }) => ({
       id: menu.id,
       name: menu.name,
       thumbnail: menu.thumbnailUrl,
-      images: menu.images.map((img) => img.url),
+      images: menu.images.map((img: { url: string }) => img.url),
     }));
 
     return NextResponse.json({
