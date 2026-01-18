@@ -9,15 +9,10 @@ import GalleryModal from "@/components/GalleryModal";
 
 function HomeContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [mounted, setMounted] = useState(false);
   
-  // Get brand from URL params, default to first brand
-  const brandFromUrl = searchParams.get("brand");
-  const initialBrandId = brandFromUrl && BRANDS.find(b => b.id === brandFromUrl) 
-    ? brandFromUrl 
-    : BRANDS[0].id;
-  
-  const [selectedBrandId, setSelectedBrandId] = useState<string>(initialBrandId);
+  // Start with default brand - will be updated after mount to prevent hydration mismatch
+  const [selectedBrandId, setSelectedBrandId] = useState<string>(BRANDS[0].id);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
@@ -35,13 +30,18 @@ function HomeContent() {
   const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
   const coverImages = venueData.coverImages.slice(0, 3);
 
-  // Update selectedBrandId when URL param changes
+  // Set mounted and read URL params on client-side only to prevent hydration mismatch
   useEffect(() => {
-    const brandFromUrl = searchParams.get("brand");
-    if (brandFromUrl && BRANDS.find(b => b.id === brandFromUrl)) {
-      setSelectedBrandId(brandFromUrl);
+    setMounted(true);
+    // Read from URL directly to avoid hydration issues with useSearchParams
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const brandFromUrl = urlParams.get("brand");
+      if (brandFromUrl && BRANDS.find(b => b.id === brandFromUrl)) {
+        setSelectedBrandId(brandFromUrl);
+      }
     }
-  }, [searchParams]);
+  }, []);
 
   // Load venue data when brand changes
   useEffect(() => {
@@ -109,6 +109,18 @@ function HomeContent() {
   const handleBookNow = () => {
     router.push(`/reservations?brand=${selectedBrandId}`);
   };
+
+  // Prevent hydration mismatch by not rendering until mounted
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
