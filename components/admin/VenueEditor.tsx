@@ -133,7 +133,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
             imageType="COVER"
             existingImages={coverImages}
             maxImages={3}
-            aspectRatio="16:9"
+            aspectRatio="any"
             onUpdate={onSave}
           />
         )}

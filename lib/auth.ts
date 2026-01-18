@@ -14,7 +14,84 @@ export const HARDCODED_ADMINS = [
     role: "MAIN_ADMIN" as AdminRole,
     venuePermissions: [] as string[], // Empty array means all venues for MAIN_ADMIN
   },
-  // Add more admins here if needed
+  // Outlet-specific admins
+  {
+    id: "admin-alehouse",
+    username: "alehouse",
+    password: "alehouse123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["alehouse"],
+  },
+  {
+    id: "admin-c53",
+    username: "c53",
+    password: "c53123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["c53"],
+  },
+  {
+    id: "admin-boiler-room",
+    username: "boilerroom",
+    password: "boilerroom123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["boiler-room"],
+  },
+  {
+    id: "admin-skyhy",
+    username: "skyhy",
+    password: "skyhy123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["skyhy"],
+  },
+  {
+    id: "admin-kiik69",
+    username: "kiik69",
+    password: "kiik69123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["kiik69"],
+  },
+  {
+    id: "admin-club-rogue-gachibowli",
+    username: "clubrouge-gachibowli",
+    password: "clubrouge-gb123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["club-rogue-gachibowli"],
+  },
+  {
+    id: "admin-club-rogue-kondapur",
+    username: "clubrouge-kondapur",
+    password: "clubrouge-kp123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["club-rogue-kondapur"],
+  },
+  {
+    id: "admin-club-rogue-jubilee-hills",
+    username: "clubrouge-jubileehills",
+    password: "clubrouge-jh123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["club-rogue-jubilee-hills"],
+  },
+  {
+    id: "admin-sound-of-soul",
+    username: "soundofsoul",
+    password: "soundofsoul123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["sound-of-soul"],
+  },
+  {
+    id: "admin-rejoy",
+    username: "rejoy",
+    password: "rejoy123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["rejoy"],
+  },
+  {
+    id: "admin-firefly",
+    username: "firefly",
+    password: "firefly123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["firefly"],
+  },
 ];
 
 export async function verifyAdmin(username: string, password: string) {
