@@ -66,8 +66,7 @@ function ReservationsContent() {
                   >
                     {BRANDS.map((brand) => (
                       <option key={brand.id} value={brand.id}>
-                        {brand.shortName}
-                        {brand.id.startsWith("club-rogue") && ` - ${brand.name.split("–")[1]?.trim()}`}
+                        {brand.name}
                       </option>
                     ))}
                   </select>
