@@ -3,22 +3,22 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
-import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
+import { motion, AnimatePresence, useScroll } from "framer-motion";
 import { BRANDS } from "@/lib/brands";
 import MenuModal from "@/components/MenuModal";
 import GalleryModal from "@/components/GalleryModal";
-import { HeroSkeleton, MenuCardSkeleton, PhotosStripSkeleton, LocationCardSkeleton, CTASkeleton } from "@/components/SkeletonLoader";
-import BrandedLoader from "@/components/BrandedLoader";
 
 function OutletContent() {
   const router = useRouter();
   const params = useParams();
   const outletSlug = params?.outlet as string;
+  const { scrollY } = useScroll();
   
   const [mounted, setMounted] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [showStickyCTA, setShowStickyCTA] = useState(false);
   
-  // Find brand by slug (outlet ID)
+  // Find brand by slug
   const findBrandBySlug = (slug: string) => {
     return BRANDS.find(b => b.id === slug) || BRANDS[0];
   };
@@ -31,7 +31,6 @@ function OutletContent() {
     return BRANDS[0].id;
   });
   
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
   const [galleryStartIndex, setGalleryStartIndex] = useState(0);
@@ -45,18 +44,10 @@ function OutletContent() {
   const [loading, setLoading] = useState(true);
   const [loadedGalleryImages, setLoadedGalleryImages] = useState<Set<number>>(new Set());
   const [failedGalleryImages, setFailedGalleryImages] = useState<Set<number>>(new Set());
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const heroRef = useRef<HTMLDivElement>(null);
-  const { scrollY } = useScroll();
-  
-  // Parallax and zoom effects
-  const heroScale = useTransform(scrollY, [0, 300], [1, 1.1]);
-  const heroOpacity = useTransform(scrollY, [0, 300], [1, 0.4]);
 
   const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
-  const coverImages = venueData.coverImages.slice(0, 3);
+  const coverImage = venueData.coverImages[0] || null;
   const validGalleryImages = venueData.galleryImages.filter((_, index) => !failedGalleryImages.has(index));
 
   // Set mounted and sync with URL
@@ -69,6 +60,14 @@ function OutletContent() {
       }
     }
   }, [outletSlug]);
+
+  // Show sticky CTA after scroll
+  useEffect(() => {
+    const unsubscribe = scrollY.on("change", (latest) => {
+      setShowStickyCTA(latest > 300);
+    });
+    return () => unsubscribe();
+  }, [scrollY]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -86,7 +85,6 @@ function OutletContent() {
   // Load venue data when brand changes
   useEffect(() => {
     const loadVenueData = async () => {
-      setIsTransitioning(true);
       setLoading(true);
       setLoadedGalleryImages(new Set());
       setFailedGalleryImages(new Set());
@@ -129,25 +127,10 @@ function OutletContent() {
         });
       } finally {
         setLoading(false);
-        setTimeout(() => setIsTransitioning(false), 300);
       }
     };
     loadVenueData();
   }, [selectedBrandId]);
-
-  // Auto-scroll cover images
-  useEffect(() => {
-    if (coverImages.length > 1) {
-      intervalRef.current = setInterval(() => {
-        setCurrentImageIndex((prev) => (prev + 1) % coverImages.length);
-      }, 5000);
-    }
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [coverImages.length, selectedBrandId]);
 
   const handleBookNow = () => {
     router.push(`/${selectedBrandId}/reservations`);
@@ -155,9 +138,7 @@ function OutletContent() {
 
   const handleBrandSelect = (brandId: string) => {
     setSelectedBrandId(brandId);
-    setCurrentImageIndex(0);
     setIsDropdownOpen(false);
-    // Navigate to the new outlet's URL
     router.push(`/${brandId}`);
   };
 
@@ -169,82 +150,72 @@ function OutletContent() {
     setFailedGalleryImages(prev => new Set(prev).add(index));
   };
 
-  // Use club-rogue.png for all Club Rogue variants
   const logoPath = selectedBrand.id.startsWith('club-rogue') 
     ? '/logos/club-rogue.png' 
     : `/logos/${selectedBrand.id}.png`;
 
-  // Prevent hydration mismatch
   if (!mounted) {
     return (
-      <BrandedLoader 
-        accentColor={selectedBrand.accentColor}
-        logoPath={logoPath}
-        brandName={selectedBrand.shortName}
-      />
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="text-center"
+        >
+          <div className="relative w-16 h-16 mx-auto mb-4">
+            <motion.div
+              className="absolute inset-0 rounded-full border-4"
+              style={{ borderColor: `${selectedBrand.accentColor}30` }}
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            />
+            <motion.div
+              className="absolute inset-0 rounded-full border-4 border-transparent"
+              style={{ borderTopColor: selectedBrand.accentColor }}
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            />
+          </div>
+        </motion.div>
+      </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-black">
-      {/* Full-bleed Hero Cover Image with Parallax */}
-      <motion.div 
-        ref={heroRef} 
-        className="relative w-full h-[65vh] overflow-hidden"
-        style={{ scale: heroScale }}
-      >
+      {/* Full-bleed Cover Image - No Sliding */}
+      <div className="relative w-full h-[60vh] sm:h-[65vh] overflow-hidden">
         {loading ? (
-          <HeroSkeleton accentColor={selectedBrand.accentColor} />
-        ) : coverImages.length > 0 ? (
-          <AnimatePresence mode="wait">
-            {coverImages.map((image, index) => (
-              index === currentImageIndex && (
-                <motion.div
-                  key={`${selectedBrandId}-${index}`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: isTransitioning ? 0.3 : 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="absolute inset-0"
-                  style={{ opacity: heroOpacity }}
-                >
-                  <Image
-                    src={image}
-                    alt={`${selectedBrand.shortName} cover ${index + 1}`}
-                    fill
-                    sizes="100vw"
-                    className="object-cover"
-                    unoptimized
-                    priority={index === 0}
-                    quality={85}
-                  />
-                  {/* Dark gradient overlay for readability */}
-                  <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/80" />
-                </motion.div>
-              )
-            ))}
-          </AnimatePresence>
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black animate-pulse" />
+        ) : coverImage ? (
+          <Image
+            src={coverImage}
+            alt={selectedBrand.shortName}
+            fill
+            sizes="100vw"
+            className="object-cover brightness-100"
+            unoptimized
+            priority
+            quality={85}
+          />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 to-black">
-            <svg className="w-16 h-16 mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <p className="text-gray-400">Cover images are empty</p>
-          </div>
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black" />
         )}
         
-        {/* Compact Outlet Switcher Dropdown Pill - Centered Top */}
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-black/80" />
+        
+        {/* Compact Outlet Switcher Dropdown */}
         <div ref={dropdownRef} className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
           <motion.button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-full backdrop-blur-xl bg-white/15 border border-white/20 shadow-2xl transition-all"
+            className="flex items-center gap-2 px-3 py-2 rounded-full backdrop-blur-xl bg-black/60 border border-white/20 shadow-xl transition-all"
             style={{
               borderColor: `${selectedBrand.accentColor}60`,
-              boxShadow: `0 8px 32px ${selectedBrand.accentColor}40`,
             }}
           >
-            <div className="relative w-5 h-5 flex-shrink-0">
+            <div className="relative w-4 h-4 flex-shrink-0">
               <Image
                 src={logoPath}
                 alt={selectedBrand.shortName}
@@ -255,9 +226,9 @@ function OutletContent() {
                 }}
               />
             </div>
-            <span className="text-sm font-semibold text-white">{selectedBrand.shortName}</span>
+            <span className="text-xs font-semibold text-white">{selectedBrand.shortName}</span>
             <motion.svg
-              className="w-4 h-4 text-white"
+              className="w-3 h-3 text-white"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -268,7 +239,7 @@ function OutletContent() {
             </motion.svg>
           </motion.button>
 
-          {/* Dropdown Menu */}
+          {/* Compact Dropdown Menu - Max 3 visible, scrollable */}
           <AnimatePresence>
             {isDropdownOpen && (
               <motion.div
@@ -276,7 +247,7 @@ function OutletContent() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.95 }}
                 transition={{ duration: 0.2 }}
-                className="absolute top-full left-1/2 -translate-x-1/2 mt-2 min-w-[200px] backdrop-blur-xl bg-black/80 border border-white/20 rounded-2xl shadow-2xl overflow-hidden"
+                className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[180px] backdrop-blur-xl bg-black/90 border border-white/20 rounded-xl shadow-2xl overflow-hidden max-h-[200px] overflow-y-auto scrollbar-hide"
                 style={{
                   boxShadow: `0 8px 32px ${selectedBrand.accentColor}30`,
                 }}
@@ -291,13 +262,13 @@ function OutletContent() {
                     <button
                       key={brand.id}
                       onClick={() => handleBrandSelect(brand.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${
+                      className={`w-full flex items-center gap-2 px-3 py-2.5 transition-colors text-left ${
                         isSelected
                           ? 'bg-white/10'
                           : 'hover:bg-white/5'
                       }`}
                     >
-                      <div className="relative w-5 h-5 flex-shrink-0">
+                      <div className="relative w-4 h-4 flex-shrink-0">
                         <Image
                           src={brandLogoPath}
                           alt={brand.shortName}
@@ -308,13 +279,13 @@ function OutletContent() {
                           }}
                         />
                       </div>
-                      <span className={`text-sm font-medium flex-1 text-left ${
+                      <span className={`text-xs font-medium flex-1 ${
                         isSelected ? 'text-white' : 'text-gray-300'
                       }`}>
                         {brand.shortName}
                       </span>
                       {isSelected && (
-                        <svg className="w-4 h-4" style={{ color: brand.accentColor }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3 h-3" style={{ color: brand.accentColor }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                       )}
@@ -325,46 +296,53 @@ function OutletContent() {
             )}
           </AnimatePresence>
         </div>
-
-        {/* Image indicators */}
-        {coverImages.length > 1 && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-2">
-            {coverImages.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentImageIndex(index)}
-                className={`h-1 rounded-full transition-all duration-300 ${
-                  index === currentImageIndex
-                    ? "w-8 bg-white shadow-lg"
-                    : "w-1.5 bg-white/40 hover:bg-white/60"
-                }`}
-                aria-label={`Go to image ${index + 1}`}
-              />
-            ))}
-          </div>
-        )}
-      </motion.div>
+      </div>
 
       {/* Content Sections */}
-      <div className="max-w-4xl mx-auto px-4 -mt-8 relative z-10 space-y-3 pb-32">
-        {/* Menu Section - Compact */}
+      <div className="max-w-4xl mx-auto px-4 -mt-6 relative z-10 space-y-3 pb-24">
+        {/* Menu Section - Single Compact Card */}
         {loading ? (
-          <MenuCardSkeleton />
+          <div className="h-20 bg-white/5 rounded-xl animate-pulse" />
         ) : (
           <motion.section
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1, duration: 0.5 }}
-            className="backdrop-blur-md bg-white/5 rounded-2xl border border-white/10 p-3 shadow-xl"
+            transition={{ delay: 0.1 }}
+            className="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-3"
           >
-            <h2 className="text-sm font-semibold text-white mb-2">Menu</h2>
             {venueData.menus.length === 0 ? (
-              <div className="text-center py-4 text-gray-400">
-                <svg className="w-8 h-8 mx-auto mb-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+              <div className="text-center py-3 text-gray-400">
                 <p className="text-xs">Menu section is empty</p>
               </div>
+            ) : venueData.menus.length === 1 ? (
+              <motion.button
+                onClick={() => {
+                  setSelectedMenuId(venueData.menus[0].id);
+                  setIsMenuModalOpen(true);
+                }}
+                whileTap={{ scale: 0.98 }}
+                className="w-full flex items-center gap-3 bg-white/5 rounded-lg p-3 hover:bg-white/10 transition-all"
+              >
+                <div className="relative w-14 h-14 rounded-lg overflow-hidden flex-shrink-0">
+                  <Image
+                    src={venueData.menus[0].thumbnail}
+                    alt={venueData.menus[0].name}
+                    fill
+                    sizes="56px"
+                    className="object-cover"
+                    unoptimized
+                    loading="lazy"
+                    quality={80}
+                  />
+                </div>
+                <div className="flex-1 text-left">
+                  <h3 className="text-white font-medium text-sm mb-0.5">{venueData.menus[0].name}</h3>
+                  <p className="text-gray-400 text-xs">{venueData.menus[0].images.length} pages</p>
+                </div>
+                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </motion.button>
             ) : (
               <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
                 {venueData.menus.map((menu) => (
@@ -375,14 +353,14 @@ function OutletContent() {
                       setIsMenuModalOpen(true);
                     }}
                     whileTap={{ scale: 0.96 }}
-                    className="flex-shrink-0 flex items-center gap-2 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-2 hover:bg-white/10 transition-all min-w-[160px]"
+                    className="flex-shrink-0 flex items-center gap-2 bg-white/5 rounded-lg p-2 hover:bg-white/10 transition-all min-w-[140px]"
                   >
-                    <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                    <div className="relative w-10 h-10 rounded overflow-hidden flex-shrink-0">
                       <Image
                         src={menu.thumbnail}
                         alt={menu.name}
                         fill
-                        sizes="48px"
+                        sizes="40px"
                         className="object-cover"
                         unoptimized
                         loading="lazy"
@@ -400,17 +378,17 @@ function OutletContent() {
           </motion.section>
         )}
 
-        {/* Photos Section - Horizontal Scroll */}
+        {/* Photos Section - Horizontal Scroll (2-3 visible) */}
         {loading ? (
-          <PhotosStripSkeleton accentColor={selectedBrand.accentColor} />
+          <div className="h-32 bg-white/5 rounded-xl animate-pulse" />
         ) : (
           <motion.section
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.5 }}
-            className="backdrop-blur-md bg-white/5 rounded-2xl border border-white/10 p-3 shadow-xl"
+            transition={{ delay: 0.2 }}
+            className="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-3"
           >
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-semibold text-white">Photos</h2>
               {validGalleryImages.length > 0 && (
                 <button
@@ -426,15 +404,12 @@ function OutletContent() {
               )}
             </div>
             {validGalleryImages.length === 0 ? (
-              <div className="text-center py-4 text-gray-400">
-                <svg className="w-8 h-8 mx-auto mb-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
+              <div className="text-center py-3 text-gray-400">
                 <p className="text-xs">Gallery is empty</p>
               </div>
             ) : (
               <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-                {validGalleryImages.slice(0, 4).map((image, index) => {
+                {validGalleryImages.slice(0, 6).map((image, index) => {
                   const originalIndex = venueData.galleryImages.indexOf(image);
                   const isLoaded = loadedGalleryImages.has(originalIndex);
                   const hasFailed = failedGalleryImages.has(originalIndex);
@@ -450,18 +425,18 @@ function OutletContent() {
                         setIsGalleryModalOpen(true);
                       }}
                       whileTap={{ scale: 0.95 }}
-                      className="relative rounded-xl overflow-hidden bg-gray-800/50 aspect-square flex-shrink-0 w-[48%]"
+                      className="relative rounded-lg overflow-hidden bg-gray-800/50 aspect-square flex-shrink-0 w-[120px] sm:w-[140px]"
                     >
                       {!isLoaded && (
                         <div className="absolute inset-0 flex items-center justify-center z-10">
-                          <div className="animate-spin rounded-full h-6 w-6 border-2" style={{ borderColor: selectedBrand.accentColor, borderTopColor: 'transparent' }}></div>
+                          <div className="animate-spin rounded-full h-5 w-5 border-2" style={{ borderColor: selectedBrand.accentColor, borderTopColor: 'transparent' }}></div>
                         </div>
                       )}
                       <Image
                         src={image}
                         alt={`Gallery ${index + 1}`}
                         fill
-                        sizes="(max-width: 768px) 50vw, 400px"
+                        sizes="(max-width: 640px) 120px, 140px"
                         className={`object-cover transition-opacity duration-300 ${
                           isLoaded ? 'opacity-100' : 'opacity-0'
                         }`}
@@ -481,13 +456,13 @@ function OutletContent() {
 
         {/* Location Section - Compact */}
         {loading ? (
-          <LocationCardSkeleton />
+          <div className="h-20 bg-white/5 rounded-xl animate-pulse" />
         ) : (
           <motion.section
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.5 }}
-            className="backdrop-blur-md bg-white/5 rounded-2xl border border-white/10 p-3 shadow-xl overflow-hidden"
+            transition={{ delay: 0.3 }}
+            className="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-3 overflow-hidden"
           >
             <h2 className="text-sm font-semibold text-white mb-2">Location</h2>
             <a
@@ -496,10 +471,10 @@ function OutletContent() {
               rel="noopener noreferrer"
               className="block group"
             >
-              <div className="relative h-24 rounded-xl overflow-hidden bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 mb-2">
+              <div className="relative h-16 rounded-lg overflow-hidden bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 mb-2">
                 <div className="absolute inset-0 flex items-center justify-center">
                   <svg
-                    className="w-8 h-8 transition-colors"
+                    className="w-6 h-6 transition-colors"
                     style={{ color: selectedBrand.accentColor }}
                     fill="none"
                     stroke="currentColor"
@@ -519,11 +494,10 @@ function OutletContent() {
                     />
                   </svg>
                 </div>
-                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
               </div>
               <div className="flex items-start gap-2">
                 <svg
-                  className="w-3.5 h-3.5 mt-0.5 flex-shrink-0"
+                  className="w-3 h-3 mt-0.5 flex-shrink-0"
                   style={{ color: selectedBrand.accentColor }}
                   fill="none"
                   stroke="currentColor"
@@ -554,43 +528,42 @@ function OutletContent() {
         )}
       </div>
 
-      {/* Premium Sticky Pill CTA Button */}
-      {loading ? (
-        <CTASkeleton accentColor={selectedBrand.accentColor} />
-      ) : (
-        <motion.div
-          initial={{ y: 100, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.4, type: "spring", stiffness: 100, damping: 20 }}
-          className="fixed bottom-4 left-4 right-4 z-50 max-w-sm mx-auto"
-        >
-          <motion.button
-            onClick={handleBookNow}
-            whileTap={{ scale: 0.95 }}
-            whileHover={{ scale: 1.02 }}
-            className="w-full py-3 px-6 rounded-full font-semibold text-white transition-all duration-300 relative overflow-hidden group backdrop-blur-xl border border-white/20 shadow-2xl"
-            style={{ 
-              backgroundColor: selectedBrand.accentColor,
-              boxShadow: `0 8px 32px ${selectedBrand.accentColor}50`
-            }}
+      {/* Sticky CTA - Only after scroll */}
+      <AnimatePresence>
+        {showStickyCTA && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[calc(100%-2rem)]"
           >
-            {/* Shine effect */}
-            <motion.span
-              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-              initial={{ x: '-100%' }}
-              whileHover={{ x: '100%' }}
-              transition={{ duration: 0.6 }}
-            />
-            
-            <span className="relative z-10 flex items-center justify-center gap-2 text-sm">
-              <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              Book a table
-            </span>
-          </motion.button>
-        </motion.div>
-      )}
+            <motion.button
+              onClick={handleBookNow}
+              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.02 }}
+              className="w-full py-2.5 px-6 rounded-full font-semibold text-white transition-all duration-300 relative overflow-hidden group backdrop-blur-xl border border-white/20 shadow-2xl"
+              style={{ 
+                backgroundColor: selectedBrand.accentColor,
+                boxShadow: `0 8px 32px ${selectedBrand.accentColor}50`
+              }}
+            >
+              <motion.span
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                initial={{ x: '-100%' }}
+                whileHover={{ x: '100%' }}
+                transition={{ duration: 0.6 }}
+              />
+              <span className="relative z-10 flex items-center justify-center gap-2 text-sm">
+                <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                Book a table
+              </span>
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Menu Modal */}
       {isMenuModalOpen && selectedMenuId && (

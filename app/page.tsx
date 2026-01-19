@@ -12,23 +12,20 @@ interface OutletData {
   loading: boolean;
 }
 
-// Location mapping
+// Location mapping - Updated per requirements
 const LOCATION_MAP: Record<string, string[]> = {
-  "Gachibowli": ["club-rogue-gachibowli", "kiik69"],
-  "Kondapur": ["club-rogue-kondapur"],
+  "Kondapur": ["alehouse", "c53", "boiler-room", "firefly", "rejoy"],
+  "Gachibowli": ["kiik69", "skyhy", "club-rogue-gachibowli"],
   "Jubilee Hills": ["club-rogue-jubilee-hills"],
-  "Hitech City": ["alehouse", "c53", "boiler-room"],
-  "Madhapur": ["skyhy", "sound-of-soul", "rejoy", "firefly"],
 };
 
 // Mood/Occasion mapping
-const MOOD_MAP: Record<string, string[]> = {
-  "Party Night": ["club-rogue-gachibowli", "club-rogue-kondapur", "club-rogue-jubilee-hills", "rejoy", "firefly", "sound-of-soul"],
-  "Romantic Dinner": ["c53", "alehouse"],
-  "Chill & Drinks": ["boiler-room", "skyhy", "alehouse"],
-  "Family Dining": ["c53"],
-  "Birthday / Celebration": ["club-rogue-gachibowli", "club-rogue-kondapur", "club-rogue-jubilee-hills", "rejoy", "firefly", "sound-of-soul", "kiik69"],
-  "Live Music / DJ": ["skyhy", "sound-of-soul", "rejoy"],
+const MOOD_MAP: Record<string, { icon: string; brands: string[] }> = {
+  "Party Night": { icon: "🍾", brands: ["club-rogue-gachibowli", "club-rogue-kondapur", "club-rogue-jubilee-hills", "rejoy", "firefly", "sound-of-soul"] },
+  "Romantic Dinner": { icon: "❤️", brands: ["c53", "alehouse"] },
+  "Chill & Drinks": { icon: "🍺", brands: ["boiler-room", "skyhy", "alehouse"] },
+  "Live Music / DJ": { icon: "🎧", brands: ["skyhy", "sound-of-soul", "rejoy"] },
+  "Birthday / Celebration": { icon: "🎂", brands: ["club-rogue-gachibowli", "club-rogue-kondapur", "club-rogue-jubilee-hills", "rejoy", "firefly", "sound-of-soul", "kiik69"] },
 };
 
 // Venue Type mapping
@@ -39,6 +36,16 @@ const VENUE_TYPE_MAP: Record<string, string[]> = {
   "Fine Dining": ["c53", "alehouse"],
   "Casual Bar": ["boiler-room"],
   "Lounge": ["alehouse"],
+};
+
+// Get venue type for a brand
+const getVenueType = (brandId: string): string => {
+  for (const [type, brands] of Object.entries(VENUE_TYPE_MAP)) {
+    if (brands.includes(brandId)) {
+      return type;
+    }
+  }
+  return "Venue";
 };
 
 function LandingContent() {
@@ -52,8 +59,7 @@ function LandingContent() {
   );
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
-  const [selectedVenueType, setSelectedVenueType] = useState<string | null>(null);
-  const [showQuickActions, setShowQuickActions] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const outletsRef = useRef<HTMLDivElement>(null);
 
   // Fetch cover images for all outlets
@@ -90,18 +96,10 @@ function LandingContent() {
 
       const results = await Promise.all(promises);
       setOutletsData(results);
+      setIsInitialLoad(false);
     };
 
     fetchAllCovers();
-  }, []);
-
-  // Show quick actions on scroll
-  useEffect(() => {
-    const handleScroll = () => {
-      setShowQuickActions(window.scrollY > 100);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   // Filter outlets based on selected filters
@@ -114,20 +112,15 @@ function LandingContent() {
     }
 
     if (selectedMood) {
-      const moodBrands = MOOD_MAP[selectedMood] || [];
+      const moodBrands = MOOD_MAP[selectedMood]?.brands || [];
       filtered = filtered.filter(b => moodBrands.includes(b.id));
-    }
-
-    if (selectedVenueType) {
-      const typeBrands = VENUE_TYPE_MAP[selectedVenueType] || [];
-      filtered = filtered.filter(b => typeBrands.includes(b.id));
     }
 
     return filtered;
   };
 
   const filteredBrands = getFilteredBrands();
-  const hasActiveFilters = selectedLocation || selectedMood || selectedVenueType;
+  const hasActiveFilters = selectedLocation || selectedMood;
 
   const handleOutletClick = (brandId: string) => {
     router.push(`/${brandId}`);
@@ -140,7 +133,6 @@ function LandingContent() {
   const clearFilters = () => {
     setSelectedLocation(null);
     setSelectedMood(null);
-    setSelectedVenueType(null);
   };
 
   const getLogoPath = (brandId: string) => {
@@ -149,43 +141,90 @@ function LandingContent() {
       : `/logos/${brandId}.png`;
   };
 
+  // Show loader only on initial load if data is still loading
+  if (isInitialLoad && outletsData.some(d => d.loading)) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="text-center"
+        >
+          <div className="relative w-16 h-16 mx-auto mb-4">
+            <motion.div
+              className="absolute inset-0 rounded-full border-4 border-orange-500/30"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            />
+            <motion.div
+              className="absolute inset-0 rounded-full border-4 border-transparent border-t-orange-500"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            />
+          </div>
+          <p className="text-gray-400 text-sm">Loading venues...</p>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black">
-      {/* Compact Hero Section */}
+    <div className="min-h-screen bg-black">
+      {/* Premium Hero Section */}
       <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 via-purple-500/10 to-pink-500/10" />
+        {/* Animated gradient background */}
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-br from-orange-900/20 via-purple-900/20 to-pink-900/20"
+          animate={{
+            backgroundPosition: ["0% 0%", "100% 100%"],
+          }}
+          transition={{
+            duration: 10,
+            repeat: Infinity,
+            repeatType: "reverse",
+          }}
+        />
         
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-6 sm:pt-16 sm:pb-8">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-8 sm:pt-20 sm:pb-12">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
+            transition={{ duration: 0.8 }}
             className="text-center"
           >
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-3">
-              <span className="block">You Name It,</span>
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-white mb-4 tracking-tight">
+              <span className="block">YOU NAME IT,</span>
               <span className="block bg-gradient-to-r from-orange-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
-                We Have It
+                WE HAVE IT
               </span>
             </h1>
-            <p className="text-sm sm:text-base text-gray-400 max-w-xl mx-auto">
-              Discover the finest dining and nightlife experiences
+            <p className="text-sm sm:text-base text-gray-400 max-w-xl mx-auto mb-6">
+              Discover the finest dining and nightlife experiences across Hyderabad
             </p>
+            
+            {/* Quick discovery actions */}
+            <div className="flex flex-wrap justify-center gap-3 mt-6">
+              <motion.button
+                onClick={scrollToOutlets}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="px-6 py-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white text-sm font-medium hover:bg-white/20 transition-all"
+              >
+                Explore Venues
+              </motion.button>
+            </div>
           </motion.div>
         </div>
       </div>
 
-      {/* Smart Shortcut Sections */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6 pb-8">
-        {/* 1. Find by Location */}
+      {/* Filters Section */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4 pb-6">
+        {/* Location Filter */}
         <motion.section
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
+          transition={{ delay: 0.2 }}
         >
-          <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2">
-            <span>📍</span> Near You
-          </h2>
           <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4">
             {Object.keys(LOCATION_MAP).map((location) => (
               <motion.button
@@ -193,11 +232,10 @@ function LandingContent() {
                 onClick={() => {
                   setSelectedLocation(selectedLocation === location ? null : location);
                   setSelectedMood(null);
-                  setSelectedVenueType(null);
                   setTimeout(scrollToOutlets, 100);
                 }}
                 whileTap={{ scale: 0.95 }}
-                className={`flex-shrink-0 px-4 py-2.5 rounded-full backdrop-blur-md border transition-all duration-300 ${
+                className={`flex-shrink-0 px-5 py-2.5 rounded-full backdrop-blur-md border transition-all duration-300 ${
                   selectedLocation === location
                     ? 'bg-white/20 border-white/40 text-white shadow-lg'
                     : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20'
@@ -214,89 +252,41 @@ function LandingContent() {
           </div>
         </motion.section>
 
-        {/* 2. Find by Mood/Occasion */}
+        {/* Mood Filter */}
         <motion.section
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.5 }}
+          transition={{ delay: 0.3 }}
         >
-          <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2">
-            <span>🍻</span> What's the plan tonight?
-          </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {Object.keys(MOOD_MAP).map((mood) => (
+          <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4">
+            {Object.entries(MOOD_MAP).map(([mood, { icon }]) => (
               <motion.button
                 key={mood}
                 onClick={() => {
                   setSelectedMood(selectedMood === mood ? null : mood);
                   setSelectedLocation(null);
-                  setSelectedVenueType(null);
                   setTimeout(scrollToOutlets, 100);
                 }}
                 whileTap={{ scale: 0.95 }}
-                className={`relative p-4 rounded-xl backdrop-blur-md border transition-all duration-300 text-left ${
+                className={`flex-shrink-0 px-4 py-2.5 rounded-full backdrop-blur-md border transition-all duration-300 flex items-center gap-2 ${
                   selectedMood === mood
-                    ? 'bg-white/15 border-white/30 text-white shadow-xl'
-                    : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20'
-                }`}
-                style={
-                  selectedMood === mood
-                    ? { boxShadow: '0 8px 32px rgba(255, 255, 255, 0.15)' }
-                    : {}
-                }
-              >
-                <p className="text-xs font-medium leading-tight">{mood}</p>
-                {selectedMood === mood && (
-                  <motion.div
-                    className="absolute top-2 right-2 w-2 h-2 rounded-full bg-white"
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  />
-                )}
-              </motion.button>
-            ))}
-          </div>
-        </motion.section>
-
-        {/* 3. Find by Venue Type */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.5 }}
-        >
-          <h2 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2">
-            <span>✨</span> Choose your vibe
-          </h2>
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4">
-            {Object.keys(VENUE_TYPE_MAP).map((type) => (
-              <motion.button
-                key={type}
-                onClick={() => {
-                  setSelectedVenueType(selectedVenueType === type ? null : type);
-                  setSelectedLocation(null);
-                  setSelectedMood(null);
-                  setTimeout(scrollToOutlets, 100);
-                }}
-                whileTap={{ scale: 0.95 }}
-                className={`flex-shrink-0 px-4 py-2.5 rounded-full backdrop-blur-md border transition-all duration-300 ${
-                  selectedVenueType === type
                     ? 'bg-white/20 border-white/40 text-white shadow-lg'
                     : 'bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20'
                 }`}
                 style={
-                  selectedVenueType === type
+                  selectedMood === mood
                     ? { boxShadow: '0 4px 20px rgba(255, 255, 255, 0.2)' }
                     : {}
                 }
               >
-                <span className="text-sm font-medium whitespace-nowrap">{type}</span>
+                <span className="text-base">{icon}</span>
+                <span className="text-sm font-medium whitespace-nowrap">{mood}</span>
               </motion.button>
             ))}
           </div>
         </motion.section>
 
-        {/* Active Filters Clear Button */}
+        {/* Active Filters Clear */}
         {hasActiveFilters && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -316,44 +306,51 @@ function LandingContent() {
         )}
       </div>
 
-      {/* Outlets Grid */}
-      <div ref={outletsRef} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        {/* Mobile: Horizontal Scroll */}
-        <div className="sm:hidden">
-          <div className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-4 px-4">
+      {/* Compact Outlet Grid */}
+      <div ref={outletsRef} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={selectedLocation || selectedMood || 'all'}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4"
+          >
             {filteredBrands.map((brand, index) => {
               const outletData = outletsData.find((o) => o.brandId === brand.id);
               const coverImage = outletData?.coverImage;
-              const isLoading = outletData?.loading ?? true;
               const logoPath = getLogoPath(brand.id);
+              const venueType = getVenueType(brand.id);
 
               return (
                 <motion.button
                   key={brand.id}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05, duration: 0.4 }}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: index * 0.05, duration: 0.3 }}
                   onClick={() => handleOutletClick(brand.id)}
-                  className="group relative flex-shrink-0 w-[280px] h-[320px] rounded-2xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300"
+                  whileHover={{ scale: 1.02, y: -4 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="group relative aspect-[4/5] rounded-xl overflow-hidden backdrop-blur-md border border-white/10 hover:border-white/20 transition-all duration-300"
                   style={{
-                    boxShadow: `0 10px 40px ${brand.accentColor}20`,
+                    boxShadow: `0 4px 20px ${brand.accentColor}10`,
                   }}
                 >
-                  {isLoading ? (
-                    <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 animate-pulse" />
-                  ) : coverImage ? (
+                  {/* Cover Image or Gradient */}
+                  {coverImage ? (
                     <>
                       <Image
                         src={coverImage}
                         alt={brand.name}
                         fill
-                        sizes="280px"
+                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                         className="object-cover transition-transform duration-500 group-hover:scale-110 brightness-100"
                         unoptimized
                         loading="lazy"
-                        quality={80}
+                        quality={75}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
                     </>
                   ) : (
                     <div 
@@ -364,8 +361,9 @@ function LandingContent() {
                     />
                   )}
 
-                  <div className="absolute top-4 left-4 z-10">
-                    <div className="relative w-12 h-12 rounded-lg bg-white/10 backdrop-blur-md border border-white/20 p-1.5">
+                  {/* Logo */}
+                  <div className="absolute top-2 left-2 z-10">
+                    <div className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-black/40 backdrop-blur-md border border-white/20 p-1.5">
                       <Image
                         src={logoPath}
                         alt={brand.shortName}
@@ -378,130 +376,41 @@ function LandingContent() {
                     </div>
                   </div>
 
-                  <div className="absolute bottom-0 left-0 right-0 p-4 z-10">
-                    <h2 className="text-xl font-bold text-white drop-shadow-lg mb-1">
-                      {brand.shortName}
-                    </h2>
+                  {/* Content */}
+                  <div className="absolute bottom-0 left-0 right-0 p-3 z-10">
+                    <div className="flex items-start justify-between mb-1.5">
+                      <h3 className="text-sm sm:text-base font-bold text-white drop-shadow-lg leading-tight">
+                        {brand.shortName}
+                      </h3>
+                    </div>
+                    
+                    {/* Type Tag */}
                     <div 
-                      className="h-0.5 w-12 rounded-full mb-2"
+                      className="inline-block px-2 py-0.5 rounded-full text-[10px] font-medium text-white mb-2 backdrop-blur-sm"
+                      style={{ backgroundColor: `${brand.accentColor}80` }}
+                    >
+                      {venueType}
+                    </div>
+
+                    {/* Accent Line */}
+                    <div 
+                      className="h-0.5 w-8 rounded-full"
                       style={{ backgroundColor: brand.accentColor }}
                     />
-                    <p className="text-xs text-white/90 drop-shadow-md">
-                      {brand.name}
-                    </p>
                   </div>
+
+                  {/* Hover Glow */}
+                  <div 
+                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                    style={{
+                      boxShadow: `inset 0 0 60px ${brand.accentColor}30`,
+                    }}
+                  />
                 </motion.button>
               );
             })}
-          </div>
-        </div>
-
-        {/* Desktop: Compact Grid */}
-        <div className="hidden sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredBrands.map((brand, index) => {
-            const outletData = outletsData.find((o) => o.brandId === brand.id);
-            const coverImage = outletData?.coverImage;
-            const isLoading = outletData?.loading ?? true;
-            const logoPath = getLogoPath(brand.id);
-
-            return (
-              <motion.button
-                key={brand.id}
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05, duration: 0.4 }}
-                onClick={() => handleOutletClick(brand.id)}
-                className="group relative h-[280px] rounded-2xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]"
-                style={{
-                  boxShadow: `0 10px 40px ${brand.accentColor}20`,
-                }}
-              >
-                {isLoading ? (
-                  <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 animate-pulse" />
-                ) : coverImage ? (
-                  <>
-                    <Image
-                      src={coverImage}
-                      alt={brand.name}
-                      fill
-                      sizes="(max-width: 1024px) 50vw, 25vw"
-                      className="object-cover transition-transform duration-500 group-hover:scale-110 brightness-100"
-                      unoptimized
-                      loading="lazy"
-                      quality={80}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent group-hover:from-black/80 transition-all duration-500" />
-                  </>
-                ) : (
-                  <div 
-                    className="absolute inset-0 bg-gradient-to-br"
-                    style={{
-                      background: `linear-gradient(135deg, ${brand.accentColor}60, ${brand.accentColor}90)`,
-                    }}
-                  />
-                )}
-
-                <div className="absolute top-4 left-4 z-10">
-                  <div className="relative w-12 h-12 rounded-lg bg-white/10 backdrop-blur-md border border-white/20 p-1.5 group-hover:scale-110 transition-transform duration-300">
-                    <Image
-                      src={logoPath}
-                      alt={brand.shortName}
-                      fill
-                      className="object-contain"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="absolute bottom-0 left-0 right-0 p-4 z-10">
-                  <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-lg font-bold text-white drop-shadow-lg">
-                      {brand.shortName}
-                    </h2>
-                    <motion.div
-                      className="w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-md bg-white/20 border border-white/30"
-                      whileHover={{ scale: 1.1, rotate: 45 }}
-                      transition={{ duration: 0.3 }}
-                      style={{ backgroundColor: `${brand.accentColor}40` }}
-                    >
-                      <svg
-                        className="w-4 h-4 text-white"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M9 5l7 7-7 7"
-                        />
-                      </svg>
-                    </motion.div>
-                  </div>
-                  
-                  <div 
-                    className="h-0.5 w-12 rounded-full mb-2 group-hover:w-16 transition-all duration-500"
-                    style={{ backgroundColor: brand.accentColor }}
-                  />
-
-                  <p className="text-xs text-white/90 drop-shadow-md">
-                    {brand.name}
-                  </p>
-                </div>
-
-                <div 
-                  className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                  style={{
-                    boxShadow: `inset 0 0 80px ${brand.accentColor}20`,
-                  }}
-                />
-              </motion.button>
-            );
-          })}
-        </div>
+          </motion.div>
+        </AnimatePresence>
 
         {filteredBrands.length === 0 && (
           <div className="text-center py-12">
@@ -509,37 +418,6 @@ function LandingContent() {
           </div>
         )}
       </div>
-
-      {/* Quick Action Shortcuts - Sticky */}
-      <AnimatePresence>
-        {showQuickActions && (
-          <motion.div
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-[calc(100%-2rem)]"
-          >
-            <div className="flex gap-2 p-2 rounded-2xl backdrop-blur-xl bg-black/80 border border-white/20 shadow-2xl">
-              <motion.button
-                onClick={scrollToOutlets}
-                whileTap={{ scale: 0.95 }}
-                className="flex-1 px-3 py-2 text-xs font-medium text-white bg-white/10 rounded-xl hover:bg-white/20 transition-colors"
-              >
-                View All
-              </motion.button>
-              <motion.button
-                onClick={() => router.push(`/${BRANDS[0].id}/reservations`)}
-                whileTap={{ scale: 0.95 }}
-                className="flex-1 px-3 py-2 text-xs font-medium text-white rounded-xl transition-colors"
-                style={{ backgroundColor: BRANDS[0].accentColor }}
-              >
-                Book Table
-              </motion.button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Compact Footer */}
       <div className="border-t border-white/10 py-6">
