@@ -8,6 +8,7 @@ import { BRANDS } from "@/lib/brands";
 import MenuModal from "@/components/MenuModal";
 import GalleryModal from "@/components/GalleryModal";
 import { HeroSkeleton, MenuCardSkeleton, PhotosStripSkeleton, LocationCardSkeleton, CTASkeleton } from "@/components/SkeletonLoader";
+import BrandedLoader from "@/components/BrandedLoader";
 
 function HomeContent() {
   const router = useRouter();
