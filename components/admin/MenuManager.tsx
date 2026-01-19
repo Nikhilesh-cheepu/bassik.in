@@ -87,12 +87,12 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
       }
 
       try {
-        // Compress menu images
+        // Compress menu images (more aggressive compression for menus)
         const compressedBase64 = await compressImage(file, {
-          maxWidth: 1600,
-          maxHeight: 2400, // Menu images can be taller
-          quality: 0.75,
-          maxSizeKB: 400,
+          maxWidth: 1400, // Reduced from 1600
+          maxHeight: 2000, // Reduced from 2400
+          quality: 0.65, // More aggressive compression
+          maxSizeKB: 250, // Reduced from 400KB
         });
         
         const sizeKB = (compressedBase64.length / 1024).toFixed(2);
@@ -146,12 +146,76 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
         payloadSize: `${(payloadSize / 1024).toFixed(2)} KB`,
       });
 
-      // Check if payload is too large (4MB limit)
-      const MAX_PAYLOAD_SIZE = 4 * 1024 * 1024;
+      // If payload is too large, split into smaller batches
+      const MAX_PAYLOAD_SIZE = 3 * 1024 * 1024; // 3MB limit for safety
       if (payloadSize > MAX_PAYLOAD_SIZE) {
-        throw new Error(`Menu data is too large (${(payloadSize / 1024).toFixed(2)} KB). Please reduce the number of images or their size.`);
+        console.log(`[MenuManager] Payload too large (${(payloadSize / 1024).toFixed(2)} KB), splitting into batches`);
+        
+        // Calculate how many images per batch (leave room for metadata ~50KB)
+        const metadataSize = 200; // Approximate size of name, thumbnailUrl, menuId
+        const availableSize = MAX_PAYLOAD_SIZE - metadataSize;
+        const avgImageSize = imageData.length > 0 ? imageData[0].url.length : 0;
+        const batchSize = Math.max(1, Math.floor((availableSize * 0.8) / avgImageSize));
+        console.log(`[MenuManager] Batch size: ${batchSize} images per request (avg image size: ${(avgImageSize / 1024).toFixed(2)} KB)`);
+
+        // Process in batches - accumulate images across batches
+        let currentMenuId = editingMenu.id;
+        let accumulatedImages: any[] = [];
+        
+        for (let i = 0; i < imageData.length; i += batchSize) {
+          const batch = imageData.slice(i, i + batchSize);
+          accumulatedImages = [...accumulatedImages, ...batch.map((img: any, idx: number) => ({ ...img, order: accumulatedImages.length + idx }))];
+          
+          // Check if accumulated payload is still too large
+          const accumulatedPayload = {
+            menuId: i === 0 ? editingMenu.id : currentMenuId,
+            name: editingMenu.name,
+            thumbnailUrl: editingMenu.thumbnailUrl,
+            images: accumulatedImages,
+          };
+          const accumulatedSize = JSON.stringify(accumulatedPayload).length;
+          
+          // If still too large, reduce batch size and retry
+          if (accumulatedSize > MAX_PAYLOAD_SIZE && accumulatedImages.length > batch.length) {
+            // Remove the last batch and try with smaller size
+            accumulatedImages = accumulatedImages.slice(0, -batch.length);
+            const smallerBatch = batch.slice(0, Math.floor(batch.length * 0.7));
+            accumulatedImages = [...accumulatedImages, ...smallerBatch.map((img: any, idx: number) => ({ ...img, order: accumulatedImages.length + idx }))];
+          }
+
+          const batchPayload = {
+            menuId: i === 0 ? editingMenu.id : currentMenuId,
+            name: editingMenu.name,
+            thumbnailUrl: editingMenu.thumbnailUrl,
+            images: accumulatedImages,
+          };
+
+          const batchRes = await fetch(`/api/admin/venues/${venueId}/menus`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(batchPayload),
+          });
+
+          if (!batchRes.ok) {
+            const errorData = await batchRes.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to upload batch ${Math.floor(i / batchSize) + 1} (${batchRes.status})`);
+          }
+
+          const batchResult = await batchRes.json();
+          if (batchResult.menu?.id) {
+            currentMenuId = batchResult.menu.id;
+          }
+
+          console.log(`[MenuManager] Batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(imageData.length / batchSize)} uploaded (${accumulatedImages.length} total images)`);
+        }
+
+        setMessage({ type: "success", text: `Menu section saved successfully with ${imageData.length} images!` });
+        setEditingMenu(null);
+        await onUpdate();
+        return;
       }
 
+      // Normal upload if payload is small enough
       const res = await fetch(`/api/admin/venues/${venueId}/menus`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

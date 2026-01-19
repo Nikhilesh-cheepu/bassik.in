@@ -65,8 +65,8 @@ export default function ImageUploader({
           const compressedBase64 = await compressImage(file, {
             maxWidth: imageType === "COVER" ? 1920 : 1200,
             maxHeight: imageType === "COVER" ? 1080 : 1200,
-            quality: 0.75,
-            maxSizeKB: 400, // Target 400KB per image
+            quality: 0.7, // Slightly more aggressive
+            maxSizeKB: 300, // Reduced from 400KB to 300KB
           });
           
           const sizeKB = (compressedBase64.length / 1024).toFixed(2);

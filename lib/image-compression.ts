@@ -17,8 +17,8 @@ export async function compressImage(
   const {
     maxWidth = 1920,
     maxHeight = 1920,
-    quality = 0.8,
-    maxSizeKB = 500, // Target 500KB per image
+    quality = 0.7, // Reduced from 0.8 for better compression
+    maxSizeKB = 250, // Reduced from 500KB to 250KB for smaller payloads
   } = options;
 
   return new Promise((resolve, reject) => {
