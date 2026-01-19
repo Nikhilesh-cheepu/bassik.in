@@ -58,8 +58,8 @@ export const BRANDS: Brand[] = [
   },
   {
     id: "club-rogue-gachibowli",
-    name: "Club Rogue – Gachibowli",
-    shortName: "Gachibowli",
+    name: "clubrogue - gachibowli",
+    shortName: "clubrogue - gachibowli",
     accentColor: "#F97316",
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/clubrogue.gachibowli/"],
@@ -67,8 +67,8 @@ export const BRANDS: Brand[] = [
   },
   {
     id: "club-rogue-kondapur",
-    name: "Club Rogue – Kondapur",
-    shortName: "Kondapur",
+    name: "clubrogue - kondapur",
+    shortName: "clubrogue - kondapur",
     accentColor: "#EC4899",
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/clubrogue.kondapur/"],
@@ -76,8 +76,8 @@ export const BRANDS: Brand[] = [
   },
   {
     id: "club-rogue-jubilee-hills",
-    name: "Club Rogue – Jubilee Hills",
-    shortName: "Jubilee Hills",
+    name: "clubrogue - jublieehills",
+    shortName: "clubrogue - jublieehills",
     accentColor: "#A855F7",
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/clubrogue.jubileehills/"],

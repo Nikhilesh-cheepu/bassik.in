@@ -69,6 +69,16 @@ export default function AdminsPage() {
     alert("Admins are managed in code. To modify admins, edit the HARDCODED_ADMINS array in lib/auth.ts");
   };
 
+  const handleLogout = async () => {
+    try {
+      document.cookie = "admin-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      document.cookie = "admin-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/admin;";
+      window.location.href = "/admin";
+    } catch (error) {
+      window.location.href = "/admin";
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -91,12 +101,20 @@ export default function AdminsPage() {
         <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
           <div className="flex items-center justify-between">
             <h1 className="text-lg sm:text-xl font-bold text-gray-900">Manage Admins</h1>
-            <button
-              onClick={() => router.push("/admin/dashboard")}
-              className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              ← Back
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => router.push("/admin/dashboard")}
+                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                ← Back
+              </button>
+              <button
+                onClick={handleLogout}
+                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>

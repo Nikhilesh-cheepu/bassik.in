@@ -6,6 +6,8 @@ export const AdminRole = {
 };
 
 // Hardcoded admin credentials - no database required
+// MAIN ADMIN: full access (all venues)
+// SUB ADMINS: outlet-specific access only
 export const HARDCODED_ADMINS = [
   {
     id: "admin-1",
@@ -14,7 +16,84 @@ export const HARDCODED_ADMINS = [
     role: "MAIN_ADMIN" as AdminRole,
     venuePermissions: [] as string[], // Empty array means all venues for MAIN_ADMIN
   },
-  // Add more admins here if needed
+  // Outlet-specific admins
+  {
+    id: "admin-alehouse",
+    username: "alehouse",
+    password: "alehouse123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["alehouse"],
+  },
+  {
+    id: "admin-c53",
+    username: "c53",
+    password: "c53123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["c53"],
+  },
+  {
+    id: "admin-boiler-room",
+    username: "boilerroom",
+    password: "boilerroom123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["boiler-room"],
+  },
+  {
+    id: "admin-skyhy",
+    username: "skyhy",
+    password: "skyhy123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["skyhy"],
+  },
+  {
+    id: "admin-kiik69",
+    username: "kiik69",
+    password: "kiik69123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["kiik69"],
+  },
+  {
+    id: "admin-clubrogue-gachibowli",
+    username: "clubrogue-gachibowli",
+    password: "clubrogue-gb123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["club-rogue-gachibowli"],
+  },
+  {
+    id: "admin-clubrogue-kondapur",
+    username: "clubrogue-kondapur",
+    password: "clubrogue-kp123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["club-rogue-kondapur"],
+  },
+  {
+    id: "admin-clubrogue-jublieehills",
+    username: "clubrogue-jublieehills",
+    password: "clubrogue-jh123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["club-rogue-jubilee-hills"],
+  },
+  {
+    id: "admin-sound-of-soul",
+    username: "soundofsoul",
+    password: "soundofsoul123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["sound-of-soul"],
+  },
+  {
+    id: "admin-rejoy",
+    username: "rejoy",
+    password: "rejoy123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["rejoy"],
+  },
+  {
+    id: "admin-firefly",
+    username: "firefly",
+    password: "firefly123",
+    role: "ADMIN" as AdminRole,
+    venuePermissions: ["firefly"],
+  },
 ];
 
 export async function verifyAdmin(username: string, password: string) {

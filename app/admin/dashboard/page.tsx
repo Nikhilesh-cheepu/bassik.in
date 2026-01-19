@@ -83,9 +83,17 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    document.cookie = "admin-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-    router.push("/admin");
+  const handleLogout = async () => {
+    try {
+      // Clear cookie with all possible path variations
+      document.cookie = "admin-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      document.cookie = "admin-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/admin;";
+      // Force immediate hard redirect to clear any cached state
+      window.location.href = "/admin";
+    } catch (error) {
+      // Fallback if cookie clearing fails
+      window.location.href = "/admin";
+    }
   };
 
   if (loading) {
