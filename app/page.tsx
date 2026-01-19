@@ -7,6 +7,7 @@ import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion"
 import { BRANDS } from "@/lib/brands";
 import MenuModal from "@/components/MenuModal";
 import GalleryModal from "@/components/GalleryModal";
+import { HeroSkeleton, MenuCardSkeleton, PhotosStripSkeleton, LocationCardSkeleton, CTASkeleton } from "@/components/SkeletonLoader";
 
 function HomeContent() {
   const router = useRouter();
@@ -154,9 +155,7 @@ function HomeContent() {
       {/* Full-bleed Hero Cover Image (55-65vh) */}
       <div ref={heroRef} className="relative w-full h-[60vh] overflow-hidden">
         {loading ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-black">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2" style={{ borderColor: selectedBrand.accentColor }}></div>
-          </div>
+          <HeroSkeleton accentColor={selectedBrand.accentColor} />
         ) : coverImages.length > 0 ? (
           <AnimatePresence mode="wait">
             {coverImages.map((image, index) => (
@@ -174,9 +173,11 @@ function HomeContent() {
                     src={image}
                     alt={`${selectedBrand.shortName} cover ${index + 1}`}
                     fill
+                    sizes="100vw"
                     className="object-cover"
                     unoptimized
                     priority={index === 0}
+                    quality={85}
                   />
                   {/* Dark gradient overlay */}
                   <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/80" />
@@ -221,7 +222,7 @@ function HomeContent() {
                     animate={{
                       scale: isSelected ? 1.05 : 1,
                     }}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all duration-300 backdrop-blur-xl border ${
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap transition-all duration-300 backdrop-blur-md border ${
                       isSelected
                         ? 'bg-white/20 shadow-2xl'
                         : 'bg-white/5 border-white/10 hover:bg-white/10'
@@ -274,14 +275,17 @@ function HomeContent() {
       {/* Content Sections */}
       <div className="max-w-4xl mx-auto px-4 -mt-8 relative z-10 space-y-4 pb-24">
         {/* Menu Section - Compact Tap Card */}
-        <motion.section
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.5 }}
-          className="backdrop-blur-xl bg-white/5 rounded-2xl border border-white/10 p-4 shadow-xl"
-        >
-          <h2 className="text-base font-semibold text-white mb-3">Menu</h2>
-          {venueData.menus.length === 0 ? (
+        {loading ? (
+          <MenuCardSkeleton />
+        ) : (
+          <motion.section
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1, duration: 0.5 }}
+            className="backdrop-blur-md bg-white/5 rounded-2xl border border-white/10 p-4 shadow-xl"
+          >
+            <h2 className="text-base font-semibold text-white mb-3">Menu</h2>
+            {venueData.menus.length === 0 ? (
             <div className="text-center py-6 text-gray-400">
               <svg className="w-10 h-10 mx-auto mb-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -305,8 +309,11 @@ function HomeContent() {
                       src={menu.thumbnail}
                       alt={menu.name}
                       fill
+                      sizes="56px"
                       className="object-cover"
                       unoptimized
+                      loading="lazy"
+                      quality={80}
                     />
                   </div>
                   <div className="flex-1 text-left min-w-0">
@@ -316,16 +323,20 @@ function HomeContent() {
                 </motion.button>
               ))}
             </div>
-          )}
-        </motion.section>
+            )}
+          </motion.section>
+        )}
 
         {/* Photos Section - Horizontal Scroll Strip (Swiggy-like) */}
-        <motion.section
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-          className="backdrop-blur-xl bg-white/5 rounded-2xl border border-white/10 p-4 shadow-xl"
-        >
+        {loading ? (
+          <PhotosStripSkeleton accentColor={selectedBrand.accentColor} />
+        ) : (
+          <motion.section
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+            className="backdrop-blur-md bg-white/5 rounded-2xl border border-white/10 p-4 shadow-xl"
+          >
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-base font-semibold text-white">Photos</h2>
             {validGalleryImages.length > 0 && (
@@ -377,10 +388,13 @@ function HomeContent() {
                       src={image}
                       alt={`Gallery ${index + 1}`}
                       fill
+                      sizes="128px"
                       className={`object-cover transition-opacity duration-300 ${
                         isLoaded ? 'opacity-100' : 'opacity-0'
                       }`}
                       unoptimized
+                      loading="lazy"
+                      quality={75}
                       onLoad={() => handleImageLoad(originalIndex)}
                       onError={() => handleImageError(originalIndex)}
                     />
@@ -388,16 +402,20 @@ function HomeContent() {
                 );
               })}
             </div>
-          )}
-        </motion.section>
+            )}
+          </motion.section>
+        )}
 
         {/* Location Section - Compact Card */}
-        <motion.section
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.5 }}
-          className="backdrop-blur-xl bg-white/5 rounded-2xl border border-white/10 p-4 shadow-xl overflow-hidden"
-        >
+        {loading ? (
+          <LocationCardSkeleton />
+        ) : (
+          <motion.section
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
+            className="backdrop-blur-md bg-white/5 rounded-2xl border border-white/10 p-4 shadow-xl overflow-hidden"
+          >
           <h2 className="text-base font-semibold text-white mb-3">Location</h2>
           <a
             href={venueData.location.mapUrl}
@@ -459,17 +477,21 @@ function HomeContent() {
               </div>
             </div>
           </a>
-        </motion.section>
+          </motion.section>
+        )}
       </div>
 
       {/* Floating Bottom Glass Bar - Premium CTA */}
-      <motion.div
-        initial={{ y: 100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.4, type: "spring", stiffness: 100, damping: 20 }}
-        className="fixed bottom-0 left-0 right-0 z-50 backdrop-blur-2xl bg-black/60 border-t border-white/10 p-3 shadow-2xl"
-        style={{ height: '64px' }}
-      >
+      {loading ? (
+        <CTASkeleton accentColor={selectedBrand.accentColor} />
+      ) : (
+        <motion.div
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.4, type: "spring", stiffness: 100, damping: 20 }}
+          className="fixed bottom-0 left-0 right-0 z-50 backdrop-blur-xl bg-black/60 border-t border-white/10 p-3 shadow-2xl"
+          style={{ height: '64px' }}
+        >
         <motion.button
           onClick={handleBookNow}
           whileTap={{ scale: 0.96 }}
@@ -495,7 +517,8 @@ function HomeContent() {
             Book a table
           </span>
         </motion.button>
-      </motion.div>
+        </motion.div>
+      )}
 
       {/* Menu Modal */}
       {isMenuModalOpen && selectedMenuId && (
