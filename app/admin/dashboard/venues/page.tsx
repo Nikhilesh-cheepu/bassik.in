@@ -53,7 +53,12 @@ export default function VenuesPage() {
 
   const loadVenues = async () => {
     try {
-      const res = await fetch("/api/admin/venues");
+      const res = await fetch("/api/admin/venues", {
+        cache: 'no-store', // Ensure fresh data
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         setVenues(data.venues || []);
@@ -74,9 +79,14 @@ export default function VenuesPage() {
 
   const handleSave = async () => {
     await loadVenues();
-    // Update selectedVenue if it still exists
+    // Update selectedVenue if it still exists - fetch fresh data
     if (selectedVenue) {
-      const res = await fetch("/api/admin/venues");
+      const res = await fetch("/api/admin/venues", {
+        cache: 'no-store', // Ensure fresh data
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
       if (res.ok) {
         const data = await res.json();
         const updatedVenue = data.venues?.find((v: Venue) => v.brandId === selectedVenue.brandId);

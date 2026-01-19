@@ -30,12 +30,19 @@ interface VenueEditorProps {
 }
 
 export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEditorProps) {
+  const [currentVenue, setCurrentVenue] = useState(venue);
   const [formData, setFormData] = useState({
     mapUrl: venue.mapUrl || "",
   });
   const [activeTab, setActiveTab] = useState<"cover" | "gallery" | "menus" | "location">("cover");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Update currentVenue when venue prop changes (after onSave refreshes data)
+  useEffect(() => {
+    setCurrentVenue(venue);
+    setFormData({ mapUrl: venue.mapUrl || "" });
+  }, [venue]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -46,7 +53,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          brandId: venue.brandId,
+          brandId: currentVenue.brandId,
           mapUrl: formData.mapUrl,
         }),
       });
@@ -65,8 +72,8 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
     }
   };
 
-  const coverImages = venue.images?.filter((i) => i.type === "COVER") || [];
-  const galleryImages = venue.images?.filter((i) => i.type === "GALLERY") || [];
+  const coverImages = currentVenue.images?.filter((i) => i.type === "COVER") || [];
+  const galleryImages = currentVenue.images?.filter((i) => i.type === "GALLERY") || [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -74,7 +81,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
         <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex-1 min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{venue.shortName}</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{currentVenue.shortName}</h1>
               <p className="text-xs sm:text-sm text-gray-600 mt-1">Manage venue content</p>
             </div>
             <button
@@ -129,7 +136,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
         {/* Cover Photos Tab */}
         {activeTab === "cover" && (
           <ImageUploader
-            venueId={venue.brandId}
+            venueId={currentVenue.brandId}
             imageType="COVER"
             existingImages={coverImages}
             maxImages={3}
@@ -141,7 +148,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
         {/* Gallery Tab */}
         {activeTab === "gallery" && (
           <ImageUploader
-            venueId={venue.brandId}
+            venueId={currentVenue.brandId}
             imageType="GALLERY"
             existingImages={galleryImages}
             maxImages={50}
@@ -152,7 +159,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
 
         {/* Menus Tab */}
         {activeTab === "menus" && (
-          <MenuManager venueId={venue.brandId} existingMenus={venue.menus || []} onUpdate={onSave} />
+          <MenuManager venueId={currentVenue.brandId} existingMenus={currentVenue.menus || []} onUpdate={onSave} />
         )}
 
         {/* Location Tab */}

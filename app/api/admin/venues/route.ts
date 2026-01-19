@@ -36,12 +36,23 @@ export async function GET(request: NextRequest) {
               orderBy: { order: "asc" },
             },
           },
+          orderBy: { name: "asc" }, // Add ordering for menus
         },
       },
       orderBy: { name: "asc" },
     });
 
-    return NextResponse.json({ venues });
+    // Return with no-cache headers to ensure fresh data
+    return NextResponse.json(
+      { venues },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error("Error fetching venues:", error);
     return NextResponse.json(
