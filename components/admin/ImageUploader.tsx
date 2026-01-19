@@ -46,20 +46,34 @@ export default function ImageUploader({
     setMessage(null);
 
     try {
-      const uploadPromises = Array.from(files).map(async (file) => {
-        // Convert to base64 (no aspect ratio validation)
+      console.log(`[ImageUploader] Starting upload: ${files.length} file(s) for venue ${venueId}, type ${imageType}`);
+      
+      // Convert files to base64 with progress tracking
+      const uploadPromises = Array.from(files).map(async (file, fileIndex) => {
+        console.log(`[ImageUploader] Processing file ${fileIndex + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+        
+        // Check file size (limit to 10MB per image)
+        if (file.size > 10 * 1024 * 1024) {
+          throw new Error(`File "${file.name}" is too large. Maximum size is 10MB.`);
+        }
+
         return new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => {
             const base64 = reader.result as string;
+            console.log(`[ImageUploader] File ${fileIndex + 1} converted to base64 (${(base64.length / 1024).toFixed(2)} KB)`);
             resolve(base64);
           };
-          reader.onerror = reject;
+          reader.onerror = (error) => {
+            console.error(`[ImageUploader] Error reading file ${fileIndex + 1}:`, error);
+            reject(new Error(`Failed to read file "${file.name}"`));
+          };
           reader.readAsDataURL(file);
         });
       });
 
       const base64Images = await Promise.all(uploadPromises);
+      console.log(`[ImageUploader] All ${base64Images.length} files converted to base64`);
 
       // Save images directly to venue (base64 is stored directly in database)
       const imageData = base64Images.map((base64, index) => ({
@@ -67,6 +81,8 @@ export default function ImageUploader({
         order: images.length + index,
       }));
 
+      console.log(`[ImageUploader] Sending ${imageData.length} new images + ${images.length} existing images to API`);
+      
       const saveRes = await fetch(`/api/admin/venues/${venueId}/images`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -76,18 +92,24 @@ export default function ImageUploader({
         }),
       });
 
+      console.log(`[ImageUploader] API response status: ${saveRes.status}`);
+
       if (saveRes.ok) {
-        setMessage({ type: "success", text: "Images uploaded successfully!" });
+        const result = await saveRes.json();
+        console.log(`[ImageUploader] Upload successful:`, result);
+        setMessage({ type: "success", text: `Successfully uploaded ${files.length} image(s)!` });
         // Reload images from the response or parent
         onUpdate();
       } else {
-        const errorData = await saveRes.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to save images");
+        const errorData = await saveRes.json().catch(() => ({ error: `HTTP ${saveRes.status}: ${saveRes.statusText}` }));
+        console.error(`[ImageUploader] Upload failed:`, errorData);
+        throw new Error(errorData.error || `Failed to save images (${saveRes.status})`);
       }
     } catch (error: any) {
+      console.error(`[ImageUploader] Upload error:`, error);
       setMessage({
         type: "error",
-        text: error.message || "Failed to upload images",
+        text: error.message || "Failed to upload images. Please check the console for details.",
       });
     } finally {
       setUploading(false);

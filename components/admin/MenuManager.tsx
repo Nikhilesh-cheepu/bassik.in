@@ -46,44 +46,57 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
   };
 
   const handleThumbnailUpload = async (file: File) => {
-    const base64 = await new Promise<string>((resolve, reject) => {
+    console.log(`[MenuManager] Uploading thumbnail: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+    
+    // Check file size (limit to 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      throw new Error(`File "${file.name}" is too large. Maximum size is 10MB.`);
+    }
+
+    return new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        console.log(`[MenuManager] Thumbnail converted to base64 (${(base64.length / 1024).toFixed(2)} KB)`);
+        resolve(base64);
+      };
+      reader.onerror = (error) => {
+        console.error(`[MenuManager] Error reading thumbnail:`, error);
+        reject(new Error(`Failed to read file "${file.name}"`));
+      };
       reader.readAsDataURL(file);
     });
-
-    const res = await fetch("/api/admin/upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: base64, venueId }),
-    });
-
-    if (!res.ok) throw new Error("Upload failed");
-    const data = await res.json();
-    return data.url;
   };
 
   const handleMenuImagesUpload = async (files: FileList) => {
-    const uploadPromises = Array.from(files).map(async (file) => {
-      const base64 = await new Promise<string>((resolve, reject) => {
+    console.log(`[MenuManager] Uploading ${files.length} menu image(s)`);
+    
+    const uploadPromises = Array.from(files).map((file, index) => {
+      console.log(`[MenuManager] Processing file ${index + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+      
+      // Check file size (limit to 10MB per image)
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error(`File "${file.name}" is too large. Maximum size is 10MB.`);
+      }
+
+      return new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
+        reader.onload = () => {
+          const base64 = reader.result as string;
+          console.log(`[MenuManager] File ${index + 1} converted to base64 (${(base64.length / 1024).toFixed(2)} KB)`);
+          resolve(base64);
+        };
+        reader.onerror = (error) => {
+          console.error(`[MenuManager] Error reading file ${index + 1}:`, error);
+          reject(new Error(`Failed to read file "${file.name}"`));
+        };
         reader.readAsDataURL(file);
       });
-
-      const res = await fetch("/api/admin/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: base64, venueId }),
-      });
-
-      if (!res.ok) throw new Error("Upload failed");
-      return res.json();
     });
 
-    return Promise.all(uploadPromises);
+    const results = await Promise.all(uploadPromises);
+    console.log(`[MenuManager] All ${results.length} menu images converted to base64`);
+    return results;
   };
 
   const handleSaveMenu = async () => {
@@ -100,10 +113,19 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
     setMessage(null);
 
     try {
+      console.log(`[MenuManager] Saving menu section: "${editingMenu.name}" with ${editingMenu.images.length} image(s) for venue ${venueId}`);
+      
       const imageData = editingMenu.images.map((img: any, idx: number) => ({
         url: typeof img === "string" ? img : img.url,
         order: idx,
       }));
+
+      console.log(`[MenuManager] Sending menu data to API:`, {
+        menuId: editingMenu.id,
+        name: editingMenu.name,
+        thumbnailUrl: editingMenu.thumbnailUrl.substring(0, 50) + "...",
+        imageCount: imageData.length,
+      });
 
       const res = await fetch(`/api/admin/venues/${venueId}/menus`, {
         method: "POST",
@@ -116,16 +138,22 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
         }),
       });
 
+      console.log(`[MenuManager] API response status: ${res.status}`);
+
       if (res.ok) {
+        const result = await res.json();
+        console.log(`[MenuManager] Menu saved successfully:`, result);
         setMessage({ type: "success", text: "Menu section saved successfully!" });
         setEditingMenu(null);
         await onUpdate();
       } else {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to save menu section");
+        const errorData = await res.json().catch(() => ({ error: `HTTP ${res.status}: ${res.statusText}` }));
+        console.error(`[MenuManager] Save failed:`, errorData);
+        throw new Error(errorData.error || `Failed to save menu section (${res.status})`);
       }
     } catch (error: any) {
-      setMessage({ type: "error", text: error.message || "Failed to save menu" });
+      console.error(`[MenuManager] Save error:`, error);
+      setMessage({ type: "error", text: error.message || "Failed to save menu. Please check the console for details." });
     } finally {
       setUploading(false);
     }
@@ -230,10 +258,15 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
                     const file = e.target.files?.[0];
                     if (file) {
                       try {
+                        setUploading(true);
                         const url = await handleThumbnailUpload(file);
                         setEditingMenu({ ...editingMenu, thumbnailUrl: url });
-                      } catch (error) {
-                        setMessage({ type: "error", text: "Failed to upload thumbnail" });
+                        setMessage(null);
+                      } catch (error: any) {
+                        console.error(`[MenuManager] Thumbnail upload error:`, error);
+                        setMessage({ type: "error", text: error.message || "Failed to upload thumbnail. Please check the console for details." });
+                      } finally {
+                        setUploading(false);
                       }
                     }
                   }}
@@ -268,7 +301,7 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
                   const results = await handleMenuImagesUpload(files);
                   setEditingMenu({
                     ...editingMenu,
-                    images: [...editingMenu.images, ...results.map((r) => r.url)],
+                    images: [...editingMenu.images, ...results],
                   });
                   setMessage(null);
                 } catch (error: any) {
