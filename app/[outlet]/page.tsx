@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
-import { motion, AnimatePresence, useScroll } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { BRANDS } from "@/lib/brands";
 import MenuModal from "@/components/MenuModal";
 import GalleryModal from "@/components/GalleryModal";
@@ -12,11 +12,9 @@ function OutletContent() {
   const router = useRouter();
   const params = useParams();
   const outletSlug = params?.outlet as string;
-  const { scrollY } = useScroll();
   
   const [mounted, setMounted] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [showStickyCTA, setShowStickyCTA] = useState(false);
   
   // Find brand by slug
   const findBrandBySlug = (slug: string) => {
@@ -61,13 +59,6 @@ function OutletContent() {
     }
   }, [outletSlug]);
 
-  // Show sticky CTA after scroll
-  useEffect(() => {
-    const unsubscribe = scrollY.on("change", (latest) => {
-      setShowStickyCTA(latest > 300);
-    });
-    return () => unsubscribe();
-  }, [scrollY]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -90,7 +81,7 @@ function OutletContent() {
       setFailedGalleryImages(new Set());
       try {
         const res = await fetch(`/api/venues/${selectedBrandId}`, {
-          cache: 'no-store',
+          cache: 'force-cache', // Use cache for faster loads
         });
         if (res.ok) {
           const data = await res.json();
@@ -154,31 +145,9 @@ function OutletContent() {
     ? '/logos/club-rogue.png' 
     : `/logos/${selectedBrand.id}.png`;
 
+  // Don't block rendering - show content immediately
   if (!mounted) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="text-center"
-        >
-          <div className="relative w-16 h-16 mx-auto mb-4">
-            <motion.div
-              className="absolute inset-0 rounded-full border-4"
-              style={{ borderColor: `${selectedBrand.accentColor}30` }}
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            />
-            <motion.div
-              className="absolute inset-0 rounded-full border-4 border-transparent"
-              style={{ borderTopColor: selectedBrand.accentColor }}
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            />
-          </div>
-        </motion.div>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -299,7 +268,7 @@ function OutletContent() {
       </div>
 
       {/* Content Sections */}
-      <div className="max-w-4xl mx-auto px-4 -mt-6 relative z-10 space-y-3 pb-24">
+      <div className="max-w-4xl mx-auto px-4 -mt-6 relative z-10 space-y-3 pb-32">
         {/* Menu Section - Single Compact Card */}
         {loading ? (
           <div className="h-20 bg-white/5 rounded-xl animate-pulse" />
@@ -528,42 +497,33 @@ function OutletContent() {
         )}
       </div>
 
-      {/* Sticky CTA - Only after scroll */}
-      <AnimatePresence>
-        {showStickyCTA && (
-          <motion.div
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[calc(100%-2rem)]"
-          >
-            <motion.button
-              onClick={handleBookNow}
-              whileTap={{ scale: 0.95 }}
-              whileHover={{ scale: 1.02 }}
-              className="w-full py-2.5 px-6 rounded-full font-semibold text-white transition-all duration-300 relative overflow-hidden group backdrop-blur-xl border border-white/20 shadow-2xl"
-              style={{ 
-                backgroundColor: selectedBrand.accentColor,
-                boxShadow: `0 8px 32px ${selectedBrand.accentColor}50`
-              }}
-            >
-              <motion.span
-                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-                initial={{ x: '-100%' }}
-                whileHover={{ x: '100%' }}
-                transition={{ duration: 0.6 }}
-              />
-              <span className="relative z-10 flex items-center justify-center gap-2 text-sm">
-                <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-                Book a table
-              </span>
-            </motion.button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Fixed Book Table Button - Always Visible */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[calc(100%-2rem)]">
+        <motion.button
+          onClick={handleBookNow}
+          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.02 }}
+          className="w-full py-2.5 px-6 rounded-full font-semibold text-white transition-all duration-300 relative overflow-hidden group backdrop-blur-xl border border-white/20 shadow-2xl"
+          style={{ 
+            backgroundColor: selectedBrand.accentColor,
+            boxShadow: `0 8px 32px ${selectedBrand.accentColor}50`
+          }}
+        >
+          <motion.span
+            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+            initial={{ x: '-100%' }}
+            whileHover={{ x: '100%' }}
+            transition={{ duration: 0.6 }}
+          />
+          <span className="relative z-10 flex items-center justify-center gap-2 text-sm">
+            <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            Book a table
+          </span>
+        </motion.button>
+      </div>
+
 
       {/* Menu Modal */}
       {isMenuModalOpen && selectedMenuId && (

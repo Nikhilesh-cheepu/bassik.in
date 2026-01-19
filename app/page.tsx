@@ -14,7 +14,7 @@ interface OutletData {
 
 // Location mapping - Updated per requirements
 const LOCATION_MAP: Record<string, string[]> = {
-  "Kondapur": ["alehouse", "c53", "boiler-room", "firefly", "rejoy"],
+  "Kondapur": ["alehouse", "c53", "boiler-room", "firefly", "rejoy", "club-rogue-kondapur", "sound-of-soul"],
   "Gachibowli": ["kiik69", "skyhy", "club-rogue-gachibowli"],
   "Jubilee Hills": ["club-rogue-jubilee-hills"],
 };
@@ -59,44 +59,46 @@ function LandingContent() {
   );
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const outletsRef = useRef<HTMLDivElement>(null);
 
-  // Fetch cover images for all outlets
+  // Fetch cover images in background - don't block rendering
   useEffect(() => {
+    // Start fetching immediately but don't block UI
     const fetchAllCovers = async () => {
-      const promises = BRANDS.map(async (brand) => {
-        try {
-          const res = await fetch(`/api/venues/${brand.id}`, {
-            cache: 'no-store',
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const coverImages = data.venue?.coverImages || [];
-            return {
-              brandId: brand.id,
-              coverImage: coverImages.length > 0 ? coverImages[0] : null,
-              loading: false,
-            };
+      // Fetch in batches to avoid overwhelming
+      const batchSize = 3;
+      for (let i = 0; i < BRANDS.length; i += batchSize) {
+        const batch = BRANDS.slice(i, i + batchSize);
+        const promises = batch.map(async (brand) => {
+          try {
+            const res = await fetch(`/api/venues/${brand.id}`, {
+              cache: 'force-cache', // Use cache for faster loads
+            });
+            if (res.ok) {
+              const data = await res.json();
+              const coverImages = data.venue?.coverImages || [];
+              setOutletsData(prev => prev.map(item => 
+                item.brandId === brand.id 
+                  ? { ...item, coverImage: coverImages.length > 0 ? coverImages[0] : null, loading: false }
+                  : item
+              ));
+            } else {
+              setOutletsData(prev => prev.map(item => 
+                item.brandId === brand.id 
+                  ? { ...item, coverImage: null, loading: false }
+                  : item
+              ));
+            }
+          } catch (error) {
+            setOutletsData(prev => prev.map(item => 
+              item.brandId === brand.id 
+                ? { ...item, coverImage: null, loading: false }
+                : item
+            ));
           }
-          return {
-            brandId: brand.id,
-            coverImage: null,
-            loading: false,
-          };
-        } catch (error) {
-          console.error(`Error fetching cover for ${brand.id}:`, error);
-          return {
-            brandId: brand.id,
-            coverImage: null,
-            loading: false,
-          };
-        }
-      });
-
-      const results = await Promise.all(promises);
-      setOutletsData(results);
-      setIsInitialLoad(false);
+        });
+        await Promise.all(promises);
+      }
     };
 
     fetchAllCovers();
@@ -141,32 +143,6 @@ function LandingContent() {
       : `/logos/${brandId}.png`;
   };
 
-  // Show loader only on initial load if data is still loading
-  if (isInitialLoad && outletsData.some(d => d.loading)) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="text-center"
-        >
-          <div className="relative w-16 h-16 mx-auto mb-4">
-            <motion.div
-              className="absolute inset-0 rounded-full border-4 border-orange-500/30"
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            />
-            <motion.div
-              className="absolute inset-0 rounded-full border-4 border-transparent border-t-orange-500"
-              animate={{ rotate: 360 }}
-              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            />
-          </div>
-          <p className="text-gray-400 text-sm">Loading venues...</p>
-        </motion.div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-black">
