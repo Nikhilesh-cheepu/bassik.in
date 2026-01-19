@@ -61,25 +61,9 @@ export default function ImageUploader({
 
       const base64Images = await Promise.all(uploadPromises);
 
-      // Upload each image
-      const uploadResults = await Promise.all(
-        base64Images.map(async (base64) => {
-          const res = await fetch("/api/admin/upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: base64, venueId }),
-          });
-          if (!res.ok) {
-            const errorData = await res.json().catch(() => ({}));
-            throw new Error(errorData.error || `Upload failed: ${res.statusText}`);
-          }
-          return res.json();
-        })
-      );
-
-      // Save images to venue
-      const imageData = uploadResults.map((result, index) => ({
-        url: result.url,
+      // Save images directly to venue (base64 is stored directly in database)
+      const imageData = base64Images.map((base64, index) => ({
+        url: base64,
         order: images.length + index,
       }));
 
