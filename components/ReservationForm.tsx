@@ -483,7 +483,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   <span className="w-1.5 h-8 rounded-full" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
                   Select Date & Time
                 </h3>
-                <p className="text-sm text-gray-400 mb-6">Choose when you'd like to visit us</p>
+                <p className="text-sm text-gray-400 mb-6">Choose when you&apos;d like to visit us</p>
 
                 {/* Date Selection - Glassmorphic */}
                 <div className="mb-6">
@@ -972,7 +972,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                             : "rgba(255, 255, 255, 0.2)";
                           e.target.style.boxShadow = formData.contactNumber && isValid
                             ? `0 0 20px ${brand.accentColor}30`
-                            : undefined;
+                            : "";
                         }}
                         placeholder="10 digit mobile number"
                         maxLength={10}
