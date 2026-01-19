@@ -512,7 +512,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                       }}
                       onBlur={(e) => {
                         e.target.style.borderColor = formData.date ? `${brand.accentColor}60` : "rgba(255, 255, 255, 0.2)";
-                        e.target.style.boxShadow = formData.date ? `0 0 20px ${brand.accentColor}30` : undefined;
+                        e.target.style.boxShadow = formData.date ? `0 0 20px ${brand.accentColor}30` : "";
                       }}
                     />
                   </div>
@@ -870,7 +870,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   }}
                   onBlur={(e) => {
                     e.target.style.borderColor = formData.notes ? `${brand.accentColor}60` : "rgba(255, 255, 255, 0.2)";
-                    e.target.style.boxShadow = formData.notes ? `0 0 20px ${brand.accentColor}30` : undefined;
+                    e.target.style.boxShadow = formData.notes ? `0 0 20px ${brand.accentColor}30` : "";
                   }}
                   placeholder="Any special occasion, dietary requirements, or preferences..."
                 />
@@ -893,7 +893,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   <span className="w-1.5 h-8 rounded-full" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
                   Contact Information
                 </h3>
-                <p className="text-sm text-gray-400 mb-6">We'll use this to confirm your reservation</p>
+                <p className="text-sm text-gray-400 mb-6">We&apos;ll use this to confirm your reservation</p>
                 <div className="space-y-5">
                   <div>
                     <label className="block text-sm font-semibold text-gray-300 mb-3">
@@ -922,7 +922,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                         }}
                         onBlur={(e) => {
                           e.target.style.borderColor = formData.fullName ? `${brand.accentColor}60` : "rgba(255, 255, 255, 0.2)";
-                          e.target.style.boxShadow = formData.fullName ? `0 0 20px ${brand.accentColor}30` : undefined;
+                          e.target.style.boxShadow = formData.fullName ? `0 0 20px ${brand.accentColor}30` : "";
                         }}
                         placeholder="Enter your full name"
                       />

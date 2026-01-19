@@ -57,7 +57,7 @@ function OutletContent() {
         setSelectedBrandId(brand.id);
       }
     }
-  }, [outletSlug]);
+  }, [outletSlug, selectedBrandId]);
 
 
   // Close dropdown when clicking outside
