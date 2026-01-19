@@ -333,7 +333,7 @@ function HomeContent() {
       </motion.div>
 
       {/* Content Sections */}
-      <div className="max-w-4xl mx-auto px-4 -mt-8 relative z-10 space-y-3 pb-20">
+      <div className="max-w-4xl mx-auto px-4 -mt-8 relative z-10 space-y-3 pb-32">
         {/* Menu Section - Compact (40-50% reduced height) */}
         {loading ? (
           <MenuCardSkeleton />
@@ -420,16 +420,13 @@ function HomeContent() {
                 <p className="text-xs">Gallery is empty</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {validGalleryImages.slice(0, 6).map((image, index) => {
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+                {validGalleryImages.slice(0, 4).map((image, index) => {
                   const originalIndex = venueData.galleryImages.indexOf(image);
                   const isLoaded = loadedGalleryImages.has(originalIndex);
                   const hasFailed = failedGalleryImages.has(originalIndex);
                   
                   if (hasFailed) return null;
-                  
-                  // Create masonry effect - alternate heights
-                  const isTall = index % 3 === 0;
                   
                   return (
                     <motion.button
@@ -440,10 +437,7 @@ function HomeContent() {
                         setIsGalleryModalOpen(true);
                       }}
                       whileTap={{ scale: 0.95 }}
-                      className={`relative rounded-xl overflow-hidden bg-gray-800/50 ${
-                        isTall ? 'row-span-2' : ''
-                      }`}
-                      style={{ aspectRatio: isTall ? '3/4' : '1' }}
+                      className="relative rounded-xl overflow-hidden bg-gray-800/50 aspect-square flex-shrink-0 w-[48%]"
                     >
                       {!isLoaded && (
                         <div className="absolute inset-0 flex items-center justify-center z-10">
@@ -555,7 +549,7 @@ function HomeContent() {
           initial={{ y: 100, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.4, type: "spring", stiffness: 100, damping: 20 }}
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-sm"
+          className="fixed bottom-4 left-4 right-4 z-50 max-w-sm mx-auto"
         >
           <motion.button
             onClick={handleBookNow}
