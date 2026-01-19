@@ -155,6 +155,8 @@ function HomeContent() {
     setFailedGalleryImages(prev => new Set(prev).add(index));
   };
 
+  const logoPath = `/logos/${selectedBrand.id}.png`;
+
   // Prevent hydration mismatch
   if (!mounted) {
     return (
@@ -165,8 +167,6 @@ function HomeContent() {
       />
     );
   }
-
-  const logoPath = `/logos/${selectedBrand.id}.png`;
 
   return (
     <div className="min-h-screen bg-black">
