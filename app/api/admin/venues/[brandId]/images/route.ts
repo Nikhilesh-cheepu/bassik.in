@@ -3,6 +3,10 @@ import { prisma } from "@/lib/db";
 import { verifyAdminToken, canAccessVenue } from "@/lib/admin-auth";
 import { AdminRole } from "@/lib/auth";
 
+// Increase body size limit for image uploads (default is 1MB, we need more for base64)
+export const maxDuration = 60; // 60 seconds timeout
+export const runtime = 'nodejs';
+
 // Define ImageType enum
 enum ImageType {
   COVER = "COVER",

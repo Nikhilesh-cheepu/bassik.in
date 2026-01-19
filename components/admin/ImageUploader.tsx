@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import { compressImage } from "@/lib/image-compression";
 
 interface ImageUploaderProps {
   venueId: string;
@@ -48,31 +49,34 @@ export default function ImageUploader({
     try {
       console.log(`[ImageUploader] Starting upload: ${files.length} file(s) for venue ${venueId}, type ${imageType}`);
       
-      // Convert files to base64 with progress tracking
-      const uploadPromises = Array.from(files).map(async (file, fileIndex) => {
-        console.log(`[ImageUploader] Processing file ${fileIndex + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+      // Compress and convert files to base64 (one at a time to avoid memory issues)
+      const base64Images: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        console.log(`[ImageUploader] Processing file ${i + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
         
-        // Check file size (limit to 10MB per image)
+        // Check file size (limit to 10MB per image before compression)
         if (file.size > 10 * 1024 * 1024) {
           throw new Error(`File "${file.name}" is too large. Maximum size is 10MB.`);
         }
 
-        return new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const base64 = reader.result as string;
-            console.log(`[ImageUploader] File ${fileIndex + 1} converted to base64 (${(base64.length / 1024).toFixed(2)} KB)`);
-            resolve(base64);
-          };
-          reader.onerror = (error) => {
-            console.error(`[ImageUploader] Error reading file ${fileIndex + 1}:`, error);
-            reject(new Error(`Failed to read file "${file.name}"`));
-          };
-          reader.readAsDataURL(file);
-        });
-      });
-
-      const base64Images = await Promise.all(uploadPromises);
+        try {
+          // Compress image before converting to base64
+          const compressedBase64 = await compressImage(file, {
+            maxWidth: imageType === "COVER" ? 1920 : 1200,
+            maxHeight: imageType === "COVER" ? 1080 : 1200,
+            quality: 0.75,
+            maxSizeKB: 400, // Target 400KB per image
+          });
+          
+          const sizeKB = (compressedBase64.length / 1024).toFixed(2);
+          console.log(`[ImageUploader] File ${i + 1} compressed and converted (${sizeKB} KB)`);
+          base64Images.push(compressedBase64);
+        } catch (error: any) {
+          console.error(`[ImageUploader] Error processing file ${i + 1}:`, error);
+          throw new Error(`Failed to process "${file.name}": ${error.message}`);
+        }
+      }
       console.log(`[ImageUploader] All ${base64Images.length} files converted to base64`);
 
       // Save images directly to venue (base64 is stored directly in database)
@@ -81,14 +85,71 @@ export default function ImageUploader({
         order: images.length + index,
       }));
 
-      console.log(`[ImageUploader] Sending ${imageData.length} new images + ${images.length} existing images to API`);
+      // Calculate total payload size
+      const allImages = [...images.map((img, idx) => ({ url: img.url, order: idx })), ...imageData];
+      const payloadSize = JSON.stringify({ type: imageType, images: allImages }).length;
+      console.log(`[ImageUploader] Sending ${imageData.length} new images + ${images.length} existing images to API (payload: ${(payloadSize / 1024).toFixed(2)} KB)`);
       
+      // If payload is too large, upload in batches
+      const MAX_PAYLOAD_SIZE = 4 * 1024 * 1024; // 4MB limit
+      if (payloadSize > MAX_PAYLOAD_SIZE) {
+        console.log(`[ImageUploader] Payload too large (${(payloadSize / 1024).toFixed(2)} KB), uploading in batches`);
+        
+        // Upload existing images first, then new images in batches
+        const batchSize = Math.max(1, Math.floor((MAX_PAYLOAD_SIZE * 0.8) / (base64Images[0]?.length || 1)));
+        console.log(`[ImageUploader] Batch size: ${batchSize} images per request`);
+        
+        // First, save existing images
+        if (images.length > 0) {
+          const existingRes = await fetch(`/api/admin/venues/${venueId}/images`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: imageType,
+              images: images.map((img, idx) => ({ url: img.url, order: idx })),
+            }),
+          });
+          
+          if (!existingRes.ok) {
+            const errorData = await existingRes.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to save existing images (${existingRes.status})`);
+          }
+        }
+        
+        // Then upload new images in batches
+        for (let i = 0; i < imageData.length; i += batchSize) {
+          const batch = imageData.slice(i, i + batchSize);
+          const batchOrder = images.length + i;
+          
+          const batchRes = await fetch(`/api/admin/venues/${venueId}/images`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: imageType,
+              images: batch.map((img, idx) => ({ ...img, order: batchOrder + idx })),
+            }),
+          });
+          
+          if (!batchRes.ok) {
+            const errorData = await batchRes.json().catch(() => ({}));
+            throw new Error(errorData.error || `Failed to upload batch (${batchRes.status})`);
+          }
+          
+          console.log(`[ImageUploader] Batch ${Math.floor(i / batchSize) + 1} uploaded (${batch.length} images)`);
+        }
+        
+        setMessage({ type: "success", text: `Successfully uploaded ${files.length} image(s)!` });
+        onUpdate();
+        return;
+      }
+      
+      // Normal upload if payload is small enough
       const saveRes = await fetch(`/api/admin/venues/${venueId}/images`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: imageType,
-          images: [...images.map((img, idx) => ({ url: img.url, order: idx })), ...imageData],
+          images: allImages,
         }),
       });
 

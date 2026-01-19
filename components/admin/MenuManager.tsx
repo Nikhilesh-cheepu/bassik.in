@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import { compressImage } from "@/lib/image-compression";
 
 interface MenuManagerProps {
   venueId: string;
@@ -48,54 +49,62 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
   const handleThumbnailUpload = async (file: File) => {
     console.log(`[MenuManager] Uploading thumbnail: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
     
-    // Check file size (limit to 10MB)
+    // Check file size (limit to 10MB before compression)
     if (file.size > 10 * 1024 * 1024) {
       throw new Error(`File "${file.name}" is too large. Maximum size is 10MB.`);
     }
 
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result as string;
-        console.log(`[MenuManager] Thumbnail converted to base64 (${(base64.length / 1024).toFixed(2)} KB)`);
-        resolve(base64);
-      };
-      reader.onerror = (error) => {
-        console.error(`[MenuManager] Error reading thumbnail:`, error);
-        reject(new Error(`Failed to read file "${file.name}"`));
-      };
-      reader.readAsDataURL(file);
-    });
+    try {
+      // Compress thumbnail (smaller size for thumbnails)
+      const compressedBase64 = await compressImage(file, {
+        maxWidth: 800,
+        maxHeight: 800,
+        quality: 0.8,
+        maxSizeKB: 200, // Thumbnails should be smaller
+      });
+      
+      const sizeKB = (compressedBase64.length / 1024).toFixed(2);
+      console.log(`[MenuManager] Thumbnail compressed and converted (${sizeKB} KB)`);
+      return compressedBase64;
+    } catch (error: any) {
+      console.error(`[MenuManager] Error compressing thumbnail:`, error);
+      throw new Error(`Failed to compress thumbnail: ${error.message}`);
+    }
   };
 
   const handleMenuImagesUpload = async (files: FileList) => {
     console.log(`[MenuManager] Uploading ${files.length} menu image(s)`);
     
-    const uploadPromises = Array.from(files).map((file, index) => {
-      console.log(`[MenuManager] Processing file ${index + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+    // Process images one at a time to avoid memory issues
+    const results: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      console.log(`[MenuManager] Processing file ${i + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
       
-      // Check file size (limit to 10MB per image)
+      // Check file size (limit to 10MB per image before compression)
       if (file.size > 10 * 1024 * 1024) {
         throw new Error(`File "${file.name}" is too large. Maximum size is 10MB.`);
       }
 
-      return new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const base64 = reader.result as string;
-          console.log(`[MenuManager] File ${index + 1} converted to base64 (${(base64.length / 1024).toFixed(2)} KB)`);
-          resolve(base64);
-        };
-        reader.onerror = (error) => {
-          console.error(`[MenuManager] Error reading file ${index + 1}:`, error);
-          reject(new Error(`Failed to read file "${file.name}"`));
-        };
-        reader.readAsDataURL(file);
-      });
-    });
-
-    const results = await Promise.all(uploadPromises);
-    console.log(`[MenuManager] All ${results.length} menu images converted to base64`);
+      try {
+        // Compress menu images
+        const compressedBase64 = await compressImage(file, {
+          maxWidth: 1600,
+          maxHeight: 2400, // Menu images can be taller
+          quality: 0.75,
+          maxSizeKB: 400,
+        });
+        
+        const sizeKB = (compressedBase64.length / 1024).toFixed(2);
+        console.log(`[MenuManager] File ${i + 1} compressed and converted (${sizeKB} KB)`);
+        results.push(compressedBase64);
+      } catch (error: any) {
+        console.error(`[MenuManager] Error processing file ${i + 1}:`, error);
+        throw new Error(`Failed to process "${file.name}": ${error.message}`);
+      }
+    }
+    
+    console.log(`[MenuManager] All ${results.length} menu images compressed and converted`);
     return results;
   };
 
@@ -120,22 +129,33 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
         order: idx,
       }));
 
+      // Calculate payload size
+      const payload = {
+        menuId: editingMenu.id,
+        name: editingMenu.name,
+        thumbnailUrl: editingMenu.thumbnailUrl,
+        images: imageData,
+      };
+      const payloadSize = JSON.stringify(payload).length;
+      
       console.log(`[MenuManager] Sending menu data to API:`, {
         menuId: editingMenu.id,
         name: editingMenu.name,
         thumbnailUrl: editingMenu.thumbnailUrl.substring(0, 50) + "...",
         imageCount: imageData.length,
+        payloadSize: `${(payloadSize / 1024).toFixed(2)} KB`,
       });
+
+      // Check if payload is too large (4MB limit)
+      const MAX_PAYLOAD_SIZE = 4 * 1024 * 1024;
+      if (payloadSize > MAX_PAYLOAD_SIZE) {
+        throw new Error(`Menu data is too large (${(payloadSize / 1024).toFixed(2)} KB). Please reduce the number of images or their size.`);
+      }
 
       const res = await fetch(`/api/admin/venues/${venueId}/menus`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          menuId: editingMenu.id,
-          name: editingMenu.name,
-          thumbnailUrl: editingMenu.thumbnailUrl,
-          images: imageData,
-        }),
+        body: JSON.stringify(payload),
       });
 
       console.log(`[MenuManager] API response status: ${res.status}`);

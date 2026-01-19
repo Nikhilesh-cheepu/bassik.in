@@ -3,6 +3,10 @@ import { prisma } from "@/lib/db";
 import { verifyAdminToken, canAccessVenue } from "@/lib/admin-auth";
 import { AdminRole } from "@/lib/auth";
 
+// Increase body size limit for menu uploads
+export const maxDuration = 60; // 60 seconds timeout
+export const runtime = 'nodejs';
+
 // POST - Create or update menu
 export async function POST(
   request: NextRequest,
