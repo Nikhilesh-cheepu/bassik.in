@@ -134,22 +134,22 @@ function LandingContent() {
                       alt={brand.name}
                       fill
                       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                      className="object-cover transition-transform duration-700 group-hover:scale-110"
+                      className="object-cover transition-transform duration-700 group-hover:scale-110 brightness-100"
                       unoptimized
                       loading="lazy"
                       quality={80}
                     />
-                    {/* Gradient Overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/30 group-hover:from-black/95 group-hover:via-black/60 transition-all duration-500" />
+                    {/* Subtle gradient overlay only at bottom for text readability */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent group-hover:from-black/70 transition-all duration-500" />
                   </div>
                 ) : (
                   <div 
                     className="absolute inset-0 bg-gradient-to-br"
                     style={{
-                      background: `linear-gradient(135deg, ${brand.accentColor}40, ${brand.accentColor}80)`,
+                      background: `linear-gradient(135deg, ${brand.accentColor}60, ${brand.accentColor}90)`,
                     }}
                   >
-                    <div className="absolute inset-0 bg-black/40" />
+                    <div className="absolute inset-0 bg-black/20" />
                   </div>
                 )}
 
@@ -171,7 +171,7 @@ function LandingContent() {
                 {/* Content */}
                 <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-8 z-10">
                   <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-2xl sm:text-3xl font-bold text-white group-hover:text-white transition-colors">
+                    <h2 className="text-2xl sm:text-3xl font-bold text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] group-hover:text-white transition-colors">
                       {brand.shortName}
                     </h2>
                     <motion.div
@@ -202,7 +202,7 @@ function LandingContent() {
                     style={{ backgroundColor: brand.accentColor }}
                   />
 
-                  <p className="text-sm sm:text-base text-gray-300 group-hover:text-white transition-colors">
+                  <p className="text-sm sm:text-base text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] group-hover:text-white transition-colors">
                     {brand.name}
                   </p>
                 </div>
