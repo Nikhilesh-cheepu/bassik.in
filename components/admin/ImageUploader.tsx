@@ -47,27 +47,7 @@ export default function ImageUploader({
 
     try {
       const uploadPromises = Array.from(files).map(async (file) => {
-        // Validate aspect ratio for cover images
-        if (imageType === "COVER" && aspectRatio === "16:9") {
-          const imgElement = new window.Image();
-          const objectUrl = URL.createObjectURL(file);
-          await new Promise((resolve, reject) => {
-            imgElement.onload = () => {
-              const ratio = imgElement.width / imgElement.height;
-              const targetRatio = 16 / 9;
-              if (Math.abs(ratio - targetRatio) > 0.1) {
-                reject(new Error(`Image must be 16:9 aspect ratio. Current: ${imgElement.width}x${imgElement.height}`));
-              } else {
-                resolve(null);
-              }
-              URL.revokeObjectURL(objectUrl);
-            };
-            imgElement.onerror = reject;
-            imgElement.src = objectUrl;
-          });
-        }
-
-        // Convert to base64
+        // Convert to base64 (no aspect ratio validation)
         return new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => {
@@ -181,7 +161,7 @@ export default function ImageUploader({
           </h2>
           <p className="text-xs sm:text-sm text-gray-600 mt-1">
             {imageType === "COVER"
-              ? "Upload up to 3 cover images (16:9 aspect ratio required)"
+              ? "Upload up to 3 cover images (any aspect ratio)"
               : "Upload gallery images (1:1 recommended)"}
           </p>
         </div>
