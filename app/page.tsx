@@ -155,7 +155,10 @@ function HomeContent() {
     setFailedGalleryImages(prev => new Set(prev).add(index));
   };
 
-  const logoPath = `/logos/${selectedBrand.id}.png`;
+  // Use club-rogue.png for all Club Rogue variants
+  const logoPath = selectedBrand.id.startsWith('club-rogue') 
+    ? '/logos/club-rogue.png' 
+    : `/logos/${selectedBrand.id}.png`;
 
   // Prevent hydration mismatch
   if (!mounted) {
@@ -216,8 +219,8 @@ function HomeContent() {
           </div>
         )}
         
-        {/* Compact Outlet Switcher Dropdown Pill */}
-        <div ref={dropdownRef} className="absolute top-4 left-4 z-20">
+        {/* Compact Outlet Switcher Dropdown Pill - Centered Top */}
+        <div ref={dropdownRef} className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
           <motion.button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             whileTap={{ scale: 0.95 }}
@@ -259,13 +262,16 @@ function HomeContent() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.95 }}
                 transition={{ duration: 0.2 }}
-                className="absolute top-full left-0 mt-2 min-w-[200px] backdrop-blur-xl bg-black/80 border border-white/20 rounded-2xl shadow-2xl overflow-hidden"
+                className="absolute top-full left-1/2 -translate-x-1/2 mt-2 min-w-[200px] backdrop-blur-xl bg-black/80 border border-white/20 rounded-2xl shadow-2xl overflow-hidden"
                 style={{
                   boxShadow: `0 8px 32px ${selectedBrand.accentColor}30`,
                 }}
               >
                 {BRANDS.map((brand) => {
-                  const brandLogoPath = `/logos/${brand.id}.png`;
+                  // Use club-rogue.png for all Club Rogue variants
+                  const brandLogoPath = brand.id.startsWith('club-rogue') 
+                    ? '/logos/club-rogue.png' 
+                    : `/logos/${brand.id}.png`;
                   const isSelected = brand.id === selectedBrandId;
                   
                   return (
