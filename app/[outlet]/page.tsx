@@ -1,19 +1,36 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useRouter, useParams } from "next/navigation";
+import Image from "next/image";
+import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion";
 import { BRANDS } from "@/lib/brands";
+import MenuModal from "@/components/MenuModal";
+import GalleryModal from "@/components/GalleryModal";
+import { HeroSkeleton, MenuCardSkeleton, PhotosStripSkeleton, LocationCardSkeleton, CTASkeleton } from "@/components/SkeletonLoader";
+import BrandedLoader from "@/components/BrandedLoader";
 
-export default function Home() {
+function OutletContent() {
   const router = useRouter();
+  const params = useParams();
+  const outletSlug = params?.outlet as string;
   
-  useEffect(() => {
-    // Redirect to default outlet (alehouse)
-    router.replace(`/${BRANDS[0].id}`);
-  }, [router]);
-
-  return null;
-}
+  const [mounted, setMounted] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  
+  // Find brand by slug (outlet ID)
+  const findBrandBySlug = (slug: string) => {
+    return BRANDS.find(b => b.id === slug) || BRANDS[0];
+  };
+  
+  const [selectedBrandId, setSelectedBrandId] = useState<string>(() => {
+    if (outletSlug) {
+      const brand = findBrandBySlug(outletSlug);
+      return brand.id;
+    }
+    return BRANDS[0].id;
+  });
+  
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
@@ -42,17 +59,16 @@ export default function Home() {
   const coverImages = venueData.coverImages.slice(0, 3);
   const validGalleryImages = venueData.galleryImages.filter((_, index) => !failedGalleryImages.has(index));
 
-  // Set mounted and read URL params on client-side only to prevent hydration mismatch
+  // Set mounted and sync with URL
   useEffect(() => {
     setMounted(true);
-    if (typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search);
-      const brandFromUrl = urlParams.get("brand");
-      if (brandFromUrl && BRANDS.find(b => b.id === brandFromUrl)) {
-        setSelectedBrandId(brandFromUrl);
+    if (outletSlug) {
+      const brand = findBrandBySlug(outletSlug);
+      if (brand && brand.id !== selectedBrandId) {
+        setSelectedBrandId(brand.id);
       }
     }
-  }, []);
+  }, [outletSlug]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -113,7 +129,6 @@ export default function Home() {
         });
       } finally {
         setLoading(false);
-        // Fast fade transition (250-350ms)
         setTimeout(() => setIsTransitioning(false), 300);
       }
     };
@@ -135,13 +150,15 @@ export default function Home() {
   }, [coverImages.length, selectedBrandId]);
 
   const handleBookNow = () => {
-    router.push(`/reservations?brand=${selectedBrandId}`);
+    router.push(`/${selectedBrandId}/reservations`);
   };
 
   const handleBrandSelect = (brandId: string) => {
     setSelectedBrandId(brandId);
     setCurrentImageIndex(0);
     setIsDropdownOpen(false);
+    // Navigate to the new outlet's URL
+    router.push(`/${brandId}`);
   };
 
   const handleImageLoad = (index: number) => {
@@ -265,7 +282,6 @@ export default function Home() {
                 }}
               >
                 {BRANDS.map((brand) => {
-                  // Use club-rogue.png for all Club Rogue variants
                   const brandLogoPath = brand.id.startsWith('club-rogue') 
                     ? '/logos/club-rogue.png' 
                     : `/logos/${brand.id}.png`;
@@ -331,7 +347,7 @@ export default function Home() {
 
       {/* Content Sections */}
       <div className="max-w-4xl mx-auto px-4 -mt-8 relative z-10 space-y-3 pb-32">
-        {/* Menu Section - Compact (40-50% reduced height) */}
+        {/* Menu Section - Compact */}
         {loading ? (
           <MenuCardSkeleton />
         ) : (
@@ -384,7 +400,7 @@ export default function Home() {
           </motion.section>
         )}
 
-        {/* Photos Section - 2-Column Masonry Grid */}
+        {/* Photos Section - Horizontal Scroll */}
         {loading ? (
           <PhotosStripSkeleton accentColor={selectedBrand.accentColor} />
         ) : (
@@ -601,7 +617,7 @@ export default function Home() {
   );
 }
 
-export default function Home() {
+export default function OutletPage() {
   return (
     <Suspense
       fallback={
@@ -613,7 +629,7 @@ export default function Home() {
         </div>
       }
     >
-      <HomeContent />
+      <OutletContent />
     </Suspense>
   );
 }
