@@ -119,13 +119,13 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
       {/* Subtle looping gradient background */}
       <div className="fixed inset-0 pointer-events-none">
         <motion.div
-          className="absolute inset-0 opacity-30"
+          className="absolute inset-0 opacity-35"
           animate={{
             background: [
-              'radial-gradient(circle at 20% 50%, rgba(251, 191, 36, 0.15) 0%, transparent 50%)',
-              'radial-gradient(circle at 80% 50%, rgba(251, 191, 36, 0.15) 0%, transparent 50%)',
-              'radial-gradient(circle at 50% 20%, rgba(251, 191, 36, 0.15) 0%, transparent 50%)',
-              'radial-gradient(circle at 20% 50%, rgba(251, 191, 36, 0.15) 0%, transparent 50%)',
+              'radial-gradient(circle at 20% 50%, rgba(236, 72, 153, 0.18) 0%, transparent 45%)',
+              'radial-gradient(circle at 80% 50%, rgba(14, 165, 233, 0.16) 0%, transparent 45%)',
+              'radial-gradient(circle at 50% 20%, rgba(244, 114, 182, 0.18) 0%, transparent 45%)',
+              'radial-gradient(circle at 20% 50%, rgba(236, 72, 153, 0.18) 0%, transparent 45%)',
             ],
           }}
           transition={{
@@ -135,13 +135,13 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
           }}
         />
         <motion.div
-          className="absolute inset-0 opacity-20"
+          className="absolute inset-0 opacity-25"
           animate={{
             background: [
-              'radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.1) 0%, transparent 50%)',
-              'radial-gradient(circle at 20% 20%, rgba(168, 85, 247, 0.1) 0%, transparent 50%)',
-              'radial-gradient(circle at 50% 80%, rgba(168, 85, 247, 0.1) 0%, transparent 50%)',
-              'radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.1) 0%, transparent 50%)',
+              'radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.14) 0%, transparent 50%)',
+              'radial-gradient(circle at 20% 20%, rgba(16, 185, 129, 0.12) 0%, transparent 50%)',
+              'radial-gradient(circle at 50% 80%, rgba(94, 234, 212, 0.12) 0%, transparent 50%)',
+              'radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.14) 0%, transparent 50%)',
             ],
           }}
           transition={{
@@ -169,7 +169,7 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight"
+            className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight bg-gradient-to-r from-pink-400 via-amber-300 to-sky-300 bg-clip-text text-transparent"
           >
             YOU NAME IT, WE HAVE IT
           </motion.h2>
@@ -204,12 +204,20 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
                   transition={{ duration: 0.3, delay: index * 0.03 }}
                   className="flex flex-col items-center text-center"
                 >
-                  {/* Card Container */}
-                  <motion.button
+                  {/* Card Container (div with click) */}
+                  <motion.div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => handleExplore(brand.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleExplore(brand.id);
+                      }
+                    }}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="w-full rounded-xl sm:rounded-2xl overflow-hidden mb-2 group relative backdrop-blur-sm border border-white/10"
+                    className="w-full rounded-xl sm:rounded-2xl overflow-hidden mb-2 group relative backdrop-blur-sm border border-white/10 cursor-pointer"
                     style={{
                       background: 'rgba(255, 255, 255, 0.03)',
                       boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05)',
@@ -234,29 +242,31 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
                           style={{
                             background: `linear-gradient(135deg, ${brand.accentColor}30, ${brand.accentColor}50)`,
                           }}
-                        >
-                          <div className="relative w-8 h-8 sm:w-10 sm:h-10">
-                            <Image
-                              src={logoPath}
-                              alt={brand.shortName}
-                              fill
-                              className="object-contain opacity-70"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none';
-                              }}
-                            />
-                          </div>
-                        </div>
+                        />
                       )}
                       {/* Subtle overlay */}
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
                     </div>
 
-                    {/* Venue Name - Small */}
-                    <div className="px-2 py-2 sm:py-2.5">
-                      <h3 className="text-xs sm:text-sm font-semibold text-white mb-1 line-clamp-1">
-                        {brand.shortName}
-                      </h3>
+                    {/* Logo Chip instead of name */}
+                    <div className="px-2 py-2 sm:py-2.5 flex flex-col items-center gap-1">
+                      <div className="flex items-center justify-center gap-2 rounded-full bg-white/5 border border-white/10 px-2 py-1">
+                        <div className="relative w-6 h-6 sm:w-7 sm:h-7 rounded-full overflow-hidden bg-black/40">
+                          <Image
+                            src={logoPath}
+                            alt={brand.shortName}
+                            fill
+                            sizes="28px"
+                            className="object-contain"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                        <span className="text-[11px] sm:text-xs font-medium text-white/90 line-clamp-1">
+                          {brand.shortName}
+                        </span>
+                      </div>
                       
                       {/* Optional: Super short description (truncated aggressively) */}
                       {brand.description && (
@@ -265,7 +275,7 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
                         </p>
                       )}
                     </div>
-                  </motion.button>
+                  </motion.div>
 
                   {/* CTA - Small */}
                   <motion.button
