@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from "framer-motion";
+import { motion, useScroll, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { BRANDS, Brand } from "@/lib/brands";
 
 interface VenueData {
@@ -13,7 +13,7 @@ interface VenueData {
 }
 
 interface HomeTrailProps {
-  venues?: Brand[]; // Optional prop to allow filtering
+  venues?: Brand[];
 }
 
 export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
@@ -26,22 +26,31 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
     }))
   );
   const [linePath, setLinePath] = useState<string>("");
+  const [venuePositions, setVenuePositions] = useState<number[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const pathRef = useRef<SVGPathElement>(null);
+  const venueRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // Animate line drawing
+  // Track scroll progress
+  const scrollProgress = useMotionValue(0);
   const pathLength = useMotionValue(0);
   const pathLengthSpring = useSpring(pathLength, {
     stiffness: 100,
     damping: 30,
   });
-  const opacity = useTransform(pathLengthSpring, [0, 0.1], [0, 1]);
-  const glowOpacity = useTransform(pathLengthSpring, (v) => v > 0 ? 0.3 : 0);
 
-  // Fetch cover images in background - optimized for performance
+  // Path glow intensity based on scroll
+  const pathGlow = useTransform(scrollProgress, [0, 1], [0.1, 1]);
+  const pathGlowColor = useTransform(
+    scrollProgress,
+    [0, 0.5, 1],
+    ["rgba(255, 255, 255, 0.15)", "rgba(251, 191, 36, 0.7)", "rgba(251, 191, 36, 0.9)"]
+  );
+  const glowOpacity = useTransform(pathGlow, (v) => v * 0.2);
+
+  // Fetch cover images in background
   useEffect(() => {
     const fetchCovers = async () => {
-      // Fetch in small batches to avoid overwhelming
       const batchSize = 2;
       for (let i = 0; i < venues.length; i += batchSize) {
         const batch = venues.slice(i, i + batchSize);
@@ -80,7 +89,6 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
           }
         });
         await Promise.all(promises);
-        // Small delay between batches to avoid blocking
         if (i + batchSize < venues.length) {
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
@@ -90,7 +98,7 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
     fetchCovers();
   }, [venues]);
 
-  // Calculate vertical path after mount
+  // Calculate curved vertical path
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -98,55 +106,84 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
       const container = containerRef.current;
       if (!container) return;
 
-      const cards = container.querySelectorAll('[data-venue-card]');
-      if (cards.length === 0) {
-        // Retry after a short delay if cards aren't ready
+      const nodes = container.querySelectorAll('[data-venue-node]');
+      if (nodes.length === 0) {
         setTimeout(calculatePath, 100);
         return;
       }
 
       const pathPoints: { x: number; y: number }[] = [];
+      const positions: number[] = [];
       const centerX = container.offsetWidth / 2;
 
-      cards.forEach((card) => {
-        const rect = card.getBoundingClientRect();
+      nodes.forEach((node) => {
+        const rect = node.getBoundingClientRect();
         const containerRect = container.getBoundingClientRect();
         const relativeY = rect.top - containerRect.top + rect.height / 2;
         pathPoints.push({ x: centerX, y: relativeY });
+        positions.push(relativeY);
       });
 
       if (pathPoints.length < 2) return;
 
-      // Create smooth vertical path
+      setVenuePositions(positions);
+
+      // Create smooth curved path with slight curves
       let path = `M ${pathPoints[0].x} ${pathPoints[0].y}`;
       for (let i = 1; i < pathPoints.length; i++) {
         const prev = pathPoints[i - 1];
         const curr = pathPoints[i];
-        path += ` L ${prev.x} ${curr.y}`;
+        const midY = (prev.y + curr.y) / 2;
+        // Add slight curve for visual interest
+        const curveOffset = 15;
+        const controlX1 = prev.x + (i % 2 === 0 ? curveOffset : -curveOffset);
+        const controlX2 = curr.x + (i % 2 === 0 ? -curveOffset : curveOffset);
+        path += ` C ${controlX1} ${prev.y}, ${controlX2} ${midY}, ${curr.x} ${midY}`;
+        path += ` C ${controlX2} ${midY}, ${controlX1} ${curr.y}, ${curr.x} ${curr.y}`;
       }
 
       setLinePath(path);
     };
 
-    // Calculate after layout is ready
     const timer = setTimeout(calculatePath, 150);
-    const resizeTimer = setTimeout(calculatePath, 500); // Also recalculate after images load
+    const resizeTimer = setTimeout(calculatePath, 500);
+
+    window.addEventListener('resize', calculatePath);
 
     return () => {
       clearTimeout(timer);
       clearTimeout(resizeTimer);
+      window.removeEventListener('resize', calculatePath);
     };
   }, [venues, venuesData]);
 
-  // Animate path drawing
+  // Animate path based on scroll
   useEffect(() => {
-    if (linePath && pathRef.current) {
+    if (linePath && pathRef.current && containerRef.current) {
       const length = pathRef.current.getTotalLength();
-      pathLength.set(length);
-      pathLength.set(0);
-      pathLength.set(length);
+      const container = containerRef.current;
+      
+      const updatePath = () => {
+        if (!container) return;
+        const scrollTop = container.scrollTop;
+        const scrollHeight = container.scrollHeight - container.clientHeight;
+        const progress = scrollHeight > 0 ? Math.min(scrollTop / scrollHeight, 1) : 0;
+        pathLength.set(length * progress);
+        scrollProgress.set(progress);
+      };
+
+      const handleScroll = () => {
+        requestAnimationFrame(updatePath);
+      };
+
+      container.addEventListener('scroll', handleScroll, { passive: true });
+      updatePath();
+
+      return () => {
+        container.removeEventListener('scroll', handleScroll);
+      };
     }
-  }, [linePath, pathLength]);
+  }, [linePath, pathLength, scrollProgress]);
 
   const handleExplore = (brandId: string) => {
     router.push(`/${brandId}`);
@@ -158,140 +195,205 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
       : `/logos/${brandId}.png`;
   };
 
-  return (
-    <div className="min-h-screen bg-black relative overflow-hidden">
-      {/* Subtle animated gradient background */}
-      <motion.div
-        className="absolute inset-0 bg-gradient-to-br from-orange-900/10 via-purple-900/10 to-pink-900/10"
-        animate={{
-          backgroundPosition: ["0% 0%", "100% 100%"],
-        }}
-        transition={{
-          duration: 20,
-          repeat: Infinity,
-          repeatType: "reverse",
-        }}
-      />
+  // Track active venue based on scroll
+  const [activeIndex, setActiveIndex] = useState(-1);
 
-      {/* Compact Header */}
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-6 pb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative w-8 h-8 sm:w-10 sm:h-10">
-              <Image
-                src="/logos/bassik.png"
-                alt="Bassik"
-                fill
-                className="object-contain"
-                priority
-                sizes="40px"
-              />
-            </div>
-            <h1 className="text-lg sm:text-xl font-bold text-white">Venues</h1>
+  useEffect(() => {
+    if (!containerRef.current || venuePositions.length === 0) return;
+
+    const updateActiveVenue = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      
+      const scrollTop = container.scrollTop;
+      const viewportCenter = scrollTop + container.clientHeight / 2;
+      
+      let newActiveIndex = -1;
+      let minDistance = Infinity;
+
+      for (let i = 0; i < venuePositions.length; i++) {
+        const distance = Math.abs(viewportCenter - venuePositions[i]);
+        if (distance < minDistance && distance < 200) {
+          minDistance = distance;
+          newActiveIndex = i;
+        }
+      }
+
+      if (newActiveIndex !== activeIndex) {
+        setActiveIndex(newActiveIndex);
+      }
+    };
+
+    const handleScroll = () => {
+      requestAnimationFrame(updateActiveVenue);
+    };
+
+    const container = containerRef.current;
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    updateActiveVenue();
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+    };
+  }, [venuePositions, activeIndex]);
+
+  return (
+    <div className="min-h-screen bg-black relative">
+      {/* Minimal Header */}
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-2">
+        <div className="flex items-center gap-2.5">
+          <div className="relative w-7 h-7 sm:w-8 sm:h-8">
+            <Image
+              src="/logos/bassik.png"
+              alt="Bassik"
+              fill
+              className="object-contain"
+              priority
+              sizes="32px"
+            />
           </div>
+          <h1 className="text-base sm:text-lg font-semibold text-white">Venues</h1>
         </div>
       </div>
 
-      {/* Vertical Trail Container */}
+      {/* Pathway Container */}
       <div
         ref={containerRef}
-        className="relative max-w-4xl mx-auto px-4 sm:px-6 pb-12"
+        className="relative w-full overflow-y-auto"
+        style={{ height: 'calc(100vh - 50px)', maxHeight: 'calc(100vh - 50px)' }}
       >
-        {/* SVG Path Line */}
-        {linePath && (
-          <svg
-            className="absolute left-0 top-0 w-full h-full pointer-events-none"
-            style={{ zIndex: 1 }}
-          >
-            <motion.path
-              ref={pathRef}
-              d={linePath}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-white/20"
-              style={{
-                pathLength: pathLengthSpring,
-                opacity,
-              }}
-            />
-            {/* Glow effect */}
-            <motion.path
-              d={linePath}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="text-white/10"
-              style={{
-                pathLength: pathLengthSpring,
-                opacity: glowOpacity,
-              }}
-            />
-          </svg>
-        )}
-
-        {/* Venue Cards */}
-        <div className="relative z-10 space-y-4 sm:space-y-5">
-          {venues.map((brand, index) => {
-            const venueData = venuesData.find((v) => v.brandId === brand.id);
-            const coverImage = venueData?.coverImage;
-            const logoPath = getLogoPath(brand.id);
-
-            return (
-              <motion.div
-                key={brand.id}
-                data-venue-card
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  delay: index * 0.08,
-                  duration: 0.4,
-                  ease: "easeOut",
+        <div className="relative max-w-2xl mx-auto px-4 pb-20">
+          {/* SVG Pathway - The Hero Element */}
+          {linePath && (
+            <svg
+              className="absolute left-0 top-0 w-full h-full pointer-events-none"
+              style={{ zIndex: 0 }}
+            >
+              {/* Base path (dark) */}
+              <path
+                ref={pathRef}
+                d={linePath}
+                fill="none"
+                stroke="rgba(255, 255, 255, 0.08)"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              
+              {/* Glowing path (scroll-driven) */}
+              <motion.path
+                d={linePath}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  pathLength: pathLengthSpring,
+                  color: pathGlowColor,
                 }}
-                className="flex items-center justify-center"
-              >
-                <motion.button
-                  onClick={() => handleExplore(brand.id)}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="group w-full max-w-md mx-auto flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10 hover:border-white/20 transition-all duration-300 relative overflow-hidden"
-                  style={{
-                    boxShadow: `0 4px 20px ${brand.accentColor}10`,
-                  }}
-                >
-                  {/* Hover glow */}
-                  <motion.div
-                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                    style={{
-                      background: `radial-gradient(circle at center, ${brand.accentColor}15, transparent 70%)`,
-                    }}
-                  />
+                className="drop-shadow-lg"
+              />
+              
+              {/* Outer glow */}
+              <motion.path
+                d={linePath}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{
+                  pathLength: pathLengthSpring,
+                  color: pathGlowColor,
+                  opacity: glowOpacity,
+                }}
+              />
+            </svg>
+          )}
 
-                  {/* Thumbnail/Logo */}
-                  <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden flex-shrink-0 bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10">
+          {/* Venue Nodes - Centered, Minimal */}
+          <div className="relative z-10 space-y-8 sm:space-y-10">
+            {venues.map((brand, index) => {
+              const venueData = venuesData.find((v) => v.brandId === brand.id);
+              const coverImage = venueData?.coverImage;
+              const logoPath = getLogoPath(brand.id);
+              const isActive = activeIndex === index;
+              const isPast = activeIndex > index;
+
+              return (
+                <motion.div
+                  key={brand.id}
+                  ref={(el) => {
+                    venueRefs.current[index] = el;
+                  }}
+                  data-venue-node
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    delay: index * 0.05,
+                    duration: 0.4,
+                    ease: "easeOut",
+                  }}
+                  className="flex flex-col items-center text-center"
+                >
+                  {/* Venue Name */}
+                  <motion.h2
+                    className="text-lg sm:text-xl font-bold text-white mb-3"
+                    animate={{
+                      scale: isActive ? 1.05 : 1,
+                      opacity: isPast ? 0.5 : isActive ? 1 : 0.7,
+                    }}
+                    transition={{ duration: 0.3 }}
+                    style={{
+                      color: isActive ? brand.accentColor : 'white',
+                      textShadow: isActive ? `0 0 20px ${brand.accentColor}60` : 'none',
+                    }}
+                  >
+                    {brand.shortName}
+                  </motion.h2>
+
+                  {/* Cover Image - Small, Rectangular, Rounded */}
+                  <motion.button
+                    onClick={() => handleExplore(brand.id)}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="relative w-48 sm:w-56 h-32 sm:h-36 rounded-lg overflow-hidden mb-3 group"
+                    animate={{
+                      scale: isActive ? 1.02 : 1,
+                      opacity: isPast ? 0.6 : isActive ? 1 : 0.8,
+                    }}
+                    transition={{ duration: 0.3 }}
+                    style={{
+                      boxShadow: isActive
+                        ? `0 8px 32px ${brand.accentColor}40`
+                        : '0 4px 16px rgba(0, 0, 0, 0.3)',
+                    }}
+                  >
                     {coverImage ? (
                       <Image
                         src={coverImage}
                         alt={brand.shortName}
                         fill
-                        sizes="(max-width: 640px) 64px, 80px"
-                        className="object-cover"
+                        sizes="(max-width: 640px) 192px, 224px"
+                        className="object-cover transition-transform duration-500 group-hover:scale-110"
                         loading={index < 3 ? "eager" : "lazy"}
-                        quality={75}
+                        quality={80}
                         unoptimized
                       />
                     ) : (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="relative w-10 h-10 sm:w-12 sm:h-12">
+                      <div
+                        className="absolute inset-0 flex items-center justify-center"
+                        style={{
+                          background: `linear-gradient(135deg, ${brand.accentColor}40, ${brand.accentColor}60)`,
+                        }}
+                      >
+                        <div className="relative w-16 h-16">
                           <Image
                             src={logoPath}
                             alt={brand.shortName}
                             fill
-                            className="object-contain opacity-60"
+                            className="object-contain opacity-70"
                             onError={(e) => {
                               (e.target as HTMLImageElement).style.display = 'none';
                             }}
@@ -299,51 +401,54 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
                         </div>
                       </div>
                     )}
-                  </div>
+                    {/* Subtle overlay on hover */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                  </motion.button>
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <h3 className="text-sm sm:text-base font-bold text-white truncate">
-                        {brand.shortName}
-                      </h3>
-                      {brand.tag && (
-                        <span
-                          className="px-2 py-0.5 rounded-full text-[10px] font-medium text-white flex-shrink-0"
-                          style={{ backgroundColor: `${brand.accentColor}80` }}
-                        >
-                          {brand.tag}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs sm:text-sm text-gray-400 mb-2 line-clamp-1">
-                      {brand.description || "Premium dining & nightlife experience"}
-                    </p>
-                    <motion.div
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold"
-                      style={{ color: brand.accentColor }}
-                      whileHover={{ x: 2 }}
+                  {/* Description */}
+                  <motion.p
+                    className="text-xs sm:text-sm text-gray-400 mb-3 max-w-xs mx-auto"
+                    animate={{
+                      opacity: isPast ? 0.4 : isActive ? 0.9 : 0.6,
+                    }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {brand.description || "Premium dining & nightlife experience"}
+                  </motion.p>
+
+                  {/* Minimal CTA */}
+                  <motion.button
+                    onClick={() => handleExplore(brand.id)}
+                    whileHover={{ x: 4 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="text-xs sm:text-sm font-medium flex items-center gap-1.5"
+                    animate={{
+                      opacity: isPast ? 0.5 : isActive ? 1 : 0.7,
+                    }}
+                    transition={{ duration: 0.3 }}
+                    style={{
+                      color: isActive ? brand.accentColor : 'rgba(255, 255, 255, 0.7)',
+                    }}
+                  >
+                    Explore
+                    <svg
+                      className="w-3.5 h-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
                     >
-                      Explore
-                      <svg
-                        className="w-3.5 h-3.5"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M9 5l7 7-7 7"
-                        />
-                      </svg>
-                    </motion.div>
-                  </div>
-                </motion.button>
-              </motion.div>
-            );
-          })}
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </motion.button>
+                </motion.div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
