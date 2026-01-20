@@ -6,6 +6,8 @@ export type Brand = {
   exploreUrl: string;
   instagramUrls: string[]; // Array to support multiple Instagram profiles (e.g., Club Rogue)
   websiteUrl: string; // Official website URL
+  description?: string; // One-line description for homepage
+  tag?: string; // Optional tag (e.g., "Club", "Sports Bar")
 };
 
 export const BRANDS: Brand[] = [
@@ -17,6 +19,8 @@ export const BRANDS: Brand[] = [
     exploreUrl: "https://www.alehouse.club",
     instagramUrls: ["https://www.instagram.com/alehouse.club/"],
     websiteUrl: "https://www.alehouse.club",
+    description: "Medieval tavern club • Cocktails • Late nights",
+    tag: "Fine Dining",
   },
   {
     id: "c53",
@@ -26,6 +30,8 @@ export const BRANDS: Brand[] = [
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/c53wc/"],
     websiteUrl: "https://example.com/c53", // TODO: Replace with real website URL
+    description: "World cuisine dining • Family friendly",
+    tag: "Fine Dining",
   },
   {
     id: "boiler-room",
@@ -35,6 +41,8 @@ export const BRANDS: Brand[] = [
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/boilerroomhyd/"],
     websiteUrl: "https://example.com/boilerroom", // TODO: Replace with real website URL
+    description: "Underground club vibe • DJ nights",
+    tag: "Casual Bar",
   },
   {
     id: "skyhy",
@@ -44,6 +52,8 @@ export const BRANDS: Brand[] = [
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/skyhylive/"],
     websiteUrl: "https://example.com/skyhy", // TODO: Replace with real website URL
+    description: "Rooftop lounge • City views",
+    tag: "Rooftop",
   },
   {
     id: "kiik69",
@@ -55,6 +65,8 @@ export const BRANDS: Brand[] = [
       "https://www.instagram.com/kiik69sportsbar.gachibowli/",
     ],
     websiteUrl: "https://www.kiik69.com",
+    description: "Sports bar • Bowling • Drinks",
+    tag: "Sports Bar",
   },
   {
     id: "club-rogue-gachibowli",
@@ -64,6 +76,8 @@ export const BRANDS: Brand[] = [
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/clubrogue.gachibowli/"],
     websiteUrl: "https://example.com/clubrogue", // TODO: Replace with real website URL
+    description: "Club nights • Signature cocktails",
+    tag: "Club",
   },
   {
     id: "club-rogue-kondapur",
@@ -73,6 +87,8 @@ export const BRANDS: Brand[] = [
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/clubrogue.kondapur/"],
     websiteUrl: "https://example.com/clubrogue", // TODO: Replace with real website URL
+    description: "Club nights • Signature cocktails",
+    tag: "Club",
   },
   {
     id: "club-rogue-jubilee-hills",
@@ -82,6 +98,8 @@ export const BRANDS: Brand[] = [
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/clubrogue.jubileehills/"],
     websiteUrl: "https://example.com/clubrogue", // TODO: Replace with real website URL
+    description: "Club nights • Signature cocktails",
+    tag: "Club",
   },
   {
     id: "sound-of-soul",
@@ -91,6 +109,8 @@ export const BRANDS: Brand[] = [
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/soundofsoulclub/"],
     websiteUrl: "https://example.com/soundofsoul", // TODO: Replace with real website URL
+    description: "Club nights • Live music",
+    tag: "Club",
   },
   {
     id: "rejoy",
@@ -100,6 +120,8 @@ export const BRANDS: Brand[] = [
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/rejoyclub/"],
     websiteUrl: "https://example.com/rejoy", // TODO: Replace with real website URL
+    description: "Club nights • Party vibes",
+    tag: "Club",
   },
   {
     id: "firefly",
@@ -109,6 +131,8 @@ export const BRANDS: Brand[] = [
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/fireflyclub/"],
     websiteUrl: "https://example.com/firefly", // TODO: Replace with real website URL
+    description: "Club nights • Social vibes",
+    tag: "Club",
   },
 ];
 
