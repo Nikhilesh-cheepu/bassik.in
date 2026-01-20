@@ -16,10 +16,37 @@ interface HomeTrailProps {
   venues?: Brand[];
 }
 
+// Specific ordering as requested
+const VENUE_ORDER = [
+  "alehouse",
+  "boiler-room",
+  "c53",
+  "kiik69",
+  "skyhy",
+  "club-rogue-gachibowli",
+  "club-rogue-kondapur",
+  "club-rogue-jubilee-hills",
+  "sound-of-soul",
+  "rejoy",
+  "firefly",
+];
+
 export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
   const router = useRouter();
+  
+  // Order venues according to specified order
+  const orderedVenues = [...venues].sort((a, b) => {
+    const indexA = VENUE_ORDER.indexOf(a.id);
+    const indexB = VENUE_ORDER.indexOf(b.id);
+    // If not in order list, put at end
+    if (indexA === -1 && indexB === -1) return 0;
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  });
+
   const [venuesData, setVenuesData] = useState<VenueData[]>(
-    venues.map((brand) => ({
+    orderedVenues.map((brand) => ({
       brandId: brand.id,
       coverImage: null,
       loading: true,
@@ -31,8 +58,8 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
   useEffect(() => {
     const fetchCovers = async () => {
       const batchSize = 3;
-      for (let i = 0; i < venues.length; i += batchSize) {
-        const batch = venues.slice(i, i + batchSize);
+      for (let i = 0; i < orderedVenues.length; i += batchSize) {
+        const batch = orderedVenues.slice(i, i + batchSize);
         const promises = batch.map(async (brand) => {
           try {
             const res = await fetch(`/api/venues/${brand.id}`, {
@@ -68,14 +95,14 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
           }
         });
         await Promise.all(promises);
-        if (i + batchSize < venues.length) {
+        if (i + batchSize < orderedVenues.length) {
           await new Promise((resolve) => setTimeout(resolve, 50));
         }
       }
     };
 
     fetchCovers();
-  }, [venues]);
+  }, [orderedVenues]);
 
   const handleExplore = (brandId: string) => {
     router.push(`/${brandId}`);
@@ -128,7 +155,7 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
       {/* Content */}
       <div className="relative z-10">
         {/* Hero / Header */}
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12 pb-8 sm:pb-12 text-center">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12 pb-6 sm:pb-8 text-center">
           <motion.h1
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -157,10 +184,10 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
           </motion.p>
         </div>
 
-        {/* Venues List */}
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 pb-16">
-          <div className="space-y-6 sm:space-y-8">
-            {venues.map((brand, index) => {
+        {/* Venues Grid - 3 columns */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 pb-12">
+          <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
+            {orderedVenues.map((brand, index) => {
               const venueData = venuesData.find((v) => v.brandId === brand.id);
               const coverImage = venueData?.coverImage;
               const logoPath = getLogoPath(brand.id);
@@ -171,80 +198,88 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
                   ref={(el) => {
                     venueRefs.current[index] = el;
                   }}
-                  initial={{ opacity: 0, y: 20 }}
+                  initial={{ opacity: 0, y: 10 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: "-50px" }}
-                  transition={{ duration: 0.4, delay: index * 0.05 }}
+                  viewport={{ once: true, margin: "-20px" }}
+                  transition={{ duration: 0.3, delay: index * 0.03 }}
                   className="flex flex-col items-center text-center"
                 >
-                  {/* Cover Image / Logo */}
+                  {/* Card Container */}
                   <motion.button
                     onClick={() => handleExplore(brand.id)}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="relative w-[240px] sm:w-[260px] h-[120px] sm:h-[140px] rounded-lg overflow-hidden mb-3 group"
+                    className="w-full rounded-xl sm:rounded-2xl overflow-hidden mb-2 group relative backdrop-blur-sm border border-white/10"
                     style={{
-                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+                      background: 'rgba(255, 255, 255, 0.03)',
+                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05)',
                     }}
                   >
-                    {coverImage ? (
-                      <Image
-                        src={coverImage}
-                        alt={brand.shortName}
-                        fill
-                        sizes="(max-width: 640px) 240px, 260px"
-                        className="object-cover transition-transform duration-300 group-hover:scale-105"
-                        loading={index < 4 ? "eager" : "lazy"}
-                        quality={80}
-                        unoptimized
-                      />
-                    ) : (
-                      <div
-                        className="absolute inset-0 flex items-center justify-center"
-                        style={{
-                          background: `linear-gradient(135deg, ${brand.accentColor}30, ${brand.accentColor}50)`,
-                        }}
-                      >
-                        <div className="relative w-12 h-12 sm:w-14 sm:h-14">
-                          <Image
-                            src={logoPath}
-                            alt={brand.shortName}
-                            fill
-                            className="object-contain opacity-70"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                            }}
-                          />
+                    {/* Cover Image - Small */}
+                    <div className="relative w-full aspect-[4/3]">
+                      {coverImage ? (
+                        <Image
+                          src={coverImage}
+                          alt={brand.shortName}
+                          fill
+                          sizes="(max-width: 640px) 33vw, 200px"
+                          className="object-cover transition-transform duration-300 group-hover:scale-105"
+                          loading={index < 6 ? "eager" : "lazy"}
+                          quality={75}
+                          unoptimized
+                        />
+                      ) : (
+                        <div
+                          className="absolute inset-0 flex items-center justify-center"
+                          style={{
+                            background: `linear-gradient(135deg, ${brand.accentColor}30, ${brand.accentColor}50)`,
+                          }}
+                        >
+                          <div className="relative w-8 h-8 sm:w-10 sm:h-10">
+                            <Image
+                              src={logoPath}
+                              alt={brand.shortName}
+                              fill
+                              className="object-contain opacity-70"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    )}
-                    {/* Subtle overlay */}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
+                      )}
+                      {/* Subtle overlay */}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
+                    </div>
+
+                    {/* Venue Name - Small */}
+                    <div className="px-2 py-2 sm:py-2.5">
+                      <h3 className="text-xs sm:text-sm font-semibold text-white mb-1 line-clamp-1">
+                        {brand.shortName}
+                      </h3>
+                      
+                      {/* Optional: Super short description (truncated aggressively) */}
+                      {brand.description && (
+                        <p className="text-[10px] sm:text-xs text-gray-500 line-clamp-1">
+                          {brand.description.split('•')[0]?.trim() || brand.description}
+                        </p>
+                      )}
+                    </div>
                   </motion.button>
 
-                  {/* Venue Name */}
-                  <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">
-                    {brand.shortName}
-                  </h3>
-
-                  {/* Description */}
-                  <p className="text-xs sm:text-sm text-gray-400 mb-3 max-w-[280px] mx-auto truncate">
-                    {brand.description || "Premium dining & nightlife experience"}
-                  </p>
-
-                  {/* CTA */}
+                  {/* CTA - Small */}
                   <motion.button
                     onClick={() => handleExplore(brand.id)}
-                    whileHover={{ x: 3 }}
+                    whileHover={{ x: 2 }}
                     whileTap={{ scale: 0.95 }}
-                    className="text-xs sm:text-sm font-medium text-gray-300 hover:text-white flex items-center gap-1.5 transition-colors"
+                    className="text-[10px] sm:text-xs font-medium flex items-center gap-1 transition-colors"
                     style={{
                       color: brand.accentColor + 'CC',
                     }}
                   >
                     Explore
                     <svg
-                      className="w-3.5 h-3.5"
+                      className="w-2.5 h-2.5 sm:w-3 sm:h-3"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
