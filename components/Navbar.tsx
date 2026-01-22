@@ -8,13 +8,13 @@ export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
-    <nav className="w-full bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 py-3">
+    <nav className="w-full bg-gray-950 border-b border-white/10 sticky top-0 z-50 shadow-lg">
+      <div className="max-w-7xl mx-auto px-4 sm:px-5 py-2.5 sm:py-3" style={{ paddingLeft: "max(1rem, env(safe-area-inset-left))", paddingRight: "max(1rem, env(safe-area-inset-right))" }}>
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center">
+          <div className="flex items-center shrink-0">
             <Link href="/" className="block">
-              <div className="bg-gray-900 rounded-lg px-3 py-2 md:px-4 md:py-2.5 overflow-hidden relative h-10 md:h-12">
+              <div className="bg-white/10 rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 overflow-hidden relative w-24 sm:w-28 h-9 sm:h-10 md:h-11">
                 <Image
                   src="/logos/bassik.png"
                   alt="Bassik"
@@ -29,25 +29,25 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-6">
             <Link
               href="/"
-              className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors"
+              className="text-gray-300 hover:text-white text-sm font-medium transition-colors"
             >
               Home
             </Link>
             <Link
               href="/reservations"
-              className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors"
+              className="text-gray-300 hover:text-white text-sm font-medium transition-colors"
             >
               Reservations
             </Link>
             <a
               href="#"
-              className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors"
+              className="text-gray-300 hover:text-white text-sm font-medium transition-colors"
             >
               Venues
             </a>
             <a
               href="#"
-              className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors"
+              className="text-gray-300 hover:text-white text-sm font-medium transition-colors"
             >
               About
             </a>
@@ -56,8 +56,9 @@ export default function Navbar() {
           {/* Mobile Hamburger Button */}
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="md:hidden text-gray-900 p-2"
+            className="md:hidden text-white p-2 -mr-2 touch-manipulation"
             aria-label="Toggle menu"
+            style={{ WebkitTapHighlightColor: "transparent" }}
           >
             <svg
               className="w-6 h-6"
@@ -79,32 +80,32 @@ export default function Navbar() {
 
         {/* Mobile Menu */}
         {isMenuOpen && (
-          <div className="md:hidden mt-4 pb-2 border-t border-gray-200">
-            <div className="flex flex-col gap-3 pt-3">
+          <div className="md:hidden mt-3 pb-2 border-t border-white/10">
+            <div className="flex flex-col gap-1 pt-3">
               <Link
                 href="/"
-                className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors py-2"
+                className="text-gray-300 hover:text-white text-sm font-medium transition-colors py-2.5 px-1"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Home
               </Link>
               <Link
                 href="/reservations"
-                className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors py-2"
+                className="text-gray-300 hover:text-white text-sm font-medium transition-colors py-2.5 px-1"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Reservations
               </Link>
               <a
                 href="#"
-                className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors py-2"
+                className="text-gray-300 hover:text-white text-sm font-medium transition-colors py-2.5 px-1"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Venues
               </a>
               <a
                 href="#"
-                className="text-gray-600 hover:text-gray-900 text-sm font-medium transition-colors py-2"
+                className="text-gray-300 hover:text-white text-sm font-medium transition-colors py-2.5 px-1"
                 onClick={() => setIsMenuOpen(false)}
               >
                 About
