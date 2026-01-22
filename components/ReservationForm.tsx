@@ -54,6 +54,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     message: string;
   }>({ type: null, message: "" });
   const [timeSlotTab, setTimeSlotTab] = useState<"lunch" | "dinner">("lunch");
+  const [timeSlotPickerOpen, setTimeSlotPickerOpen] = useState(true);
 
   useEffect(() => {
     setCurrentStep(1);
@@ -69,6 +70,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
       notes: "",
     });
     setTimeSlotTab("lunch");
+    setTimeSlotPickerOpen(true);
     setSubmitStatus({ type: null, message: "" });
   }, [brand.id]);
 
@@ -179,6 +181,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData((prev) => ({ ...prev, date: e.target.value, timeSlot: "" }));
+    setTimeSlotPickerOpen(true);
   };
 
   const handleSlotSelect = (slot24: string) => {
@@ -190,6 +193,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
       return;
     }
     setFormData((prev) => ({ ...prev, timeSlot: slot24 }));
+    setTimeSlotPickerOpen(false);
     setSubmitStatus({ type: null, message: "" });
   };
 
@@ -205,20 +209,24 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     });
   };
 
-  const validateIndianPhoneNumber = (phone: string): boolean => {
-    const cleaned = phone.replace(/[\s\-+91]/g, '');
-    return /^[6-9]\d{9}$/.test(cleaned);
+  const isValid10DigitPhone = (phone: string): boolean => {
+    const digits = phone.replace(/\D/g, "");
+    return /^\d{10}$/.test(digits);
   };
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    
+
     if (name === "contactNumber") {
-      const digitsOnly = value.replace(/\D/g, '');
-      const limited = digitsOnly.slice(0, 10);
-      setFormData((prev) => ({ ...prev, [name]: limited }));
+      let digitsOnly = value.replace(/\D/g, "");
+      if (digitsOnly.length > 10 && (digitsOnly.startsWith("91") || digitsOnly.startsWith("0"))) {
+        digitsOnly = digitsOnly.replace(/^(91|0)+/, "").slice(0, 10);
+      } else {
+        digitsOnly = digitsOnly.slice(0, 10);
+      }
+      setFormData((prev) => ({ ...prev, [name]: digitsOnly }));
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
@@ -240,7 +248,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     return (
       formData.fullName &&
       formData.contactNumber &&
-      validateIndianPhoneNumber(formData.contactNumber) &&
+      isValid10DigitPhone(formData.contactNumber) &&
       (formData.numberOfMen !== "" ||
         formData.numberOfWomen !== "" ||
         formData.numberOfCouples !== "")
@@ -339,12 +347,13 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
           });
         }
       } else {
-        throw new Error("Failed to submit reservation");
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to submit reservation");
       }
     } catch (error) {
       setSubmitStatus({
         type: "error",
-        message: "Something went wrong. Please try again.",
+        message: error instanceof Error ? error.message : "Something went wrong. Please try again.",
       });
     } finally {
       setIsSubmitting(false);
@@ -361,11 +370,11 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   return (
     <div className="w-full">
       {/* Premium Step Indicator - Glowing & Animated */}
-      <div className="mb-8 sm:mb-10">
-        <div className="flex items-start w-full">
+      <div className="mb-6 sm:mb-8">
+        <div className="flex items-center w-full">
           {steps.map((step, index) => (
             <div key={step.number} className="flex items-center flex-1" style={{ minWidth: 0 }}>
-              <div className="flex flex-col items-center flex-1 min-w-0">
+              <div className="flex flex-col items-center flex-1 min-w-0 relative z-10">
                 <motion.div
                   className="relative mb-2"
                   initial={false}
@@ -375,12 +384,12 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   transition={{ duration: 0.3 }}
                 >
                   <motion.div
-                    className={`w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-sm sm:text-base font-bold transition-all duration-300 backdrop-blur-md border-2 ${
-                      currentStep >= step.number
+                    className={`w-10 h-10 sm:w-12 sm:h-14 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all duration-300 backdrop-blur-md border-2 ${
+                    currentStep >= step.number
                         ? "text-white"
                         : "text-gray-400 border-white/10"
-                    }`}
-                    style={{
+                  }`}
+                  style={{
                       backgroundColor: currentStep >= step.number 
                         ? `${brand.accentColor}80` 
                         : "rgba(255, 255, 255, 0.05)",
@@ -413,7 +422,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                           initial={{ scale: 0, rotate: -180 }}
                           animate={{ scale: 1, rotate: 0 }}
                           exit={{ scale: 0, rotate: 180 }}
-                          className="w-6 h-6 sm:w-7 sm:h-7"
+                          className="w-5 h-5 sm:w-6 sm:h-6"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -426,15 +435,15 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                           initial={{ scale: 0 }}
                           animate={{ scale: 1 }}
                           exit={{ scale: 0 }}
-                        >
-                          {step.number}
+                >
+                  {step.number}
                         </motion.span>
                       )}
                     </AnimatePresence>
                   </motion.div>
                 </motion.div>
                 <motion.span
-                  className={`text-[10px] sm:text-xs font-semibold text-center transition-all leading-tight ${
+                  className={`text-[9px] sm:text-[10px] font-semibold text-center transition-all leading-tight ${
                     currentStep >= step.number ? "text-white" : "text-gray-500"
                   }`}
                   style={{
@@ -446,10 +455,9 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                 </motion.span>
               </div>
               {index < steps.length - 1 && (
-                <div className="flex items-center px-2 sm:px-3 relative" style={{ top: '-28px' }}>
+                <div className="flex items-center px-1 sm:px-2 flex-1 relative" style={{ marginTop: '-20px' }}>
                   <motion.div
-                    className="h-1 rounded-full"
-                    style={{ width: "100%", minWidth: "24px" }}
+                    className="h-0.5 sm:h-1 rounded-full w-full"
                     initial={{ scaleX: 0 }}
                     animate={{
                       scaleX: currentStep > step.number ? 1 : 0.3,
@@ -466,10 +474,10 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
         <AnimatePresence mode="wait">
           {/* Step 1: Date & Time */}
-          {currentStep === 1 && (
+        {currentStep === 1 && (
             <motion.div
               key="step1"
               initial={{ opacity: 0, x: 20 }}
@@ -479,20 +487,20 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
               className="space-y-6"
             >
               <div>
-                <h3 className="text-2xl sm:text-3xl font-bold text-white mb-2 flex items-center gap-3">
-                  <span className="w-1.5 h-8 rounded-full" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
-                  Select Date & Time
+                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2 sm:gap-3">
+                  <span className="w-1 h-6 sm:h-8 rounded-full flex-shrink-0" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
+                  <span>Select Date & Time</span>
                 </h3>
-                <p className="text-sm text-gray-400 mb-6">Choose when you&apos;d like to visit us</p>
+                <p className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6">Choose when you&apos;d like to visit us</p>
 
                 {/* Date Selection - Glassmorphic */}
-                <div className="mb-6">
-                  <label className="block text-sm font-semibold text-gray-300 mb-3">
+                <div className="mb-4 sm:mb-6">
+                  <label className="block text-xs sm:text-sm font-semibold text-gray-300 mb-2 sm:mb-3">
                     Select Date <span className="text-red-400">*</span>
                   </label>
-                  <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="relative max-w-full">
+                    <div className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                     </div>
@@ -501,10 +509,11 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                       value={formData.date}
                       onChange={handleDateChange}
                       min={todayStr}
-                      className="w-full pl-12 pr-4 py-4 text-sm font-medium backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:border-white/40 transition-all shadow-lg hover:shadow-xl"
+                      className="w-full max-w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3 sm:py-4 text-xs sm:text-sm font-medium backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-xl sm:rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:border-white/40 transition-all shadow-lg hover:shadow-xl touch-manipulation"
                       style={{
                         borderColor: formData.date ? `${brand.accentColor}60` : undefined,
                         boxShadow: formData.date ? `0 0 20px ${brand.accentColor}30` : undefined,
+                        touchAction: 'manipulation',
                       }}
                       onFocus={(e) => {
                         e.target.style.borderColor = brand.accentColor;
@@ -518,31 +527,34 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   </div>
                 </div>
 
-                {/* Time Slot Selection */}
-                {formData.date && (
-                  <div>
+              {/* Time Slot Selection */}
+              {formData.date && (
+                <div>
                     <label className="block text-sm font-semibold text-gray-300 mb-3">
                       Select Time Slot <span className="text-red-400">*</span>
-                    </label>
-                    
+                  </label>
+                  
                     {/* Lunch/Dinner Toggle - Animated Pills */}
-                    <div className="flex gap-3 mb-4 backdrop-blur-xl bg-white/5 p-1.5 rounded-2xl border border-white/10">
+                    <div className="flex gap-2 sm:gap-3 mb-3 sm:mb-4 backdrop-blur-xl bg-white/5 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border border-white/10">
                       <motion.button
                         type="button"
                         onClick={() => {
                           setTimeSlotTab("lunch");
                           setFormData((prev) => ({ ...prev, timeSlot: "" }));
+                          setTimeSlotPickerOpen(true);
                         }}
-                        className={`flex-1 py-3 px-4 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${
+                        className={`flex-1 py-2 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 sm:gap-2 touch-manipulation ${
                           timeSlotTab === "lunch" ? "text-white" : "text-gray-400"
                         }`}
                         style={{
                           backgroundColor: timeSlotTab === "lunch" ? `${brand.accentColor}80` : "transparent",
                           boxShadow: timeSlotTab === "lunch" ? `0 4px 20px ${brand.accentColor}40` : undefined,
+                          touchAction: 'manipulation',
+                          WebkitTapHighlightColor: 'transparent',
                         }}
                         whileTap={{ scale: 0.95 }}
                       >
-                        <span className="text-lg">🍽️</span>
+                        <span className="text-base sm:text-lg">🍽️</span>
                         <span>Lunch</span>
                       </motion.button>
                       <motion.button
@@ -550,77 +562,98 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                         onClick={() => {
                           setTimeSlotTab("dinner");
                           setFormData((prev) => ({ ...prev, timeSlot: "" }));
+                          setTimeSlotPickerOpen(true);
                         }}
-                        className={`flex-1 py-3 px-4 text-sm font-semibold rounded-xl transition-all duration-300 flex items-center justify-center gap-2 ${
+                        className={`flex-1 py-2 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 sm:gap-2 touch-manipulation ${
                           timeSlotTab === "dinner" ? "text-white" : "text-gray-400"
                         }`}
                         style={{
                           backgroundColor: timeSlotTab === "dinner" ? `${brand.accentColor}80` : "transparent",
                           boxShadow: timeSlotTab === "dinner" ? `0 4px 20px ${brand.accentColor}40` : undefined,
+                          touchAction: 'manipulation',
+                          WebkitTapHighlightColor: 'transparent',
                         }}
                         whileTap={{ scale: 0.95 }}
                       >
-                        <span className="text-lg">🌙</span>
+                        <span className="text-base sm:text-lg">🌙</span>
                         <span>Dinner</span>
                       </motion.button>
                     </div>
 
-                    {/* Time Slot Grid - Glowing Pills */}
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3 max-h-64 sm:max-h-72 overflow-y-auto p-3 backdrop-blur-xl bg-white/5 rounded-2xl border border-white/10 scrollbar-hide">
-                      {timeSlots.map((slot) => {
-                        const isPast = isSlotInPast(formData.date, slot.value24);
-                        const isSelected = formData.timeSlot === slot.value24;
-                        return (
-                          <motion.button
-                            key={slot.value24}
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              if (!isPast) {
-                                handleSlotSelect(slot.value24);
-                              }
-                            }}
-                            disabled={isPast}
-                            className={`w-full px-3 py-2.5 text-xs sm:text-sm font-medium rounded-xl border-2 transition-all ${
-                              isPast
-                                ? "bg-white/5 text-gray-600 border-white/5 cursor-not-allowed"
-                                : isSelected
-                                ? "text-white border-transparent"
-                                : "backdrop-blur-md bg-white/10 text-gray-300 border-white/20 hover:bg-white/20 hover:border-white/30"
-                            }`}
-                            style={{
-                              backgroundColor: isSelected ? brand.accentColor : undefined,
-                              boxShadow: isSelected ? `0 0 20px ${brand.accentColor}60, 0 4px 14px ${brand.accentColor}40` : undefined,
-                            }}
-                            whileHover={!isPast && !isSelected ? { scale: 1.05 } : {}}
-                            whileTap={!isPast ? { scale: 0.95 } : {}}
-                            animate={isSelected ? {
-                              boxShadow: [
-                                `0 0 20px ${brand.accentColor}60, 0 4px 14px ${brand.accentColor}40`,
-                                `0 0 30px ${brand.accentColor}80, 0 4px 14px ${brand.accentColor}40`,
-                                `0 0 20px ${brand.accentColor}60, 0 4px 14px ${brand.accentColor}40`,
-                              ],
-                            } : {}}
-                            transition={{ duration: 2, repeat: isSelected ? Infinity : 0 }}
-                          >
-                            {slot.display12}
-                          </motion.button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-3">
-                      {timeSlotTab === "lunch"
-                        ? brand.id.startsWith("club-rogue")
-                          ? "Lunch slots: 5:00 PM - 6:45 PM"
-                          : "Lunch slots: 12:00 PM - 6:45 PM"
-                        : "Dinner slots: 7:00 PM - 11:45 PM"}
-                    </p>
-                  </div>
-                )}
+                    {/* Time Slot: collapsed "Selected" or full grid */}
+                    {formData.timeSlot && !timeSlotPickerOpen ? (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="flex items-center justify-between gap-3 p-3 sm:p-4 backdrop-blur-xl bg-white/5 rounded-xl sm:rounded-2xl border border-white/10"
+                      >
+                        <span className="text-sm sm:text-base font-semibold text-white">
+                          {formatTo12Hour(formData.timeSlot)}
+                          <span className="ml-2 text-green-400">✓</span>
+                        </span>
+                        <motion.button
+                          type="button"
+                          onClick={() => setTimeSlotPickerOpen(true)}
+                          className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg transition-colors touch-manipulation"
+                          style={{ color: brand.accentColor, backgroundColor: `${brand.accentColor}30` }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          Change
+                        </motion.button>
+                      </motion.div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5 sm:gap-2 md:gap-3 max-h-56 sm:max-h-64 md:max-h-72 overflow-y-auto p-2 sm:p-3 backdrop-blur-xl bg-white/5 rounded-xl sm:rounded-2xl border border-white/10 scrollbar-hide">
+                          {timeSlots.map((slot) => {
+                            const isPast = isSlotInPast(formData.date, slot.value24);
+                            const isSelected = formData.timeSlot === slot.value24;
+                            return (
+                              <motion.button
+                                key={slot.value24}
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (!isPast) handleSlotSelect(slot.value24);
+                                }}
+                                disabled={isPast}
+                                className={`w-full px-2 sm:px-3 py-2 sm:py-2.5 text-[10px] sm:text-xs md:text-sm font-medium rounded-lg sm:rounded-xl border-2 transition-all touch-manipulation ${
+                                  isPast
+                                    ? "bg-white/5 text-gray-600 border-white/5 cursor-not-allowed"
+                                    : isSelected
+                                    ? "text-white border-transparent"
+                                    : "backdrop-blur-md bg-white/10 text-gray-300 border-white/20 hover:bg-white/20 hover:border-white/30"
+                                }`}
+                                style={{
+                                  backgroundColor: isSelected ? brand.accentColor : undefined,
+                                  boxShadow: isSelected ? `0 0 20px ${brand.accentColor}60, 0 4px 14px ${brand.accentColor}40` : undefined,
+                                  touchAction: "manipulation",
+                                  WebkitTapHighlightColor: "transparent",
+                                }}
+                                whileHover={!isPast && !isSelected ? { scale: 1.05 } : {}}
+                                whileTap={!isPast ? { scale: 0.95 } : {}}
+                                animate={isSelected ? { boxShadow: [`0 0 20px ${brand.accentColor}60`, `0 0 30px ${brand.accentColor}80`, `0 0 20px ${brand.accentColor}60`] } : {}}
+                                transition={{ duration: 2, repeat: isSelected ? Infinity : 0 }}
+                              >
+                                {slot.display12}
+                              </motion.button>
+                            );
+                          })}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-3">
+                          {timeSlotTab === "lunch"
+                            ? brand.id.startsWith("club-rogue")
+                              ? "Lunch slots: 5:00 PM - 6:45 PM"
+                              : "Lunch slots: 12:00 PM - 6:45 PM"
+                            : "Dinner slots: 7:00 PM - 11:45 PM"}
+                        </p>
+                      </>
+                    )}
+                </div>
+              )}
 
                 {/* Premium Offers Cards */}
-                {formData.timeSlot && availableDiscounts.length > 0 && (
+              {formData.timeSlot && availableDiscounts.length > 0 && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -628,25 +661,34 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   >
                     <h4 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
                       <span className="text-lg">✨</span>
-                      Available Offers for {formatTo12Hour(formData.timeSlot)}
-                    </h4>
+                    Available Offers for {formatTo12Hour(formData.timeSlot)}
+                  </h4>
                     <div className="space-y-3">
-                      {availableDiscounts.map((discount) => (
-                        <motion.label
-                          key={discount.id}
+                    {availableDiscounts.map((discount) => (
+                        <motion.div
+                        key={discount.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleDiscountToggle(discount.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleDiscountToggle(discount.id);
+                            }
+                          }}
                           className={`flex items-start gap-3 p-4 backdrop-blur-md rounded-xl border-2 cursor-pointer transition-all ${
                             formData.selectedDiscounts.includes(discount.id)
                               ? "border-white/30"
                               : "border-white/10 hover:border-white/20"
                           }`}
-                          style={{
+                        style={{
                             backgroundColor: formData.selectedDiscounts.includes(discount.id)
                               ? `${brand.accentColor}20`
                               : "rgba(255, 255, 255, 0.05)",
                             boxShadow: formData.selectedDiscounts.includes(discount.id)
                               ? `0 0 20px ${brand.accentColor}30`
-                              : undefined,
-                          }}
+                            : undefined,
+                        }}
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                         >
@@ -656,7 +698,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                                 ? "border-white"
                                 : "border-white/30"
                             }`}
-                            style={{
+                          style={{
                               backgroundColor: formData.selectedDiscounts.includes(discount.id)
                                 ? brand.accentColor
                                 : "transparent",
@@ -679,25 +721,25 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                               </motion.svg>
                             )}
                           </motion.div>
-                          <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-0">
                             <div className="font-medium text-white text-sm mb-1">
-                              {discount.title}
-                            </div>
-                            <div className="text-xs text-gray-400">
-                              {discount.description}
-                            </div>
+                            {discount.title}
                           </div>
-                        </motion.label>
-                      ))}
-                    </div>
+                            <div className="text-xs text-gray-400">
+                            {discount.description}
+                          </div>
+                        </div>
+                        </motion.div>
+                    ))}
+                  </div>
                   </motion.div>
                 )}
-              </div>
+                </div>
             </motion.div>
-          )}
+        )}
 
           {/* Step 2: Guests */}
-          {currentStep === 2 && (
+        {currentStep === 2 && (
             <motion.div
               key="step2"
               initial={{ opacity: 0, x: 20 }}
@@ -707,14 +749,14 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
               className="space-y-6"
             >
               <div>
-                <h3 className="text-2xl sm:text-3xl font-bold text-white mb-2 flex items-center gap-3">
-                  <span className="w-1.5 h-8 rounded-full" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
-                  Number of Guests
+                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2 sm:gap-3">
+                  <span className="w-1 h-6 sm:h-8 rounded-full flex-shrink-0" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
+                  <span>Number of Guests</span>
                 </h3>
-                <p className="text-sm text-gray-400 mb-6">Tell us how many guests to expect</p>
+                <p className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6">Tell us how many guests to expect</p>
                 
                 {/* Guest Inputs - Animated +/- Buttons */}
-                <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4 sm:mb-6">
                   {[
                     { key: "numberOfMen", label: "👨 Men", emoji: "👨" },
                     { key: "numberOfWomen", label: "👩 Women", emoji: "👩" },
@@ -722,13 +764,13 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   ].map(({ key, label, emoji }) => (
                     <motion.div
                       key={key}
-                      className="backdrop-blur-xl bg-white/10 rounded-2xl border border-white/20 p-4"
+                      className="backdrop-blur-xl bg-white/10 rounded-xl sm:rounded-2xl border border-white/20 p-2.5 sm:p-4"
                       whileHover={{ scale: 1.02 }}
                     >
-                      <label className="block text-xs font-semibold text-gray-300 mb-3 text-center">
+                      <label className="block text-[10px] sm:text-xs font-semibold text-gray-300 mb-2 sm:mb-3 text-center">
                         {label}
                       </label>
-                      <div className="flex items-center justify-center gap-2">
+                      <div className="flex items-center justify-center gap-1.5 sm:gap-2">
                         <motion.button
                           type="button"
                           onClick={() => {
@@ -740,11 +782,12 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                               }));
                             }
                           }}
-                          className="w-8 h-8 rounded-lg backdrop-blur-md bg-white/20 border border-white/30 flex items-center justify-center text-white hover:bg-white/30 transition-all"
+                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg backdrop-blur-md bg-white/20 border border-white/30 flex items-center justify-center text-white hover:bg-white/30 transition-all touch-manipulation"
+                          style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.9 }}
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
                           </svg>
                         </motion.button>
@@ -754,7 +797,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                           min="0"
                           value={formData[key as keyof FormData] as string}
                           onChange={handleChange}
-                          className="w-16 text-center py-2 text-lg font-bold text-white bg-transparent border-none focus:outline-none"
+                          className="w-12 sm:w-16 text-center py-1.5 sm:py-2 text-base sm:text-lg font-bold text-white bg-transparent border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           placeholder="0"
                         />
                         <motion.button
@@ -766,12 +809,12 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                               [key]: (current + 1).toString(),
                             }));
                           }}
-                          className="w-8 h-8 rounded-lg backdrop-blur-md bg-white/20 border border-white/30 flex items-center justify-center text-white hover:bg-white/30 transition-all"
-                          style={{ backgroundColor: `${brand.accentColor}40` }}
+                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg backdrop-blur-md bg-white/20 border border-white/30 flex items-center justify-center text-white hover:bg-white/30 transition-all touch-manipulation"
+                          style={{ backgroundColor: `${brand.accentColor}40`, touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.9 }}
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                           </svg>
                         </motion.button>
@@ -779,31 +822,40 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     </motion.div>
                   ))}
                 </div>
-              </div>
+            </div>
 
               {/* Offers in Step 2 */}
-              {availableDiscounts.length > 0 && (
-                <div>
+            {availableDiscounts.length > 0 && (
+              <div>
                   <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <span>✨</span> Available Offers
-                  </h3>
-                  <div className="space-y-3">
-                    {availableDiscounts.map((discount) => (
-                      <motion.label
-                        key={discount.id}
+                </h3>
+                <div className="space-y-3">
+                  {availableDiscounts.map((discount) => (
+                      <motion.div
+                      key={discount.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => handleDiscountToggle(discount.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleDiscountToggle(discount.id);
+                          }
+                        }}
                         className={`flex items-start gap-3 p-4 backdrop-blur-md rounded-xl border-2 cursor-pointer transition-all ${
                           formData.selectedDiscounts.includes(discount.id)
                             ? "border-white/30"
                             : "border-white/10 hover:border-white/20"
                         }`}
-                        style={{
+                      style={{
                           backgroundColor: formData.selectedDiscounts.includes(discount.id)
                             ? `${brand.accentColor}20`
                             : "rgba(255, 255, 255, 0.05)",
                           boxShadow: formData.selectedDiscounts.includes(discount.id)
                             ? `0 0 20px ${brand.accentColor}30`
-                            : undefined,
-                        }}
+                          : undefined,
+                      }}
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
                       >
@@ -813,7 +865,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                               ? "border-white"
                               : "border-white/30"
                           }`}
-                          style={{
+                        style={{
                             backgroundColor: formData.selectedDiscounts.includes(discount.id)
                               ? brand.accentColor
                               : "transparent",
@@ -835,51 +887,51 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                             </motion.svg>
                           )}
                         </motion.div>
-                        <div className="flex-1">
+                      <div className="flex-1">
                           <div className="font-medium text-white text-sm">
-                            {discount.title}
-                          </div>
-                          <div className="text-xs text-gray-400 mt-1">
-                            {discount.description}
-                          </div>
+                          {discount.title}
                         </div>
-                      </motion.label>
-                    ))}
-                  </div>
+                          <div className="text-xs text-gray-400 mt-1">
+                          {discount.description}
+                        </div>
+                      </div>
+                      </motion.div>
+                  ))}
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Notes */}
-              <div>
+            {/* Notes */}
+            <div>
                 <label className="block text-sm font-medium text-gray-300 mb-3">
-                  Special Requests (Optional)
-                </label>
-                <textarea
-                  name="notes"
-                  rows={3}
-                  value={formData.notes}
-                  onChange={handleChange}
+                Special Requests (Optional)
+              </label>
+              <textarea
+                name="notes"
+                rows={3}
+                value={formData.notes}
+                onChange={handleChange}
                   className="w-full px-4 py-3 text-sm backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-2xl text-white placeholder-gray-500 focus:outline-none focus:border-white/40 transition-all resize-none"
                   style={{
                     borderColor: formData.notes ? `${brand.accentColor}60` : undefined,
                     boxShadow: formData.notes ? `0 0 20px ${brand.accentColor}30` : undefined,
                   }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = brand.accentColor;
+                onFocus={(e) => {
+                  e.target.style.borderColor = brand.accentColor;
                     e.target.style.boxShadow = `0 0 30px ${brand.accentColor}50`;
-                  }}
-                  onBlur={(e) => {
+                }}
+                onBlur={(e) => {
                     e.target.style.borderColor = formData.notes ? `${brand.accentColor}60` : "rgba(255, 255, 255, 0.2)";
                     e.target.style.boxShadow = formData.notes ? `0 0 20px ${brand.accentColor}30` : "";
-                  }}
-                  placeholder="Any special occasion, dietary requirements, or preferences..."
-                />
-              </div>
+                }}
+                placeholder="Any special occasion, dietary requirements, or preferences..."
+              />
+            </div>
             </motion.div>
-          )}
+        )}
 
           {/* Step 3: Contact */}
-          {currentStep === 3 && (
+        {currentStep === 3 && (
             <motion.div
               key="step3"
               initial={{ opacity: 0, x: 20 }}
@@ -889,82 +941,85 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
               className="space-y-6"
             >
               <div>
-                <h3 className="text-2xl sm:text-3xl font-bold text-white mb-2 flex items-center gap-3">
-                  <span className="w-1.5 h-8 rounded-full" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
-                  Contact Information
+                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2 sm:gap-3">
+                  <span className="w-1 h-6 sm:h-8 rounded-full flex-shrink-0" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
+                  <span>Contact Information</span>
                 </h3>
-                <p className="text-sm text-gray-400 mb-6">We&apos;ll use this to confirm your reservation</p>
-                <div className="space-y-5">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-300 mb-3">
+                <p className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6">We&apos;ll use this to confirm your reservation</p>
+                <div className="space-y-4 sm:space-y-5">
+                <div>
+                    <label className="block text-xs sm:text-sm font-semibold text-gray-300 mb-2 sm:mb-3">
                       Full Name <span className="text-red-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  </label>
+                    <div className="relative max-w-full">
+                      <div className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
                       </div>
-                      <input
-                        type="text"
-                        name="fullName"
-                        required
-                        value={formData.fullName}
-                        onChange={handleChange}
-                        className="w-full pl-12 pr-4 py-4 text-sm font-medium backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-2xl text-white placeholder-gray-500 focus:outline-none focus:border-white/40 transition-all"
+                  <input
+                    type="text"
+                    name="fullName"
+                    required
+                    value={formData.fullName}
+                    onChange={handleChange}
+                        className="w-full max-w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3 sm:py-4 text-xs sm:text-sm font-medium backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-xl sm:rounded-2xl text-white placeholder-gray-500 focus:outline-none focus:border-white/40 transition-all touch-manipulation"
                         style={{
                           borderColor: formData.fullName ? `${brand.accentColor}60` : undefined,
                           boxShadow: formData.fullName ? `0 0 20px ${brand.accentColor}30` : undefined,
+                          touchAction: 'manipulation',
                         }}
-                        onFocus={(e) => {
-                          e.target.style.borderColor = brand.accentColor;
+                    onFocus={(e) => {
+                      e.target.style.borderColor = brand.accentColor;
                           e.target.style.boxShadow = `0 0 30px ${brand.accentColor}50`;
-                        }}
-                        onBlur={(e) => {
+                    }}
+                    onBlur={(e) => {
                           e.target.style.borderColor = formData.fullName ? `${brand.accentColor}60` : "rgba(255, 255, 255, 0.2)";
                           e.target.style.boxShadow = formData.fullName ? `0 0 20px ${brand.accentColor}30` : "";
-                        }}
-                        placeholder="Enter your full name"
-                      />
+                    }}
+                    placeholder="Enter your full name"
+                  />
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-300 mb-3">
+                </div>
+                <div>
+                    <label className="block text-xs sm:text-sm font-semibold text-gray-300 mb-2 sm:mb-3">
                       Contact Number <span className="text-red-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  </label>
+                    <div className="relative max-w-full">
+                      <div className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                         </svg>
                       </div>
-                      <input
-                        type="tel"
-                        name="contactNumber"
-                        required
-                        value={formData.contactNumber}
-                        onChange={handleChange}
-                        className={`w-full pl-12 pr-4 py-4 text-sm font-medium backdrop-blur-xl bg-white/10 border-2 rounded-2xl text-white placeholder-gray-500 focus:outline-none transition-all ${
-                          formData.contactNumber && !validateIndianPhoneNumber(formData.contactNumber)
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    name="contactNumber"
+                    required
+                    value={formData.contactNumber}
+                    onChange={handleChange}
+                        className={`w-full max-w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3 sm:py-4 text-xs sm:text-sm font-medium backdrop-blur-xl bg-white/10 border-2 rounded-xl sm:rounded-2xl text-white placeholder-gray-500 focus:outline-none transition-all touch-manipulation ${
+                          formData.contactNumber && !isValid10DigitPhone(formData.contactNumber)
                             ? "border-red-500/60"
                             : "border-white/20"
                         }`}
                         style={{
-                          borderColor: formData.contactNumber && validateIndianPhoneNumber(formData.contactNumber)
+                          touchAction: 'manipulation',
+                          borderColor: formData.contactNumber && isValid10DigitPhone(formData.contactNumber)
                             ? `${brand.accentColor}60`
-                            : formData.contactNumber && !validateIndianPhoneNumber(formData.contactNumber)
+                            : formData.contactNumber && !isValid10DigitPhone(formData.contactNumber)
                             ? "rgba(239, 68, 68, 0.6)"
                             : undefined,
-                          boxShadow: formData.contactNumber && validateIndianPhoneNumber(formData.contactNumber)
+                          boxShadow: formData.contactNumber && isValid10DigitPhone(formData.contactNumber)
                             ? `0 0 20px ${brand.accentColor}30`
                             : undefined,
                         }}
-                        onFocus={(e) => {
-                          e.target.style.borderColor = brand.accentColor;
+                    onFocus={(e) => {
+                      e.target.style.borderColor = brand.accentColor;
                           e.target.style.boxShadow = `0 0 30px ${brand.accentColor}50`;
-                        }}
-                        onBlur={(e) => {
-                          const isValid = validateIndianPhoneNumber(formData.contactNumber);
+                    }}
+                    onBlur={(e) => {
+                          const isValid = isValid10DigitPhone(formData.contactNumber);
                           e.target.style.borderColor = formData.contactNumber && !isValid
                             ? "rgba(239, 68, 68, 0.6)"
                             : formData.contactNumber && isValid
@@ -976,19 +1031,19 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                         }}
                         placeholder="10 digit mobile number"
                         maxLength={10}
-                      />
-                    </div>
-                    {formData.contactNumber && !validateIndianPhoneNumber(formData.contactNumber) && (
+                  />
+                </div>
+                    {formData.contactNumber && !isValid10DigitPhone(formData.contactNumber) && (
                       <p className="text-xs text-red-400 mt-2">Please enter a valid 10-digit Indian mobile number (starts with 6-9)</p>
                     )}
-                  </div>
-                </div>
               </div>
+            </div>
+          </div>
             </motion.div>
-          )}
+        )}
 
           {/* Step 4: Review - VIP Ticket Style */}
-          {currentStep === 4 && (
+        {currentStep === 4 && (
             <motion.div
               key="step4"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -998,31 +1053,31 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
               className="space-y-6"
             >
               <div>
-                <h3 className="text-2xl sm:text-3xl font-bold text-white mb-2 flex items-center gap-3">
-                  <span className="w-1.5 h-8 rounded-full" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
-                  Review Your Booking
+                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2 sm:gap-3">
+                  <span className="w-1 h-6 sm:h-8 rounded-full flex-shrink-0" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
+                  <span>Review Your Booking</span>
                 </h3>
-                <p className="text-sm text-gray-400 mb-6">Please review your details before confirming</p>
+                <p className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6">Please review your details before confirming</p>
                 
                 {/* VIP Ticket Card */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="backdrop-blur-xl bg-gradient-to-br from-white/10 to-white/5 rounded-3xl border-2 border-white/20 p-6 sm:p-8 space-y-5 shadow-2xl"
+                  className="backdrop-blur-xl bg-gradient-to-br from-white/10 to-white/5 rounded-2xl sm:rounded-3xl border-2 border-white/20 p-4 sm:p-6 md:p-8 space-y-3 sm:space-y-4 md:space-y-5 shadow-2xl"
                   style={{
                     boxShadow: `0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px ${brand.accentColor}20`,
                   }}
                 >
-                  <div className="flex items-center justify-between pb-4 border-b border-white/10">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full backdrop-blur-md bg-white/20 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-white/10">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full backdrop-blur-md bg-white/20 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
                       </div>
-                      <div>
-                        <span className="text-gray-400 text-sm">Date & Time</span>
-                        <div className="font-bold text-white text-lg">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-gray-400 text-xs sm:text-sm block">Date & Time</span>
+                        <div className="font-bold text-white text-sm sm:text-base md:text-lg truncate">
                           {formData.date && formData.timeSlot
                             ? `${new Date(formData.date).toLocaleDateString("en-IN", {
                                 weekday: "short",
@@ -1035,16 +1090,16 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pb-4 border-b border-white/10">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full backdrop-blur-md bg-white/20 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-white/10">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full backdrop-blur-md bg-white/20 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                         </svg>
                       </div>
-                      <div>
-                        <span className="text-gray-400 text-sm">Guests</span>
-                        <div className="font-bold text-white text-lg">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-gray-400 text-xs sm:text-sm block">Guests</span>
+                        <div className="font-bold text-white text-sm sm:text-base md:text-lg truncate">
                           {[
                             formData.numberOfMen !== "" && formData.numberOfMen !== "0"
                               ? `${formData.numberOfMen} Men`
@@ -1064,14 +1119,14 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   </div>
 
                   {formData.selectedDiscounts.length > 0 && availableDiscounts.length > 0 && (
-                    <div className="pb-4 border-b border-white/10">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 rounded-full backdrop-blur-md bg-white/20 flex items-center justify-center">
-                          <span className="text-lg">✨</span>
+                    <div className="pb-3 sm:pb-4 border-b border-white/10">
+                      <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full backdrop-blur-md bg-white/20 flex items-center justify-center flex-shrink-0">
+                          <span className="text-sm sm:text-lg">✨</span>
                         </div>
-                        <span className="text-gray-400 text-sm">Selected Offers</span>
+                        <span className="text-gray-400 text-xs sm:text-sm">Selected Offers</span>
                       </div>
-                      <div className="space-y-2 pl-[52px]">
+                      <div className="space-y-1.5 sm:space-y-2 pl-[40px] sm:pl-[52px]">
                         {formData.selectedDiscounts.map((discountId) => {
                           const discount = availableDiscounts.find((d) => d.id === discountId);
                           return discount ? (
@@ -1079,13 +1134,13 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                               key={discountId}
                               initial={{ opacity: 0, x: -10 }}
                               animate={{ opacity: 1, x: 0 }}
-                              className="flex items-center gap-2 text-sm font-medium"
+                              className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-medium"
                               style={{ color: brand.accentColor }}
                             >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                               </svg>
-                              {discount.title}
+                              <span className="truncate">{discount.title}</span>
                             </motion.div>
                           ) : null;
                         })}
@@ -1093,38 +1148,38 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between pb-4 border-b border-white/10">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full backdrop-blur-md bg-white/20 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="flex items-center justify-between pb-3 sm:pb-4 border-b border-white/10">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full backdrop-blur-md bg-white/20 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
                       </div>
-                      <div>
-                        <span className="text-gray-400 text-sm">Name</span>
-                        <div className="font-bold text-white text-lg">{formData.fullName}</div>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-gray-400 text-xs sm:text-sm block">Name</span>
+                        <div className="font-bold text-white text-sm sm:text-base md:text-lg truncate">{formData.fullName}</div>
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full backdrop-blur-md bg-white/20 flex items-center justify-center">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full backdrop-blur-md bg-white/20 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                         </svg>
                       </div>
-                      <div>
-                        <span className="text-gray-400 text-sm">Contact</span>
-                        <div className="font-bold text-white text-lg">{formData.contactNumber}</div>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-gray-400 text-xs sm:text-sm block">Contact</span>
+                        <div className="font-bold text-white text-sm sm:text-base md:text-lg truncate">{formData.contactNumber}</div>
                       </div>
                     </div>
                   </div>
 
                   {formData.notes && (
-                    <div className="pt-4 border-t border-white/10">
-                      <span className="text-gray-400 text-sm">Special Requests</span>
-                      <p className="text-sm text-gray-300 mt-2">{formData.notes}</p>
+                    <div className="pt-3 sm:pt-4 border-t border-white/10">
+                      <span className="text-gray-400 text-xs sm:text-sm block mb-1 sm:mb-2">Special Requests</span>
+                      <p className="text-xs sm:text-sm text-gray-300 break-words">{formData.notes}</p>
                     </div>
                   )}
                 </motion.div>
@@ -1149,38 +1204,49 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
         )}
 
         {/* Navigation Buttons - Premium */}
-        <div className="flex items-center justify-between pt-6 sm:pt-8 border-t border-white/10 gap-4">
+        <div className="flex items-center justify-between pt-4 sm:pt-6 border-t border-white/10 gap-3 sm:gap-4" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
           {currentStep > 1 ? (
             <motion.button
               type="button"
               onClick={handleBack}
-              className="px-6 py-3.5 text-sm font-semibold text-white backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-xl hover:bg-white/20 transition-all duration-200 flex items-center gap-2"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                handleBack();
+              }}
+              className="px-4 sm:px-6 py-2.5 sm:py-3.5 text-xs sm:text-sm font-semibold text-white backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-lg sm:rounded-xl hover:bg-white/20 transition-all duration-200 flex items-center gap-1.5 sm:gap-2 min-w-[80px] sm:min-w-[100px] justify-center touch-manipulation relative z-20"
+              style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
-              Back
+              <span>Back</span>
             </motion.button>
           ) : (
-            <div />
+            <div className="min-w-[80px] sm:min-w-[100px]" />
           )}
 
           {currentStep < 4 ? (
             <motion.button
               type="button"
               onClick={handleNext}
-              className="px-8 py-3.5 text-sm font-bold text-white rounded-xl transition-all duration-200 flex items-center gap-2 backdrop-blur-xl border-2 border-white/20"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                handleNext();
+              }}
+              className="px-6 sm:px-8 py-2.5 sm:py-3.5 text-xs sm:text-sm font-bold text-white rounded-lg sm:rounded-xl transition-all duration-200 flex items-center gap-1.5 sm:gap-2 backdrop-blur-xl border-2 border-white/20 min-w-[100px] sm:min-w-[140px] justify-center touch-manipulation relative z-20"
               style={{
                 backgroundColor: brand.accentColor,
                 boxShadow: `0 8px 32px ${brand.accentColor}50`,
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
               whileHover={{ scale: 1.05, boxShadow: `0 12px 40px ${brand.accentColor}70` }}
               whileTap={{ scale: 0.95 }}
             >
-              Continue
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span>Continue</span>
+              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </motion.button>
@@ -1188,10 +1254,25 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
             <motion.button
               type="submit"
               disabled={isSubmitting || !canSubmit()}
-              className="px-8 py-3.5 text-sm font-bold text-white rounded-xl transition-all duration-200 flex items-center gap-2 backdrop-blur-xl border-2 border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={(e) => {
+                // Defensive onClick handler for iOS Safari
+                if (!isSubmitting && canSubmit()) {
+                  handleSubmit(e as any);
+                }
+              }}
+              onPointerDown={(e) => {
+                // iOS Safari fallback
+                if (!isSubmitting && canSubmit()) {
+                  e.preventDefault();
+                  handleSubmit(e as any);
+                }
+              }}
+              className="px-6 sm:px-8 py-2.5 sm:py-3.5 text-xs sm:text-sm font-bold text-white rounded-lg sm:rounded-xl transition-all duration-200 flex items-center gap-1.5 sm:gap-2 backdrop-blur-xl border-2 border-white/20 disabled:opacity-50 disabled:cursor-not-allowed relative z-20 touch-manipulation min-w-[120px] sm:min-w-[160px] justify-center"
               style={{
                 backgroundColor: brand.accentColor,
                 boxShadow: !(isSubmitting || !canSubmit()) ? `0 8px 32px ${brand.accentColor}50` : undefined,
+                touchAction: 'manipulation',
+                WebkitTapHighlightColor: 'transparent',
               }}
               whileHover={!(isSubmitting || !canSubmit()) ? { scale: 1.05, boxShadow: `0 12px 40px ${brand.accentColor}70` } : {}}
               whileTap={!(isSubmitting || !canSubmit()) ? { scale: 0.95 } : {}}

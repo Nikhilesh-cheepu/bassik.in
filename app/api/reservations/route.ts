@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-const RESERVATION_PHONE_NUMBER = "7013884485";
+const RESERVATION_PHONE_NUMBER = "917013884485"; // India + business 10-digit
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {
+    let {
       fullName,
       contactNumber,
       numberOfMen,
@@ -21,7 +21,16 @@ export async function POST(request: NextRequest) {
       brandName,
     } = body;
 
-    // Validate required fields
+    // Normalize to 10-digit Indian number (strip +91, 91, 0 prefix)
+    const digitsOnly = String(contactNumber || "").replace(/\D/g, "");
+    const normalized =
+      digitsOnly.length > 10 && (digitsOnly.startsWith("91") || digitsOnly.startsWith("0"))
+        ? digitsOnly.replace(/^(91|0)+/, "").slice(0, 10)
+        : digitsOnly.slice(0, 10);
+    contactNumber = normalized;
+
+    const validIndianPhone = /^[6-9]\d{9}$/.test(contactNumber);
+
     if (
       !fullName ||
       !contactNumber ||
@@ -34,6 +43,12 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+    if (!validIndianPhone) {
+      return NextResponse.json(
+        { error: "Invalid 10-digit Indian mobile number (must start with 6–9)" },
         { status: 400 }
       );
     }

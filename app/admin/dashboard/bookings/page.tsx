@@ -193,7 +193,7 @@ Reservation ID: ${reservation.id}`;
   };
 
   const handleWhatsAppMessage = (reservation: Reservation) => {
-    const RESERVATION_PHONE_NUMBER = "7013884485";
+    const RESERVATION_PHONE_NUMBER = "917013884485";
     const message = generateWhatsAppMessage(reservation);
     const encodedMessage = encodeURIComponent(message);
     const whatsappUrl = `https://wa.me/${RESERVATION_PHONE_NUMBER}?text=${encodedMessage}`;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { BRANDS, Brand } from "@/lib/brands";
@@ -32,8 +32,6 @@ const VENUE_ORDER = [
 ];
 
 export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
-  const router = useRouter();
-  
   // Order venues according to specified order
   const orderedVenues = [...venues].sort((a, b) => {
     const indexA = VENUE_ORDER.indexOf(a.id);
@@ -54,59 +52,38 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
   );
   const venueRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // Fetch cover images in background
+  // Fetch cover images in parallel for faster load
   useEffect(() => {
     const fetchCovers = async () => {
-      const batchSize = 3;
-      for (let i = 0; i < orderedVenues.length; i += batchSize) {
-        const batch = orderedVenues.slice(i, i + batchSize);
-        const promises = batch.map(async (brand) => {
-          try {
-            const res = await fetch(`/api/venues/${brand.id}`, {
-              cache: 'force-cache',
-            });
-            if (res.ok) {
-              const data = await res.json();
-              const coverImages = data.venue?.coverImages || [];
-              setVenuesData(prev =>
-                prev.map(item =>
-                  item.brandId === brand.id
-                    ? {
-                        ...item,
-                        coverImage: coverImages.length > 0 ? coverImages[0] : null,
-                        loading: false,
-                      }
-                    : item
-                )
-              );
-            } else {
-              setVenuesData(prev =>
-                prev.map(item =>
-                  item.brandId === brand.id ? { ...item, loading: false } : item
-                )
-              );
-            }
-          } catch (error) {
-            setVenuesData(prev =>
-              prev.map(item =>
-                item.brandId === brand.id ? { ...item, loading: false } : item
-              )
-            );
+      const promises = orderedVenues.map(async (brand) => {
+        try {
+          const res = await fetch(`/api/venues/${brand.id}`, {
+            cache: "force-cache",
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const coverImages = data.venue?.coverImages || [];
+            return {
+              brandId: brand.id,
+              coverImage: coverImages.length > 0 ? coverImages[0] : null,
+              loading: false,
+            };
           }
-        });
-        await Promise.all(promises);
-        if (i + batchSize < orderedVenues.length) {
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          return { brandId: brand.id, coverImage: null, loading: false };
+        } catch {
+          return { brandId: brand.id, coverImage: null, loading: false };
         }
-      }
+      });
+      const results = await Promise.all(promises);
+      setVenuesData((prev) =>
+        prev.map((item) => {
+          const r = results.find((x) => x.brandId === item.brandId);
+          return r ? { ...item, ...r } : item;
+        })
+      );
     };
-
     fetchCovers();
   }, [orderedVenues]);
-
-  const handleExplore = (brandId: string) => {
-    router.push(`/${brandId}`);
-  };
 
   const getLogoPath = (brandId: string) => {
     return brandId.startsWith('club-rogue')
@@ -204,104 +181,95 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
                   transition={{ duration: 0.3, delay: index * 0.03 }}
                   className="flex flex-col items-center text-center"
                 >
-                  {/* Card Container (div with click) */}
-                  <motion.div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => handleExplore(brand.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        handleExplore(brand.id);
-                      }
-                    }}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="w-full rounded-xl sm:rounded-2xl overflow-hidden mb-2 group relative backdrop-blur-sm border border-white/10 cursor-pointer"
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.03)',
-                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05)',
-                    }}
+                  <Link
+                    href={`/${brand.id}`}
+                    prefetch
+                    className="flex flex-col items-center text-center w-full group/card"
                   >
-                    {/* Cover Image - Small */}
-                    <div className="relative w-full aspect-[4/3]">
-                      {coverImage ? (
-                        <Image
-                          src={coverImage}
-                          alt={brand.shortName}
-                          fill
-                          sizes="(max-width: 640px) 33vw, 200px"
-                          className="object-cover transition-transform duration-300 group-hover:scale-105"
-                          loading={index < 6 ? "eager" : "lazy"}
-                          quality={75}
-                          unoptimized
-                        />
-                      ) : (
-                        <div
-                          className="absolute inset-0 flex items-center justify-center"
-                          style={{
-                            background: `linear-gradient(135deg, ${brand.accentColor}30, ${brand.accentColor}50)`,
-                          }}
-                        />
-                      )}
-                      {/* Subtle overlay */}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
-                    </div>
-
-                    {/* Logo Chip instead of name */}
-                    <div className="px-2 py-2 sm:py-2.5 flex flex-col items-center gap-1">
-                      <div className="flex items-center justify-center gap-2 rounded-full bg-white/5 border border-white/10 px-2 py-1">
-                        <div className="relative w-6 h-6 sm:w-7 sm:h-7 rounded-full overflow-hidden bg-black/40">
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="w-full rounded-xl sm:rounded-2xl overflow-hidden mb-2 relative backdrop-blur-sm border border-white/10 cursor-pointer"
+                      style={{
+                        background: "rgba(255, 255, 255, 0.03)",
+                        boxShadow:
+                          "0 2px 8px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05)",
+                      }}
+                    >
+                      {/* Cover Image - Small */}
+                      <div className="relative w-full aspect-[4/3]">
+                        {coverImage ? (
                           <Image
-                            src={logoPath}
+                            src={coverImage}
                             alt={brand.shortName}
                             fill
-                            sizes="28px"
-                            className="object-contain"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
+                            sizes="(max-width: 640px) 33vw, 200px"
+                            className="object-cover transition-transform duration-300 group-hover/card:scale-105"
+                            loading={index < 6 ? "eager" : "lazy"}
+                            quality={75}
+                            priority={index < 6}
+                          />
+                        ) : (
+                          <div
+                            className="absolute inset-0 flex items-center justify-center"
+                            style={{
+                              background: `linear-gradient(135deg, ${brand.accentColor}30, ${brand.accentColor}50)`,
                             }}
                           />
-                        </div>
-                        <span className="text-[11px] sm:text-xs font-medium text-white/90 line-clamp-1">
-                          {brand.shortName}
-                        </span>
+                        )}
+                        <div className="absolute inset-0 bg-black/0 group-hover/card:bg-black/5 transition-colors" />
                       </div>
-                      
-                      {/* Optional: Super short description (truncated aggressively) */}
-                      {brand.description && (
-                        <p className="text-[10px] sm:text-xs text-gray-500 line-clamp-1">
-                          {brand.description.split('•')[0]?.trim() || brand.description}
-                        </p>
-                      )}
-                    </div>
-                  </motion.div>
 
-                  {/* CTA - Small */}
-                  <motion.button
-                    onClick={() => handleExplore(brand.id)}
-                    whileHover={{ x: 2 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="text-[10px] sm:text-xs font-medium flex items-center gap-1 transition-colors"
-                    style={{
-                      color: brand.accentColor + 'CC',
-                    }}
-                  >
-                    Explore
-                    <svg
-                      className="w-2.5 h-2.5 sm:w-3 sm:h-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                      {/* Logo Chip */}
+                      <div className="px-2 py-2 sm:py-2.5 flex flex-col items-center gap-1">
+                        <div className="flex items-center justify-center gap-2 rounded-full bg-white/5 border border-white/10 px-2 py-1">
+                          <div className="relative w-6 h-6 sm:w-7 sm:h-7 rounded-full overflow-hidden bg-black/40">
+                            <Image
+                              src={logoPath}
+                              alt={brand.shortName}
+                              fill
+                              sizes="28px"
+                              className="object-contain"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display =
+                                  "none";
+                              }}
+                            />
+                          </div>
+                          <span className="text-[11px] sm:text-xs font-medium text-white/90 line-clamp-1">
+                            {brand.shortName}
+                          </span>
+                        </div>
+                        {brand.description && (
+                          <p className="text-[10px] sm:text-xs text-gray-500 line-clamp-1">
+                            {brand.description
+                              .split("•")[0]
+                              ?.trim() || brand.description}
+                          </p>
+                        )}
+                      </div>
+                    </motion.div>
+
+                    <span
+                      className="text-[10px] sm:text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                      style={{ color: brand.accentColor + "CC" }}
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
-                    </svg>
-                  </motion.button>
+                      Explore
+                      <svg
+                        className="w-2.5 h-2.5 sm:w-3 sm:h-3"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
+                    </span>
+                  </Link>
                 </motion.div>
               );
             })}
