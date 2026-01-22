@@ -167,23 +167,23 @@ export default function BookingsPage() {
     if (reservation.notes && reservation.notes.trim()) {
       const notesLower = reservation.notes.toLowerCase();
       if (notesLower.includes("birthday") || notesLower.includes("bday")) {
-        notesSection = "\n🎉 Birthday";
+        notesSection = "\n\nBirthday";
       } else if (notesLower.includes("anniversary")) {
-        notesSection = "\n🎉 Anniversary";
+        notesSection = "\n\nAnniversary";
       } else if (notesLower.includes("celebration")) {
-        notesSection = "\n🎉 Celebration";
+        notesSection = "\n\nCelebration";
       } else {
-        notesSection = `\n📝 ${reservation.notes}`;
+        notesSection = `\n\n${reservation.notes.trim()}`;
       }
     }
 
-    const message = `🍽️ Table Reservation | ${reservation.brandName}
+    const message = `Table Reservation | ${reservation.brandName}
 
-👤 ${reservation.fullName} | 📞 ${reservation.contactNumber}
+${reservation.fullName} | ${reservation.contactNumber}
 
-📅 ${dateStr} | ⏰ ${timeStr}
+${dateStr} | ${timeStr}
 
-👥 ${guestCountStr}${notesSection}
+${guestCountStr}${notesSection}
 
 Status: ${reservation.status}
 

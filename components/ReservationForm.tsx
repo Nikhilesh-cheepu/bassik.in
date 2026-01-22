@@ -244,6 +244,14 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     );
   };
 
+  const canProceedToStep4 = () => {
+    return (
+      formData.fullName.trim().length > 0 &&
+      formData.contactNumber.length === 10 &&
+      isValid10DigitPhone(formData.contactNumber)
+    );
+  };
+
   const canSubmit = () => {
     return (
       formData.fullName &&
@@ -267,6 +275,13 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
       setSubmitStatus({
         type: "error",
         message: "Please enter at least one guest count.",
+      });
+      return;
+    }
+    if (currentStep === 3 && !canProceedToStep4()) {
+      setSubmitStatus({
+        type: "error",
+        message: "Please enter your name and a valid 10-digit contact number before continuing.",
       });
       return;
     }
@@ -1034,7 +1049,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   />
                 </div>
                     {formData.contactNumber && !isValid10DigitPhone(formData.contactNumber) && (
-                      <p className="text-xs text-red-400 mt-2">Please enter a valid 10-digit Indian mobile number (starts with 6-9)</p>
+                      <p className="text-xs text-red-400 mt-2">Please enter a valid 10-digit number.</p>
                     )}
               </div>
             </div>
@@ -1228,28 +1243,39 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
           )}
 
           {currentStep < 4 ? (
-            <motion.button
-              type="button"
-              onClick={handleNext}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                handleNext();
-              }}
-              className="px-6 sm:px-8 py-2.5 sm:py-3.5 text-xs sm:text-sm font-bold text-white rounded-lg sm:rounded-xl transition-all duration-200 flex items-center gap-1.5 sm:gap-2 backdrop-blur-xl border-2 border-white/20 min-w-[100px] sm:min-w-[140px] justify-center touch-manipulation relative z-20"
-              style={{
-                backgroundColor: brand.accentColor,
-                boxShadow: `0 8px 32px ${brand.accentColor}50`,
-                touchAction: 'manipulation',
-                WebkitTapHighlightColor: 'transparent',
-              }}
-              whileHover={{ scale: 1.05, boxShadow: `0 12px 40px ${brand.accentColor}70` }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <span>Continue</span>
-              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </motion.button>
+            (() => {
+              const canAdvance =
+                (currentStep === 1 && canProceedToStep2()) ||
+                (currentStep === 2 && canProceedToStep3()) ||
+                (currentStep === 3 && canProceedToStep4());
+              return (
+                <motion.button
+                  type="button"
+                  onClick={() => canAdvance && handleNext()}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    if (canAdvance) handleNext();
+                  }}
+                  disabled={!canAdvance}
+                  className={`px-6 sm:px-8 py-2.5 sm:py-3.5 text-xs sm:text-sm font-bold text-white rounded-lg sm:rounded-xl transition-all duration-200 flex items-center gap-1.5 sm:gap-2 backdrop-blur-xl border-2 border-white/20 min-w-[100px] sm:min-w-[140px] justify-center touch-manipulation relative z-20 ${
+                    !canAdvance ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                  style={{
+                    backgroundColor: brand.accentColor,
+                    boxShadow: canAdvance ? `0 8px 32px ${brand.accentColor}50` : undefined,
+                    touchAction: "manipulation",
+                    WebkitTapHighlightColor: "transparent",
+                  }}
+                  whileHover={canAdvance ? { scale: 1.05, boxShadow: `0 12px 40px ${brand.accentColor}70` } : {}}
+                  whileTap={canAdvance ? { scale: 0.95 } : {}}
+                >
+                  <span>Continue</span>
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </motion.button>
+              );
+            })()
           ) : (
             <motion.button
               type="submit"

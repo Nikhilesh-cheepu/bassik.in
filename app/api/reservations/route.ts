@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
         : digitsOnly.slice(0, 10);
     contactNumber = normalized;
 
-    const validIndianPhone = /^[6-9]\d{9}$/.test(contactNumber);
+    const valid10Digit = /^\d{10}$/.test(contactNumber);
 
     if (
       !fullName ||
@@ -46,9 +46,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    if (!validIndianPhone) {
+    if (!valid10Digit) {
       return NextResponse.json(
-        { error: "Invalid 10-digit Indian mobile number (must start with 6–9)" },
+        { error: "Please provide a valid 10-digit contact number." },
         { status: 400 }
       );
     }
@@ -109,41 +109,37 @@ export async function POST(request: NextRequest) {
     if (parseInt(numberOfCouples) > 0) guestParts.push(`${numberOfCouples} Couple${parseInt(numberOfCouples) > 1 ? "s" : ""}`);
     const guestCountStr = `${totalGuests} Guests (${guestParts.join(" / ")})`;
 
-    // Build offers section
+    // Build offers section (plain text, no emojis)
     let offersSection = "";
     if (selectedDiscounts && Array.isArray(selectedDiscounts) && selectedDiscounts.length > 0) {
       const offerList = selectedDiscounts
-        .map((discountId: string) => {
-          return discountNames[discountId] || discountId;
-        })
-        .map((offer: string) => `💸 ${offer}`)
+        .map((discountId: string) => discountNames[discountId] || discountId)
         .join("\n");
-      offersSection = `\n${offerList}`;
+      offersSection = `\n\n${offerList}`;
     }
 
-    // Build notes section
+    // Build notes section (plain text, no emojis)
     let notesSection = "";
     if (notes && notes.trim()) {
-      // Check if notes contains common event types
       const notesLower = notes.toLowerCase();
       if (notesLower.includes("birthday") || notesLower.includes("bday")) {
-        notesSection = "\n🎉 Birthday";
+        notesSection = "\n\nBirthday";
       } else if (notesLower.includes("anniversary")) {
-        notesSection = "\n🎉 Anniversary";
+        notesSection = "\n\nAnniversary";
       } else if (notesLower.includes("celebration")) {
-        notesSection = "\n🎉 Celebration";
+        notesSection = "\n\nCelebration";
       } else {
-        notesSection = `\n📝 ${notes}`;
+        notesSection = `\n\n${notes.trim()}`;
       }
     }
 
-    const message = `🍽️ Table Reservation | ${brandName}
+    const message = `Table Reservation | ${brandName}
 
-👤 ${fullName} | 📞 ${contactNumber}
+${fullName} | ${contactNumber}
 
-📅 ${formatDateShort(date)} | ⏰ ${formattedTime}
+${formatDateShort(date)} | ${formattedTime}
 
-👥 ${guestCountStr}${offersSection}${notesSection}
+${guestCountStr}${offersSection}${notesSection}
 
 Reservation submitted via bassik.in`;
 
