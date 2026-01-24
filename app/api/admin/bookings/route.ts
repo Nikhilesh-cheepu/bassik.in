@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
     // Try to include user relation (if User table exists)
     let reservations;
     try {
+      // First, try without user relation to avoid schema validation issues
       reservations = await prisma.reservation.findMany({
         where,
         include: {
@@ -81,14 +82,6 @@ export async function GET(request: NextRequest) {
               shortName: true,
             },
           },
-          user: {
-            select: {
-              id: true,
-              email: true,
-              firstName: true,
-              lastName: true,
-            },
-          },
         },
         orderBy: [
           { date: "asc" },
@@ -96,33 +89,131 @@ export async function GET(request: NextRequest) {
         ],
         take: 500, // Increased limit to show more bookings
       });
+      
+      // If we got reservations, try to fetch user data separately using raw SQL
+      // This avoids Prisma schema validation issues
+      if (reservations.length > 0) {
+        try {
+          // Check if User table exists by trying a simple query
+          const userTableCheck = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+            `SELECT EXISTS (
+              SELECT FROM information_schema.tables 
+              WHERE table_schema = 'public' 
+              AND table_name = 'User'
+            ) as exists`
+          );
+          
+          if (userTableCheck && userTableCheck[0]?.exists) {
+            // User table exists, fetch user data for reservations that have userId
+            const reservationIds = reservations.map(r => r.id);
+            const userIds = reservations
+              .map(r => (r as any).userId)
+              .filter((id): id is string => !!id);
+            
+            if (userIds.length > 0) {
+              // Fetch users for these userIds using raw SQL
+              const usersData = await prisma.$queryRawUnsafe<Array<{
+                id: string;
+                email: string;
+                firstName: string | null;
+                lastName: string | null;
+              }>>(
+                `SELECT "id", "email", "firstName", "lastName" FROM "User" WHERE "id" = ANY($1::text[])`,
+                userIds
+              );
+              
+              // Map users to reservations
+              const usersMap = new Map(usersData.map(u => [u.id, u]));
+              reservations = reservations.map(r => ({
+                ...r,
+                user: (r as any).userId ? usersMap.get((r as any).userId) || null : null,
+              }));
+            }
+          }
+        } catch (userFetchError: any) {
+          // If user fetch fails, just continue without user data
+          console.warn("[ADMIN-BOOKINGS] Could not fetch user data:", userFetchError?.message);
+        }
+      }
     } catch (error: any) {
-      // If User table doesn't exist, fetch without user relation
+      // If query fails due to schema issues, try using raw SQL
       if (
+        error?.code === "P2022" ||
         error?.code === "P2021" ||
         error?.message?.includes("does not exist") ||
         error?.message?.includes("Unknown model") ||
-        error?.message?.includes("model User")
+        error?.message?.includes("column") ||
+        error?.message?.includes("userId")
       ) {
-        console.warn("[ADMIN-BOOKINGS] User table not found, fetching bookings without user relation");
-        reservations = await prisma.reservation.findMany({
-          where,
-          include: {
-            venue: {
-              select: {
-                id: true,
-                brandId: true,
-                name: true,
-                shortName: true,
-              },
-            },
+        console.warn("[ADMIN-BOOKINGS] Schema mismatch detected, using raw SQL to fetch bookings");
+        
+        // Build WHERE clause for raw SQL
+        let whereClause = "1=1";
+        const params: any[] = [];
+        let paramIndex = 1;
+        
+        if (where.brandId) {
+          whereClause += ` AND "brandId" = $${paramIndex}`;
+          params.push(where.brandId);
+          paramIndex++;
+        }
+        
+        if (where.status) {
+          whereClause += ` AND "status" = $${paramIndex}`;
+          params.push(where.status);
+          paramIndex++;
+        }
+        
+        if (where.date) {
+          if (typeof where.date === 'string') {
+            whereClause += ` AND "date" = $${paramIndex}`;
+            params.push(where.date);
+            paramIndex++;
+          } else {
+            if (where.date.gte) {
+              whereClause += ` AND "date" >= $${paramIndex}`;
+              params.push(where.date.gte);
+              paramIndex++;
+            }
+            if (where.date.lte) {
+              whereClause += ` AND "date" <= $${paramIndex}`;
+              params.push(where.date.lte);
+              paramIndex++;
+            }
+          }
+        }
+        
+        const rawReservations = await prisma.$queryRawUnsafe<Array<any>>(
+          `SELECT * FROM "Reservation" WHERE ${whereClause} ORDER BY "date" ASC, "timeSlot" ASC LIMIT 500`,
+          ...params
+        );
+        
+        // Format reservations to match expected structure
+        reservations = rawReservations.map((r: any) => ({
+          id: r.id,
+          venueId: r.venueId,
+          brandId: r.brandId,
+          brandName: r.brandName,
+          fullName: r.fullName,
+          contactNumber: r.contactNumber,
+          numberOfMen: r.numberOfMen,
+          numberOfWomen: r.numberOfWomen,
+          numberOfCouples: r.numberOfCouples,
+          date: r.date,
+          timeSlot: r.timeSlot,
+          notes: r.notes,
+          selectedDiscounts: r.selectedDiscounts,
+          status: r.status,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+          venue: {
+            id: r.venueId,
+            brandId: r.brandId,
+            name: r.brandName,
+            shortName: r.brandName,
           },
-          orderBy: [
-            { date: "asc" },
-            { timeSlot: "asc" },
-          ],
-          take: 500,
-        });
+          user: null, // Can't fetch user without userId column
+        }));
       } else {
         throw error;
       }
