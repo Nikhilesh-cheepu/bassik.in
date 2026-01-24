@@ -67,24 +67,66 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const reservations = await prisma.reservation.findMany({
-      where,
-      include: {
-        venue: {
-          select: {
-            id: true,
-            brandId: true,
-            name: true,
-            shortName: true,
+    // Try to include user relation (if User table exists)
+    let reservations;
+    try {
+      reservations = await prisma.reservation.findMany({
+        where,
+        include: {
+          venue: {
+            select: {
+              id: true,
+              brandId: true,
+              name: true,
+              shortName: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
           },
         },
-      },
-      orderBy: [
-        { date: "asc" },
-        { timeSlot: "asc" },
-      ],
-      take: 100, // Limit to recent 100
-    });
+        orderBy: [
+          { date: "asc" },
+          { timeSlot: "asc" },
+        ],
+        take: 500, // Increased limit to show more bookings
+      });
+    } catch (error: any) {
+      // If User table doesn't exist, fetch without user relation
+      if (
+        error?.code === "P2021" ||
+        error?.message?.includes("does not exist") ||
+        error?.message?.includes("Unknown model") ||
+        error?.message?.includes("model User")
+      ) {
+        console.warn("[ADMIN-BOOKINGS] User table not found, fetching bookings without user relation");
+        reservations = await prisma.reservation.findMany({
+          where,
+          include: {
+            venue: {
+              select: {
+                id: true,
+                brandId: true,
+                name: true,
+                shortName: true,
+              },
+            },
+          },
+          orderBy: [
+            { date: "asc" },
+            { timeSlot: "asc" },
+          ],
+          take: 500,
+        });
+      } else {
+        throw error;
+      }
+    }
 
     return NextResponse.json({ reservations });
   } catch (error) {

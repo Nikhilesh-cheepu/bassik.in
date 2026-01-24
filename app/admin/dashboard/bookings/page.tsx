@@ -19,6 +19,12 @@ interface Reservation {
   brandId: string;
   brandName: string;
   createdAt: string;
+  user?: {
+    id: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+  } | null;
 }
 
 export default function BookingsPage() {
@@ -342,7 +348,17 @@ Reservation ID: ${reservation.id}`;
                         <div className="text-sm sm:text-base font-semibold text-gray-900 truncate">
                           {reservation.fullName}
                         </div>
-                        <div className="text-xs sm:text-sm text-gray-500">{reservation.contactNumber}</div>
+                        <div className="text-xs sm:text-sm text-gray-500 space-y-0.5">
+                          <div>{reservation.contactNumber}</div>
+                          {reservation.user?.email && (
+                            <div className="text-gray-400">{reservation.user.email}</div>
+                          )}
+                          {reservation.user?.firstName || reservation.user?.lastName ? (
+                            <div className="text-gray-400">
+                              {[reservation.user.firstName, reservation.user.lastName].filter(Boolean).join(' ')}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="text-xs sm:text-sm font-medium text-gray-600 bg-gray-50 px-2 py-1 rounded whitespace-nowrap">
                         {reservation.brandName}
