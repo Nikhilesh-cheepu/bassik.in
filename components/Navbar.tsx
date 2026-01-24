@@ -3,9 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { SignInButton, SignUpButton, UserButton, SignedIn, SignedOut, useUser } from "@clerk/nextjs";
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { user } = useUser();
+  const isAdmin = user?.publicMetadata?.role === "admin" || user?.publicMetadata?.role === "main_admin";
 
   return (
     <nav className="w-full bg-gray-950 border-b border-white/10 sticky top-0 z-50 shadow-lg">
@@ -51,6 +54,43 @@ export default function Navbar() {
             >
               About
             </a>
+            
+            {/* Clerk Auth Buttons */}
+            <SignedOut>
+              <SignInButton mode="modal">
+                <button className="text-gray-300 hover:text-white text-sm font-medium transition-colors">
+                  Sign In
+                </button>
+              </SignInButton>
+              <SignUpButton mode="modal">
+                <button className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors">
+                  Sign Up
+                </button>
+              </SignUpButton>
+            </SignedOut>
+            <SignedIn>
+              {isAdmin && (
+                <Link
+                  href="/admin/dashboard"
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Admin
+                </Link>
+              )}
+              <Link
+                href="/my-bookings"
+                className="text-gray-300 hover:text-white text-sm font-medium transition-colors"
+              >
+                My Bookings
+              </Link>
+              <UserButton 
+                appearance={{
+                  elements: {
+                    avatarBox: "w-8 h-8",
+                  },
+                }}
+              />
+            </SignedIn>
           </div>
 
           {/* Mobile Hamburger Button */}
@@ -110,6 +150,54 @@ export default function Navbar() {
               >
                 About
               </a>
+              
+              {/* Mobile Auth Buttons */}
+              <div className="pt-2 border-t border-white/10 mt-2">
+                <SignedOut>
+                  <div className="flex flex-col gap-2">
+                    <SignInButton mode="modal">
+                      <button className="text-gray-300 hover:text-white text-sm font-medium transition-colors py-2.5 px-1 text-left w-full">
+                        Sign In
+                      </button>
+                    </SignInButton>
+                    <SignUpButton mode="modal">
+                      <button className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors w-full text-center">
+                        Sign Up
+                      </button>
+                    </SignUpButton>
+                  </div>
+                </SignedOut>
+                <SignedIn>
+                  <div className="flex flex-col gap-2">
+                    {isAdmin && (
+                      <Link
+                        href="/admin/dashboard"
+                        className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors text-center"
+                        onClick={() => setIsMenuOpen(false)}
+                      >
+                        Admin
+                      </Link>
+                    )}
+                    <Link
+                      href="/my-bookings"
+                      className="text-gray-300 hover:text-white text-sm font-medium transition-colors py-2.5 px-1"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      My Bookings
+                    </Link>
+                    <div className="flex items-center gap-2 py-2.5 px-1">
+                      <UserButton 
+                        appearance={{
+                          elements: {
+                            avatarBox: "w-8 h-8",
+                          },
+                        }}
+                      />
+                      <span className="text-gray-300 text-sm">Account</span>
+                    </div>
+                  </div>
+                </SignedIn>
+              </div>
             </div>
           </div>
         )}

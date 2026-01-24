@@ -52,10 +52,10 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
   );
   const venueRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // Fetch cover images in parallel for faster load
+  // Fetch cover images lazily - only load first 6 immediately, rest on scroll
   useEffect(() => {
-    const fetchCovers = async () => {
-      const promises = orderedVenues.map(async (brand) => {
+    const fetchCovers = async (brandsToLoad: Brand[]) => {
+      const promises = brandsToLoad.map(async (brand) => {
         try {
           const res = await fetch(`/api/venues/${brand.id}`, {
             cache: "force-cache",
@@ -82,7 +82,20 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
         })
       );
     };
-    fetchCovers();
+
+    // Load first 6 venues immediately (above the fold)
+    const initialVenues = orderedVenues.slice(0, 6);
+    fetchCovers(initialVenues);
+
+    // Load remaining venues after a delay (lazy load)
+    if (orderedVenues.length > 6) {
+      const remainingVenues = orderedVenues.slice(6);
+      const timeoutId = setTimeout(() => {
+        fetchCovers(remainingVenues);
+      }, 1000); // Load after 1 second
+
+      return () => clearTimeout(timeoutId);
+    }
   }, [orderedVenues]);
 
   const getLogoPath = (brandId: string) => {
@@ -183,7 +196,7 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
                 >
                   <Link
                     href={`/${brand.id}`}
-                    prefetch
+                    prefetch={false}
                     className="flex flex-col items-center text-center w-full group/card"
                   >
                     <motion.div

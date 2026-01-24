@@ -1,6 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { clerkClient } from "@clerk/nextjs/server";
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
 
@@ -16,10 +17,26 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     return NextResponse.next();
   }
 
-  // Protect admin routes - require authentication
-  if (isAdminRoute(request)) {
+  // Protect admin routes - require authentication AND admin role (except /admin which is the sign-in page)
+  if (isAdminRoute(request) && pathname !== "/admin") {
     const { userId } = await auth();
     if (!userId) {
+      const signInUrl = new URL("/admin", request.url);
+      return NextResponse.redirect(signInUrl);
+    }
+
+    // Check if user has admin role using clerkClient (required in middleware)
+    try {
+      const client = await clerkClient();
+      const user = await client.users.getUser(userId);
+      const role = user.publicMetadata?.role as string;
+      if (role !== "admin" && role !== "main_admin") {
+        // User is authenticated but not an admin - redirect to home
+        return NextResponse.redirect(new URL("/", request.url));
+      }
+    } catch (error) {
+      // If we can't fetch user, redirect to sign in for safety
+      console.error("Error fetching user in middleware:", error);
       const signInUrl = new URL("/admin", request.url);
       return NextResponse.redirect(signInUrl);
     }

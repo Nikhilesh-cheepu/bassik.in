@@ -9,19 +9,48 @@ export async function GET(
   try {
     const { brandId } = await params;
 
+    // Add cache headers for better performance
+    const headers = {
+      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+    };
+
+    // Optimize query - only fetch what's needed, use select for better performance
     const venue = await prisma.venue.findUnique({
       where: { brandId },
-      include: {
+      select: {
+        id: true,
+        brandId: true,
+        name: true,
+        shortName: true,
+        address: true,
+        mapUrl: true,
         images: {
           orderBy: [{ type: "asc" }, { order: "asc" }],
+          select: {
+            url: true,
+            type: true,
+          },
         },
         menus: {
           include: {
             images: {
               orderBy: { order: "asc" },
+              select: {
+                url: true,
+              },
             },
           },
           orderBy: { name: "asc" },
+          select: {
+            id: true,
+            name: true,
+            thumbnailUrl: true,
+            images: {
+              select: {
+                url: true,
+              },
+            },
+          },
         },
       },
     });
@@ -46,19 +75,22 @@ export async function GET(
       images: menu.images.map((img: { url: string }) => img.url),
     }));
 
-    return NextResponse.json({
-      venue: {
-        id: venue.id,
-        brandId: venue.brandId,
-        name: venue.name,
-        shortName: venue.shortName,
-        address: venue.address,
-        mapUrl: venue.mapUrl,
-        coverImages,
-        galleryImages,
-        menus,
+    return NextResponse.json(
+      {
+        venue: {
+          id: venue.id,
+          brandId: venue.brandId,
+          name: venue.name,
+          shortName: venue.shortName,
+          address: venue.address,
+          mapUrl: venue.mapUrl,
+          coverImages,
+          galleryImages,
+          menus,
+        },
       },
-    });
+      { headers }
+    );
   } catch (error) {
     console.error("Error fetching venue:", error);
     return NextResponse.json(

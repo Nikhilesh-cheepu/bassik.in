@@ -3,6 +3,7 @@
 import { useState, FormEvent, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Brand } from "@/lib/brands";
+import { useUser, SignInButton } from "@clerk/nextjs";
 
 interface ReservationFormProps {
   brand: Brand;
@@ -28,14 +29,8 @@ type Discount = {
 };
 
 export default function ReservationForm({ brand }: ReservationFormProps) {
-  const formatTo12Hour = (time24: string): string => {
-    if (!time24) return "";
-    const [hours, minutes] = time24.split(":").map(Number);
-    const period = hours >= 12 ? "PM" : "AM";
-    const hours12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
-    return `${hours12}:${minutes.toString().padStart(2, "0")}${period}`;
-  };
-
+  // ALL HOOKS MUST BE CALLED FIRST - before any conditional returns
+  const { isLoaded, isSignedIn, user } = useUser();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<FormData>({
     fullName: "",
@@ -56,24 +51,16 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   const [timeSlotTab, setTimeSlotTab] = useState<"lunch" | "dinner">("lunch");
   const [timeSlotPickerOpen, setTimeSlotPickerOpen] = useState(true);
 
-  useEffect(() => {
-    setCurrentStep(1);
-    setFormData({
-      fullName: "",
-      contactNumber: "",
-      numberOfMen: "",
-      numberOfWomen: "",
-      numberOfCouples: "",
-      date: "",
-      timeSlot: "",
-      selectedDiscounts: [],
-      notes: "",
-    });
-    setTimeSlotTab("lunch");
-    setTimeSlotPickerOpen(true);
-    setSubmitStatus({ type: null, message: "" });
-  }, [brand.id]);
+  // Helper function (not a hook)
+  const formatTo12Hour = (time24: string): string => {
+    if (!time24) return "";
+    const [hours, minutes] = time24.split(":").map(Number);
+    const period = hours >= 12 ? "PM" : "AM";
+    const hours12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+    return `${hours12}:${minutes.toString().padStart(2, "0")}${period}`;
+  };
 
+  // ALL useMemo hooks must be called before any returns
   const allTimeSlots = useMemo(() => {
     const slots: { value24: string; display12: string; category: "lunch" | "dinner" }[] = [];
     const isClubRogue = brand.id.startsWith("club-rogue");
@@ -172,6 +159,61 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     const now = new Date();
     return now.toISOString().split("T")[0];
   }, []);
+
+  // ALL useEffect hooks must be called before any returns
+  useEffect(() => {
+    if (isSignedIn) {
+      setCurrentStep(1);
+      setFormData({
+        fullName: "",
+        contactNumber: "",
+        numberOfMen: "",
+        numberOfWomen: "",
+        numberOfCouples: "",
+        date: "",
+        timeSlot: "",
+        selectedDiscounts: [],
+        notes: "",
+      });
+      setTimeSlotTab("lunch");
+      setTimeSlotPickerOpen(true);
+      setSubmitStatus({ type: null, message: "" });
+    }
+  }, [brand.id, isSignedIn]);
+
+  // Show login prompt if not authenticated (AFTER all hooks)
+  if (!isLoaded) {
+    return (
+      <div className="w-full flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <div className="w-full">
+        <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 sm:p-12 text-center border border-white/10">
+          <div className="max-w-md mx-auto">
+            <div className="mb-6">
+              <svg className="w-16 h-16 mx-auto text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">Sign In Required</h2>
+            <p className="text-gray-300 mb-8 text-sm sm:text-base">
+              Please sign in to make a reservation. Your booking history will be saved to your account.
+            </p>
+            <SignInButton mode="modal">
+              <button className="px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors text-sm sm:text-base">
+                Sign In to Continue
+              </button>
+            </SignInButton>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const isSlotInPast = (date: string, slot: string): boolean => {
     if (!date || !slot) return false;

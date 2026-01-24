@@ -73,28 +73,60 @@ function OutletContent() {
     }
   }, [isDropdownOpen]);
 
-  // Load venue data when brand changes
+  // Load venue data when brand changes - optimized for faster loading
   useEffect(() => {
+    let cancelled = false;
+    
     const loadVenueData = async () => {
+      // Don't block UI - show page immediately, load data progressively
       setLoading(true);
       setLoadedGalleryImages(new Set());
       setFailedGalleryImages(new Set());
+      
       try {
+        // Use AbortController for cancellation
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+        
         const res = await fetch(`/api/venues/${selectedBrandId}`, {
-          cache: 'force-cache', // Use cache for faster loads
+          cache: 'force-cache',
+          signal: controller.signal,
+          headers: {
+            'Cache-Control': 'public, max-age=60',
+          },
         });
+        
+        clearTimeout(timeoutId);
+        
+        if (cancelled) return;
+        
         if (res.ok) {
           const data = await res.json();
-          setVenueData({
+          if (cancelled) return;
+          
+          // Update state progressively - cover image first
+          setVenueData(prev => ({
+            ...prev,
             coverImages: data.venue.coverImages || [],
-            galleryImages: data.venue.galleryImages || [],
-            menus: data.venue.menus || [],
-            location: {
-              address: data.venue.address || "",
-              mapUrl: data.venue.mapUrl || "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
-            },
-          });
+          }));
+          
+          // Then update rest of data
+          setTimeout(() => {
+            if (!cancelled) {
+              setVenueData(prev => ({
+                ...prev,
+                galleryImages: data.venue.galleryImages || [],
+                menus: data.venue.menus || [],
+                location: {
+                  address: data.venue.address || "",
+                  mapUrl: data.venue.mapUrl || "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
+                },
+              }));
+              setLoading(false);
+            }
+          }, 50); // Small delay to show cover image first
         } else {
+          if (cancelled) return;
           setVenueData({
             coverImages: [],
             galleryImages: [],
@@ -104,8 +136,14 @@ function OutletContent() {
               mapUrl: "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
             },
           });
+          setLoading(false);
         }
-      } catch (error) {
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          console.log('Request cancelled');
+          return;
+        }
+        if (cancelled) return;
         console.error("Error fetching venue data:", error);
         setVenueData({
           coverImages: [],
@@ -116,11 +154,15 @@ function OutletContent() {
             mapUrl: "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
           },
         });
-      } finally {
         setLoading(false);
       }
     };
+    
     loadVenueData();
+    
+    return () => {
+      cancelled = true;
+    };
   }, [selectedBrandId]);
 
   const handleBookNow = () => {
@@ -145,16 +187,25 @@ function OutletContent() {
     ? '/logos/club-rogue.png' 
     : `/logos/${selectedBrand.id}.png`;
 
-  // Don't block rendering - show content immediately
-  if (!mounted) {
-    return null;
-  }
+  // Show page immediately - don't wait for mounted
+  // if (!mounted) {
+  //   return null;
+  // }
 
   return (
     <div className="min-h-screen bg-black">
       {/* Full-bleed Cover Image - No Sliding */}
       <div className="relative w-full h-[60vh] sm:h-[65vh] overflow-hidden">
-        {loading ? (
+        {/* Show brand gradient immediately while loading */}
+        {!coverImage && (
+          <div 
+            className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black"
+            style={{
+              background: `linear-gradient(135deg, ${selectedBrand.accentColor}20, ${selectedBrand.accentColor}40, black)`,
+            }}
+          />
+        )}
+        {loading && coverImage ? (
           <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black animate-pulse" />
         ) : coverImage ? (
           <Image

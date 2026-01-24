@@ -45,8 +45,8 @@ export default function AdminsPage() {
   };
 
   const handleToggleAdmin = async (adminId: string, currentActive: boolean) => {
-    // Admins are hardcoded in code, cannot be toggled
-    alert("Admins are managed in code. To modify admins, edit the HARDCODED_ADMINS array in lib/auth.ts");
+    // Admins are managed in Clerk Dashboard via user metadata
+    alert("Admins are managed in Clerk Dashboard. To modify admins, go to Clerk Dashboard → Users → Edit user → Metadata → Set role to 'admin' or 'main_admin'");
   };
 
 
@@ -92,7 +92,7 @@ export default function AdminsPage() {
       <main className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 mb-4">
           <p className="text-xs sm:text-sm text-blue-800">
-            <strong>Note:</strong> Admins are managed in code. To add or modify admins, edit the <code className="bg-blue-100 px-1 py-0.5 rounded">HARDCODED_ADMINS</code> array in <code className="bg-blue-100 px-1 py-0.5 rounded">lib/auth.ts</code>
+            <strong>Note:</strong> Admins are managed in Clerk Dashboard. To add or modify admins, go to <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" className="underline">Clerk Dashboard</a> → Users → Edit user → Metadata → Set role to <code className="bg-blue-100 px-1 py-0.5 rounded">"admin"</code> or <code className="bg-blue-100 px-1 py-0.5 rounded">"main_admin"</code>
           </p>
         </div>
         {/* Card-Based Admins List */}

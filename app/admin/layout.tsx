@@ -1,16 +1,9 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
-
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { userId } = await auth();
-
-  if (!userId) {
-    redirect("/admin");
-  }
-
+  // Auth protection is handled by middleware.ts
+  // This layout just provides structure for admin pages
   return <>{children}</>;
 }

@@ -1,10 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { auth, currentUser } from "@clerk/nextjs/server";
 
 const RESERVATION_PHONE_NUMBER = "917013884485"; // India + business 10-digit
 
 export async function POST(request: NextRequest) {
   try {
+    // Require authentication
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Unauthorized - Please sign in to make a reservation" },
+        { status: 401 }
+      );
+    }
+
+    // Get user info to sync to database
+    const user = await currentUser();
+    if (!user) {
+      return NextResponse.json(
+        { error: "User not found" },
+        { status: 404 }
+      );
+    }
+
     const body = await request.json();
     let {
       fullName,
@@ -160,7 +179,37 @@ Reservation submitted via bassik.in`;
       });
     }
 
-    // Save to database
+    // Ensure user exists in database (sync from Clerk)
+    // Handle case where User table might not exist yet (migration not run)
+    let dbUser;
+    try {
+      dbUser = await prisma.user.upsert({
+        where: { id: userId },
+        update: {
+          email: user.emailAddresses[0]?.emailAddress || "",
+          firstName: user.firstName || null,
+          lastName: user.lastName || null,
+          imageUrl: user.imageUrl || null,
+        },
+        create: {
+          id: userId,
+          email: user.emailAddresses[0]?.emailAddress || "",
+          firstName: user.firstName || null,
+          lastName: user.lastName || null,
+          imageUrl: user.imageUrl || null,
+        },
+      });
+    } catch (error: any) {
+      // If User table doesn't exist, log warning but continue (backward compatibility)
+      if (error?.code === "P2021" || error?.message?.includes("does not exist")) {
+        console.warn("User table not found. Please run database migration: npm run db:migrate");
+        // Continue without userId - backward compatible
+      } else {
+        throw error;
+      }
+    }
+
+    // Save to database with userId (if User table exists)
     const reservation = await prisma.reservation.create({
       data: {
         venueId: venue.id,
@@ -178,6 +227,7 @@ Reservation submitted via bassik.in`;
           ? JSON.stringify(selectedDiscounts)
           : null,
         status: "PENDING",
+        userId: dbUser ? userId : null, // Link to user if User table exists
       },
     });
 

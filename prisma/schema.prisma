@@ -9,6 +9,20 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id            String        @id // Clerk user ID
+  email         String        @unique
+  firstName     String?
+  lastName      String?
+  imageUrl      String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  reservations Reservation[]
+
+  @@index([email])
+}
+
 model Venue {
   id        String   @id @default(cuid())
   brandId   String   @unique // Matches brand.id from brands.ts
@@ -89,6 +103,9 @@ model Reservation {
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
+  userId String? // Clerk user ID - optional for backward compatibility
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
 
   @@index([venueId])
@@ -96,6 +113,7 @@ model Reservation {
   @@index([date])
   @@index([status])
   @@index([createdAt])
+  @@index([userId])
 }
 
 enum ReservationStatus {

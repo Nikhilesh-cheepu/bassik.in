@@ -7,13 +7,19 @@ import { useUser } from "@clerk/nextjs";
 
 export default function AdminLogin() {
   const router = useRouter();
-  const { isSignedIn } = useUser();
+  const { isSignedIn, user, isLoaded } = useUser();
 
   useEffect(() => {
-    if (isSignedIn) {
-      router.push("/admin/dashboard");
+    if (isLoaded && isSignedIn) {
+      const role = user?.publicMetadata?.role as string;
+      if (role === "admin" || role === "main_admin") {
+        router.push("/admin/dashboard");
+      } else {
+        // Normal user - redirect to home
+        router.push("/");
+      }
     }
-  }, [isSignedIn, router]);
+  }, [isLoaded, isSignedIn, user, router]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 flex items-center justify-center px-4 py-12">

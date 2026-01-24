@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { HARDCODED_ADMINS } from "@/lib/auth";
+import { auth, currentUser } from "@clerk/nextjs/server";
 
-// GET - Get all hardcoded admins (only MAIN_ADMIN)
+// GET - Get all Clerk admin users (users with admin role in metadata)
 export async function GET(request: NextRequest) {
   try {
     const { userId } = await auth();
@@ -10,26 +9,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // For now, all authenticated Clerk users can see admins
-    // You can add role-based checks using Clerk metadata if needed
+    // Check if user has admin role
+    const user = await currentUser();
+    const role = user?.publicMetadata?.role as string;
+    if (role !== "admin" && role !== "main_admin") {
+      return NextResponse.json({ error: "Forbidden - Admin access required" }, { status: 403 });
+    }
 
-    // Return hardcoded admins with formatted structure
-    const admins = HARDCODED_ADMINS.map((a) => ({
-      id: a.id,
-      username: a.username,
-      role: a.role,
-      active: true, // All hardcoded admins are active
-      venuePermissions: a.venuePermissions.map((venueId) => ({
-        venue: {
-          brandId: venueId,
-          name: venueId,
-          shortName: venueId,
-        },
-      })),
-      createdAt: new Date().toISOString(),
-    }));
-
-    return NextResponse.json({ admins });
+    // Note: Clerk admins are managed via Clerk Dashboard metadata
+    // This endpoint is kept for compatibility but returns empty array
+    // Admins should be managed in Clerk Dashboard by setting role in user metadata
+    return NextResponse.json({ admins: [] });
   } catch (error) {
     console.error("Error fetching admins:", error);
     return NextResponse.json(
@@ -39,18 +29,18 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Not supported (admins are hardcoded in code)
+// POST - Not supported (admins are managed in Clerk Dashboard)
 export async function POST(request: NextRequest) {
   return NextResponse.json(
-    { error: "Admin creation is not supported. Admins are managed in code." },
+    { error: "Admin creation is not supported via API. Admins are managed in Clerk Dashboard by setting role in user metadata." },
     { status: 405 }
   );
 }
 
-// PATCH - Not supported (admins are hardcoded in code)
+// PATCH - Not supported (admins are managed in Clerk Dashboard)
 export async function PATCH(request: NextRequest) {
   return NextResponse.json(
-    { error: "Admin updates are not supported. Admins are managed in code." },
+    { error: "Admin updates are not supported via API. Admins are managed in Clerk Dashboard by setting role in user metadata." },
     { status: 405 }
   );
 }
