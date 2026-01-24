@@ -9,48 +9,25 @@ export async function GET(
   try {
     const { brandId } = await params;
 
-    // Add cache headers for better performance
+    // Add cache headers - shorter cache for admin updates to show quickly
     const headers = {
-      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+      'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
     };
 
-    // Optimize query - only fetch what's needed, use select for better performance
+    // Fetch venue data with all related images and menus
     const venue = await prisma.venue.findUnique({
       where: { brandId },
-      select: {
-        id: true,
-        brandId: true,
-        name: true,
-        shortName: true,
-        address: true,
-        mapUrl: true,
+      include: {
         images: {
           orderBy: [{ type: "asc" }, { order: "asc" }],
-          select: {
-            url: true,
-            type: true,
-          },
         },
         menus: {
           include: {
             images: {
               orderBy: { order: "asc" },
-              select: {
-                url: true,
-              },
             },
           },
           orderBy: { name: "asc" },
-          select: {
-            id: true,
-            name: true,
-            thumbnailUrl: true,
-            images: {
-              select: {
-                url: true,
-              },
-            },
-          },
         },
       },
     });

@@ -89,10 +89,10 @@ function OutletContent() {
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
         
         const res = await fetch(`/api/venues/${selectedBrandId}`, {
-          cache: 'force-cache',
+          cache: 'no-store', // Always fetch fresh data
           signal: controller.signal,
           headers: {
-            'Cache-Control': 'public, max-age=60',
+            'Cache-Control': 'no-cache',
           },
         });
         

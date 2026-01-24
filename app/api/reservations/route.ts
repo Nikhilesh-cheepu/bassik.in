@@ -181,8 +181,9 @@ Reservation submitted via bassik.in`;
 
     // Ensure user exists in database (sync from Clerk)
     // Handle case where User table might not exist yet (migration not run)
-    let dbUser;
+    let dbUser = null;
     try {
+      // Check if User model exists by trying to find first user
       dbUser = await prisma.user.upsert({
         where: { id: userId },
         update: {
@@ -201,35 +202,90 @@ Reservation submitted via bassik.in`;
       });
     } catch (error: any) {
       // If User table doesn't exist, log warning but continue (backward compatibility)
-      if (error?.code === "P2021" || error?.message?.includes("does not exist")) {
+      // P2021 = Table does not exist, P2002 = Unique constraint (might be OK)
+      if (
+        error?.code === "P2021" || 
+        error?.message?.includes("does not exist") ||
+        error?.message?.includes("Unknown model") ||
+        error?.message?.includes("model User")
+      ) {
         console.warn("User table not found. Please run database migration: npm run db:migrate");
-        // Continue without userId - backward compatible
+        console.warn("Continuing without userId - reservation will be created without user link");
+        dbUser = null; // Explicitly set to null
+      } else if (error?.code === "P2002") {
+        // Unique constraint violation - user might already exist, try to find it
+        try {
+          dbUser = await prisma.user.findUnique({ where: { id: userId } });
+        } catch (findError) {
+          console.warn("Could not find user after unique constraint error:", findError);
+          dbUser = null;
+        }
       } else {
-        throw error;
+        // For other errors, log but don't fail - allow reservation without user link
+        console.error("Error syncing user to database:", error);
+        dbUser = null;
       }
     }
 
     // Save to database with userId (if User table exists)
-    const reservation = await prisma.reservation.create({
-      data: {
-        venueId: venue.id,
-        brandId,
-        brandName,
-        fullName,
-        contactNumber,
-        numberOfMen: numberOfMen || "0",
-        numberOfWomen: numberOfWomen || "0",
-        numberOfCouples: numberOfCouples || "0",
-        date,
-        timeSlot: timeSlot || time || "",
-        notes: notes || null,
-        selectedDiscounts: selectedDiscounts
-          ? JSON.stringify(selectedDiscounts)
-          : null,
-        status: "PENDING",
-        userId: dbUser ? userId : null, // Link to user if User table exists
-      },
-    });
+    // Build reservation data object - start without userId
+    const reservationData: any = {
+      venueId: venue.id,
+      brandId,
+      brandName,
+      fullName,
+      contactNumber,
+      numberOfMen: numberOfMen || "0",
+      numberOfWomen: numberOfWomen || "0",
+      numberOfCouples: numberOfCouples || "0",
+      date,
+      timeSlot: timeSlot || time || "",
+      notes: notes || null,
+      selectedDiscounts: selectedDiscounts
+        ? JSON.stringify(selectedDiscounts)
+        : null,
+      status: "PENDING",
+    };
+
+    // Only add userId if User table exists and user was created successfully
+    // Don't add userId field at all if User table doesn't exist (avoids Prisma errors)
+    if (dbUser && userId) {
+      try {
+        // Try to add userId - if it fails, continue without it
+        reservationData.userId = userId;
+      } catch (err) {
+        console.warn("Could not add userId to reservation:", err);
+        // Continue without userId
+      }
+    }
+
+    let reservation;
+    try {
+      reservation = await prisma.reservation.create({
+        data: reservationData,
+      });
+    } catch (createError: any) {
+      // If creation fails due to userId foreign key constraint, try without userId
+      if (
+        (createError?.code === "P2003" || createError?.code === "P2014") && 
+        reservationData.userId
+      ) {
+        console.warn("Reservation creation failed with userId constraint, retrying without userId");
+        console.warn("Error details:", createError.message);
+        delete reservationData.userId;
+        reservation = await prisma.reservation.create({
+          data: reservationData,
+        });
+      } else {
+        // Log the full error for debugging
+        console.error("Reservation creation error:", {
+          code: createError?.code,
+          message: createError?.message,
+          meta: createError?.meta,
+        });
+        throw createError;
+      }
+    }
 
     // Encode message for WhatsApp URL
     const encodedMessage = encodeURIComponent(message);
@@ -244,10 +300,30 @@ Reservation submitted via bassik.in`;
       },
       { status: 200 }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error processing reservation:", error);
+    
+    // Provide more detailed error information for debugging
+    const errorMessage = error?.message || "Internal server error";
+    const errorCode = error?.code || "UNKNOWN";
+    
+    // Log full error details (always log in development, minimal in production)
+    console.error("Reservation API Error:", {
+      message: errorMessage,
+      code: errorCode,
+      meta: error?.meta,
+      stack: process.env.NODE_ENV === "development" ? error?.stack : undefined,
+    });
+
+    // Return user-friendly error message with details in development
     return NextResponse.json(
-      { error: "Internal server error" },
+      { 
+        error: "Failed to process reservation. Please try again.",
+        ...(process.env.NODE_ENV === "development" && {
+          details: errorMessage,
+          code: errorCode,
+        }),
+      },
       { status: 500 }
     );
   }
