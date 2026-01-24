@@ -265,12 +265,16 @@ Reservation submitted via bassik.in`;
         data: reservationData,
       });
     } catch (createError: any) {
-      // If creation fails due to userId foreign key constraint, try without userId
+      // If creation fails due to userId foreign key constraint or field doesn't exist, try without userId
       if (
-        (createError?.code === "P2003" || createError?.code === "P2014") && 
+        (createError?.code === "P2003" || 
+         createError?.code === "P2014" || 
+         createError?.code === "P2009" ||
+         createError?.message?.includes("Unknown argument") ||
+         createError?.message?.includes("userId")) && 
         reservationData.userId
       ) {
-        console.warn("Reservation creation failed with userId constraint, retrying without userId");
+        console.warn("Reservation creation failed with userId, retrying without userId");
         console.warn("Error details:", createError.message);
         delete reservationData.userId;
         reservation = await prisma.reservation.create({
