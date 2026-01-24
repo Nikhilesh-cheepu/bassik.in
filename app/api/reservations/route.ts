@@ -6,29 +6,49 @@ const RESERVATION_PHONE_NUMBER = "917013884485"; // India + business 10-digit
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("[RESERVATION API] Starting reservation request");
+    
     // Require authentication
     const { userId } = await auth();
     if (!userId) {
+      console.log("[RESERVATION API] No userId - unauthorized");
       return NextResponse.json(
         { error: "Unauthorized - Please sign in to make a reservation" },
         { status: 401 }
       );
     }
 
+    console.log("[RESERVATION API] User authenticated:", userId);
+
     // Get user info to sync to database (optional - don't fail if can't get)
     let user;
     try {
       user = await currentUser();
+      console.log("[RESERVATION API] User fetched from Clerk:", user?.id);
     } catch (userError: any) {
-      console.warn("Could not fetch current user:", userError?.message);
+      console.warn("[RESERVATION API] Could not fetch current user:", userError?.message);
       // Continue without user - reservation can still be created
     }
 
     if (!user) {
-      console.warn("User not found from Clerk, but continuing with reservation");
+      console.warn("[RESERVATION API] User not found from Clerk, but continuing with reservation");
     }
 
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+      console.log("[RESERVATION API] Request body received:", { 
+        brandId: body.brandId, 
+        hasDate: !!body.date,
+        hasTimeSlot: !!body.timeSlot,
+      });
+    } catch (parseError: any) {
+      console.error("[RESERVATION API] Error parsing request body:", parseError);
+      return NextResponse.json(
+        { error: "Invalid request data" },
+        { status: 400 }
+      );
+    }
     let {
       fullName,
       contactNumber,
@@ -167,20 +187,34 @@ ${guestCountStr}${offersSection}${notesSection}
 Reservation submitted via bassik.in`;
 
     // Find or create venue
-    let venue = await prisma.venue.findUnique({
-      where: { brandId },
-    });
-
-    if (!venue) {
-      // Create venue if it doesn't exist
-      venue = await prisma.venue.create({
-        data: {
-          brandId,
-          name: brandName,
-          shortName: brandName,
-          address: "Address to be updated",
-        },
+    console.log("[RESERVATION API] Looking for venue:", brandId);
+    let venue;
+    try {
+      venue = await prisma.venue.findUnique({
+        where: { brandId },
       });
+      console.log("[RESERVATION API] Venue found:", venue?.id || "not found");
+
+      if (!venue) {
+        // Create venue if it doesn't exist
+        console.log("[RESERVATION API] Creating new venue:", brandId);
+        venue = await prisma.venue.create({
+          data: {
+            brandId,
+            name: brandName,
+            shortName: brandName,
+            address: "Address to be updated",
+          },
+        });
+        console.log("[RESERVATION API] Venue created:", venue.id);
+      }
+    } catch (venueError: any) {
+      console.error("[RESERVATION API] Error with venue:", {
+        code: venueError?.code,
+        message: venueError?.message,
+        meta: venueError?.meta,
+      });
+      throw venueError;
     }
 
     // Ensure user exists in database (sync from Clerk)
@@ -265,33 +299,59 @@ Reservation submitted via bassik.in`;
       }
     }
 
+    console.log("[RESERVATION API] Creating reservation with data:", {
+      venueId: reservationData.venueId,
+      brandId: reservationData.brandId,
+      hasUserId: !!reservationData.userId,
+    });
+
     let reservation;
     try {
       reservation = await prisma.reservation.create({
         data: reservationData,
       });
+      console.log("[RESERVATION API] Reservation created successfully:", reservation.id);
     } catch (createError: any) {
+      console.error("[RESERVATION API] Reservation creation failed:", {
+        code: createError?.code,
+        message: createError?.message,
+        meta: createError?.meta,
+        hasUserId: !!reservationData.userId,
+      });
+      
       // If creation fails due to userId foreign key constraint or field doesn't exist, try without userId
       if (
         (createError?.code === "P2003" || 
          createError?.code === "P2014" || 
          createError?.code === "P2009" ||
+         createError?.code === "P2011" ||
          createError?.message?.includes("Unknown argument") ||
-         createError?.message?.includes("userId")) && 
+         createError?.message?.includes("userId") ||
+         createError?.message?.includes("Unknown field")) && 
         reservationData.userId
       ) {
-        console.warn("Reservation creation failed with userId, retrying without userId");
-        console.warn("Error details:", createError.message);
+        console.warn("[RESERVATION API] Retrying reservation creation without userId");
         delete reservationData.userId;
-        reservation = await prisma.reservation.create({
-          data: reservationData,
-        });
+        try {
+          reservation = await prisma.reservation.create({
+            data: reservationData,
+          });
+          console.log("[RESERVATION API] Reservation created without userId:", reservation.id);
+        } catch (retryError: any) {
+          console.error("[RESERVATION API] Retry also failed:", {
+            code: retryError?.code,
+            message: retryError?.message,
+            meta: retryError?.meta,
+          });
+          throw retryError;
+        }
       } else {
         // Log the full error for debugging
-        console.error("Reservation creation error:", {
+        console.error("[RESERVATION API] Reservation creation error (non-recoverable):", {
           code: createError?.code,
           message: createError?.message,
           meta: createError?.meta,
+          stack: createError?.stack,
         });
         throw createError;
       }
@@ -301,6 +361,7 @@ Reservation submitted via bassik.in`;
     const encodedMessage = encodeURIComponent(message);
     const whatsappUrl = `https://wa.me/${RESERVATION_PHONE_NUMBER}?text=${encodedMessage}`;
 
+    console.log("[RESERVATION API] Reservation successful, returning response");
     return NextResponse.json(
       {
         success: true,
@@ -311,28 +372,28 @@ Reservation submitted via bassik.in`;
       { status: 200 }
     );
   } catch (error: any) {
-    console.error("Error processing reservation:", error);
+    console.error("[RESERVATION API] Top-level error caught:", error);
     
     // Provide more detailed error information for debugging
     const errorMessage = error?.message || "Internal server error";
     const errorCode = error?.code || "UNKNOWN";
     
-    // Log full error details (always log in development, minimal in production)
-    console.error("Reservation API Error:", {
+    // Log full error details (always log - helps with debugging)
+    console.error("[RESERVATION API] Full error details:", {
       message: errorMessage,
       code: errorCode,
       meta: error?.meta,
-      stack: process.env.NODE_ENV === "development" ? error?.stack : undefined,
+      name: error?.name,
+      stack: error?.stack?.split('\n').slice(0, 5).join('\n'), // First 5 lines of stack
     });
 
-    // Return user-friendly error message with details in development
+    // Return user-friendly error message with details for debugging
     return NextResponse.json(
       { 
         error: "Failed to process reservation. Please try again.",
-        ...(process.env.NODE_ENV === "development" && {
-          details: errorMessage,
-          code: errorCode,
-        }),
+        // Always include details in response for debugging (can be removed in production if needed)
+        details: errorMessage,
+        code: errorCode,
       },
       { status: 500 }
     );
