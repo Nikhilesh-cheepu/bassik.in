@@ -235,6 +235,8 @@ Reservation submitted via bassik.in`;
     // Ensure user exists in database (sync from Clerk)
     // Handle case where User table might not exist yet (migration not run)
     let dbUser = null;
+    let userTableExists = false; // Track if User table exists
+    
     if (user) {
       try {
         // Check if User model exists by trying to find first user
@@ -254,6 +256,8 @@ Reservation submitted via bassik.in`;
             imageUrl: user.imageUrl || null,
           },
         });
+        userTableExists = true; // If upsert succeeded, table exists
+        console.log("[RESERVATION API] User synced to database:", dbUser.id);
       } catch (error: any) {
         // If User table doesn't exist, log warning but continue (backward compatibility)
         // P2021 = Table does not exist, P2002 = Unique constraint (might be OK)
@@ -261,23 +265,29 @@ Reservation submitted via bassik.in`;
           error?.code === "P2021" || 
           error?.message?.includes("does not exist") ||
           error?.message?.includes("Unknown model") ||
-          error?.message?.includes("model User")
+          error?.message?.includes("model User") ||
+          error?.message?.includes("The table 'public.User'")
         ) {
-          console.warn("User table not found. Please run database migration: npm run db:migrate");
-          console.warn("Continuing without userId - reservation will be created without user link");
+          console.warn("[RESERVATION API] User table not found. Please run database migration: npm run db:migrate");
+          console.warn("[RESERVATION API] Continuing without userId - reservation will be created without user link");
           dbUser = null; // Explicitly set to null
+          userTableExists = false; // Mark that table doesn't exist
         } else if (error?.code === "P2002") {
           // Unique constraint violation - user might already exist, try to find it
           try {
             dbUser = await prisma.user.findUnique({ where: { id: userId } });
+            userTableExists = true; // If find succeeded, table exists
+            console.log("[RESERVATION API] User found in database:", dbUser?.id);
           } catch (findError) {
-            console.warn("Could not find user after unique constraint error:", findError);
+            console.warn("[RESERVATION API] Could not find user after unique constraint error:", findError);
             dbUser = null;
+            userTableExists = false;
           }
         } else {
           // For other errors, log but don't fail - allow reservation without user link
-          console.error("Error syncing user to database:", error);
+          console.error("[RESERVATION API] Error syncing user to database:", error);
           dbUser = null;
+          userTableExists = false; // Assume table doesn't exist on unknown errors
         }
       }
     }
@@ -304,20 +314,19 @@ Reservation submitted via bassik.in`;
 
     // Only add userId if User table exists and user was created successfully
     // Don't add userId field at all if User table doesn't exist (avoids Prisma errors)
-    if (dbUser && userId) {
-      try {
-        // Try to add userId - if it fails, continue without it
-        reservationData.userId = userId;
-      } catch (err) {
-        console.warn("Could not add userId to reservation:", err);
-        // Continue without userId
-      }
+    // IMPORTANT: Only add userId if we confirmed the User table exists
+    if (userTableExists && dbUser && userId) {
+      reservationData.userId = userId;
+      console.log("[RESERVATION API] Adding userId to reservation:", userId);
+    } else {
+      console.log("[RESERVATION API] Skipping userId - User table may not exist or user not synced");
     }
 
     console.log("[RESERVATION API] Creating reservation with data:", {
       venueId: reservationData.venueId,
       brandId: reservationData.brandId,
       hasUserId: !!reservationData.userId,
+      userTableExists,
     });
 
     let reservation;
@@ -332,31 +341,38 @@ Reservation submitted via bassik.in`;
         message: createError?.message,
         meta: createError?.meta,
         hasUserId: !!reservationData.userId,
+        errorName: createError?.name,
       });
       
-      // If creation fails due to userId foreign key constraint or field doesn't exist, try without userId
-      if (
-        (createError?.code === "P2003" || 
-         createError?.code === "P2014" || 
-         createError?.code === "P2009" ||
-         createError?.code === "P2011" ||
-         createError?.message?.includes("Unknown argument") ||
-         createError?.message?.includes("userId") ||
-         createError?.message?.includes("Unknown field")) && 
-        reservationData.userId
-      ) {
-        console.warn("[RESERVATION API] Retrying reservation creation without userId");
+      // If creation fails due to userId foreign key constraint, field doesn't exist, or unknown argument
+      // Try again without userId
+      const isUserIdRelatedError = 
+        createError?.code === "P2003" || // Foreign key constraint
+        createError?.code === "P2014" || // Related record not found
+        createError?.code === "P2009" || // Unknown argument
+        createError?.code === "P2011" || // Null constraint
+        createError?.code === "P2021" || // Table/column does not exist
+        createError?.message?.includes("Unknown argument") ||
+        createError?.message?.includes("Unknown field") ||
+        createError?.message?.includes("userId") ||
+        createError?.message?.includes("does not exist") ||
+        (createError?.meta?.target && Array.isArray(createError.meta.target) && createError.meta.target.includes("userId"));
+      
+      if (isUserIdRelatedError && reservationData.userId) {
+        console.warn("[RESERVATION API] userId-related error detected, retrying without userId");
+        console.warn("[RESERVATION API] Original error:", createError.message);
         delete reservationData.userId;
         try {
           reservation = await prisma.reservation.create({
             data: reservationData,
           });
-          console.log("[RESERVATION API] Reservation created without userId:", reservation.id);
+          console.log("[RESERVATION API] Reservation created successfully without userId:", reservation.id);
         } catch (retryError: any) {
           console.error("[RESERVATION API] Retry also failed:", {
             code: retryError?.code,
             message: retryError?.message,
             meta: retryError?.meta,
+            errorName: retryError?.name,
           });
           throw retryError;
         }
@@ -366,7 +382,8 @@ Reservation submitted via bassik.in`;
           code: createError?.code,
           message: createError?.message,
           meta: createError?.meta,
-          stack: createError?.stack,
+          errorName: createError?.name,
+          stack: createError?.stack?.split('\n').slice(0, 5).join('\n'),
         });
         throw createError;
       }
