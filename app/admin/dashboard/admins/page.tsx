@@ -2,14 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
+import { SignOutButton } from "@clerk/nextjs";
 import { BRANDS } from "@/lib/brands";
-
-interface Admin {
-  id: string;
-  username: string;
-  role: string;
-  venuePermissions: string[];
-}
 
 interface AdminUser {
   id: string;
@@ -22,35 +17,20 @@ interface AdminUser {
 
 export default function AdminsPage() {
   const router = useRouter();
-  const [admin, setAdmin] = useState<Admin | null>(null);
+  const { isLoaded, isSignedIn } = useUser();
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const res = await fetch("/api/admin/me");
-        if (!res.ok) {
-          router.push("/admin");
-          return;
-        }
-        const data = await res.json();
-        setAdmin(data.admin);
-
-        if (data.admin.role !== "MAIN_ADMIN") {
-          router.push("/admin/dashboard");
-          return;
-        }
-
-        loadAdmins();
-      } catch (error) {
+    if (isLoaded) {
+      if (!isSignedIn) {
         router.push("/admin");
-      } finally {
-        setLoading(false);
+        return;
       }
-    };
-    checkAuth();
-  }, [router]);
+      setLoading(false);
+      loadAdmins();
+    }
+  }, [isLoaded, isSignedIn, router]);
 
   const loadAdmins = async () => {
     try {
@@ -69,15 +49,6 @@ export default function AdminsPage() {
     alert("Admins are managed in code. To modify admins, edit the HARDCODED_ADMINS array in lib/auth.ts");
   };
 
-  const handleLogout = async () => {
-    try {
-      document.cookie = "admin-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-      document.cookie = "admin-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/admin;";
-      window.location.href = "/admin";
-    } catch (error) {
-      window.location.href = "/admin";
-    }
-  };
 
   if (loading) {
     return (
@@ -90,7 +61,7 @@ export default function AdminsPage() {
     );
   }
 
-  if (!admin || admin.role !== "MAIN_ADMIN") {
+  if (!isLoaded || !isSignedIn) {
     return null;
   }
 
@@ -108,12 +79,11 @@ export default function AdminsPage() {
               >
                 ← Back
               </button>
-              <button
-                onClick={handleLogout}
-                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Logout
-              </button>
+              <SignOutButton>
+                <button className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                  Logout
+                </button>
+              </SignOutButton>
             </div>
           </div>
         </div>

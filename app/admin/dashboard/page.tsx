@@ -2,18 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
+import { SignOutButton } from "@clerk/nextjs";
 import Link from "next/link";
-
-interface Admin {
-  id: string;
-  username: string;
-  role: string;
-  venuePermissions: string[];
-}
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [admin, setAdmin] = useState<Admin | null>(null);
+  const { isLoaded, isSignedIn, user } = useUser();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalVenues: 0,
@@ -22,26 +17,17 @@ export default function AdminDashboard() {
   });
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const res = await fetch("/api/admin/me");
-        if (!res.ok) {
-          router.push("/admin");
-          return;
-        }
-        const data = await res.json();
-        setAdmin(data.admin);
-        loadStats(data.admin);
-      } catch (error) {
+    if (isLoaded) {
+      if (!isSignedIn) {
         router.push("/admin");
-      } finally {
-        setLoading(false);
+        return;
       }
-    };
-    checkAuth();
-  }, [router]);
+      setLoading(false);
+      loadStats();
+    }
+  }, [isLoaded, isSignedIn, router]);
 
-  const loadStats = async (adminData: Admin) => {
+  const loadStats = async () => {
     try {
       const [venuesRes, bookingsRes] = await Promise.all([
         fetch("/api/admin/venues"),
@@ -83,18 +69,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      // Clear cookie with all possible path variations
-      document.cookie = "admin-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-      document.cookie = "admin-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/admin;";
-      // Force immediate hard redirect to clear any cached state
-      window.location.href = "/admin";
-    } catch (error) {
-      // Fallback if cookie clearing fails
-      window.location.href = "/admin";
-    }
-  };
 
   if (loading) {
     return (
@@ -107,7 +81,7 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!admin) {
+  if (!isLoaded || !isSignedIn || !user) {
     return null;
   }
 
@@ -120,15 +94,14 @@ export default function AdminDashboard() {
             <div className="flex items-center gap-3">
               <h1 className="text-lg sm:text-xl font-bold text-gray-900">Dashboard</h1>
               <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
-                {admin.role === "MAIN_ADMIN" ? "Main Admin" : "Admin"}
+                Admin
               </span>
             </div>
-            <button
-              onClick={handleLogout}
-              className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Logout
-            </button>
+            <SignOutButton>
+              <button className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                Logout
+              </button>
+            </SignOutButton>
           </div>
         </div>
       </header>
@@ -155,14 +128,12 @@ export default function AdminDashboard() {
             >
               Bookings
             </Link>
-            {admin.role === "MAIN_ADMIN" && (
-              <Link
-                href="/admin/dashboard/admins"
-                className="border-b-2 border-transparent px-2 py-2.5 text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap"
-              >
-                Admins
-              </Link>
-            )}
+            <Link
+              href="/admin/dashboard/admins"
+              className="border-b-2 border-transparent px-2 py-2.5 text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap"
+            >
+              Admins
+            </Link>
           </div>
         </div>
       </nav>
@@ -254,11 +225,10 @@ export default function AdminDashboard() {
             </div>
           </Link>
 
-          {admin.role === "MAIN_ADMIN" && (
-            <Link
-              href="/admin/dashboard/admins"
-              className="bg-white rounded-xl shadow-sm p-4 sm:p-5 hover:shadow-md transition-all border border-gray-100 group"
-            >
+          <Link
+            href="/admin/dashboard/admins"
+            className="bg-white rounded-xl shadow-sm p-4 sm:p-5 hover:shadow-md transition-all border border-gray-100 group"
+          >
               <div className="flex items-center gap-3 sm:gap-4">
                 <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
                   <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -274,7 +244,6 @@ export default function AdminDashboard() {
                 </svg>
               </div>
             </Link>
-          )}
         </div>
       </main>
     </div>

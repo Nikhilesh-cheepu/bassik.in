@@ -2,16 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
+import { SignOutButton } from "@clerk/nextjs";
 import Image from "next/image";
 import { BRANDS } from "@/lib/brands";
 import VenueEditor from "@/components/admin/VenueEditor";
-
-interface Admin {
-  id: string;
-  username: string;
-  role: string;
-  venuePermissions: string[];
-}
 
 interface Venue {
   id: string;
@@ -26,30 +21,21 @@ interface Venue {
 
 export default function VenuesPage() {
   const router = useRouter();
-  const [admin, setAdmin] = useState<Admin | null>(null);
+  const { isLoaded, isSignedIn } = useUser();
   const [venues, setVenues] = useState<Venue[]>([]);
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const res = await fetch("/api/admin/me");
-        if (!res.ok) {
-          router.push("/admin");
-          return;
-        }
-        const data = await res.json();
-        setAdmin(data.admin);
-        loadVenues();
-      } catch (error) {
+    if (isLoaded) {
+      if (!isSignedIn) {
         router.push("/admin");
-      } finally {
-        setLoading(false);
+        return;
       }
-    };
-    checkAuth();
-  }, [router]);
+      setLoading(false);
+      loadVenues();
+    }
+  }, [isLoaded, isSignedIn, router]);
 
   const loadVenues = async () => {
     try {
@@ -97,15 +83,6 @@ export default function VenuesPage() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      document.cookie = "admin-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-      document.cookie = "admin-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/admin;";
-      window.location.href = "/admin";
-    } catch (error) {
-      window.location.href = "/admin";
-    }
-  };
 
   if (loading) {
     return (
@@ -118,7 +95,7 @@ export default function VenuesPage() {
     );
   }
 
-  if (!admin) {
+  if (!isLoaded || !isSignedIn) {
     return null;
   }
 
@@ -126,7 +103,7 @@ export default function VenuesPage() {
     return (
       <VenueEditor
         venue={selectedVenue}
-        admin={admin}
+        admin={null}
         onBack={handleBack}
         onSave={handleSave}
       />
@@ -147,12 +124,11 @@ export default function VenuesPage() {
               >
                 ← Back
               </button>
-              <button
-                onClick={handleLogout}
-                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Logout
-              </button>
+              <SignOutButton>
+                <button className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+                  Logout
+                </button>
+              </SignOutButton>
             </div>
           </div>
         </div>
@@ -161,15 +137,8 @@ export default function VenuesPage() {
       <main className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
           {BRANDS.map((brand) => {
-            // Check if admin can access this venue
-            const canAccess =
-              admin.role === "MAIN_ADMIN" ||
-              admin.venuePermissions.includes(brand.id);
-
-            if (!canAccess) {
-              return null;
-            }
-
+            // For now, all authenticated Clerk users can access all venues
+            // You can add role-based filtering using Clerk metadata if needed
             const venue = venues.find((v) => v.brandId === brand.id);
             const coverCount = venue?.images.filter((i) => i.type === "COVER").length || 0;
             const galleryCount = venue?.images.filter((i) => i.type === "GALLERY").length || 0;

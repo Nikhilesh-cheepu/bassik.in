@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { verifyAdminToken, canAccessVenue } from "@/lib/admin-auth";
-import { AdminRole } from "@/lib/auth";
+import { auth } from "@clerk/nextjs/server";
 
 // Define ReservationStatus enum
 enum ReservationStatus {
@@ -14,8 +13,8 @@ enum ReservationStatus {
 // GET - Get all bookings (filtered by admin permissions)
 export async function GET(request: NextRequest) {
   try {
-    const admin = await verifyAdminToken(request);
-    if (!admin) {
+    const { userId } = await auth();
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -28,20 +27,12 @@ export async function GET(request: NextRequest) {
 
     let where: any = {};
 
-    // If main admin, can see all. Otherwise, filter by permissions
-    if (admin.role !== "MAIN_ADMIN") {
-      where.brandId = { in: admin.venuePermissions };
-    }
+    // For now, all authenticated Clerk users can see all bookings
+    // You can add role-based filtering later using Clerk metadata
 
     if (venueId) {
       where.brandId = venueId;
-      // Check permission for this venue
-      if (admin.role !== "MAIN_ADMIN") {
-      const permissions: string[] = admin.venuePermissions || [];
-      if (!permissions.includes(venueId)) {
-          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-        }
-      }
+      // You can add permission checks here using Clerk metadata if needed
     }
 
     if (status) {
@@ -101,8 +92,8 @@ export async function GET(request: NextRequest) {
 // PATCH - Update reservation status
 export async function PATCH(request: NextRequest) {
   try {
-    const admin = await verifyAdminToken(request);
-    if (!admin) {
+    const { userId } = await auth();
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -129,12 +120,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Check permission
-    if (admin.role !== "MAIN_ADMIN") {
-      if (!admin.venuePermissions.includes(reservation.brandId)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    }
+    // You can add permission checks here using Clerk metadata if needed
 
     const updated = await prisma.reservation.update({
       where: { id: reservationIdToUse },

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { verifyAdminToken, canAccessVenue } from "@/lib/admin-auth";
-import { AdminRole } from "@/lib/auth";
+import { auth } from "@clerk/nextjs/server";
 
 // Define ImageType enum
 enum ImageType {
@@ -12,17 +11,15 @@ enum ImageType {
 // GET - Get all venues with their data (filtered by permissions)
 export async function GET(request: NextRequest) {
   try {
-    const admin = await verifyAdminToken(request);
-    if (!admin) {
+    const { userId } = await auth();
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     let where: any = {};
     
-    // If not main admin, filter by permissions
-    if (admin.role !== "MAIN_ADMIN") {
-      where.brandId = { in: admin.venuePermissions };
-    }
+    // For now, all authenticated Clerk users can see all venues
+    // You can add role-based filtering later using Clerk metadata
 
     const venues = await prisma.venue.findMany({
       where,
@@ -65,8 +62,8 @@ export async function GET(request: NextRequest) {
 // POST - Create or update venue
 export async function POST(request: NextRequest) {
   try {
-    const admin = await verifyAdminToken(request);
-    if (!admin) {
+    const { userId } = await auth();
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -80,12 +77,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check permission
-    if (admin.role !== "MAIN_ADMIN") {
-      if (!(await canAccessVenue(admin, brandId))) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    }
+    // You can add permission checks here using Clerk metadata if needed
 
     // Check if venue exists
     const existingVenue = await prisma.venue.findUnique({

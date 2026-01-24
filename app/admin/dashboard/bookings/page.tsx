@@ -2,13 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-
-interface Admin {
-  id: string;
-  username: string;
-  role: string;
-  venuePermissions: string[];
-}
+import { useUser } from "@clerk/nextjs";
+import { SignOutButton } from "@clerk/nextjs";
 
 interface Reservation {
   id: string;
@@ -28,7 +23,7 @@ interface Reservation {
 
 export default function BookingsPage() {
   const router = useRouter();
-  const [admin, setAdmin] = useState<Admin | null>(null);
+  const { isLoaded, isSignedIn } = useUser();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -79,29 +74,20 @@ export default function BookingsPage() {
   }, [filter]);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const res = await fetch("/api/admin/me");
-        if (!res.ok) {
-          router.push("/admin");
-          return;
-        }
-        const data = await res.json();
-        setAdmin(data.admin);
-      } catch (error) {
+    if (isLoaded) {
+      if (!isSignedIn) {
         router.push("/admin");
-      } finally {
-        setLoading(false);
+        return;
       }
-    };
-    checkAuth();
-  }, [router]);
+      setLoading(false);
+    }
+  }, [isLoaded, isSignedIn, router]);
 
   useEffect(() => {
-    if (admin) {
+    if (isLoaded && isSignedIn) {
       loadBookings();
     }
-  }, [filter, admin, loadBookings]);
+  }, [filter, isLoaded, isSignedIn, loadBookings]);
 
   const handleStatusUpdate = async (reservationId: string, newStatus: string) => {
     try {
@@ -137,15 +123,6 @@ export default function BookingsPage() {
     return `${hours12}:${minutes.toString().padStart(2, "0")} ${period}`;
   };
 
-  const handleLogout = async () => {
-    try {
-      document.cookie = "admin-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-      document.cookie = "admin-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/admin;";
-      window.location.href = "/admin";
-    } catch (error) {
-      window.location.href = "/admin";
-    }
-  };
 
   const generateWhatsAppMessage = (reservation: Reservation): string => {
     const dateStr = formatDate(reservation.date);
@@ -247,7 +224,7 @@ Reservation ID: ${reservation.id}`;
     );
   }
 
-  if (!admin) {
+  if (!isLoaded || !isSignedIn) {
     return null;
   }
 
@@ -265,12 +242,11 @@ Reservation ID: ${reservation.id}`;
               >
                 ← Back
               </button>
-              <button
-                onClick={handleLogout}
-                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
+            <SignOutButton>
+              <button className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
                 Logout
               </button>
+            </SignOutButton>
             </div>
           </div>
         </div>

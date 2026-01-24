@@ -24,7 +24,7 @@ interface Venue {
 
 interface VenueEditorProps {
   venue: Venue;
-  admin: Admin;
+  admin: Admin | null;
   onBack: () => void;
   onSave: () => void;
 }

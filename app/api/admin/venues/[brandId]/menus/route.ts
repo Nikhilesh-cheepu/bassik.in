@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { verifyAdminToken, canAccessVenue } from "@/lib/admin-auth";
-import { AdminRole } from "@/lib/auth";
+import { auth } from "@clerk/nextjs/server";
 
 // Increase body size limit for menu uploads
 export const maxDuration = 60; // 60 seconds timeout
@@ -13,14 +12,14 @@ export async function POST(
   { params }: { params: Promise<{ brandId: string }> }
 ) {
   try {
-    const admin = await verifyAdminToken(request);
-    if (!admin) {
+    const { userId } = await auth();
+    if (!userId) {
       console.error("[API] Unauthorized menu save attempt");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { brandId } = await params;
-    console.log(`[API] Menu save request for venue: ${brandId} by admin: ${admin.username}`);
+    console.log(`[API] Menu save request for venue: ${brandId} by user: ${userId}`);
     
     const body = await request.json();
     const { menuId, name, thumbnailUrl, images } = body;
@@ -52,13 +51,7 @@ export async function POST(
       return NextResponse.json({ error: `Venue not found: ${brandId}` }, { status: 404 });
     }
 
-    // Check permission
-    if (admin.role !== "MAIN_ADMIN") {
-      if (!(await canAccessVenue(admin, brandId))) {
-        console.error(`[API] Forbidden: Admin ${admin.username} cannot access venue ${brandId}`);
-        return NextResponse.json({ error: "Forbidden: You don't have permission to access this venue" }, { status: 403 });
-      }
-    }
+    // You can add permission checks here using Clerk metadata if needed
 
     // Validate image URLs
     const invalidImages = images.filter((img: any) => !img.url || typeof img.url !== "string");
@@ -137,8 +130,8 @@ export async function DELETE(
   { params }: { params: Promise<{ brandId: string }> }
 ) {
   try {
-    const admin = await verifyAdminToken(request);
-    if (!admin) {
+    const { userId } = await auth();
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

@@ -26,7 +26,20 @@
    DATABASE_URL="postgresql://postgres:actualpassword@containers-us-west-xxx.railway.app:5432/railway"
    ```
 
-### Step 3: Keep Everything Else As Is
+### Step 3: Clerk Authentication Keys
+
+Get your Clerk keys from: https://dashboard.clerk.com/last-active?path=api-keys
+
+Add these to your `.env.local` file:
+
+```env
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=YOUR_PUBLISHABLE_KEY
+CLERK_SECRET_KEY=YOUR_SECRET_KEY
+```
+
+Replace `YOUR_PUBLISHABLE_KEY` and `YOUR_SECRET_KEY` with your actual keys from the Clerk Dashboard.
+
+### Step 4: Keep Everything Else As Is
 
 - ✅ `NEXTAUTH_SECRET` - Already generated, keep it
 - ✅ `NEXTAUTH_URL` - Already set for localhost, keep it
