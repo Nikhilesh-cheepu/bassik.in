@@ -170,13 +170,13 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
         numberOfMen: "",
         numberOfWomen: "",
         numberOfCouples: "",
-        date: "",
+        date: "", // No default date - user must select
         timeSlot: "",
         selectedDiscounts: [],
         notes: "",
       });
       setTimeSlotTab("lunch");
-      setTimeSlotPickerOpen(true);
+      setTimeSlotPickerOpen(false); // Don't show time slots until date is selected
       setSubmitStatus({ type: null, message: "" });
     }
   }, [brand.id, isSignedIn]);
@@ -222,8 +222,28 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   };
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData((prev) => ({ ...prev, date: e.target.value, timeSlot: "" }));
+    const selectedDate = e.target.value;
+    setFormData((prev) => ({ ...prev, date: selectedDate, timeSlot: "" }));
     setTimeSlotPickerOpen(true);
+    
+    // If date is today and lunch time is over, automatically switch to dinner
+    if (selectedDate === todayStr) {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const currentTime24 = `${currentHour.toString().padStart(2, "0")}:${currentMinute.toString().padStart(2, "0")}`;
+      
+      // Check if lunch time is over (after 7 PM for most venues, 8 PM for some)
+      const lunchEndTime = (brand.id === "kiik69" || brand.id === "alehouse" || brand.id === "skyhy") ? "20:00" : "19:00";
+      if (currentTime24 >= lunchEndTime) {
+        setTimeSlotTab("dinner");
+      } else {
+        setTimeSlotTab("lunch");
+      }
+    } else {
+      // For future dates, default to lunch
+      setTimeSlotTab("lunch");
+    }
   };
 
   const handleSlotSelect = (slot24: string) => {
@@ -562,7 +582,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   <label className="block text-xs sm:text-sm font-semibold text-gray-300 mb-2 sm:mb-3">
                     Select Date <span className="text-red-400">*</span>
                   </label>
-                  <div className="relative max-w-full">
+                  <div className="relative w-full overflow-hidden">
                     <div className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
                       <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -570,14 +590,15 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     </div>
                     <input
                       type="date"
-                      value={formData.date}
+                      value={formData.date || ""}
                       onChange={handleDateChange}
                       min={todayStr}
-                      className="w-full max-w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3 sm:py-4 text-xs sm:text-sm font-medium backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-xl sm:rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:border-white/40 transition-all shadow-lg hover:shadow-xl touch-manipulation"
+                      className="w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3 sm:py-4 text-xs sm:text-sm font-medium backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-xl sm:rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:border-white/40 transition-all shadow-lg hover:shadow-xl touch-manipulation box-border"
                       style={{
                         borderColor: formData.date ? `${brand.accentColor}60` : undefined,
                         boxShadow: formData.date ? `0 0 20px ${brand.accentColor}30` : undefined,
                         touchAction: 'manipulation',
+                        maxWidth: '100%',
                       }}
                       onFocus={(e) => {
                         e.target.style.borderColor = brand.accentColor;

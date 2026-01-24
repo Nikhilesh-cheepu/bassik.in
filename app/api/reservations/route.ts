@@ -15,13 +15,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get user info to sync to database
-    const user = await currentUser();
+    // Get user info to sync to database (optional - don't fail if can't get)
+    let user;
+    try {
+      user = await currentUser();
+    } catch (userError: any) {
+      console.warn("Could not fetch current user:", userError?.message);
+      // Continue without user - reservation can still be created
+    }
+
     if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      );
+      console.warn("User not found from Clerk, but continuing with reservation");
     }
 
     const body = await request.json();
@@ -182,48 +186,50 @@ Reservation submitted via bassik.in`;
     // Ensure user exists in database (sync from Clerk)
     // Handle case where User table might not exist yet (migration not run)
     let dbUser = null;
-    try {
-      // Check if User model exists by trying to find first user
-      dbUser = await prisma.user.upsert({
-        where: { id: userId },
-        update: {
-          email: user.emailAddresses[0]?.emailAddress || "",
-          firstName: user.firstName || null,
-          lastName: user.lastName || null,
-          imageUrl: user.imageUrl || null,
-        },
-        create: {
-          id: userId,
-          email: user.emailAddresses[0]?.emailAddress || "",
-          firstName: user.firstName || null,
-          lastName: user.lastName || null,
-          imageUrl: user.imageUrl || null,
-        },
-      });
-    } catch (error: any) {
-      // If User table doesn't exist, log warning but continue (backward compatibility)
-      // P2021 = Table does not exist, P2002 = Unique constraint (might be OK)
-      if (
-        error?.code === "P2021" || 
-        error?.message?.includes("does not exist") ||
-        error?.message?.includes("Unknown model") ||
-        error?.message?.includes("model User")
-      ) {
-        console.warn("User table not found. Please run database migration: npm run db:migrate");
-        console.warn("Continuing without userId - reservation will be created without user link");
-        dbUser = null; // Explicitly set to null
-      } else if (error?.code === "P2002") {
-        // Unique constraint violation - user might already exist, try to find it
-        try {
-          dbUser = await prisma.user.findUnique({ where: { id: userId } });
-        } catch (findError) {
-          console.warn("Could not find user after unique constraint error:", findError);
+    if (user) {
+      try {
+        // Check if User model exists by trying to find first user
+        dbUser = await prisma.user.upsert({
+          where: { id: userId },
+          update: {
+            email: user.emailAddresses[0]?.emailAddress || "",
+            firstName: user.firstName || null,
+            lastName: user.lastName || null,
+            imageUrl: user.imageUrl || null,
+          },
+          create: {
+            id: userId,
+            email: user.emailAddresses[0]?.emailAddress || "",
+            firstName: user.firstName || null,
+            lastName: user.lastName || null,
+            imageUrl: user.imageUrl || null,
+          },
+        });
+      } catch (error: any) {
+        // If User table doesn't exist, log warning but continue (backward compatibility)
+        // P2021 = Table does not exist, P2002 = Unique constraint (might be OK)
+        if (
+          error?.code === "P2021" || 
+          error?.message?.includes("does not exist") ||
+          error?.message?.includes("Unknown model") ||
+          error?.message?.includes("model User")
+        ) {
+          console.warn("User table not found. Please run database migration: npm run db:migrate");
+          console.warn("Continuing without userId - reservation will be created without user link");
+          dbUser = null; // Explicitly set to null
+        } else if (error?.code === "P2002") {
+          // Unique constraint violation - user might already exist, try to find it
+          try {
+            dbUser = await prisma.user.findUnique({ where: { id: userId } });
+          } catch (findError) {
+            console.warn("Could not find user after unique constraint error:", findError);
+            dbUser = null;
+          }
+        } else {
+          // For other errors, log but don't fail - allow reservation without user link
+          console.error("Error syncing user to database:", error);
           dbUser = null;
         }
-      } else {
-        // For other errors, log but don't fail - allow reservation without user link
-        console.error("Error syncing user to database:", error);
-        dbUser = null;
       }
     }
 
