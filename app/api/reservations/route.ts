@@ -190,6 +190,11 @@ Reservation submitted via bassik.in`;
     console.log("[RESERVATION API] Looking for venue:", brandId);
     let venue;
     try {
+      // Test database connection first
+      await prisma.$connect().catch((connError) => {
+        console.error("[RESERVATION API] Database connection error:", connError);
+      });
+      
       venue = await prisma.venue.findUnique({
         where: { brandId },
       });
@@ -198,21 +203,31 @@ Reservation submitted via bassik.in`;
       if (!venue) {
         // Create venue if it doesn't exist
         console.log("[RESERVATION API] Creating new venue:", brandId);
-        venue = await prisma.venue.create({
-          data: {
-            brandId,
-            name: brandName,
-            shortName: brandName,
-            address: "Address to be updated",
-          },
-        });
-        console.log("[RESERVATION API] Venue created:", venue.id);
+        try {
+          venue = await prisma.venue.create({
+            data: {
+              brandId,
+              name: brandName,
+              shortName: brandName,
+              address: "Address to be updated",
+            },
+          });
+          console.log("[RESERVATION API] Venue created:", venue.id);
+        } catch (createVenueError: any) {
+          console.error("[RESERVATION API] Error creating venue:", {
+            code: createVenueError?.code,
+            message: createVenueError?.message,
+            meta: createVenueError?.meta,
+          });
+          throw createVenueError;
+        }
       }
     } catch (venueError: any) {
       console.error("[RESERVATION API] Error with venue:", {
         code: venueError?.code,
         message: venueError?.message,
         meta: venueError?.meta,
+        stack: venueError?.stack?.split('\n').slice(0, 3).join('\n'),
       });
       throw venueError;
     }
