@@ -351,22 +351,33 @@ Reservation submitted via bassik.in`;
         createError?.code === "P2014" || // Related record not found
         createError?.code === "P2009" || // Unknown argument
         createError?.code === "P2011" || // Null constraint
-        createError?.code === "P2021" || // Table/column does not exist
+        createError?.code === "P2021" || // Table does not exist
+        createError?.code === "P2022" || // Column does not exist (CRITICAL - this is the current error)
         createError?.message?.includes("Unknown argument") ||
         createError?.message?.includes("Unknown field") ||
         createError?.message?.includes("userId") ||
         createError?.message?.includes("does not exist") ||
-        (createError?.meta?.target && Array.isArray(createError.meta.target) && createError.meta.target.includes("userId"));
+        createError?.message?.includes("column") && createError?.message?.includes("not exist") ||
+        (createError?.meta?.target && Array.isArray(createError.meta.target) && createError.meta.target.includes("userId")) ||
+        (createError?.meta?.driverAdapterError?.cause?.kind === "ColumnNotFound");
       
-      if (isUserIdRelatedError && reservationData.userId) {
-        console.warn("[RESERVATION API] userId-related error detected, retrying without userId");
+      // If it's a userId-related error, try again without userId (even if we didn't add it)
+      // This handles cases where Prisma Client expects the column but it doesn't exist in DB
+      if (isUserIdRelatedError) {
+        console.warn("[RESERVATION API] userId-related error detected (code: " + createError?.code + ")");
         console.warn("[RESERVATION API] Original error:", createError.message);
-        delete reservationData.userId;
+        console.warn("[RESERVATION API] This usually means the database migration hasn't been run.");
+        console.warn("[RESERVATION API] Attempting to create reservation without userId field...");
+        
+        // Remove userId if it exists, and create a clean data object without it
+        const { userId: _, ...reservationDataWithoutUserId } = reservationData;
+        
         try {
           reservation = await prisma.reservation.create({
-            data: reservationData,
+            data: reservationDataWithoutUserId,
           });
           console.log("[RESERVATION API] Reservation created successfully without userId:", reservation.id);
+          console.warn("[RESERVATION API] ⚠️  Please run 'npm run db:migrate' to enable user linking!");
         } catch (retryError: any) {
           console.error("[RESERVATION API] Retry also failed:", {
             code: retryError?.code,
@@ -374,6 +385,14 @@ Reservation submitted via bassik.in`;
             meta: retryError?.meta,
             errorName: retryError?.name,
           });
+          
+          // If retry also fails with same error, it might be a different issue
+          if (retryError?.code === "P2022" || retryError?.message?.includes("does not exist")) {
+            console.error("[RESERVATION API] Database schema mismatch detected!");
+            console.error("[RESERVATION API] The Prisma schema includes 'userId' but the database column doesn't exist.");
+            console.error("[RESERVATION API] SOLUTION: Run 'npm run db:migrate' to sync the database schema.");
+          }
+          
           throw retryError;
         }
       } else {
