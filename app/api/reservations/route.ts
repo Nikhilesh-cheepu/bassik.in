@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { Pool } from "pg";
 
 const RESERVATION_PHONE_NUMBER = "917013884485"; // India + business 10-digit
 
@@ -370,85 +371,86 @@ Reservation submitted via bassik.in`;
         console.warn("[RESERVATION API] Using raw SQL to create reservation (bypassing Prisma schema)...");
         
         try {
-          // Use raw SQL to insert reservation without userId column
+          // Use raw SQL via direct database pool to insert reservation without userId column
           // This bypasses Prisma's schema validation which expects the column to exist
           // Generate a unique ID first
           const newId = `res_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
           
-          await prisma.$executeRawUnsafe(`
-            INSERT INTO "Reservation" (
-              "id", "venueId", "brandId", "brandName", "fullName", 
-              "contactNumber", "numberOfMen", "numberOfWomen", "numberOfCouples",
-              "date", "timeSlot", "notes", "selectedDiscounts", "status", 
-              "createdAt", "updatedAt"
-            )
-            VALUES (
-              $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW()
-            )
-          `,
-            newId,
-            reservationData.venueId,
-            reservationData.brandId,
-            reservationData.brandName,
-            reservationData.fullName,
-            reservationData.contactNumber,
-            reservationData.numberOfMen,
-            reservationData.numberOfWomen,
-            reservationData.numberOfCouples,
-            reservationData.date,
-            reservationData.timeSlot,
-            reservationData.notes || null,
-            reservationData.selectedDiscounts || null,
-            reservationData.status
-          );
+          console.log("[RESERVATION API] Executing raw SQL insert via database pool (bypassing Prisma schema)...");
           
-          // Fetch the created reservation using raw query (bypassing Prisma schema)
-          const insertedReservation = await prisma.$queryRawUnsafe<Array<{
-            id: string;
-            venueId: string;
-            brandId: string;
-            brandName: string;
-            fullName: string;
-            contactNumber: string;
-            numberOfMen: string;
-            numberOfWomen: string;
-            numberOfCouples: string;
-            date: string;
-            timeSlot: string;
-            notes: string | null;
-            selectedDiscounts: string | null;
-            status: string;
-            createdAt: Date;
-            updatedAt: Date;
-          }>>(`
-            SELECT * FROM "Reservation" WHERE "id" = $1
-          `, newId);
+          // Create a new pool connection for raw SQL (or reuse existing one)
+          const pool = new Pool({
+            connectionString: process.env.DATABASE_URL,
+          });
           
-          if (insertedReservation && insertedReservation[0]) {
-            // Create a reservation object that matches Prisma's expected format
-            reservation = {
-              id: insertedReservation[0].id,
-              venueId: insertedReservation[0].venueId,
-              brandId: insertedReservation[0].brandId,
-              brandName: insertedReservation[0].brandName,
-              fullName: insertedReservation[0].fullName,
-              contactNumber: insertedReservation[0].contactNumber,
-              numberOfMen: insertedReservation[0].numberOfMen,
-              numberOfWomen: insertedReservation[0].numberOfWomen,
-              numberOfCouples: insertedReservation[0].numberOfCouples,
-              date: insertedReservation[0].date,
-              timeSlot: insertedReservation[0].timeSlot,
-              notes: insertedReservation[0].notes,
-              selectedDiscounts: insertedReservation[0].selectedDiscounts,
-              status: insertedReservation[0].status as any,
-              createdAt: insertedReservation[0].createdAt,
-              updatedAt: insertedReservation[0].updatedAt,
-            } as any;
+          try {
+            // Use parameterized query for safety
+            const insertQuery = `
+              INSERT INTO "Reservation" (
+                "id", "venueId", "brandId", "brandName", "fullName", 
+                "contactNumber", "numberOfMen", "numberOfWomen", "numberOfCouples",
+                "date", "timeSlot", "notes", "selectedDiscounts", "status", 
+                "createdAt", "updatedAt"
+              )
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
+              RETURNING "id"
+            `;
             
-            console.log("[RESERVATION API] Reservation created successfully via raw SQL:", reservation.id);
-            console.warn("[RESERVATION API] ⚠️  Please run 'npm run db:migrate' to enable user linking!");
-          } else {
-            throw new Error("Failed to retrieve created reservation - no data returned");
+            const insertResult = await pool.query(insertQuery, [
+              newId,
+              reservationData.venueId,
+              reservationData.brandId,
+              reservationData.brandName,
+              reservationData.fullName,
+              reservationData.contactNumber,
+              reservationData.numberOfMen,
+              reservationData.numberOfWomen,
+              reservationData.numberOfCouples,
+              reservationData.date,
+              reservationData.timeSlot,
+              reservationData.notes || null,
+              reservationData.selectedDiscounts || null,
+              reservationData.status,
+            ]);
+            
+            console.log("[RESERVATION API] Raw SQL insert completed, inserted ID:", insertResult.rows[0]?.id);
+            
+            // Fetch the created reservation
+            const fetchResult = await pool.query(
+              `SELECT * FROM "Reservation" WHERE "id" = $1`,
+              [newId]
+            );
+            
+            if (fetchResult.rows && fetchResult.rows[0]) {
+              const row = fetchResult.rows[0];
+              // Create a reservation object that matches Prisma's expected format
+              reservation = {
+                id: row.id,
+                venueId: row.venueId,
+                brandId: row.brandId,
+                brandName: row.brandName,
+                fullName: row.fullName,
+                contactNumber: row.contactNumber,
+                numberOfMen: row.numberOfMen,
+                numberOfWomen: row.numberOfWomen,
+                numberOfCouples: row.numberOfCouples,
+                date: row.date,
+                timeSlot: row.timeSlot,
+                notes: row.notes,
+                selectedDiscounts: row.selectedDiscounts,
+                status: row.status,
+                createdAt: row.createdAt,
+                updatedAt: row.updatedAt,
+              } as any;
+              
+              console.log("[RESERVATION API] Reservation created successfully via raw SQL:", reservation.id);
+              console.warn("[RESERVATION API] ⚠️  Please run 'npm run db:migrate' to enable user linking!");
+            } else {
+              throw new Error("Failed to retrieve created reservation - no data returned");
+            }
+          } finally {
+            // Close the pool connection
+            await pool.end();
           }
         } catch (rawSqlError: any) {
           console.error("[RESERVATION API] Raw SQL insertion also failed:", {
