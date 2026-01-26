@@ -18,6 +18,7 @@ interface Venue {
   shortName: string;
   address: string;
   mapUrl: string | null;
+  contactPhone?: string | null;
   images: any[];
   menus: any[];
 }
@@ -33,20 +34,25 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
   const [currentVenue, setCurrentVenue] = useState(venue);
   const [formData, setFormData] = useState({
     mapUrl: venue.mapUrl || "",
+    contactPhone: (venue.contactPhone ?? "").toString(),
   });
-  const [activeTab, setActiveTab] = useState<"cover" | "gallery" | "menus" | "location">("cover");
+  const [activeTab, setActiveTab] = useState<"cover" | "gallery" | "menus" | "location" | "contact">("cover");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Update currentVenue when venue prop changes (after onSave refreshes data)
   useEffect(() => {
     setCurrentVenue(venue);
-    setFormData({ mapUrl: venue.mapUrl || "" });
+    setFormData({
+      mapUrl: venue.mapUrl || "",
+      contactPhone: (venue.contactPhone ?? "").toString(),
+    });
   }, [venue]);
 
-  const handleSave = async () => {
+  const handleSave = async (payload?: { mapUrl?: string; contactPhone?: string }) => {
     setSaving(true);
     setMessage(null);
+    const dataToSend = payload ?? { mapUrl: formData.mapUrl, contactPhone: formData.contactPhone || null };
 
     try {
       const res = await fetch("/api/admin/venues", {
@@ -54,12 +60,13 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           brandId: currentVenue.brandId,
-          mapUrl: formData.mapUrl,
+          ...(dataToSend.mapUrl !== undefined && { mapUrl: dataToSend.mapUrl }),
+          ...(dataToSend.contactPhone !== undefined && { contactPhone: dataToSend.contactPhone || "" }),
         }),
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: "Location saved successfully!" });
+        setMessage({ type: "success", text: payload?.contactPhone !== undefined ? "Contact number saved!" : "Location saved successfully!" });
         onSave();
       } else {
         const data = await res.json();
@@ -71,6 +78,8 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
       setSaving(false);
     }
   };
+
+  const handleSaveContact = () => handleSave({ contactPhone: formData.contactPhone });
 
   const coverImages = currentVenue.images?.filter((i) => i.type === "COVER") || [];
   const galleryImages = currentVenue.images?.filter((i) => i.type === "GALLERY") || [];
@@ -103,6 +112,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
               { id: "gallery", label: "Gallery" },
               { id: "menus", label: "Menus" },
               { id: "location", label: "Location" },
+              { id: "contact", label: "Contact" },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -184,11 +194,42 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
             </div>
 
             <button
-              onClick={handleSave}
+              onClick={() => handleSave({ mapUrl: formData.mapUrl })}
               disabled={saving}
               className="bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save Location"}
+            </button>
+          </div>
+        )}
+
+        {/* Contact Tab - Call & WhatsApp number */}
+        {activeTab === "contact" && (
+          <div className="bg-white rounded-lg shadow p-4 sm:p-6 space-y-4">
+            <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4">Contact number</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              This number is used for the <strong>Call</strong> and <strong>WhatsApp</strong> buttons on the outlet page. Use 10 digits (e.g. 7013884485). Leave empty to use the default number.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Mobile number (Call & WhatsApp)
+              </label>
+              <input
+                type="tel"
+                inputMode="numeric"
+                maxLength={10}
+                value={formData.contactPhone}
+                onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                placeholder="e.g. 7013884485"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <button
+              onClick={handleSaveContact}
+              disabled={saving}
+              className="bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save contact number"}
             </button>
           </div>
         )}

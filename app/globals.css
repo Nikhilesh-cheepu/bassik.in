@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes signin-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;
@@ -70,6 +75,10 @@ body {
   
   .animate-shimmer {
     animation: shimmer 2s infinite;
+  }
+
+  .animate-signin-shimmer {
+    animation: signin-shimmer 8s ease-in-out infinite;
   }
 }
 

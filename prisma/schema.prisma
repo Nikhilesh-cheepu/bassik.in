@@ -30,6 +30,7 @@ model Venue {
   shortName String
   address   String
   mapUrl    String?
+  contactPhone String? // Override for call/WhatsApp (defaults from outlet-contacts)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

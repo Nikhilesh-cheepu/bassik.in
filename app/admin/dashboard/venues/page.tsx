@@ -15,6 +15,7 @@ interface Venue {
   shortName: string;
   address: string;
   mapUrl: string | null;
+  contactPhone?: string | null;
   images: any[];
   menus: any[];
 }
@@ -159,6 +160,7 @@ export default function VenuesPage() {
                       shortName: brand.shortName,
                       address: "",
                       mapUrl: null,
+                      contactPhone: null,
                       images: [],
                       menus: [],
                     });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-contacts";
 
 // GET - Get venue data for public display
 export async function GET(
@@ -52,6 +53,10 @@ export async function GET(
       images: menu.images.map((img: { url: string }) => img.url),
     }));
 
+    const contactPhone =
+      (venue as { contactPhone?: string | null }).contactPhone ?? getContactForBrand(brandId);
+    const whatsappMessage = getWhatsAppMessageForBrand(brandId, venue.shortName);
+
     return NextResponse.json(
       {
         venue: {
@@ -61,6 +66,8 @@ export async function GET(
           shortName: venue.shortName,
           address: venue.address,
           mapUrl: venue.mapUrl,
+          contactPhone,
+          whatsappMessage,
           coverImages,
           galleryImages,
           menus,

@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { brandId, name, shortName, address, mapUrl } = body;
+    const { brandId, name, shortName, address, mapUrl, contactPhone } = body;
 
     if (!brandId) {
       return NextResponse.json(
@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
     if (shortName !== undefined) updateData.shortName = shortName;
     if (address !== undefined) updateData.address = address;
     if (mapUrl !== undefined) updateData.mapUrl = mapUrl || null;
+    if (contactPhone !== undefined) updateData.contactPhone = contactPhone === "" ? null : contactPhone || null;
 
     let venue;
     if (existingVenue) {
