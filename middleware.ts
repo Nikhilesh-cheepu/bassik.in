@@ -4,6 +4,8 @@ import type { NextRequest } from "next/server";
 import { clerkClient } from "@clerk/nextjs/server";
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
+const isReservationRoute = (path: string) =>
+  path === "/reservations" || (path.startsWith("/") && path.endsWith("/reservations"));
 
 export default clerkMiddleware(async (auth, request: NextRequest) => {
   const pathname = request.nextUrl.pathname;
@@ -15,6 +17,17 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     pathname.startsWith("/favicon.ico")
   ) {
     return NextResponse.next();
+  }
+
+  // Reservation routes: send unauthenticated users straight to Clerk sign-in (no app UI)
+  if (isReservationRoute(pathname) && !pathname.startsWith("/sign-in") && !pathname.startsWith("/sign-up")) {
+    const { userId } = await auth();
+    if (!userId) {
+      const signInUrl = new URL("/sign-in", request.url);
+      const redirectUrl = pathname + (request.nextUrl.search || "");
+      signInUrl.searchParams.set("redirect_url", redirectUrl);
+      return NextResponse.redirect(signInUrl);
+    }
   }
 
   // Protect admin routes - require authentication AND admin role (except /admin which is the sign-in page)

@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Let Next load @clerk/nextjs from node_modules on the server instead of bundling (fixes vendor-chunks/@clerk.js resolution)
+  serverExternalPackages: ["@clerk/nextjs"],
   // Performance optimizations
   compress: true,
   poweredByHeader: false,

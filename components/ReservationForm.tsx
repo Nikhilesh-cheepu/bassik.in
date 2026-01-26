@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, FormEvent, useMemo, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Brand } from "@/lib/brands";
-import { useUser, SignInButton } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
 
 interface ReservationFormProps {
   brand: Brand;
@@ -31,6 +32,8 @@ type Discount = {
 export default function ReservationForm({ brand }: ReservationFormProps) {
   // ALL HOOKS MUST BE CALLED FIRST - before any conditional returns
   const { isLoaded, isSignedIn, user } = useUser();
+  const pathname = usePathname();
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<FormData>({
     fullName: "",
@@ -181,6 +184,13 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     }
   }, [brand.id, isSignedIn]);
 
+  // Redirect to Clerk sign-in when not authenticated (skip custom screen, go straight to Clerk)
+  useEffect(() => {
+    if (!isLoaded || isSignedIn) return;
+    const target = pathname && pathname !== "/" ? pathname : `/${brand.id}/reservations`;
+    router.replace(`/sign-in?redirect_url=${encodeURIComponent(target)}`);
+  }, [isLoaded, isSignedIn, pathname, brand.id, router]);
+
   // Show login prompt if not authenticated (AFTER all hooks)
   if (!isLoaded) {
     return (
@@ -190,79 +200,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     );
   }
 
-  if (!isSignedIn) {
-    return (
-      <div className="relative w-full min-h-[280px] flex items-center justify-center p-4 sm:p-6">
-        {/* Subtle radial glow behind modal */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: "radial-gradient(ellipse 80% 50% at 50% 40%, rgba(201,162,74,0.08) 0%, transparent 60%)",
-          }}
-          aria-hidden
-        />
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] }}
-          className="relative w-[92vw] max-w-[420px] rounded-2xl bg-black/40 backdrop-blur-xl border border-white/10 shadow-2xl overflow-hidden"
-        >
-          {/* Very subtle animated gradient background (slow loop) */}
-          <div
-            className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[length:200%_200%] animate-signin-shimmer"
-            style={{
-              backgroundImage: "linear-gradient(135deg, #C9A24A 0%, #F1D07A 50%, #C9A24A 100%)",
-            }}
-            aria-hidden
-          />
-          <div className="relative flex flex-col items-center text-center gap-4 px-6 py-6 sm:px-8 sm:py-7">
-            {/* Small badge: Secure sign-in */}
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
-              <svg className="w-3.5 h-3.5 text-[#C9A24A]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-              <span className="text-[10px] sm:text-xs font-medium tracking-widest text-white/80 uppercase">
-                Secure sign-in
-              </span>
-            </div>
-
-            {/* Label above title */}
-            <p className="text-[10px] sm:text-xs font-medium tracking-[0.2em] text-white/50 uppercase">
-              Bassik Reservations
-            </p>
-
-            {/* Title */}
-            <h2 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight mt-0">
-              One quick sign-in
-            </h2>
-
-            {/* Description — short, 2 lines max on mobile */}
-            <p className="text-sm sm:text-base text-gray-400 leading-snug max-w-[300px]">
-              Sign in once to book. See your history and updates anytime—no need to sign in again.
-            </p>
-
-            {/* CTA — gold gradient, premium feel */}
-            <SignInButton mode="modal">
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.98 }}
-                whileHover={{ scale: 1.02 }}
-                transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                className="w-full sm:w-auto min-w-[200px] px-8 py-3.5 rounded-xl font-semibold text-sm sm:text-base text-black tracking-tight bg-gradient-to-r from-[#C9A24A] to-[#F1D07A] hover:shadow-lg hover:shadow-[#C9A24A]/25 focus:outline-none focus:ring-2 focus:ring-[#C9A24A]/50 focus:ring-offset-2 focus:ring-offset-black transition-shadow"
-              >
-                Sign in & book
-              </motion.button>
-            </SignInButton>
-
-            {/* Privacy footnote */}
-            <p className="text-[11px] sm:text-xs text-gray-500 pt-1">
-              We use your details only for this reservation and your booking history.
-            </p>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
+  // When not signed in, show nothing — middleware sends them straight to Clerk; redirect in useEffect is fallback
+  if (!isSignedIn) return null;
 
   const isSlotInPast = (date: string, slot: string): boolean => {
     if (!date || !slot) return false;
