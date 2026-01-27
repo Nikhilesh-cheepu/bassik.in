@@ -1,4 +1,3 @@
--- Add User table to store Clerk-linked users
 CREATE TABLE "User" (
   "id" TEXT NOT NULL,
   "email" TEXT NOT NULL,
@@ -14,9 +13,6 @@ CREATE TABLE "User" (
 -- Ensure emails are unique and fast to query
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 CREATE INDEX "User_email_idx" ON "User"("email");
-
--- Add contactPhone column for per-venue override of call/WhatsApp number
-ALTER TABLE "Venue" ADD COLUMN "contactPhone" TEXT;
 
 -- Add optional userId field on Reservation to link bookings to Clerk users
 ALTER TABLE "Reservation" ADD COLUMN "userId" TEXT;
