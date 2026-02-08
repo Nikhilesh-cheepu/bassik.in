@@ -30,7 +30,8 @@ model Venue {
   shortName      String
   address        String
   mapUrl         String?
-  contactPhone   String?  // Override for call/WhatsApp (defaults from outlet-contacts)
+  contactPhone   String?  // Legacy single number; use contactNumbers when set
+  contactNumbers Json?   // [{ "phone": "123", "label": "Main" }]
   coverVideoUrl  String?  // Optional cover video (e.g. for The Hub); when set, used instead of cover image
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

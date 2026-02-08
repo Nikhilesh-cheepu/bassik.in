@@ -31,6 +31,13 @@ CLERK_SECRET_KEY=YOUR_SECRET_KEY
 
 **Get your Clerk keys from:** https://dashboard.clerk.com/last-active?path=api-keys
 
+### Next.js Server Actions (fixes "Server Action not found" / UnrecognizedActionError)
+```env
+NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=your-base64-key
+```
+Generate a key: `openssl rand -base64 32`  
+Add the output to `.env.local` so Server Action IDs stay consistent across restarts and builds.
+
 ## Quick Setup
 
 1. Copy your `.env.local` file

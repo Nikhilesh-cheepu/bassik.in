@@ -53,11 +53,17 @@ export async function GET(
       images: menu.images.map((img: { url: string }) => img.url),
     }));
 
-    const contactPhone =
-      (venue as { contactPhone?: string | null }).contactPhone ?? getContactForBrand(brandId);
+    const venueExt = venue as { contactPhone?: string | null; contactNumbers?: { phone: string; label?: string }[] | null; coverVideoUrl?: string | null };
+    const rawContacts = venueExt.contactNumbers;
+    const contactNumbers: { phone: string; label?: string }[] = Array.isArray(rawContacts) && rawContacts.length > 0
+      ? rawContacts.filter((c: any) => c && typeof c.phone === "string" && c.phone.trim())
+      : (() => {
+          const single = venueExt.contactPhone ?? getContactForBrand(brandId);
+          return single ? [{ phone: single, label: "Contact" }] : [];
+        })();
+    const contactPhone = contactNumbers[0]?.phone ?? getContactForBrand(brandId);
     const whatsappMessage = getWhatsAppMessageForBrand(brandId, venue.shortName);
 
-    const venueWithVideo = venue as { coverVideoUrl?: string | null };
     return NextResponse.json(
       {
         venue: {
@@ -68,8 +74,9 @@ export async function GET(
           address: venue.address,
           mapUrl: venue.mapUrl,
           contactPhone,
+          contactNumbers,
           whatsappMessage,
-          coverVideoUrl: venueWithVideo.coverVideoUrl ?? null,
+          coverVideoUrl: venueExt.coverVideoUrl ?? null,
           coverImages,
           galleryImages,
           menus,

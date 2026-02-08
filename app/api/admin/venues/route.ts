@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { brandId, name, shortName, address, mapUrl, contactPhone, coverVideoUrl } = body;
+    const { brandId, name, shortName, address, mapUrl, contactPhone, contactNumbers, coverVideoUrl } = body;
 
     if (!brandId) {
       return NextResponse.json(
@@ -98,6 +98,17 @@ export async function POST(request: NextRequest) {
     if (address !== undefined) updateData.address = address;
     if (mapUrl !== undefined) updateData.mapUrl = mapUrl || null;
     if (contactPhone !== undefined) updateData.contactPhone = contactPhone === "" ? null : contactPhone || null;
+    if (contactNumbers !== undefined) {
+      const valid = Array.isArray(contactNumbers)
+        ? contactNumbers
+            .filter((c: any) => c && typeof c.phone === "string" && String(c.phone).trim())
+            .map((c: any) => {
+              const label = typeof c.label === "string" ? c.label.trim() : null;
+              return { phone: String(c.phone).trim(), label: label || undefined };
+            })
+        : [];
+      updateData.contactNumbers = valid.length > 0 ? valid : null;
+    }
     if (coverVideoUrl !== undefined) updateData.coverVideoUrl = coverVideoUrl === "" ? null : coverVideoUrl || null;
 
     let venue;
@@ -118,16 +129,26 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      venue = await prisma.venue.create({
-        data: {
-          brandId,
-          name,
-          shortName,
-          address: address || "Address to be updated",
-          mapUrl: mapUrl || null,
-          coverVideoUrl: coverVideoUrl === "" ? null : coverVideoUrl || null,
-        },
-      });
+      const createData: any = {
+        brandId,
+        name,
+        shortName,
+        address: address || "Address to be updated",
+        mapUrl: mapUrl || null,
+        coverVideoUrl: coverVideoUrl === "" ? null : coverVideoUrl || null,
+      };
+      if (contactNumbers !== undefined) {
+        const valid = Array.isArray(contactNumbers)
+          ? contactNumbers
+              .filter((c: any) => c && typeof c.phone === "string" && String(c.phone).trim())
+              .map((c: any) => {
+                const label = typeof c.label === "string" ? c.label.trim() : null;
+                return { phone: String(c.phone).trim(), label: label || undefined };
+              })
+          : [];
+        createData.contactNumbers = valid.length > 0 ? valid : null;
+      }
+      venue = await prisma.venue.create({ data: createData });
     }
 
     return NextResponse.json({ venue });

@@ -35,6 +35,7 @@ function OutletContent() {
   const [isGalleryModalOpen, setIsGalleryModalOpen] = useState(false);
   const [galleryStartIndex, setGalleryStartIndex] = useState(0);
   const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
+  type VenueContact = { phone: string; label?: string };
   const [venueData, setVenueData] = useState({
     coverImages: [] as string[],
     coverVideoUrl: null as string | null,
@@ -42,12 +43,16 @@ function OutletContent() {
     menus: [] as any[],
     location: { address: "", mapUrl: "" },
     contactPhone: "",
+    contactNumbers: [] as VenueContact[],
     whatsappMessage: "",
   });
+  const [selectedContactIndex, setSelectedContactIndex] = useState(0);
+  const [contactDropdownOpen, setContactDropdownOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadedGalleryImages, setLoadedGalleryImages] = useState<Set<number>>(new Set());
   const [failedGalleryImages, setFailedGalleryImages] = useState<Set<number>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const contactDropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
   const coverVideoUrl = venueData.coverVideoUrl || null;
@@ -67,18 +72,24 @@ function OutletContent() {
   }, [outletSlug, selectedBrandId]);
 
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsDropdownOpen(false);
       }
+      if (contactDropdownRef.current && !contactDropdownRef.current.contains(event.target as Node)) {
+        setContactDropdownOpen(false);
+      }
     };
-    if (isDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [isDropdownOpen]);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isDropdownOpen, contactDropdownOpen]);
+
+  // Reset selected contact when venue data changes
+  useEffect(() => {
+    setSelectedContactIndex(0);
+  }, [selectedBrandId]);
 
   // Load venue data when brand changes - optimized for faster loading
   useEffect(() => {
@@ -130,6 +141,7 @@ function OutletContent() {
                   mapUrl: data.venue.mapUrl || "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
                 },
                 contactPhone: data.venue.contactPhone || "",
+                contactNumbers: data.venue.contactNumbers || [],
                 whatsappMessage: data.venue.whatsappMessage || "",
               }));
               setLoading(false);
@@ -147,6 +159,7 @@ function OutletContent() {
               mapUrl: "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
             },
             contactPhone: "",
+            contactNumbers: [],
             whatsappMessage: "",
           });
           setLoading(false);
@@ -168,6 +181,7 @@ function OutletContent() {
             mapUrl: "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
           },
           contactPhone: "",
+          contactNumbers: [],
           whatsappMessage: "",
         });
         setLoading(false);
@@ -222,9 +236,9 @@ function OutletContent() {
         ) : coverVideoUrl ? (
           <video
             autoPlay
-            muted
             loop
             playsInline
+            controls
             className="absolute inset-0 w-full h-full object-cover brightness-100"
             src={coverVideoUrl}
           />
@@ -337,20 +351,73 @@ function OutletContent() {
         </div>
       </div>
 
-      {/* Compact contact actions – sit directly under the cover image */}
+      {/* Compact contact actions – dropdown when multiple numbers */}
       <div className="relative -mt-6 z-20">
         <div className="max-w-4xl mx-auto px-4 flex justify-center">
           {(() => {
-            const phone = venueData.contactPhone || getContactForBrand(selectedBrandId);
+            const contacts =
+              venueData.contactNumbers.length > 0
+                ? venueData.contactNumbers
+                : [{ phone: venueData.contactPhone || getContactForBrand(selectedBrandId), label: "Contact" }];
+            const phone = contacts[selectedContactIndex]?.phone || contacts[0]?.phone || getContactForBrand(selectedBrandId);
             const full = getFullPhoneNumber(phone);
             const msg =
               venueData.whatsappMessage ||
               getWhatsAppMessageForBrand(selectedBrandId, selectedBrand.shortName);
             const waUrl = `https://wa.me/${full}?text=${encodeURIComponent(msg)}`;
             const telUrl = `tel:+${full}`;
+            const hasMultiple = contacts.length > 1;
 
             return (
-              <div className="inline-flex items-center gap-2 rounded-full bg-black/50 backdrop-blur-xl border border-white/15 px-2 py-1">
+              <div className="inline-flex items-center gap-2 rounded-full bg-black/50 backdrop-blur-xl border border-white/15 px-2 py-1 flex-wrap justify-center">
+                {hasMultiple && (
+                  <div ref={contactDropdownRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setContactDropdownOpen((o) => !o)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-white/90 bg-white/10 hover:bg-white/15 transition-colors border border-white/20"
+                    >
+                      <span className="truncate max-w-[100px]">
+                        {contacts[selectedContactIndex]?.label || contacts[selectedContactIndex]?.phone || "Contact"}
+                      </span>
+                      <svg
+                        className="w-3 h-3 flex-shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        style={{ transform: contactDropdownOpen ? "rotate(180deg)" : undefined }}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    <AnimatePresence>
+                      {contactDropdownOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          className="absolute top-full left-0 mt-1 min-w-[140px] rounded-lg bg-black/90 border border-white/20 shadow-xl overflow-hidden z-50"
+                        >
+                          {contacts.map((c, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => {
+                                setSelectedContactIndex(i);
+                                setContactDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors ${
+                                i === selectedContactIndex ? "bg-white/15 text-white" : "text-gray-300 hover:bg-white/10"
+                              }`}
+                            >
+                              {c.label?.trim() || c.phone || "Contact"}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
                 <a
                   href={waUrl}
                   target="_blank"
@@ -366,18 +433,8 @@ function OutletContent() {
                   href={telUrl}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-sky-100 bg-sky-500/15 hover:bg-sky-500/25 transition-colors"
                 >
-                  <svg
-                    className="w-4 h-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                    />
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                   </svg>
                   <span>Call</span>
                 </a>

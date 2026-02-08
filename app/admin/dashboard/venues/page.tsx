@@ -16,6 +16,7 @@ interface Venue {
   address: string;
   mapUrl: string | null;
   contactPhone?: string | null;
+  contactNumbers?: { phone: string; label?: string }[] | null;
   coverVideoUrl?: string | null;
   images: any[];
   menus: any[];
@@ -162,6 +163,7 @@ export default function VenuesPage() {
                       address: "",
                       mapUrl: null,
                       contactPhone: null,
+                      contactNumbers: null,
                       coverVideoUrl: null,
                       images: [],
                       menus: [],

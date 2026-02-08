@@ -15,15 +15,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden - Admin access required" }, { status: 403 });
     }
 
-    const { image, venueId } = await request.json();
+    const body = await request.json();
+    const { image, video } = body;
 
+    // Video upload: accept data:video/* (e.g. MP4, WebM) for cover video
+    if (video && typeof video === "string" && video.startsWith("data:video/")) {
+      const maxVideoSize = 80 * 1024 * 1024; // 80MB for base64
+      if (video.length > maxVideoSize) {
+        return NextResponse.json({ error: "Video too large. Maximum size is 80MB." }, { status: 400 });
+      }
+      return NextResponse.json({ url: video });
+    }
+
+    // Image upload
     if (!image || !image.startsWith("data:image")) {
-      return NextResponse.json({ error: "Invalid image data" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid image or video data" }, { status: 400 });
     }
 
     // Store base64 data URL directly in database
-    // The url field in VenueImage/MenuImage can store base64 data URLs
-    // This works everywhere (local, Vercel, any hosting) without filesystem access
     return NextResponse.json({ url: image });
   } catch (error: any) {
     console.error("Error uploading image:", error);
