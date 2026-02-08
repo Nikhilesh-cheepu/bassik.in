@@ -8,31 +8,14 @@ Two common issues and how to fix them.
 
 **Cause:** Next.js Server Action IDs change between restarts when no encryption key is set, so the client sends an old ID and the server can’t find it (often triggered by Clerk on the outlet page).
 
-**Fix:**
+**Fix (automatic):** Running `npm run dev` now ensures `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` is in `.env.local` before starting. If you still see the error:
 
-1. **Add a stable key to `.env.local`** (one-time):
-
-   ```bash
-   echo "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> .env.local
-   ```
-
-   Or generate a key and add it manually:
-
-   ```bash
-   openssl rand -base64 32
-   ```
-
-   Then add this line to `.env.local`:
-
-   ```env
-   NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=<paste the key here>
-   ```
-
-2. **Clear build cache and restart:**
-
+1. **Stop the dev server** (Ctrl+C).
+2. **Clear cache and restart:**
    ```bash
    rm -rf .next && npm run dev
    ```
+3. **Hard-refresh the browser** (Ctrl+Shift+R or Cmd+Shift+R) so the page doesn’t use an old cached action ID.
 
 ---
 
