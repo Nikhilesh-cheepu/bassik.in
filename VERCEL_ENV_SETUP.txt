@@ -8,6 +8,7 @@ Project Settings → Environment Variables → Add New
 1. DATABASE_URL
    Value: [Your Railway PostgreSQL connection string]
    (Same as your local .env.local DATABASE_URL)
+   ⚠️ Enable for "Build" as well as Runtime so `prisma migrate deploy` runs on deploy and venue columns stay in sync.
 
 2. NEXTAUTH_SECRET
    Value: a569e8397369c96b8514f460854da881a66f4bc121520d278b2d83ef199551a5

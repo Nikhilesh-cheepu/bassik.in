@@ -4,7 +4,9 @@ If you see **PrismaClientKnownRequestError** or **500 on `/api/venues/the-hub`**
 
 ## Fix 1: Run migrations (recommended)
 
-With `DATABASE_URL` set in `.env.local`:
+**Vercel / production:** The build script runs `prisma migrate deploy` automatically. Ensure **`DATABASE_URL`** is set in your Vercel project (Settings → Environment Variables) for the **Build** environment so migrations apply on every deploy.
+
+**Local** with `DATABASE_URL` in `.env.local`:
 
 ```bash
 npx prisma migrate deploy
