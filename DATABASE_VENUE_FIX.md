@@ -1,6 +1,6 @@
 # Fix: "The column does not exist" / Venue 500 Error
 
-If you see **PrismaClientKnownRequestError** or **500 on `/api/venues/the-hub`** (or any outlet), the database is missing columns that the app expects on the `Venue` table.
+If you see **PrismaClientKnownRequestError** or **500 on `/api/venues/...`** (any outlet: the-hub, firefly, c53, etc.), the **Venue** table is missing columns. There is **no separate Video table** – cover video is stored in **Venue.coverVideoUrl**. See **DATABASE_SCHEMA.md** for the full table and column list.
 
 ## Fix 1: Run migrations (recommended)
 
