@@ -8,9 +8,26 @@ export type Brand = {
   websiteUrl: string; // Official website URL
   description?: string; // One-line description for homepage
   tag?: string; // Optional tag (e.g., "Club", "Sports Bar")
+  /** Override logo path (e.g. for "THE HUB all.png") */
+  logoPath?: string;
+  /** Show "book a table at these spots" section with partner logos (e.g. The Hub) */
+  showSpotsSection?: boolean;
 };
 
 export const BRANDS: Brand[] = [
+  {
+    id: "the-hub",
+    name: "The Hub",
+    shortName: "The Hub",
+    accentColor: "#F59E0B",
+    exploreUrl: "#",
+    instagramUrls: [],
+    websiteUrl: "#",
+    description: "Live screening on the biggest screen in Hyderabad",
+    tag: "Live Screening",
+    logoPath: "/logos/THE%20HUB%20all.png",
+    showSpotsSection: true,
+  },
   {
     id: "alehouse",
     name: "Alehouse",

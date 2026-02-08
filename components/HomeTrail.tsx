@@ -18,6 +18,7 @@ interface HomeTrailProps {
 
 // Specific ordering as requested
 const VENUE_ORDER = [
+  "the-hub",
   "alehouse",
   "boiler-room",
   "c53",
@@ -98,10 +99,8 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
     }
   }, [orderedVenues]);
 
-  const getLogoPath = (brandId: string) => {
-    return brandId.startsWith('club-rogue')
-      ? '/logos/club-rogue.png'
-      : `/logos/${brandId}.png`;
+  const getLogoPath = (brand: Brand) => {
+    return brand.logoPath ?? (brand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${brand.id}.png`);
   };
 
   return (
@@ -180,7 +179,7 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
             {orderedVenues.map((brand, index) => {
               const venueData = venuesData.find((v) => v.brandId === brand.id);
               const coverImage = venueData?.coverImage;
-              const logoPath = getLogoPath(brand.id);
+              const logoPath = getLogoPath(brand);
 
               return (
                 <motion.div

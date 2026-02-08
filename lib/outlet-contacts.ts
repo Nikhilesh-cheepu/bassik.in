@@ -29,6 +29,10 @@ export const OUTLET_CONTACTS: Record<
     phone: "8328576564",
     whatsappMessage: `Hi! I'd like to know more about Club Rogue Gachibowli — reservations, events, or table booking.`,
   },
+  "the-hub": {
+    phone: "7013884485",
+    whatsappMessage: `Hi! I'd like to know more about The Hub — live screening, table booking, or events.`,
+  },
 };
 
 export function getContactForBrand(brandId: string): string {

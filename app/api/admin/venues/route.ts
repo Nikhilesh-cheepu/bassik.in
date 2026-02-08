@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { brandId, name, shortName, address, mapUrl, contactPhone } = body;
+    const { brandId, name, shortName, address, mapUrl, contactPhone, coverVideoUrl } = body;
 
     if (!brandId) {
       return NextResponse.json(
@@ -98,6 +98,7 @@ export async function POST(request: NextRequest) {
     if (address !== undefined) updateData.address = address;
     if (mapUrl !== undefined) updateData.mapUrl = mapUrl || null;
     if (contactPhone !== undefined) updateData.contactPhone = contactPhone === "" ? null : contactPhone || null;
+    if (coverVideoUrl !== undefined) updateData.coverVideoUrl = coverVideoUrl === "" ? null : coverVideoUrl || null;
 
     let venue;
     if (existingVenue) {
@@ -124,6 +125,7 @@ export async function POST(request: NextRequest) {
           shortName,
           address: address || "Address to be updated",
           mapUrl: mapUrl || null,
+          coverVideoUrl: coverVideoUrl === "" ? null : coverVideoUrl || null,
         },
       });
     }

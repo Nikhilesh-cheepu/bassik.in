@@ -57,6 +57,7 @@ export async function GET(
       (venue as { contactPhone?: string | null }).contactPhone ?? getContactForBrand(brandId);
     const whatsappMessage = getWhatsAppMessageForBrand(brandId, venue.shortName);
 
+    const venueWithVideo = venue as { coverVideoUrl?: string | null };
     return NextResponse.json(
       {
         venue: {
@@ -68,6 +69,7 @@ export async function GET(
           mapUrl: venue.mapUrl,
           contactPhone,
           whatsappMessage,
+          coverVideoUrl: venueWithVideo.coverVideoUrl ?? null,
           coverImages,
           galleryImages,
           menus,

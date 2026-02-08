@@ -19,6 +19,7 @@ interface Venue {
   address: string;
   mapUrl: string | null;
   contactPhone?: string | null;
+  coverVideoUrl?: string | null;
   images: any[];
   menus: any[];
 }
@@ -35,6 +36,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
   const [formData, setFormData] = useState({
     mapUrl: venue.mapUrl || "",
     contactPhone: (venue.contactPhone ?? "").toString(),
+    coverVideoUrl: (venue.coverVideoUrl ?? "").toString(),
   });
   const [activeTab, setActiveTab] = useState<"cover" | "gallery" | "menus" | "location" | "contact">("cover");
   const [saving, setSaving] = useState(false);
@@ -46,13 +48,18 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
     setFormData({
       mapUrl: venue.mapUrl || "",
       contactPhone: (venue.contactPhone ?? "").toString(),
+      coverVideoUrl: (venue.coverVideoUrl ?? "").toString(),
     });
   }, [venue]);
 
-  const handleSave = async (payload?: { mapUrl?: string; contactPhone?: string }) => {
+  const handleSave = async (payload?: { mapUrl?: string; contactPhone?: string; coverVideoUrl?: string }) => {
     setSaving(true);
     setMessage(null);
-    const dataToSend = payload ?? { mapUrl: formData.mapUrl, contactPhone: formData.contactPhone || null };
+    const dataToSend = payload ?? {
+      mapUrl: formData.mapUrl,
+      contactPhone: formData.contactPhone || null,
+      coverVideoUrl: formData.coverVideoUrl || null,
+    };
 
     try {
       const res = await fetch("/api/admin/venues", {
@@ -62,11 +69,13 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
           brandId: currentVenue.brandId,
           ...(dataToSend.mapUrl !== undefined && { mapUrl: dataToSend.mapUrl }),
           ...(dataToSend.contactPhone !== undefined && { contactPhone: dataToSend.contactPhone || "" }),
+          ...(dataToSend.coverVideoUrl !== undefined && { coverVideoUrl: dataToSend.coverVideoUrl || "" }),
         }),
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: payload?.contactPhone !== undefined ? "Contact number saved!" : "Location saved successfully!" });
+        const msg = payload?.contactPhone !== undefined ? "Contact number saved!" : payload?.coverVideoUrl !== undefined ? "Cover video saved!" : "Location saved successfully!";
+        setMessage({ type: "success", text: msg });
         onSave();
       } else {
         const data = await res.json();
@@ -145,14 +154,36 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
 
         {/* Cover Photos Tab */}
         {activeTab === "cover" && (
-          <ImageUploader
-            venueId={currentVenue.brandId}
-            imageType="COVER"
-            existingImages={coverImages}
-            maxImages={3}
-            aspectRatio="any"
-            onUpdate={onSave}
-          />
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2">Cover Video (optional)</h3>
+              <p className="text-xs text-gray-600 mb-3">
+                When set, the outlet page shows this video instead of the cover image. Use a direct video URL (e.g. MP4).
+              </p>
+              <input
+                type="url"
+                value={formData.coverVideoUrl}
+                onChange={(e) => setFormData({ ...formData, coverVideoUrl: e.target.value })}
+                placeholder="https://... (video URL)"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 mb-2"
+              />
+              <button
+                onClick={() => handleSave({ coverVideoUrl: formData.coverVideoUrl })}
+                disabled={saving}
+                className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 text-sm"
+              >
+                {saving ? "Saving..." : "Save cover video"}
+              </button>
+            </div>
+            <ImageUploader
+              venueId={currentVenue.brandId}
+              imageType="COVER"
+              existingImages={coverImages}
+              maxImages={3}
+              aspectRatio="any"
+              onUpdate={onSave}
+            />
+          </div>
         )}
 
         {/* Gallery Tab */}

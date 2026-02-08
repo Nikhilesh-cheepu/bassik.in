@@ -36,6 +36,7 @@ function OutletContent() {
   const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
   const [venueData, setVenueData] = useState({
     coverImages: [] as string[],
+    coverVideoUrl: null as string | null,
     galleryImages: [] as string[],
     menus: [] as any[],
     location: { address: "", mapUrl: "" },
@@ -48,8 +49,10 @@ function OutletContent() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
+  const coverVideoUrl = venueData.coverVideoUrl || null;
   const coverImage = venueData.coverImages[0] || null;
   const validGalleryImages = venueData.galleryImages.filter((_, index) => !failedGalleryImages.has(index));
+  const logoPath = selectedBrand.logoPath ?? (selectedBrand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${selectedBrand.id}.png`);
 
   // Set mounted and sync with URL
   useEffect(() => {
@@ -107,10 +110,11 @@ function OutletContent() {
           const data = await res.json();
           if (cancelled) return;
           
-          // Update state progressively - cover image first
+          // Update state progressively - cover first
           setVenueData(prev => ({
             ...prev,
             coverImages: data.venue.coverImages || [],
+            coverVideoUrl: data.venue.coverVideoUrl || null,
           }));
           
           // Then update rest of data
@@ -129,11 +133,12 @@ function OutletContent() {
               }));
               setLoading(false);
             }
-          }, 50); // Small delay to show cover image first
+          }, 50); // Small delay to show cover first
         } else {
           if (cancelled) return;
           setVenueData({
             coverImages: [],
+            coverVideoUrl: null,
             galleryImages: [],
             menus: [],
             location: {
@@ -154,6 +159,7 @@ function OutletContent() {
         console.error("Error fetching venue data:", error);
         setVenueData({
           coverImages: [],
+          coverVideoUrl: null,
           galleryImages: [],
           menus: [],
           location: {
@@ -192,10 +198,6 @@ function OutletContent() {
     setFailedGalleryImages(prev => new Set(prev).add(index));
   };
 
-  const logoPath = selectedBrand.id.startsWith('club-rogue') 
-    ? '/logos/club-rogue.png' 
-    : `/logos/${selectedBrand.id}.png`;
-
   // Show page immediately - don't wait for mounted
   // if (!mounted) {
   //   return null;
@@ -203,10 +205,10 @@ function OutletContent() {
 
   return (
     <div className="min-h-screen bg-black">
-      {/* Full-bleed Cover Image - No Sliding */}
+      {/* Full-bleed Cover - Video or Image */}
       <div className="relative w-full h-[60vh] sm:h-[65vh] overflow-hidden">
         {/* Show brand gradient immediately while loading */}
-        {!coverImage && (
+        {!coverVideoUrl && !coverImage && (
           <div 
             className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black"
             style={{
@@ -214,8 +216,17 @@ function OutletContent() {
             }}
           />
         )}
-        {loading && coverImage ? (
+        {loading && (coverVideoUrl || coverImage) ? (
           <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black animate-pulse" />
+        ) : coverVideoUrl ? (
+          <video
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover brightness-100"
+            src={coverVideoUrl}
+          />
         ) : coverImage ? (
           <Image
             src={coverImage}
@@ -282,9 +293,7 @@ function OutletContent() {
                 }}
               >
                 {BRANDS.map((brand) => {
-                  const brandLogoPath = brand.id.startsWith('club-rogue') 
-                    ? '/logos/club-rogue.png' 
-                    : `/logos/${brand.id}.png`;
+                  const brandLogoPath = brand.logoPath ?? (brand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${brand.id}.png`);
                   const isSelected = brand.id === selectedBrandId;
                   
                   return (
@@ -379,6 +388,40 @@ function OutletContent() {
 
       {/* Content Sections */}
       <div className="max-w-4xl mx-auto px-4 -mt-3 relative z-10 space-y-3 pb-32">
+        {/* The Hub: Book a table at these spots */}
+        {selectedBrand.showSpotsSection && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-4"
+          >
+            <p className="text-sm text-white/90 text-center mb-4">
+              Book a table at any of these spots to enjoy the live screening on the biggest screen in Hyderabad
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8">
+              <a href="/c53" className="flex flex-col items-center gap-2 group">
+                <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-white/5 border border-white/10 group-hover:border-white/20 transition-colors">
+                  <Image src="/logos/c53.png" alt="C53" fill sizes="80px" className="object-contain p-1" />
+                </div>
+                <span className="text-xs font-medium text-white/80">C53</span>
+              </a>
+              <a href="/boiler-room" className="flex flex-col items-center gap-2 group">
+                <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-white/5 border border-white/10 group-hover:border-white/20 transition-colors">
+                  <Image src="/logos/boiler-room.png" alt="Boiler Room" fill sizes="80px" className="object-contain p-1" />
+                </div>
+                <span className="text-xs font-medium text-white/80">Boiler Room</span>
+              </a>
+              <a href="/firefly" className="flex flex-col items-center gap-2 group">
+                <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-white/5 border border-white/10 group-hover:border-white/20 transition-colors">
+                  <Image src="/logos/firefly.png" alt="Firefly" fill sizes="80px" className="object-contain p-1" />
+                </div>
+                <span className="text-xs font-medium text-white/80">Firefly</span>
+              </a>
+            </div>
+          </motion.section>
+        )}
+
         {/* Menu Section - Single Compact Card */}
         {loading ? (
           <div className="h-20 bg-white/5 rounded-xl animate-pulse" />

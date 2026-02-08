@@ -16,6 +16,7 @@ interface Venue {
   address: string;
   mapUrl: string | null;
   contactPhone?: string | null;
+  coverVideoUrl?: string | null;
   images: any[];
   menus: any[];
 }
@@ -161,6 +162,7 @@ export default function VenuesPage() {
                       address: "",
                       mapUrl: null,
                       contactPhone: null,
+                      coverVideoUrl: null,
                       images: [],
                       menus: [],
                     });
@@ -171,7 +173,7 @@ export default function VenuesPage() {
                 <div className="flex flex-col items-center text-center space-y-2">
                   <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
                     <Image
-                      src={`/logos/${brand.id}.png`}
+                      src={brand.logoPath ?? `/logos/${brand.id}.png`}
                       alt={brand.shortName}
                       width={40}
                       height={40}
