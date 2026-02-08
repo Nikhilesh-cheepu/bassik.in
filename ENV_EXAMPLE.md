@@ -38,6 +38,8 @@ NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=your-base64-key
 Generate a key: `openssl rand -base64 32`  
 Add the output to `.env.local` so Server Action IDs stay consistent across restarts and builds.
 
+**Localhost issues?** See **LOCALHOST_FIX.md** for "Server Action not found" and venue API 500/404.
+
 ## Quick Setup
 
 1. Copy your `.env.local` file
