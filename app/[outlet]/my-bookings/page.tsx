@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { SignInButton } from "@clerk/nextjs";
@@ -38,17 +38,7 @@ function MyBookingsContent() {
 
   const activeBrand = findBrandBySlug(outletSlug);
 
-  useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      setLoading(false);
-      return;
-    }
-    if (isLoaded && isSignedIn) {
-      loadBookings();
-    }
-  }, [isLoaded, isSignedIn, outletSlug]);
-
-  const loadBookings = async () => {
+  const loadBookings = useCallback(async () => {
     try {
       const res = await fetch(`/api/my-bookings?brandId=${outletSlug}`);
       if (res.ok) {
@@ -60,7 +50,17 @@ function MyBookingsContent() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [outletSlug]);
+
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      setLoading(false);
+      return;
+    }
+    if (isLoaded && isSignedIn) {
+      loadBookings();
+    }
+  }, [isLoaded, isSignedIn, loadBookings]);
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -147,7 +147,7 @@ function MyBookingsContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">No Bookings Yet</h2>
-            <p className="text-gray-400 mb-6">You haven't made any reservations for {activeBrand.shortName} yet.</p>
+            <p className="text-gray-400 mb-6">You haven&apos;t made any reservations for {activeBrand.shortName} yet.</p>
             <Link
               href={`/${outletSlug}/reservations`}
               className="inline-block px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors"

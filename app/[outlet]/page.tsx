@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useParams } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { BRANDS } from "@/lib/brands";
@@ -400,24 +401,24 @@ function OutletContent() {
               Book a table at any of these spots to enjoy the live screening on the biggest screen in Hyderabad
             </p>
             <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8">
-              <a href="/c53" className="flex flex-col items-center gap-2 group">
+              <Link href="/c53" className="flex flex-col items-center gap-2 group">
                 <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-white/5 border border-white/10 group-hover:border-white/20 transition-colors">
                   <Image src="/logos/c53.png" alt="C53" fill sizes="80px" className="object-contain p-1" />
                 </div>
                 <span className="text-xs font-medium text-white/80">C53</span>
-              </a>
-              <a href="/boiler-room" className="flex flex-col items-center gap-2 group">
+              </Link>
+              <Link href="/boiler-room" className="flex flex-col items-center gap-2 group">
                 <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-white/5 border border-white/10 group-hover:border-white/20 transition-colors">
                   <Image src="/logos/boiler-room.png" alt="Boiler Room" fill sizes="80px" className="object-contain p-1" />
                 </div>
                 <span className="text-xs font-medium text-white/80">Boiler Room</span>
-              </a>
-              <a href="/firefly" className="flex flex-col items-center gap-2 group">
+              </Link>
+              <Link href="/firefly" className="flex flex-col items-center gap-2 group">
                 <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-white/5 border border-white/10 group-hover:border-white/20 transition-colors">
                   <Image src="/logos/firefly.png" alt="Firefly" fill sizes="80px" className="object-contain p-1" />
                 </div>
                 <span className="text-xs font-medium text-white/80">Firefly</span>
-              </a>
+              </Link>
             </div>
           </motion.section>
         )}
