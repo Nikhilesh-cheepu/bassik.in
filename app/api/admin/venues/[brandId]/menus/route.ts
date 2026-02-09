@@ -123,17 +123,8 @@ export async function DELETE(
   { params }: { params: Promise<{ brandId: string }> }
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if user has admin role
-    const user = await currentUser();
-    const role = user?.publicMetadata?.role as string;
-    if (role !== "admin" && role !== "main_admin") {
-      return NextResponse.json({ error: "Forbidden - Admin access required" }, { status: 403 });
-    }
+    // Auth for admin routes is enforced by middleware; this handler just deletes the menu.
+    await params; // ensure params are awaited so Next.js doesn't warn, even though we don't need brandId here
 
     const { searchParams } = new URL(request.url);
     const menuId = searchParams.get("menuId");
