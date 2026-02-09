@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/ensure-server-action-key.js && next dev",
-    "build": "prisma generate && prisma migrate deploy && next build",
+    "build": "prisma generate && (DATABASE_URL=\"${DATABASE_PUBLIC_URL:-$DATABASE_URL}\" prisma migrate deploy) && next build",
     "start": "next start",
     "lint": "next lint",
     "db:migrate": "prisma migrate dev",

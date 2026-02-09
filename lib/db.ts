@@ -6,9 +6,11 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-// Create PostgreSQL connection pool
+// Create PostgreSQL connection pool (limit connections per serverless instance)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  max: 1,
+  idleTimeoutMillis: 20000,
 });
 
 // Create Prisma adapter
