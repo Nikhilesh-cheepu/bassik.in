@@ -56,6 +56,7 @@ function OutletContent() {
   const contactDropdownRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [coverMediaLoading, setCoverMediaLoading] = useState(true);
 
   const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
   // Cover video only for The Hub; all other outlets use cover image only
@@ -108,6 +109,11 @@ function OutletContent() {
   useEffect(() => {
     setSelectedContactIndex(0);
   }, [selectedBrandId]);
+
+  // Reset cover media loading when cover source changes
+  useEffect(() => {
+    setCoverMediaLoading(!!(coverVideoUrl || coverImage));
+  }, [coverVideoUrl, coverImage]);
 
   // Load venue data when brand changes - optimized for faster loading
   useEffect(() => {
@@ -250,29 +256,57 @@ function OutletContent() {
           />
         )}
         {loading && (coverVideoUrl || coverImage) ? (
-          <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black animate-pulse" />
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black animate-pulse flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3 text-white/80">
+              <div className="w-10 h-10 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              <span className="text-sm font-medium">Loading…</span>
+            </div>
+          </div>
         ) : coverVideoUrl ? (
-          <video
-            ref={videoRef}
-            loop
-            playsInline
-            controls={false}
-            className="absolute inset-0 w-full h-full object-cover brightness-100"
-            src={coverVideoUrl}
-            onPlay={() => setIsVideoPlaying(true)}
-            onPause={() => setIsVideoPlaying(false)}
-          />
+          <>
+            <video
+              ref={videoRef}
+              loop
+              playsInline
+              controls={false}
+              className="absolute inset-0 w-full h-full object-cover brightness-100"
+              src={coverVideoUrl}
+              onPlay={() => setIsVideoPlaying(true)}
+              onPause={() => setIsVideoPlaying(false)}
+              onLoadedData={() => setCoverMediaLoading(false)}
+              onError={() => setCoverMediaLoading(false)}
+            />
+            {coverMediaLoading && (
+              <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black flex items-center justify-center z-10">
+                <div className="flex flex-col items-center gap-3 text-white/80">
+                  <div className="w-10 h-10 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  <span className="text-sm font-medium">Loading video…</span>
+                </div>
+              </div>
+            )}
+          </>
         ) : coverImage ? (
-          <Image
-            src={coverImage}
-            alt={selectedBrand.shortName}
-            fill
-            sizes="100vw"
-            className="object-cover brightness-100"
-            unoptimized
-            priority
-            quality={85}
-          />
+          <>
+            <Image
+              src={coverImage}
+              alt={selectedBrand.shortName}
+              fill
+              sizes="100vw"
+              className="object-cover brightness-100"
+              unoptimized
+              priority
+              quality={85}
+              onLoad={() => setCoverMediaLoading(false)}
+            />
+            {coverMediaLoading && (
+              <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black flex items-center justify-center z-10">
+                <div className="flex flex-col items-center gap-3 text-white/80">
+                  <div className="w-10 h-10 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  <span className="text-sm font-medium">Loading…</span>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black" />
         )}

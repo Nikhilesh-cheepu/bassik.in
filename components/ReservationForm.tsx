@@ -569,21 +569,21 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
-              className="space-y-6"
+              className="space-y-6 min-w-0 overflow-x-hidden"
             >
-              <div>
+              <div className="min-w-0">
                 <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2 sm:gap-3">
                   <span className="w-1 h-6 sm:h-8 rounded-full flex-shrink-0" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
                   <span>Select Date & Time</span>
                 </h3>
                 <p className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6">Choose when you&apos;d like to visit us</p>
 
-                {/* Date Selection - Glassmorphic */}
-                <div className="mb-4 sm:mb-6">
+                {/* Date Selection - Glassmorphic; constrained so it stays inside the card on small screens */}
+                <div className="mb-4 sm:mb-6 min-w-0 max-w-full">
                   <label className="block text-xs sm:text-sm font-semibold text-gray-300 mb-2 sm:mb-3">
                     Select Date <span className="text-red-400">*</span>
                   </label>
-                  <div className="relative w-full overflow-visible">
+                  <div className="relative w-full max-w-full min-w-0">
                     <div className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
                       <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -594,12 +594,13 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                       value={formData.date || ""}
                       onChange={handleDateChange}
                       min={todayStr}
-                      className="w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3 sm:py-4 text-xs sm:text-sm font-medium backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-xl sm:rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:border-white/40 transition-all shadow-lg hover:shadow-xl touch-manipulation box-border"
+                      className="w-full min-w-0 max-w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3 sm:py-4 text-xs sm:text-sm font-medium backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-xl sm:rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:border-white/40 transition-all shadow-lg hover:shadow-xl touch-manipulation box-border"
                       style={{
                         borderColor: formData.date ? `${brand.accentColor}60` : undefined,
                         boxShadow: formData.date ? `0 0 20px ${brand.accentColor}30` : undefined,
                         touchAction: 'manipulation',
                         maxWidth: '100%',
+                        minWidth: 0,
                       }}
                       onFocus={(e) => {
                         e.target.style.borderColor = brand.accentColor;
