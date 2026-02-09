@@ -18,7 +18,7 @@ export async function POST(
 ) {
   try {
     const { brandId } = await params;
-    console.log(`[API] Image upload request for venue: ${brandId} by user: ${userId}`);
+    console.log(`[API] Image upload request for venue: ${brandId}`);
     
     const body = await request.json();
     const { images, type } = body; // images: [{url, order}], type: "COVER" | "GALLERY"
