@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import ClerkProviderWrapper from "@/components/ClerkProviderWrapper";
 import "./globals.css";
 
@@ -31,6 +32,7 @@ export default function RootLayout({
         style={{ margin: 0, padding: 0 }}
       >
         <ClerkProviderWrapper>{children}</ClerkProviderWrapper>
+        <Analytics />
       </body>
     </html>
   );

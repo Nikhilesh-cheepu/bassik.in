@@ -7,6 +7,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { BRANDS } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
+import { trackWhatsAppClick, trackCallClick } from "@/lib/analytics";
 import MenuModal from "@/components/MenuModal";
 import GalleryModal from "@/components/GalleryModal";
 
@@ -449,6 +450,7 @@ function OutletContent() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={() => {
+                                  trackWhatsAppClick({ number: targetFull, outlet: selectedBrandId });
                                   setSelectedContactIndex(i);
                                   setWhatsappDropdownOpen(false);
                                 }}
@@ -469,6 +471,7 @@ function OutletContent() {
                     href={waUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={() => trackWhatsAppClick({ number: full, outlet: selectedBrandId })}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-emerald-100 bg-emerald-500/15 hover:bg-emerald-500/25 transition-colors"
                   >
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -515,6 +518,7 @@ function OutletContent() {
                                 key={i}
                                 href={targetTelUrl}
                                 onClick={() => {
+                                  trackCallClick({ number: targetFull, outlet: selectedBrandId });
                                   setSelectedContactIndex(i);
                                   setContactDropdownOpen(false);
                                 }}
@@ -533,6 +537,7 @@ function OutletContent() {
                 ) : (
                   <a
                     href={telUrl}
+                    onClick={() => trackCallClick({ number: full, outlet: selectedBrandId })}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-sky-100 bg-sky-500/15 hover:bg-sky-500/25 transition-colors"
                   >
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">

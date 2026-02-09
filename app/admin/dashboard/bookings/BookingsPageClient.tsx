@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
+import { trackWhatsAppClick } from "@/lib/analytics";
 import { SignOutButton } from "@clerk/nextjs";
 
 interface Reservation {
@@ -141,6 +142,7 @@ Reservation ID: ${reservation.id}`;
 
   const handleWhatsAppMessage = (reservation: Reservation) => {
     const RESERVATION_PHONE_NUMBER = "917013884485";
+    trackWhatsAppClick({ number: RESERVATION_PHONE_NUMBER, source: "admin" });
     const message = generateWhatsAppMessage(reservation);
     window.open(`https://wa.me/${RESERVATION_PHONE_NUMBER}?text=${encodeURIComponent(message)}`, "_blank");
   };
