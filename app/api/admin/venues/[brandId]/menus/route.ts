@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { auth, currentUser } from "@clerk/nextjs/server";
 
 // Increase body size limit for menu uploads
 export const maxDuration = 60; // 60 seconds timeout
@@ -12,19 +11,6 @@ export async function POST(
   { params }: { params: Promise<{ brandId: string }> }
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      console.error("[API] Unauthorized menu save attempt");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if user has admin role
-    const user = await currentUser();
-    const role = user?.publicMetadata?.role as string;
-    if (role !== "admin" && role !== "main_admin") {
-      return NextResponse.json({ error: "Forbidden - Admin access required" }, { status: 403 });
-    }
-
     const { brandId } = await params;
     console.log(`[API] Menu save request for venue: ${brandId} by user: ${userId}`);
     

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { auth, currentUser } from "@clerk/nextjs/server";
 
 // Increase body size limit for image uploads (default is 1MB, we need more for base64)
 export const maxDuration = 60; // 60 seconds timeout
@@ -18,19 +17,6 @@ export async function POST(
   { params }: { params: Promise<{ brandId: string }> }
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      console.error("[API] Unauthorized image upload attempt");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if user has admin role
-    const user = await currentUser();
-    const role = user?.publicMetadata?.role as string;
-    if (role !== "admin" && role !== "main_admin") {
-      return NextResponse.json({ error: "Forbidden - Admin access required" }, { status: 403 });
-    }
-
     const { brandId } = await params;
     console.log(`[API] Image upload request for venue: ${brandId} by user: ${userId}`);
     
@@ -111,18 +97,6 @@ export async function DELETE(
   { params }: { params: Promise<{ brandId: string }> }
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if user has admin role
-    const user = await currentUser();
-    const role = user?.publicMetadata?.role as string;
-    if (role !== "admin" && role !== "main_admin") {
-      return NextResponse.json({ error: "Forbidden - Admin access required" }, { status: 403 });
-    }
-
     const { brandId } = await params;
     const { searchParams } = new URL(request.url);
     const imageIds = searchParams.get("ids")?.split(",");

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { auth, currentUser } from "@clerk/nextjs/server";
 
 export const runtime = "nodejs";
 
@@ -20,11 +19,6 @@ enum ImageType {
 // GET - Get all venues with their data (filtered by permissions)
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     let where: any = {};
     
     // For now, all authenticated Clerk users can see all venues
@@ -64,18 +58,6 @@ export async function GET(request: NextRequest) {
 // POST - Create or update venue
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if user has admin role
-    const user = await currentUser();
-    const role = user?.publicMetadata?.role as string;
-    if (role !== "admin" && role !== "main_admin") {
-      return NextResponse.json({ error: "Forbidden - Admin access required" }, { status: 403 });
-    }
-
     const body = await request.json();
     const { brandId, name, shortName, address, mapUrl, contactPhone, contactNumbers, coverVideoUrl } = body;
 

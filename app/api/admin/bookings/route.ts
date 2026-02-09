@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { auth, currentUser } from "@clerk/nextjs/server";
 
 export const runtime = "nodejs";
 
@@ -15,18 +14,6 @@ enum ReservationStatus {
 // GET - Get all bookings (filtered by admin permissions)
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if user has admin role
-    const user = await currentUser();
-    const role = user?.publicMetadata?.role as string;
-    if (role !== "admin" && role !== "main_admin") {
-      return NextResponse.json({ error: "Forbidden - Admin access required" }, { status: 403 });
-    }
-
     const { searchParams } = new URL(request.url);
     const venueId = searchParams.get("venueId");
     const status = searchParams.get("status");
@@ -232,18 +219,6 @@ export async function GET(request: NextRequest) {
 // PATCH - Update reservation status
 export async function PATCH(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if user has admin role
-    const user = await currentUser();
-    const role = user?.publicMetadata?.role as string;
-    if (role !== "admin" && role !== "main_admin") {
-      return NextResponse.json({ error: "Forbidden - Admin access required" }, { status: 403 });
-    }
-
     const body = await request.json();
     const { id, reservationId, status } = body;
     const reservationIdToUse = id || reservationId;
