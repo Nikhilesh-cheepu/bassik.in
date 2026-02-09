@@ -11,6 +11,13 @@ Source: Railway → PostgreSQL → Variables → DATABASE_URL
 Example: postgresql://postgres:password@containers-us-west-xxx.railway.app:5432/railway
 ```
 
+### 1b. DATABASE_PUBLIC_URL (required for Vercel runtime)
+```
+Value: Same as your public Railway URL (e.g. from Railway → Variables → DATABASE_PUBLIC_URL, or the public postgres URL that works from the internet)
+Source: Railway → PostgreSQL → Variables → DATABASE_PUBLIC_URL (or use the same value as DATABASE_URL if it's already a public URL)
+```
+**Why:** Vercel serverless runs on the public internet and cannot reach Railway’s private URL (`postgres.railway.internal`). The app uses `DATABASE_PUBLIC_URL` at runtime on Vercel so outlets, admin panel, and uploads can read/write the database. Build uses `DATABASE_PUBLIC_URL` for migrations; set both in Vercel for data and uploads to work.
+
 ### 2. NEXTAUTH_SECRET
 ```
 Value: a569e8397369c96b8514f460854da881a66f4bc121520d278b2d83ef199551a5
@@ -52,6 +59,7 @@ NEXTAUTH_URL=https://bassik.in
 ## ✅ After Deployment Checklist
 
 - [ ] Added `DATABASE_URL` from Railway
+- [ ] Added `DATABASE_PUBLIC_URL` from Railway (same as public Postgres URL; required for data + uploads on Vercel)
 - [ ] Added `NEXTAUTH_SECRET` (production secret)
 - [ ] Added `NEXTAUTH_URL` = `https://bassik.in`
 - [ ] Connected `bassik.in` domain in Vercel

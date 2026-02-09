@@ -12,6 +12,17 @@ const connectionString =
     ? process.env.DATABASE_PUBLIC_URL
     : process.env.DATABASE_URL;
 
+if (!connectionString?.trim()) {
+  throw new Error(
+    "Database URL is missing. Set DATABASE_URL (local) or DATABASE_PUBLIC_URL (Vercel) in your environment."
+  );
+}
+if (process.env.VERCEL && !process.env.DATABASE_PUBLIC_URL) {
+  console.warn(
+    "[db] VERCEL is set but DATABASE_PUBLIC_URL is not. If DATABASE_URL is Railway private URL, DB calls will fail. Add DATABASE_PUBLIC_URL in Vercel project settings."
+  );
+}
+
 // Create PostgreSQL connection pool (limit connections per serverless instance)
 const pool = new Pool({
   connectionString,

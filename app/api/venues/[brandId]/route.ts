@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { BRANDS } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-contacts";
 
+export const runtime = "nodejs";
+
 // GET - Get venue data for public display
 export async function GET(
   request: NextRequest,

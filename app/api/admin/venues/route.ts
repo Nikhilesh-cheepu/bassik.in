@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { auth, currentUser } from "@clerk/nextjs/server";
 
 export const runtime = "nodejs";
+
+const noCacheHeaders = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  Pragma: "no-cache",
+  Expires: "0",
+};
 
 // Define ImageType enum
 enum ImageType {
@@ -41,22 +48,15 @@ export async function GET(request: NextRequest) {
       orderBy: { name: "asc" },
     });
 
-    // Return with no-cache headers to ensure fresh data
-    return NextResponse.json(
-      { venues },
-      {
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0',
-        },
-      }
-    );
+    return NextResponse.json({ venues }, { headers: noCacheHeaders });
   } catch (error) {
+    const code = error instanceof Prisma.PrismaClientKnownRequestError ? error.code : null;
     console.error("Error fetching venues:", error);
+    if (code) console.error("Prisma code:", code, "meta:", (error as Prisma.PrismaClientKnownRequestError).meta);
+    // Return empty list so admin panel still loads; user can retry or check DB/env
     return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+      { venues: [] },
+      { status: 200, headers: noCacheHeaders }
     );
   }
 }
