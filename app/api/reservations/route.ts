@@ -210,68 +210,7 @@ Reservation submitted via bassik.in`;
       throw venueError;
     }
 
-    // Ensure user exists in database (sync from Clerk)
-    // Handle case where User table might not exist yet (migration not run)
-    let dbUser = null;
-    let userTableExists = false; // Track if User table exists
-    
-    if (user) {
-      try {
-        // Check if User model exists by trying to find first user
-        dbUser = await prisma.user.upsert({
-          where: { id: userId },
-          update: {
-            email: user.emailAddresses[0]?.emailAddress || "",
-            firstName: user.firstName || null,
-            lastName: user.lastName || null,
-            imageUrl: user.imageUrl || null,
-          },
-          create: {
-            id: userId,
-            email: user.emailAddresses[0]?.emailAddress || "",
-            firstName: user.firstName || null,
-            lastName: user.lastName || null,
-            imageUrl: user.imageUrl || null,
-          },
-        });
-        userTableExists = true; // If upsert succeeded, table exists
-        console.log("[RESERVATION API] User synced to database:", dbUser.id);
-      } catch (error: any) {
-        // If User table doesn't exist, log warning but continue (backward compatibility)
-        // P2021 = Table does not exist, P2002 = Unique constraint (might be OK)
-        if (
-          error?.code === "P2021" || 
-          error?.message?.includes("does not exist") ||
-          error?.message?.includes("Unknown model") ||
-          error?.message?.includes("model User") ||
-          error?.message?.includes("The table 'public.User'")
-        ) {
-          console.warn("[RESERVATION API] User table not found. Please run database migration: npm run db:migrate");
-          console.warn("[RESERVATION API] Continuing without userId - reservation will be created without user link");
-          dbUser = null; // Explicitly set to null
-          userTableExists = false; // Mark that table doesn't exist
-        } else if (error?.code === "P2002") {
-          // Unique constraint violation - user might already exist, try to find it
-          try {
-            dbUser = await prisma.user.findUnique({ where: { id: userId } });
-            userTableExists = true; // If find succeeded, table exists
-            console.log("[RESERVATION API] User found in database:", dbUser?.id);
-          } catch (findError) {
-            console.warn("[RESERVATION API] Could not find user after unique constraint error:", findError);
-            dbUser = null;
-            userTableExists = false;
-          }
-        } else {
-          // For other errors, log but don't fail - allow reservation without user link
-          console.error("[RESERVATION API] Error syncing user to database:", error);
-          dbUser = null;
-          userTableExists = false; // Assume table doesn't exist on unknown errors
-        }
-      }
-    }
-
-    // Save to database with userId (if User table exists)
-    // Build reservation data object - start without userId
+    // Build reservation data object (no server-side user linkage; reservations are anonymous here)
     const reservationData: any = {
       venueId: venue.id,
       brandId,
@@ -290,21 +229,9 @@ Reservation submitted via bassik.in`;
       status: "PENDING",
     };
 
-    // Only add userId if User table exists and user was created successfully
-    // Don't add userId field at all if User table doesn't exist (avoids Prisma errors)
-    // IMPORTANT: Only add userId if we confirmed the User table exists
-    if (userTableExists && dbUser && userId) {
-      reservationData.userId = userId;
-      console.log("[RESERVATION API] Adding userId to reservation:", userId);
-    } else {
-      console.log("[RESERVATION API] Skipping userId - User table may not exist or user not synced");
-    }
-
     console.log("[RESERVATION API] Creating reservation with data:", {
       venueId: reservationData.venueId,
       brandId: reservationData.brandId,
-      hasUserId: !!reservationData.userId,
-      userTableExists,
     });
 
     let reservation;
@@ -318,7 +245,6 @@ Reservation submitted via bassik.in`;
         code: createError?.code,
         message: createError?.message,
         meta: createError?.meta,
-        hasUserId: !!reservationData.userId,
         errorName: createError?.name,
       });
       
