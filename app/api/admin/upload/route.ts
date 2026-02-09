@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
 
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await auth();
@@ -36,10 +38,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ url: image });
   } catch (error: any) {
     console.error("Error uploading image:", error);
+    // Vercel serverless has ~4.5MB body limit; larger uploads get 413 before we run.
+    if (error?.message?.includes("body") || error?.message?.includes("413") || error?.code === "ECONNRESET") {
+      return NextResponse.json(
+        { error: "File too large. Use a video URL for files over ~4MB, or use a smaller file." },
+        { status: 413 }
+      );
+    }
     return NextResponse.json(
-      { 
+      {
         error: error.message || "Internal server error",
-        details: process.env.NODE_ENV === "development" ? error.stack : undefined
+        details: process.env.NODE_ENV === "development" ? error.stack : undefined,
       },
       { status: 500 }
     );

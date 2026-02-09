@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth, currentUser } from "@clerk/nextjs/server";
 
+export const runtime = "nodejs";
+
 // Define ImageType enum
 enum ImageType {
   COVER = "COVER",

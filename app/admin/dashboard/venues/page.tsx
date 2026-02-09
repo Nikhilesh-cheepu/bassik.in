@@ -175,7 +175,7 @@ export default function VenuesPage() {
                 <div className="flex flex-col items-center text-center space-y-2">
                   <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
                     <Image
-                      src={brand.logoPath ?? `/logos/${brand.id}.png`}
+                      src={brand.logoPath ?? (brand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${brand.id}.png`)}
                       alt={brand.shortName}
                       width={40}
                       height={40}
