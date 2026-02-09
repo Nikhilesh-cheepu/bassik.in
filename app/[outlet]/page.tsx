@@ -53,6 +53,8 @@ function OutletContent() {
   const [failedGalleryImages, setFailedGalleryImages] = useState<Set<number>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
   const contactDropdownRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
 
   const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
   // Cover video only for The Hub; all other outlets use cover image only
@@ -60,6 +62,22 @@ function OutletContent() {
   const coverImage = venueData.coverImages[0] || null;
   const validGalleryImages = venueData.galleryImages.filter((_, index) => !failedGalleryImages.has(index));
   const logoPath = selectedBrand.logoPath ?? (selectedBrand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${selectedBrand.id}.png`);
+
+  const handleVideoToggle = async () => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (el.paused) {
+      try {
+        await el.play();
+        setIsVideoPlaying(true);
+      } catch (err) {
+        console.error("[Outlet] Failed to play cover video:", err);
+      }
+    } else {
+      el.pause();
+      setIsVideoPlaying(false);
+    }
+  };
 
   // Set mounted and sync with URL
   useEffect(() => {
@@ -236,13 +254,14 @@ function OutletContent() {
           <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black animate-pulse" />
         ) : coverVideoUrl ? (
           <video
-            autoPlay
+            ref={videoRef}
             loop
             playsInline
-            // No controls on user page; video fills cover and plays automatically
             controls={false}
             className="absolute inset-0 w-full h-full object-cover brightness-100"
             src={coverVideoUrl}
+            onPlay={() => setIsVideoPlaying(true)}
+            onPause={() => setIsVideoPlaying(false)}
           />
         ) : coverImage ? (
           <Image
@@ -259,6 +278,17 @@ function OutletContent() {
           <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black" />
         )}
         
+        {/* Optional play button for cover video (top-right) */}
+        {coverVideoUrl && (
+          <button
+            type="button"
+            onClick={handleVideoToggle}
+            className="absolute top-4 right-4 z-20 px-3 py-1.5 rounded-full bg-black/70 text-white text-xs sm:text-sm font-medium border border-white/30 hover:bg-black/90 transition-colors"
+          >
+            {isVideoPlaying ? "Pause video" : "Play video"}
+          </button>
+        )}
+
         {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-black/80" />
         
