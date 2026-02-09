@@ -12,7 +12,7 @@ export async function POST(
 ) {
   try {
     const { brandId } = await params;
-    console.log(`[API] Menu save request for venue: ${brandId} by user: ${userId}`);
+    console.log(`[API] Menu save request for venue: ${brandId}`);
     
     const body = await request.json();
     const { menuId, name, thumbnailUrl, images } = body;
