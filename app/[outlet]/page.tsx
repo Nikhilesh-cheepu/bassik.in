@@ -55,7 +55,8 @@ function OutletContent() {
   const contactDropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
-  const coverVideoUrl = venueData.coverVideoUrl || null;
+  // Cover video only for The Hub; all other outlets use cover image only
+  const coverVideoUrl = selectedBrandId === "the-hub" ? (venueData.coverVideoUrl || null) : null;
   const coverImage = venueData.coverImages[0] || null;
   const validGalleryImages = venueData.galleryImages.filter((_, index) => !failedGalleryImages.has(index));
   const logoPath = selectedBrand.logoPath ?? (selectedBrand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${selectedBrand.id}.png`);

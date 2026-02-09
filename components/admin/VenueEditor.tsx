@@ -234,45 +234,48 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
         {/* Cover Photos Tab */}
         {activeTab === "cover" && (
           <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow p-4 sm:p-6">
-              <h3 className="text-sm font-semibold text-gray-900 mb-2">Cover Video (optional)</h3>
-              <p className="text-xs text-gray-600 mb-3">
-                Upload a video file (MP4 or MOV). It will replace the cover image on the outlet page and audio will play. Max 80MB.
-              </p>
-              <input
-                type="file"
-                ref={videoInputRef}
-                accept="video/mp4,video/webm,video/quicktime"
-                onChange={handleVideoFileSelect}
-                className="hidden"
-              />
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => videoInputRef.current?.click()}
-                  disabled={videoUploading || saving}
-                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                >
-                  {videoUploading ? "Uploading…" : formData.coverVideoUrl ? "Replace video" : "Upload video"}
-                </button>
-                {formData.coverVideoUrl ? (
+            {/* Cover video only for The Hub; all other outlets use cover images only */}
+            {currentVenue.brandId === "the-hub" && (
+              <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">Cover Video (optional)</h3>
+                <p className="text-xs text-gray-600 mb-3">
+                  Upload a video file (MP4 or MOV). It will replace the cover image on the outlet page and audio will play. For large files use a video URL instead (max ~4MB upload).
+                </p>
+                <input
+                  type="file"
+                  ref={videoInputRef}
+                  accept="video/mp4,video/webm,video/quicktime"
+                  onChange={handleVideoFileSelect}
+                  className="hidden"
+                />
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={async () => {
-                      setFormData((prev) => ({ ...prev, coverVideoUrl: "" }));
-                      await handleSave({ coverVideoUrl: "" });
-                    }}
-                    disabled={saving}
-                    className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                    onClick={() => videoInputRef.current?.click()}
+                    disabled={videoUploading || saving}
+                    className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                   >
-                    Remove video
+                    {videoUploading ? "Uploading…" : formData.coverVideoUrl ? "Replace video" : "Upload video"}
                   </button>
+                  {formData.coverVideoUrl ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setFormData((prev) => ({ ...prev, coverVideoUrl: "" }));
+                        await handleSave({ coverVideoUrl: "" });
+                      }}
+                      disabled={saving}
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                    >
+                      Remove video
+                    </button>
+                  ) : null}
+                </div>
+                {formData.coverVideoUrl ? (
+                  <p className="text-xs text-green-600 mt-2">Cover video is set. Use &quot;Replace video&quot; to upload a new file.</p>
                 ) : null}
               </div>
-              {formData.coverVideoUrl ? (
-                <p className="text-xs text-green-600 mt-2">Cover video is set. Use &quot;Replace video&quot; to upload a new file.</p>
-              ) : null}
-            </div>
+            )}
             <ImageUploader
               venueId={currentVenue.brandId}
               imageType="COVER"

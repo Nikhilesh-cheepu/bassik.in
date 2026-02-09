@@ -1,3 +1,4 @@
+import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -111,7 +112,10 @@ export async function POST(request: NextRequest) {
         : [];
       updateData.contactNumbers = valid.length > 0 ? valid : null;
     }
-    if (coverVideoUrl !== undefined) updateData.coverVideoUrl = coverVideoUrl === "" ? null : coverVideoUrl || null;
+    // Cover video only for The Hub; other outlets use cover images only
+    if (coverVideoUrl !== undefined) {
+      updateData.coverVideoUrl = brandId === "the-hub" ? (coverVideoUrl === "" ? null : coverVideoUrl || null) : null;
+    }
 
     let venue;
     if (existingVenue) {
@@ -137,7 +141,7 @@ export async function POST(request: NextRequest) {
         shortName,
         address: address || "Address to be updated",
         mapUrl: mapUrl || null,
-        coverVideoUrl: coverVideoUrl === "" ? null : coverVideoUrl || null,
+        coverVideoUrl: brandId === "the-hub" ? (coverVideoUrl === "" ? null : coverVideoUrl || null) : null,
       };
       if (contactNumbers !== undefined) {
         const valid = Array.isArray(contactNumbers)
