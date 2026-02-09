@@ -25,7 +25,7 @@ export const BRANDS: Brand[] = [
     websiteUrl: "#",
     description: "Live screening on the biggest screen in Hyderabad",
     tag: "Live Screening",
-    logoPath: "/logos/THE%20HUB%20all.png",
+    logoPath: "/logos/HUB.png",
     showSpotsSection: true,
   },
   {
