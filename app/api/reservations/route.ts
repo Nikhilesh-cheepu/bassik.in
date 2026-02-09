@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Pool } from "pg";
+import { getContactForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 
 const RESERVATION_PHONE_NUMBER = "917013884485"; // India + business 10-digit
 
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
       selectedDiscounts,
       brandId,
       brandName,
+      hubSpotId,
     } = body;
 
     // Normalize to 10-digit Indian number (strip +91, 91, 0 prefix)
@@ -384,7 +386,15 @@ Reservation submitted via bassik.in`;
 
     // Encode message for WhatsApp URL
     const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${RESERVATION_PHONE_NUMBER}?text=${encodedMessage}`;
+    const hubOutlets = ["c53", "boiler-room", "firefly"] as const;
+    const waNumber =
+      brandId === "the-hub" &&
+      hubSpotId &&
+      typeof hubSpotId === "string" &&
+      hubOutlets.includes(hubSpotId as (typeof hubOutlets)[number])
+        ? getFullPhoneNumber(getContactForBrand(hubSpotId))
+        : RESERVATION_PHONE_NUMBER;
+    const whatsappUrl = `https://wa.me/${waNumber}?text=${encodedMessage}`;
 
     if (!reservation) {
       throw new Error("Reservation was not created successfully");

@@ -20,6 +20,7 @@ interface FormData {
   timeSlot: string;
   selectedDiscounts: string[];
   notes: string;
+  hubSpotId?: string; // For The Hub only: which spot (C53 / Boiler Room / Firefly)
 }
 
 type Discount = {
@@ -45,6 +46,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     timeSlot: "",
     selectedDiscounts: [],
     notes: "",
+    hubSpotId: undefined,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{
@@ -177,6 +179,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
         timeSlot: "",
         selectedDiscounts: [],
         notes: "",
+        hubSpotId: undefined,
       });
       setTimeSlotTab("lunch");
       setTimeSlotPickerOpen(false); // Don't show time slots until date is selected
@@ -295,22 +298,30 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   };
 
   const canProceedToStep4 = () => {
-    return (
+    const hasBasicContact =
       formData.fullName.trim().length > 0 &&
       formData.contactNumber.length === 10 &&
-      isValid10DigitPhone(formData.contactNumber)
-    );
+      isValid10DigitPhone(formData.contactNumber);
+
+    if (brand.id === "the-hub") {
+      return hasBasicContact && !!formData.hubSpotId;
+    }
+    return hasBasicContact;
   };
 
   const canSubmit = () => {
-    return (
-      formData.fullName &&
-      formData.contactNumber &&
+    const baseOk =
+      !!formData.fullName &&
+      !!formData.contactNumber &&
       isValid10DigitPhone(formData.contactNumber) &&
       (formData.numberOfMen !== "" ||
         formData.numberOfWomen !== "" ||
-        formData.numberOfCouples !== "")
-    );
+        formData.numberOfCouples !== "");
+
+    if (brand.id === "the-hub") {
+      return baseOk && !!formData.hubSpotId;
+    }
+    return baseOk;
   };
 
   const handleNext = () => {
@@ -384,6 +395,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
           selectedDiscounts: formData.selectedDiscounts,
           brandId: brand.id,
           brandName: brand.name,
+          hubSpotId: brand.id === "the-hub" ? formData.hubSpotId || null : null,
         }),
       });
 
@@ -401,6 +413,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
           timeSlot: "",
           selectedDiscounts: [],
           notes: "",
+          hubSpotId: undefined,
         });
         setCurrentStep(1);
 
@@ -570,7 +583,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                   <label className="block text-xs sm:text-sm font-semibold text-gray-300 mb-2 sm:mb-3">
                     Select Date <span className="text-red-400">*</span>
                   </label>
-                  <div className="relative w-full overflow-hidden">
+                  <div className="relative w-full overflow-visible">
                     <div className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
                       <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1110,8 +1123,42 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                       <p className="text-xs text-red-400 mt-2">Please enter a valid 10-digit number.</p>
                     )}
               </div>
-            </div>
-          </div>
+
+              {/* The Hub only: select specific spot for routing (C53 / Boiler Room / Firefly) */}
+              {brand.id === "the-hub" && (
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-gray-300 mb-2 sm:mb-3">
+                    Select Hub Outlet <span className="text-red-400">*</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+                    {[
+                      { id: "c53", label: "C53" },
+                      { id: "boiler-room", label: "Boiler Room" },
+                      { id: "firefly", label: "Firefly" },
+                    ].map((spot) => {
+                      const isSelected = formData.hubSpotId === spot.id;
+                      return (
+                        <button
+                          key={spot.id}
+                          type="button"
+                          onClick={() =>
+                            setFormData((prev) => ({ ...prev, hubSpotId: spot.id }))
+                          }
+                          className={`w-full px-3 py-2.5 sm:py-3 rounded-xl text-xs sm:text-sm font-semibold border transition-all ${
+                            isSelected
+                              ? "bg-white/15 border-white/40 text-white"
+                              : "bg-white/5 border-white/15 text-gray-300 hover:bg-white/10"
+                          }`}
+                        >
+                          {spot.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+                </div>
+              </div>
             </motion.div>
         )}
 
