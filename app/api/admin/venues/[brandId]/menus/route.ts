@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-// Increase body size limit for menu uploads
+// Increase body size limit for menu uploads (admin menus API)
 export const maxDuration = 60; // 60 seconds timeout
 export const runtime = 'nodejs';
 
