@@ -4,40 +4,13 @@ import { Pool } from "pg";
 
 const RESERVATION_PHONE_NUMBER = "917013884485"; // India + business 10-digit
 
-// Stub auth helpers: reservations API no longer depends on Clerk on the server.
-// Frontend + middleware already ensure only signed-in users reach this flow.
-const auth = async () => ({ userId: null as string | null });
-const currentUser = async () => null;
-
 export async function POST(request: NextRequest) {
   try {
     console.log("[RESERVATION API] Starting reservation request");
-    
-    // Require authentication
-    const { userId } = await auth();
-    if (!userId) {
-      console.log("[RESERVATION API] No userId - unauthorized");
-      return NextResponse.json(
-        { error: "Unauthorized - Please sign in to make a reservation" },
-        { status: 401 }
-      );
-    }
 
-    console.log("[RESERVATION API] User authenticated:", userId);
-
-    // Get user info to sync to database (optional - don't fail if can't get)
-    let user;
-    try {
-      user = await currentUser();
-      console.log("[RESERVATION API] User fetched from Clerk:", user?.id);
-    } catch (userError: any) {
-      console.warn("[RESERVATION API] Could not fetch current user:", userError?.message);
-      // Continue without user - reservation can still be created
-    }
-
-    if (!user) {
-      console.warn("[RESERVATION API] User not found from Clerk, but continuing with reservation");
-    }
+    // Reservations no longer depend on server-side auth; middleware + frontend protect the flow.
+    const userId: string | null = null;
+    const user: any = null;
 
     let body;
     try {
