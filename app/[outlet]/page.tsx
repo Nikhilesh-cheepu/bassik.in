@@ -66,16 +66,13 @@ function OutletContent() {
   const handleVideoToggle = async () => {
     const el = videoRef.current;
     if (!el) return;
-    if (el.paused) {
-      try {
-        await el.play();
-        setIsVideoPlaying(true);
-      } catch (err) {
-        console.error("[Outlet] Failed to play cover video:", err);
-      }
-    } else {
-      el.pause();
-      setIsVideoPlaying(false);
+    // Single action: play once when user taps the button
+    if (!el.paused) return;
+    try {
+      await el.play();
+      setIsVideoPlaying(true);
+    } catch (err) {
+      console.error("[Outlet] Failed to play cover video:", err);
     }
   };
 
@@ -278,14 +275,22 @@ function OutletContent() {
           <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black" />
         )}
         
-        {/* Optional play button for cover video (top-right) */}
-        {coverVideoUrl && (
+        {/* Centered play button - shown only before video starts */}
+        {coverVideoUrl && !isVideoPlaying && (
           <button
             type="button"
             onClick={handleVideoToggle}
-            className="absolute top-4 right-4 z-20 px-3 py-1.5 rounded-full bg-black/70 text-white text-xs sm:text-sm font-medium border border-white/30 hover:bg-black/90 transition-colors"
+            className="absolute inset-0 z-20 flex items-center justify-center"
           >
-            {isVideoPlaying ? "Pause video" : "Play video"}
+            <span className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-black/70 text-white shadow-xl border border-white/40">
+              <svg
+                className="w-7 h-7 sm:w-8 sm:h-8"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </span>
           </button>
         )}
 
