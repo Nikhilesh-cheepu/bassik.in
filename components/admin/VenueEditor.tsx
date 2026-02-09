@@ -236,26 +236,55 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
           <div className="space-y-6">
             {/* Cover video only for The Hub; all other outlets use cover images only */}
             {currentVenue.brandId === "the-hub" && (
-              <div className="bg-white rounded-lg shadow p-4 sm:p-6">
+              <div className="bg-white rounded-lg shadow p-4 sm:p-6 space-y-4">
                 <h3 className="text-sm font-semibold text-gray-900 mb-2">Cover Video (optional)</h3>
                 <p className="text-xs text-gray-600 mb-3">
-                  Upload a video file (MP4 or MOV). It will replace the cover image on the outlet page and audio will play. For large files use a video URL instead (max ~4MB upload).
+                  Use a direct video URL (recommended for large files) or upload a small file (max ~4MB on Vercel).
                 </p>
-                <input
-                  type="file"
-                  ref={videoInputRef}
-                  accept="video/mp4,video/webm,video/quicktime"
-                  onChange={handleVideoFileSelect}
-                  className="hidden"
-                />
+                {/* Video URL - no size limit, avoids 413 */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Video URL</label>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      type="url"
+                      value={formData.coverVideoUrl && formData.coverVideoUrl.startsWith("http") ? formData.coverVideoUrl : ""}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, coverVideoUrl: e.target.value.trim() }))}
+                      placeholder="https://example.com/video.mp4"
+                      className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const url = formData.coverVideoUrl?.trim();
+                        if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+                          await handleSave({ coverVideoUrl: url });
+                        } else if (url) {
+                          setMessage({ type: "error", text: "Enter a valid http or https URL" });
+                        }
+                      }}
+                      disabled={saving}
+                      className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+                    >
+                      Save URL
+                    </button>
+                  </div>
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="file"
+                    ref={videoInputRef}
+                    accept="video/mp4,video/webm,video/quicktime"
+                    onChange={handleVideoFileSelect}
+                    className="hidden"
+                  />
+                  <span className="text-xs text-gray-500">Or upload file (max ~4MB):</span>
                   <button
                     type="button"
                     onClick={() => videoInputRef.current?.click()}
                     disabled={videoUploading || saving}
-                    className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                    className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                   >
-                    {videoUploading ? "Uploading…" : formData.coverVideoUrl ? "Replace video" : "Upload video"}
+                    {videoUploading ? "Uploading…" : "Upload video"}
                   </button>
                   {formData.coverVideoUrl ? (
                     <button
@@ -272,7 +301,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
                   ) : null}
                 </div>
                 {formData.coverVideoUrl ? (
-                  <p className="text-xs text-green-600 mt-2">Cover video is set. Use &quot;Replace video&quot; to upload a new file.</p>
+                  <p className="text-xs text-green-600">Cover video is set. Paste a new URL and click Save URL, or upload a new file.</p>
                 ) : null}
               </div>
             )}
