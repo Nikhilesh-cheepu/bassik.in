@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { auth, currentUser } from "@clerk/nextjs/server";
 import { Pool } from "pg";
 
 const RESERVATION_PHONE_NUMBER = "917013884485"; // India + business 10-digit
+
+// Stub auth helpers: reservations API no longer depends on Clerk on the server.
+// Frontend + middleware already ensure only signed-in users reach this flow.
+const auth = async () => ({ userId: null as string | null });
+const currentUser = async () => null;
 
 export async function POST(request: NextRequest) {
   try {
