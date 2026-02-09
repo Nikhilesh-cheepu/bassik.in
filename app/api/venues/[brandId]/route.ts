@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { BRANDS } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-contacts";
 
 // GET - Get venue data for public display
@@ -7,8 +9,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ brandId: string }> }
 ) {
+  const { brandId } = await params;
   try {
-    const { brandId } = await params;
 
     // Add cache headers - shorter cache for admin updates to show quickly
     const headers = {
@@ -85,7 +87,53 @@ export async function GET(
       { headers }
     );
   } catch (error) {
+    const prismaCode =
+      error instanceof Prisma.PrismaClientKnownRequestError
+        ? error.code
+        : null;
+    const prismaMeta =
+      error instanceof Prisma.PrismaClientKnownRequestError
+        ? error.meta
+        : null;
     console.error("Error fetching venue:", error);
+    if (prismaCode) console.error("Prisma code:", prismaCode, "meta:", prismaMeta);
+
+    // On DB connection (P1001) or schema/column (P2022) errors, return fallback so the page still loads
+    if (
+      prismaCode === "P1001" ||
+      prismaCode === "P2022" ||
+      (prismaCode && String(prismaCode).startsWith("P"))
+    ) {
+      const brand = BRANDS.find((b) => b.id === brandId);
+      if (brand) {
+        const contactPhone = getContactForBrand(brandId);
+        const whatsappMessage = getWhatsAppMessageForBrand(brandId, brand.shortName);
+        const headers = {
+          "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+        };
+        return NextResponse.json(
+          {
+            venue: {
+              id: brandId,
+              brandId,
+              name: brand.name,
+              shortName: brand.shortName,
+              address: null,
+              mapUrl: null,
+              contactPhone,
+              contactNumbers: [{ phone: contactPhone, label: "Contact" }],
+              whatsappMessage,
+              coverVideoUrl: null,
+              coverImages: [],
+              galleryImages: [],
+              menus: [],
+            },
+          },
+          { headers }
+        );
+      }
+    }
+
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
