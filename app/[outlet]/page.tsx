@@ -239,7 +239,8 @@ function OutletContent() {
             autoPlay
             loop
             playsInline
-            controls
+            // No controls on user page; video fills cover and plays automatically
+            controls={false}
             className="absolute inset-0 w-full h-full object-cover brightness-100"
             src={coverVideoUrl}
           />
