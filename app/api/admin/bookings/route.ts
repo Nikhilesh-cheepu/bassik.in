@@ -192,7 +192,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ reservations });
+    // Upcoming on top (date >= today, soonest first); past at bottom (most recent past first)
+    const today = new Date().toISOString().split("T")[0];
+    const upcoming = (reservations || []).filter((r: any) => r.date >= today);
+    const past = (reservations || []).filter((r: any) => r.date < today);
+    const sortByDateTime = (a: any, b: any, asc: boolean) => {
+      if (a.date !== b.date) return asc ? (a.date < b.date ? -1 : 1) : (a.date > b.date ? -1 : 1);
+      return asc ? (a.timeSlot < b.timeSlot ? -1 : 1) : (a.timeSlot > b.timeSlot ? -1 : 1);
+    };
+    upcoming.sort((a, b) => sortByDateTime(a, b, true));
+    past.sort((a, b) => sortByDateTime(a, b, false));
+    const sortedReservations = [...upcoming, ...past];
+
+    return NextResponse.json({ reservations: sortedReservations });
   } catch (error) {
     console.error("Error fetching bookings:", error);
     // Return empty list so admin bookings page still loads
@@ -234,6 +246,33 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ reservation: updated });
   } catch (error) {
     console.error("Error updating reservation:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE - Remove a booking from the database
+export async function DELETE(request: NextRequest) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const id = body.id ?? body.reservationId ?? request.nextUrl.searchParams.get("id");
+    if (!id) {
+      return NextResponse.json(
+        { error: "Reservation ID is required" },
+        { status: 400 }
+      );
+    }
+    await prisma.reservation.delete({
+      where: { id: String(id) },
+    });
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    if (error?.code === "P2025") {
+      return NextResponse.json({ error: "Reservation not found" }, { status: 404 });
+    }
+    console.error("Error deleting reservation:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
