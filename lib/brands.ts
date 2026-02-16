@@ -130,13 +130,13 @@ export const BRANDS: Brand[] = [
     tag: "Club",
   },
   {
-    id: "rejoy",
-    name: "Rejoy Club",
-    shortName: "Rejoy",
+    id: "thezenzspot",
+    name: "The Zenz Spot",
+    shortName: "The Zenz Spot",
     accentColor: "#FBBF24",
     exploreUrl: "#",
-    instagramUrls: ["https://www.instagram.com/rejoyclub/"],
-    websiteUrl: "https://example.com/rejoy", // TODO: Replace with real website URL
+    instagramUrls: ["https://www.instagram.com/thezenzspot/"],
+    websiteUrl: "https://example.com/thezenzspot", // TODO: Replace with real website URL
     description: "Club nights • Party vibes",
     tag: "Club",
   },

@@ -28,7 +28,7 @@ const VENUE_ORDER = [
   "club-rogue-kondapur",
   "club-rogue-jubilee-hills",
   "sound-of-soul",
-  "rejoy",
+  "thezenzspot",
   "firefly",
 ];
 
@@ -53,7 +53,7 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
   );
   const venueRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  // Fetch cover images lazily - only load first 6 immediately, rest on scroll
+  // Defer cover image fetches so the grid paints first (feels fast), then load images
   useEffect(() => {
     const fetchCovers = async (brandsToLoad: Brand[]) => {
       const promises = brandsToLoad.map(async (brand) => {
@@ -84,19 +84,21 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
       );
     };
 
-    // Load first 6 venues immediately (above the fold)
-    const initialVenues = orderedVenues.slice(0, 6);
-    fetchCovers(initialVenues);
+    // Let the grid render first (one frame), then load first 6 cover images
+    const t0 = requestAnimationFrame(() => {
+      const initialVenues = orderedVenues.slice(0, 6);
+      fetchCovers(initialVenues);
+    });
 
-    // Load remaining venues after a delay (lazy load)
+    let t1: ReturnType<typeof setTimeout> | null = null;
     if (orderedVenues.length > 6) {
-      const remainingVenues = orderedVenues.slice(6);
-      const timeoutId = setTimeout(() => {
-        fetchCovers(remainingVenues);
-      }, 1000); // Load after 1 second
-
-      return () => clearTimeout(timeoutId);
+      t1 = setTimeout(() => fetchCovers(orderedVenues.slice(6)), 800);
     }
+
+    return () => {
+      cancelAnimationFrame(t0);
+      if (t1) clearTimeout(t1);
+    };
   }, [orderedVenues]);
 
   const getLogoPath = (brand: Brand) => {

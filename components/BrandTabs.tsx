@@ -29,7 +29,7 @@ export default function BrandTabs({
     (b) => b.id === "club-rogue-kondapur"
   )!;
   const soundOfSoul = brands.find((b) => b.id === "sound-of-soul")!;
-  const rejoy = brands.find((b) => b.id === "rejoy")!;
+  const theZenzSpot = brands.find((b) => b.id === "thezenzspot")!;
   const firefly = brands.find((b) => b.id === "firefly")!;
 
   const orderedBrands = [
@@ -42,7 +42,7 @@ export default function BrandTabs({
     clubRogueGachibowli,
     clubRogueKondapur,
     soundOfSoul,
-    rejoy,
+    theZenzSpot,
     firefly,
   ];
 
