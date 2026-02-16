@@ -2,13 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
-import { SignOutButton } from "@clerk/nextjs";
 import Link from "next/link";
 
 export default function AdminDashboardClient() {
   const router = useRouter();
-  const { isLoaded, isSignedIn, user } = useUser();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalVenues: 0,
@@ -17,15 +14,9 @@ export default function AdminDashboardClient() {
   });
 
   useEffect(() => {
-    if (isLoaded) {
-      if (!isSignedIn) {
-        router.push("/admin");
-        return;
-      }
-      setLoading(false);
-      loadStats();
-    }
-  }, [isLoaded, isSignedIn, router]);
+    loadStats();
+    setLoading(false);
+  }, []);
 
   const loadStats = async () => {
     try {
@@ -76,8 +67,10 @@ export default function AdminDashboardClient() {
     );
   }
 
-  if (!isLoaded || !isSignedIn || !user) {
-    return null;
+  async function handleLogout() {
+    await fetch("/api/admin/logout", { method: "POST" });
+    router.push("/admin");
+    router.refresh();
   }
 
   return (
@@ -91,11 +84,13 @@ export default function AdminDashboardClient() {
                 Admin
               </span>
             </div>
-            <SignOutButton>
-              <button className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
-                Logout
-              </button>
-            </SignOutButton>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Logout
+            </button>
           </div>
         </div>
       </header>

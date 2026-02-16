@@ -21,9 +21,6 @@ export async function GET(request: NextRequest) {
   try {
     let where: any = {};
     
-    // For now, all authenticated Clerk users can see all venues
-    // You can add role-based filtering later using Clerk metadata
-
     const venues = await prisma.venue.findMany({
       where,
       include: {
@@ -67,8 +64,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // You can add permission checks here using Clerk metadata if needed
 
     // Check if venue exists
     const existingVenue = await prisma.venue.findUnique({

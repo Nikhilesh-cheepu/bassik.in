@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Brand } from "@/lib/brands";
 import { trackWhatsAppClick } from "@/lib/analytics";
-import { useUser } from "@clerk/nextjs";
 
 interface ReservationFormProps {
   brand: Brand;
@@ -32,8 +31,6 @@ type Discount = {
 };
 
 export default function ReservationForm({ brand }: ReservationFormProps) {
-  // ALL HOOKS MUST BE CALLED FIRST - before any conditional returns
-  const { isLoaded, isSignedIn, user } = useUser();
   const pathname = usePathname();
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
@@ -166,46 +163,24 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     return now.toISOString().split("T")[0];
   }, []);
 
-  // ALL useEffect hooks must be called before any returns
   useEffect(() => {
-    if (isSignedIn) {
-      setCurrentStep(1);
-      setFormData({
-        fullName: "",
-        contactNumber: "",
-        numberOfMen: "",
-        numberOfWomen: "",
-        numberOfCouples: "",
-        date: "", // No default date - user must select
-        timeSlot: "",
-        selectedDiscounts: [],
-        notes: "",
-        hubSpotId: undefined,
-      });
-      setTimeSlotTab("lunch");
-      setTimeSlotPickerOpen(false); // Don't show time slots until date is selected
-      setSubmitStatus({ type: null, message: "" });
-    }
-  }, [brand.id, isSignedIn]);
-
-  // Redirect to Clerk sign-in when not authenticated (skip custom screen, go straight to Clerk)
-  useEffect(() => {
-    if (!isLoaded || isSignedIn) return;
-    const target = pathname && pathname !== "/" ? pathname : `/${brand.id}/reservations`;
-    router.replace(`/sign-in?redirect_url=${encodeURIComponent(target)}`);
-  }, [isLoaded, isSignedIn, pathname, brand.id, router]);
-
-  // Show login prompt if not authenticated (AFTER all hooks)
-  if (!isLoaded) {
-    return (
-      <div className="w-full flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
-      </div>
-    );
-  }
-
-  // When not signed in, show nothing — middleware sends them straight to Clerk; redirect in useEffect is fallback
-  if (!isSignedIn) return null;
+    setCurrentStep(1);
+    setFormData({
+      fullName: "",
+      contactNumber: "",
+      numberOfMen: "",
+      numberOfWomen: "",
+      numberOfCouples: "",
+      date: "",
+      timeSlot: "",
+      selectedDiscounts: [],
+      notes: "",
+      hubSpotId: undefined,
+    });
+    setTimeSlotTab("lunch");
+    setTimeSlotPickerOpen(false);
+    setSubmitStatus({ type: null, message: "" });
+  }, [brand.id]);
 
   const isSlotInPast = (date: string, slot: string): boolean => {
     if (!date || !slot) return false;

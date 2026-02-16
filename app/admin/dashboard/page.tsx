@@ -2,7 +2,6 @@
 
 import dynamic from "next/dynamic";
 
-// Load dashboard only on the client so useUser() runs inside ClerkProvider (avoids useContext null / 500 on SSR).
 const AdminDashboardClient = dynamic(
   () => import("./AdminDashboardClient"),
   { ssr: false, loading: () => (

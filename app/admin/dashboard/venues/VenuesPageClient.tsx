@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
-import { SignOutButton } from "@clerk/nextjs";
 import Image from "next/image";
 import { BRANDS } from "@/lib/brands";
 import VenueEditor from "@/components/admin/VenueEditor";
@@ -24,21 +22,14 @@ interface Venue {
 
 export default function VenuesPageClient() {
   const router = useRouter();
-  const { isLoaded, isSignedIn } = useUser();
   const [venues, setVenues] = useState<Venue[]>([]);
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (isLoaded) {
-      if (!isSignedIn) {
-        router.push("/admin");
-        return;
-      }
-      setLoading(false);
-      loadVenues();
-    }
-  }, [isLoaded, isSignedIn, router]);
+    setLoading(false);
+    loadVenues();
+  }, []);
 
   const loadVenues = async () => {
     try {
@@ -90,7 +81,11 @@ export default function VenuesPageClient() {
     );
   }
 
-  if (!isLoaded || !isSignedIn) return null;
+  async function handleLogout() {
+    await fetch("/api/admin/logout", { method: "POST" });
+    router.push("/admin");
+    router.refresh();
+  }
 
   if (selectedVenue) {
     return (
@@ -116,11 +111,13 @@ export default function VenuesPageClient() {
               >
                 ← Back
               </button>
-              <SignOutButton>
-                <button className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
-                  Logout
-                </button>
-              </SignOutButton>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Logout
+              </button>
             </div>
           </div>
         </div>

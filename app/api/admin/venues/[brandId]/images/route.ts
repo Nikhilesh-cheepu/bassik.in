@@ -42,8 +42,6 @@ export async function POST(
       return NextResponse.json({ error: `Venue not found: ${brandId}` }, { status: 404 });
     }
 
-    // You can add permission checks here using Clerk metadata if needed
-
     // Delete existing images of this type
     const deleteResult = await prisma.venueImage.deleteMany({
       where: {

@@ -2,9 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
 import { trackWhatsAppClick } from "@/lib/analytics";
-import { SignOutButton } from "@clerk/nextjs";
 
 interface Reservation {
   id: string;
@@ -30,7 +28,6 @@ interface Reservation {
 
 export default function BookingsPageClient() {
   const router = useRouter();
-  const { isLoaded, isSignedIn } = useUser();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -71,18 +68,12 @@ export default function BookingsPageClient() {
   }, [filter]);
 
   useEffect(() => {
-    if (isLoaded) {
-      if (!isSignedIn) {
-        router.push("/admin");
-        return;
-      }
-      setLoading(false);
-    }
-  }, [isLoaded, isSignedIn, router]);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) loadBookings();
-  }, [filter, isLoaded, isSignedIn, loadBookings]);
+    loadBookings();
+  }, [filter, loadBookings]);
 
   const handleStatusUpdate = async (reservationId: string, newStatus: string) => {
     try {
@@ -183,7 +174,11 @@ Reservation ID: ${reservation.id}`;
     );
   }
 
-  if (!isLoaded || !isSignedIn) return null;
+  async function handleLogout() {
+    await fetch("/api/admin/logout", { method: "POST" });
+    router.push("/admin");
+    router.refresh();
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -198,11 +193,13 @@ Reservation ID: ${reservation.id}`;
               >
                 ← Back
               </button>
-              <SignOutButton>
-                <button className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
-                  Logout
-                </button>
-              </SignOutButton>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Logout
+              </button>
             </div>
           </div>
         </div>

@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { ClerkProvider } from "@clerk/nextjs";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
@@ -29,7 +28,7 @@ export default function RootLayout({
         className={`${inter.className} antialiased`}
         style={{ margin: 0, padding: 0 }}
       >
-        <ClerkProvider>{children}</ClerkProvider>
+        {children}
         <Analytics />
       </body>
     </html>

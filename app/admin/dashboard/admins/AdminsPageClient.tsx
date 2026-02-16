@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
-import { SignOutButton } from "@clerk/nextjs";
 import { BRANDS } from "@/lib/brands";
 
 interface AdminUser {
@@ -17,20 +15,13 @@ interface AdminUser {
 
 export default function AdminsPageClient() {
   const router = useRouter();
-  const { isLoaded, isSignedIn } = useUser();
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (isLoaded) {
-      if (!isSignedIn) {
-        router.push("/admin");
-        return;
-      }
-      setLoading(false);
-      loadAdmins();
-    }
-  }, [isLoaded, isSignedIn, router]);
+    setLoading(false);
+    loadAdmins();
+  }, []);
 
   const loadAdmins = async () => {
     try {
@@ -55,7 +46,11 @@ export default function AdminsPageClient() {
     );
   }
 
-  if (!isLoaded || !isSignedIn) return null;
+  async function handleLogout() {
+    await fetch("/api/admin/logout", { method: "POST" });
+    router.push("/admin");
+    router.refresh();
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -70,11 +65,13 @@ export default function AdminsPageClient() {
               >
                 ← Back
               </button>
-              <SignOutButton>
-                <button className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
-                  Logout
-                </button>
-              </SignOutButton>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Logout
+              </button>
             </div>
           </div>
         </div>
@@ -83,13 +80,7 @@ export default function AdminsPageClient() {
       <main className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 mb-4">
           <p className="text-xs sm:text-sm text-blue-800">
-            <strong>Note:</strong> Admins are managed in Clerk Dashboard. To add or modify admins, go to{" "}
-            <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" className="underline">
-              Clerk Dashboard
-            </a>{" "}
-            → Users → Edit user → Metadata → Set role to{" "}
-            <code className="bg-blue-100 px-1 py-0.5 rounded">&quot;admin&quot;</code> or{" "}
-            <code className="bg-blue-100 px-1 py-0.5 rounded">&quot;main_admin&quot;</code>
+            <strong>Note:</strong> Admin access uses a single login (bassikadmin). This page shows admin info when multiple admins are supported in the future.
           </p>
         </div>
         <div className="space-y-2 sm:space-y-3">

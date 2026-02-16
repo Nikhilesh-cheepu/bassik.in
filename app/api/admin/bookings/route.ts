@@ -23,12 +23,8 @@ export async function GET(request: NextRequest) {
 
     let where: any = {};
 
-    // For now, all authenticated Clerk users can see all bookings
-    // You can add role-based filtering later using Clerk metadata
-
     if (venueId) {
       where.brandId = venueId;
-      // You can add permission checks here using Clerk metadata if needed
     }
 
     if (status) {
@@ -241,8 +237,6 @@ export async function PATCH(request: NextRequest) {
         { status: 404 }
       );
     }
-
-    // You can add permission checks here using Clerk metadata if needed
 
     const updated = await prisma.reservation.update({
       where: { id: reservationIdToUse },

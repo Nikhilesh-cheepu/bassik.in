@@ -44,8 +44,6 @@ export async function POST(
       return NextResponse.json({ error: `Venue not found: ${brandId}` }, { status: 404 });
     }
 
-    // You can add permission checks here using Clerk metadata if needed
-
     // Validate image URLs
     const invalidImages = images.filter((img: any) => !img.url || typeof img.url !== "string");
     if (invalidImages.length > 0) {
