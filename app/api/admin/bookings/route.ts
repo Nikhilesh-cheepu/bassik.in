@@ -31,25 +31,13 @@ export async function GET(request: NextRequest) {
       where.status = status as ReservationStatus;
     }
 
-    // Date filtering - default to today if no date filters
-    const today = new Date().toISOString().split("T")[0];
-    
+    // Date filtering - only apply when date params provided; otherwise show all time
     if (date) {
       where.date = date;
-    } else {
+    } else if (dateFrom || dateTo) {
       where.date = {};
-      if (dateFrom) {
-        where.date.gte = dateFrom;
-      } else {
-        // Default "from" to today if not specified
-        where.date.gte = today;
-      }
-      if (dateTo) {
-        where.date.lte = dateTo;
-      } else {
-        // Default "to" to today if not specified
-        where.date.lte = today;
-      }
+      if (dateFrom) where.date.gte = dateFrom;
+      if (dateTo) where.date.lte = dateTo;
     }
 
     // Try to include user relation (if User table exists)

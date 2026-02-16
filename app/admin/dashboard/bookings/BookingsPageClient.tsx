@@ -44,17 +44,17 @@ export default function BookingsPageClient() {
   };
 
   const [filter, setFilter] = useState<{ dateFrom?: string; dateTo?: string }>({
-    dateFrom: getToday(),
-    dateTo: getToday(),
+    dateFrom: undefined,
+    dateTo: undefined,
   });
+
+  const isAllTime = filter.dateFrom == null && filter.dateTo == null;
 
   const loadBookings = useCallback(async () => {
     try {
       const queryParams = new URLSearchParams();
-      const dateFrom = filter.dateFrom || getToday();
-      const dateTo = filter.dateTo || getToday();
-      queryParams.append("dateFrom", dateFrom);
-      queryParams.append("dateTo", dateTo);
+      if (filter.dateFrom) queryParams.append("dateFrom", filter.dateFrom);
+      if (filter.dateTo) queryParams.append("dateTo", filter.dateTo);
       const res = await fetch(`/api/admin/bookings?${queryParams.toString()}`);
       if (res.ok) {
         const data = await res.json();
@@ -210,6 +210,12 @@ Reservation ID: ${reservation.id}`;
           <div className="flex flex-wrap items-center gap-2 mb-3 pb-3 border-b border-gray-200">
             <span className="text-xs sm:text-sm text-gray-600 font-medium">Quick:</span>
             <button
+              onClick={() => setFilter({ dateFrom: undefined, dateTo: undefined })}
+              className={`px-3 py-1.5 text-xs sm:text-sm rounded-lg transition-colors font-medium ${isAllTime ? "text-white bg-orange-500 hover:bg-orange-600" : "text-gray-700 bg-gray-100 hover:bg-gray-200"}`}
+            >
+              All time
+            </button>
+            <button
               onClick={() => setFilter({ dateFrom: getYesterday(), dateTo: getYesterday() })}
               className="px-3 py-1.5 text-xs sm:text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
             >
@@ -217,7 +223,7 @@ Reservation ID: ${reservation.id}`;
             </button>
             <button
               onClick={() => setFilter({ dateFrom: getToday(), dateTo: getToday() })}
-              className="px-3 py-1.5 text-xs sm:text-sm text-white bg-orange-500 rounded-lg hover:bg-orange-600 transition-colors font-medium"
+              className={`px-3 py-1.5 text-xs sm:text-sm rounded-lg transition-colors ${!isAllTime && filter.dateFrom === getToday() && filter.dateTo === getToday() ? "text-white bg-orange-500 hover:bg-orange-600 font-medium" : "text-gray-700 bg-gray-100 hover:bg-gray-200"}`}
             >
               Today
             </button>
@@ -232,19 +238,19 @@ Reservation ID: ${reservation.id}`;
             <label className="text-xs sm:text-sm text-gray-600 font-medium">From:</label>
             <input
               type="date"
-              value={filter.dateFrom || getToday()}
-              onChange={(e) => setFilter({ ...filter, dateFrom: e.target.value || getToday() })}
+              value={filter.dateFrom ?? ""}
+              onChange={(e) => setFilter({ ...filter, dateFrom: e.target.value || undefined })}
               className="px-2 py-1.5 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
             <label className="text-xs sm:text-sm text-gray-600 font-medium">To:</label>
             <input
               type="date"
-              value={filter.dateTo || getToday()}
-              onChange={(e) => setFilter({ ...filter, dateTo: e.target.value || getToday() })}
+              value={filter.dateTo ?? ""}
+              onChange={(e) => setFilter({ ...filter, dateTo: e.target.value || undefined })}
               className="px-2 py-1.5 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
             <button
-              onClick={() => setFilter({ dateFrom: getToday(), dateTo: getToday() })}
+              onClick={() => setFilter({ dateFrom: undefined, dateTo: undefined })}
               className="px-3 py-1.5 text-xs text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
             >
               Reset
