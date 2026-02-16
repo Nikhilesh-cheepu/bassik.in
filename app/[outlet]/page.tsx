@@ -4,12 +4,14 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { BRANDS } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 import { trackWhatsAppClick, trackCallClick } from "@/lib/analytics";
-import MenuModal from "@/components/MenuModal";
-import GalleryModal from "@/components/GalleryModal";
+
+const MenuModal = dynamic(() => import("@/components/MenuModal"));
+const GalleryModal = dynamic(() => import("@/components/GalleryModal"));
 
 function OutletContent() {
   const router = useRouter();

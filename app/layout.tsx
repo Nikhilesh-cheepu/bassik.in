@@ -4,8 +4,6 @@ import { Analytics } from "@vercel/analytics/next";
 import ClerkProviderWrapper from "@/components/ClerkProviderWrapper";
 import "./globals.css";
 
-export const dynamic = "force-dynamic";
-
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -16,8 +14,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
 
 export default function RootLayout({
