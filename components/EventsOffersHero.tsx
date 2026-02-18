@@ -22,9 +22,9 @@ interface EventsOffersHeroProps {
 }
 
 const PLACEHOLDER = "No active offers right now";
-const MAX_HEIGHT_VH = 75;
 const BORDER_RADIUS = 20;
 
+/* Card width via slidesPerView: ~1.35 so main card + 30–40% of next visible. No fixed height. */
 export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProps) {
   const swiperRef = useRef<SwiperType | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -32,24 +32,30 @@ export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProp
   const total = offers.length;
 
   return (
-    <div
-      className="w-full bg-black/40 backdrop-blur-sm border-b border-white/10 relative overflow-hidden"
-      style={{ maxHeight: `${MAX_HEIGHT_VH}vh` }}
-    >
-      {/* Extra top spacing so venue dropdown does not overlap the poster */}
+    <div className="offers-hero-carousel w-full bg-black/40 backdrop-blur-sm border-b border-white/10 relative overflow-hidden">
+      <style dangerouslySetInnerHTML={{ __html: `
+        .offers-hero-carousel .swiper-slide .offer-card-inner {
+          transform: scale(0.93);
+          transition: transform 0.25s ease-out;
+        }
+        .offers-hero-carousel .swiper-slide-active .offer-card-inner {
+          transform: scale(1);
+        }
+      `}} />
+      {/* Top spacing so venue dropdown does not overlap */}
       <div className="relative z-10 flex flex-col items-center pt-14 sm:pt-16 pb-2">
         {hasOffers ? (
-          <div className="w-full flex justify-center px-2">
+          <div className="w-full overflow-hidden">
             <Swiper
               onSwiper={(s) => {
                 swiperRef.current = s;
                 if (s) setActiveIndex(s.realIndex);
               }}
               onSlideChange={(sw) => setActiveIndex(sw.realIndex)}
-              className="!overflow-visible w-full max-w-[min(92vw,420px)]"
+              className="!overflow-visible w-full"
               loop
               centeredSlides
-              slidesPerView={1.05}
+              slidesPerView={1.35}
               spaceBetween={14}
               speed={400}
               allowTouchMove
@@ -60,7 +66,7 @@ export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProp
               {offers.map((offer, i) => (
                 <SwiperSlide key={offer.id}>
                   <div
-                    className="w-full overflow-hidden rounded-[20px] bg-black/20 relative"
+                    className="offer-card-inner w-full overflow-hidden rounded-[20px] bg-black/20 relative"
                     style={{
                       aspectRatio: "9 / 16",
                       borderRadius: BORDER_RADIUS,
@@ -71,15 +77,14 @@ export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProp
                         src={offer.imageUrl}
                         alt={offer.title}
                         fill
-                        sizes="(max-width: 768px) 90vw, 400px"
-                        className="object-cover"
+                        sizes="(max-width: 768px) 78vw, 400px"
+                        className="object-contain"
                         style={{ borderRadius: BORDER_RADIUS }}
                         priority={i === 0}
                         loading={i === 0 ? "eager" : "lazy"}
                         quality={85}
                       />
                     </div>
-                    {/* Counter: bottom center, glass, gold */}
                     {total > 1 && (
                       <div
                         className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 px-2.5 py-1 rounded-full text-[11px] font-medium tabular-nums backdrop-blur-md border border-white/10"
@@ -101,7 +106,7 @@ export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProp
             className="rounded-[20px] flex items-center justify-center bg-black/30 border border-white/10"
             style={{
               aspectRatio: "9 / 16",
-              width: "min(90vw, 360px)",
+              width: "min(78vw, 360px)",
               borderRadius: BORDER_RADIUS,
             }}
           >
