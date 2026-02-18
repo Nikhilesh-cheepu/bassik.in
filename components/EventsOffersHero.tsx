@@ -102,24 +102,23 @@ export default function EventsOffersHero({ offers, brand, isLoading = false }: E
   }
 
   return (
-    <div className="offers-hero-carousel w-full bg-black/40 backdrop-blur-sm border-b border-white/10 relative overflow-visible flex-shrink-0">
+    <div className="offers-hero-carousel w-full bg-black/40 backdrop-blur-sm border-b border-white/10 relative flex-shrink-0">
       <style dangerouslySetInnerHTML={{ __html: `
+        .offers-hero-carousel .swiper { overflow: visible !important; }
+        .offers-hero-carousel .swiper-wrapper { align-items: center; }
         .offers-hero-carousel .swiper-slide .offer-card-inner {
-          transform: scale(0.92);
-          opacity: 0.88;
-          transition: transform 0.25s ease-out, opacity 0.25s ease-out, box-shadow 0.25s ease-out;
+          transform: scale(0.94);
+          opacity: 0.9;
+          transition: transform 0.28s ease-out, opacity 0.28s ease-out, box-shadow 0.28s ease-out;
         }
         .offers-hero-carousel .swiper-slide-active .offer-card-inner {
           transform: scale(1);
           opacity: 1;
-          box-shadow: 0 12px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.08);
+          box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06);
         }
       `}} />
       <div className="relative z-10 flex flex-col items-center pt-2 pb-1" style={{ paddingInline: PADDING_INLINE_PX }}>
-        <div
-          className="w-full overflow-visible"
-          style={{ touchAction: "pan-x", WebkitOverflowScrolling: "touch" }}
-        >
+        <div className="w-full" style={{ touchAction: "pan-x", WebkitOverflowScrolling: "touch" }}>
           <Swiper
             onSwiper={(s) => {
               swiperRef.current = s;
@@ -131,15 +130,16 @@ export default function EventsOffersHero({ offers, brand, isLoading = false }: E
               if (autoplayResumeRef.current) return;
               swiperRef.current?.autoplay?.start();
             }}
-            className="!overflow-visible w-full"
+            className="offers-swiper w-full"
             loop
             centeredSlides
-            slidesPerView={1.3}
+            slidesPerView={1.75}
             spaceBetween={GAP_PX}
-            speed={350}
+            speed={380}
             allowTouchMove
             grabCursor
             touchEventsTarget="container"
+            resistanceRatio={0.7}
             autoplay={{
               delay: AUTOPLAY_DELAY_MS,
               disableOnInteraction: true,
