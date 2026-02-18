@@ -6,6 +6,19 @@ import Image from "next/image";
 import { BRANDS } from "@/lib/brands";
 import VenueEditor from "@/components/admin/VenueEditor";
 
+type VenueContact = { phone: string; label?: string };
+
+type VenueOffer = {
+  id: string;
+  imageUrl: string;
+  title: string;
+  description: string | null;
+  active: boolean;
+  startDate: string | null;
+  endDate: string | null;
+  order: number;
+};
+
 interface Venue {
   id: string;
   brandId: string;
@@ -14,10 +27,10 @@ interface Venue {
   address: string;
   mapUrl: string | null;
   contactPhone?: string | null;
-  contactNumbers?: { phone: string; label?: string }[] | null;
+  contactNumbers?: VenueContact[] | null;
   images: any[];
   menus: any[];
-  offers?: { id: string }[];
+  offers?: VenueOffer[];
 }
 
 export default function VenuesPageClient() {
