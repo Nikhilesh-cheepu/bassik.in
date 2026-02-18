@@ -10,6 +10,7 @@ import { BRANDS } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 import { trackWhatsAppClick, trackCallClick } from "@/lib/analytics";
 import EventsOffersHero from "@/components/EventsOffersHero";
+import GalleryStack from "@/components/GalleryStack";
 
 const MenuModal = dynamic(() => import("@/components/MenuModal"));
 const GalleryModal = dynamic(() => import("@/components/GalleryModal"));
@@ -563,9 +564,9 @@ function OutletContent() {
           </motion.section>
         )}
 
-        {/* Photos Section - Horizontal Scroll (2-3 visible) */}
+        {/* Photos Section - Vertical stack, 16:9, swipe up */}
         {loading ? (
-          <div className="h-32 bg-white/5 rounded-xl animate-pulse" />
+          <div className="aspect-video bg-white/5 rounded-xl animate-pulse" />
         ) : (
           <motion.section
             initial={{ opacity: 0, y: 20 }}
@@ -575,67 +576,20 @@ function OutletContent() {
           >
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-semibold text-white">Photos</h2>
-              {validGalleryImages.length > 0 && (
-                <button
-                  onClick={() => {
-                    setGalleryStartIndex(0);
-                    setIsGalleryModalOpen(true);
-                  }}
-                  className="text-xs font-medium transition-colors"
-                  style={{ color: selectedBrand.accentColor }}
-                >
-                  View all →
-                </button>
-              )}
             </div>
-            {validGalleryImages.length === 0 ? (
-              <div className="text-center py-3 text-gray-400">
-                <p className="text-xs">Gallery is empty</p>
-              </div>
-            ) : (
-              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-                {validGalleryImages.slice(0, 6).map((image, index) => {
-                  const originalIndex = venueData.galleryImages.indexOf(image);
-                  const isLoaded = loadedGalleryImages.has(originalIndex);
-                  const hasFailed = failedGalleryImages.has(originalIndex);
-                  
-                  if (hasFailed) return null;
-                  
-                  return (
-                    <motion.button
-                      key={`${originalIndex}-${image}`}
-                      onClick={() => {
-                        const validIndex = validGalleryImages.indexOf(image);
-                        setGalleryStartIndex(validIndex);
-                        setIsGalleryModalOpen(true);
-                      }}
-                      whileTap={{ scale: 0.95 }}
-                      className="relative rounded-lg overflow-hidden bg-gray-800/50 aspect-square flex-shrink-0 w-[120px] sm:w-[140px]"
-                    >
-                      {!isLoaded && (
-                        <div className="absolute inset-0 flex items-center justify-center z-10">
-                          <div className="animate-spin rounded-full h-5 w-5 border-2" style={{ borderColor: selectedBrand.accentColor, borderTopColor: 'transparent' }}></div>
-                        </div>
-                      )}
-                      <Image
-                        src={image}
-                        alt={`Gallery ${index + 1}`}
-                        fill
-                        sizes="(max-width: 640px) 120px, 140px"
-                        className={`object-cover transition-opacity duration-300 ${
-                          isLoaded ? 'opacity-100' : 'opacity-0'
-                        }`}
-                        unoptimized
-                        loading="lazy"
-                        quality={75}
-                        onLoad={() => handleImageLoad(originalIndex)}
-                        onError={() => handleImageError(originalIndex)}
-                      />
-                    </motion.button>
-                  );
-                })}
-              </div>
-            )}
+            <GalleryStack
+              images={validGalleryImages}
+              accentColor={selectedBrand.accentColor}
+              onViewAll={
+                validGalleryImages.length > 0
+                  ? () => {
+                      setGalleryStartIndex(0);
+                      setIsGalleryModalOpen(true);
+                    }
+                  : undefined
+              }
+            />
+            <p className="text-[10px] text-white/40 mt-2 text-center">Swipe up for next</p>
           </motion.section>
         )}
 
