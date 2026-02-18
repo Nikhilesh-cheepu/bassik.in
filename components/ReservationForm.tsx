@@ -333,6 +333,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!canSubmit()) {
       setSubmitStatus({
         type: "error",
@@ -548,7 +549,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
-              className="space-y-6 min-w-0"
+              className="space-y-6 min-w-0 overflow-visible"
             >
               <div className="min-w-0">
                 <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2 sm:gap-3">
@@ -557,12 +558,12 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                 </h3>
                 <p className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6">Choose when you&apos;d like to visit us</p>
 
-                {/* Date Selection - narrower on small screens so right border is never cut */}
-                <div className="mb-4 sm:mb-6 min-w-0 w-full max-w-[calc(100%-1rem)] sm:max-w-full">
+                {/* Date Selection – padding so native picker isn't cut on mobile */}
+                <div className="mb-4 sm:mb-6 min-w-0 w-full max-w-full overflow-visible px-1">
                   <label className="block text-xs sm:text-sm font-semibold text-gray-300 mb-2 sm:mb-3">
                     Select Date <span className="text-red-400">*</span>
                   </label>
-                  <div className="relative w-full min-w-0 max-w-full">
+                  <div className="relative w-full min-w-0 max-w-full overflow-visible">
                     <div className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
                       <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1364,19 +1365,6 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
             <motion.button
               type="submit"
               disabled={isSubmitting || !canSubmit()}
-              onClick={(e) => {
-                // Defensive onClick handler for iOS Safari
-                if (!isSubmitting && canSubmit()) {
-                  handleSubmit(e as any);
-                }
-              }}
-              onPointerDown={(e) => {
-                // iOS Safari fallback
-                if (!isSubmitting && canSubmit()) {
-                  e.preventDefault();
-                  handleSubmit(e as any);
-                }
-              }}
               className="px-6 sm:px-8 py-2.5 sm:py-3.5 text-xs sm:text-sm font-bold text-white rounded-lg sm:rounded-xl transition-all duration-200 flex items-center gap-1.5 sm:gap-2 backdrop-blur-xl border-2 border-white/20 disabled:opacity-50 disabled:cursor-not-allowed relative z-20 touch-manipulation min-w-[120px] sm:min-w-[160px] justify-center"
               style={{
                 backgroundColor: brand.accentColor,

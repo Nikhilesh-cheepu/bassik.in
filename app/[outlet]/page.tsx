@@ -171,17 +171,16 @@ function OutletContent() {
   return (
     <div className="min-h-screen bg-black">
       {/* Events & Offers hero (Swiggy-style carousel) */}
-      <div className="relative w-full">
+      <div className="relative w-full z-0">
         <EventsOffersHero offers={venueOffers} brand={selectedBrand} />
-        {/* Outlet switcher overlay */}
-        <div ref={dropdownRef} className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
+        {/* Outlet switcher overlay – above carousel so first tap works */}
+        <div ref={dropdownRef} className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
           <motion.button
+            type="button"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 px-3 py-2 rounded-full backdrop-blur-xl bg-black/60 border border-white/20 shadow-xl transition-all"
-            style={{
-              borderColor: `${selectedBrand.accentColor}60`,
-            }}
+            className="pointer-events-auto flex items-center gap-2 px-3 py-2 rounded-full backdrop-blur-xl bg-black/60 border border-white/20 shadow-xl transition-all touch-manipulation"
+            style={{ touchAction: "manipulation", borderColor: `${selectedBrand.accentColor}60` }}
           >
             <div className="relative w-4 h-4 flex-shrink-0">
               <Image
@@ -215,7 +214,7 @@ function OutletContent() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -10, scale: 0.95 }}
                 transition={{ duration: 0.2 }}
-                className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[180px] backdrop-blur-xl bg-black/90 border border-white/20 rounded-xl shadow-2xl overflow-hidden max-h-[200px] overflow-y-auto scrollbar-hide"
+                className="pointer-events-auto absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[180px] backdrop-blur-xl bg-black/90 border border-white/20 rounded-xl shadow-2xl overflow-hidden max-h-[200px] overflow-y-auto scrollbar-hide"
                 style={{
                   boxShadow: `0 8px 32px ${selectedBrand.accentColor}30`,
                 }}
@@ -264,9 +263,9 @@ function OutletContent() {
         </div>
       </div>
 
-      {/* WhatsApp + Call – compact row under hero */}
-      <div className="relative -mt-4 z-20">
-        <div className="max-w-4xl mx-auto px-4 flex justify-center">
+      {/* CTA row: WhatsApp (green) + Call (blue) + Book (gold) – directly under hero, no heading */}
+      <div className="relative -mt-3 z-20 pointer-events-auto">
+        <div className="max-w-4xl mx-auto px-4 flex flex-wrap justify-center gap-2">
           {(() => {
             const contacts =
               venueData.contactNumbers.length > 0
@@ -282,6 +281,7 @@ function OutletContent() {
             const hasMultiple = contacts.length > 1;
 
             return (
+              <>
               <div className="inline-flex items-center gap-2 rounded-full bg-black/50 backdrop-blur-xl border border-white/15 px-2 py-1 flex-wrap justify-center">
                 {hasMultiple ? (
                   <div ref={contactDropdownRef} className="relative">
@@ -420,6 +420,20 @@ function OutletContent() {
                   </a>
                 )}
               </div>
+              <a
+                href={`/${selectedBrandId}/reservations`}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold text-white backdrop-blur-xl border border-white/20 transition-colors touch-manipulation"
+                style={{
+                  backgroundColor: `${selectedBrand.accentColor}`,
+                  boxShadow: `0 4px 20px ${selectedBrand.accentColor}50`,
+                }}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Book
+              </a>
+              </>
             );
           })()}
         </div>
@@ -635,65 +649,43 @@ function OutletContent() {
             className="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-3 overflow-hidden"
           >
             <h2 className="text-sm font-semibold text-white mb-2">Location</h2>
-            <a
-              href={venueData.location.mapUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block group"
-            >
-              <div className="relative h-16 rounded-lg overflow-hidden bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 mb-2">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <svg
-                    className="w-6 h-6 transition-colors"
-                    style={{ color: selectedBrand.accentColor }}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
+            {venueData.location.mapUrl ? (
+              <a
+                href={venueData.location.mapUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block group"
+              >
+                <div className="relative h-16 rounded-lg overflow-hidden bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 mb-2">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <svg
+                      className="w-6 h-6 transition-colors"
+                      style={{ color: selectedBrand.accentColor }}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  <svg className="w-3 h-3 mt-0.5 flex-shrink-0" style={{ color: selectedBrand.accentColor }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                   </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-xs font-medium mb-0.5 truncate">{venueData.location.address || "Address"}</p>
+                    <p className="text-[10px] font-medium transition-colors group-hover:opacity-80" style={{ color: selectedBrand.accentColor }}>Open in Google Maps →</p>
+                  </div>
                 </div>
+              </a>
+            ) : (
+              <div className="py-3 text-center text-gray-400">
+                <p className="text-xs">Location not set</p>
               </div>
-              <div className="flex items-start gap-2">
-                <svg
-                  className="w-3 h-3 mt-0.5 flex-shrink-0"
-                  style={{ color: selectedBrand.accentColor }}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-xs font-medium mb-0.5 truncate">{venueData.location.address || "Address not available"}</p>
-                  <p className="text-[10px] font-medium transition-colors group-hover:opacity-80" style={{ color: selectedBrand.accentColor }}>
-                    Open in Google Maps →
-                  </p>
-                </div>
-              </div>
-            </a>
+            )}
           </motion.section>
         )}
       </div>

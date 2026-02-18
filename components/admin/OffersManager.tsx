@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
+import { cropTo9x16AndCompress } from "@/lib/image-compression";
 
 type Offer = {
   id: string;
@@ -34,6 +35,9 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
     endDate: "",
     order: 0,
   });
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const ACCEPT = "image/jpeg,image/png,image/webp";
 
   const loadOffers = useCallback(async () => {
     setError(null);
@@ -125,6 +129,36 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
     }
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Only JPG, PNG and WebP are allowed.");
+      e.target.value = "";
+      return;
+    }
+    setError(null);
+    setUploading(true);
+    try {
+      const blob = await cropTo9x16AndCompress(file);
+      const fd = new FormData();
+      fd.append("file", blob, "poster.webp");
+      fd.append("venueSlug", brandId);
+      const res = await fetch("/api/admin/upload/offer", { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.url) {
+        setForm((f) => ({ ...f, imageUrl: data.url }));
+      } else {
+        setError(data.error || "Upload failed.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
   const startEdit = (o: Offer) => {
     setEditingId(o.id);
     setForm({
@@ -154,13 +188,34 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
         <h3 className="text-sm font-semibold text-gray-900">{editingId ? "Edit offer" : "Add offer"}</h3>
         <div className="grid gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Image URL *</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Image *</label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPT}
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+            <div className="flex flex-wrap gap-2 items-center">
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {uploading ? "Processing & uploading…" : "Upload poster (JPG/PNG/WebP → 9:16 WebP)"}
+              </button>
+              {form.imageUrl && (
+                <span className="text-xs text-green-600">Poster set</span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">Auto-crops to 9:16 and compresses to WebP (600–900KB). Stored in Supabase.</p>
             <input
               type="url"
               value={form.imageUrl}
               onChange={(e) => { setError(null); setForm((f) => ({ ...f, imageUrl: e.target.value })); }}
-              placeholder="https://..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              placeholder="Or paste image URL"
+              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
           <div>
