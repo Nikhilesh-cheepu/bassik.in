@@ -30,12 +30,19 @@ export async function GET(
     const isMissingTable =
       typeof message === "string" &&
       (message.includes("VenueOffer") || message.includes("does not exist") || code === "P2021");
-    const body: { error: string; detail?: string } = {
-      error: isMissingTable
-        ? "Offers table not set up. Run: npx prisma migrate deploy"
-        : "Internal server error",
-    };
-    if (process.env.NODE_ENV === "development") body.detail = message;
+    const schemaError =
+      typeof message === "string" &&
+      (message.includes("title") ||
+        message.includes("column") ||
+        message.includes("null value") ||
+        code === "P2011" ||
+        code === "P2022");
+    const errorMessage =
+      isMissingTable || schemaError
+        ? "Database schema is out of date. Run: npx prisma migrate deploy (with DATABASE_URL set)."
+        : "Internal server error";
+    const body: { error: string; detail?: string } = { error: errorMessage };
+    if (process.env.NODE_ENV === "development" || isMissingTable || schemaError) body.detail = message;
     return NextResponse.json(body, { status: 500 });
   }
 }
@@ -47,7 +54,15 @@ export async function POST(
 ) {
   try {
     const { brandId } = await params;
-    const body = await request.json();
+    let body: { id?: string; imageUrl?: string; endDate?: string | null } = {};
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON body. Send { imageUrl, endDate? }." },
+        { status: 400 }
+      );
+    }
     const { id, imageUrl, endDate } = body;
 
     const venue = await prisma.venue.findUnique({ where: { brandId } });
@@ -93,22 +108,38 @@ export async function POST(
     const expired = allOffers.filter((o) => o.endDate != null && o.endDate <= t);
     return NextResponse.json({ active, expired });
   } catch (error: unknown) {
-    const err = error as { code?: string; message?: string };
+    const err = error as { code?: string; message?: string; meta?: unknown };
     if (err?.code === "P2025") {
       return NextResponse.json({ error: "Offer not found" }, { status: 404 });
     }
     const message = error instanceof Error ? (error as Error).message : String(error);
     const code = err?.code ?? null;
     console.error("[admin offers POST]", error);
+
+    // Schema out of date: DB still has old columns (e.g. title NOT NULL) or missing new ones
+    const schemaError =
+      typeof message === "string" &&
+      (message.includes("title") ||
+        message.includes("null value") ||
+        message.includes("column") && (message.includes("does not exist") || message.includes("violates")) ||
+        message.includes("not-null") ||
+        code === "P2011" ||
+        code === "P2022");
+
     const isMissingTable =
       typeof message === "string" &&
       (message.includes("VenueOffer") || message.includes("does not exist") || code === "P2021");
-    const body: { error: string; detail?: string } = {
-      error: isMissingTable
-        ? "Offers table not set up. Run: npx prisma migrate deploy"
-        : "Internal server error",
-    };
-    if (process.env.NODE_ENV === "development") body.detail = message;
+
+    let errorMessage = "Internal server error";
+    if (schemaError || isMissingTable) {
+      errorMessage =
+        "Database schema is out of date. Run: npx prisma migrate deploy (with DATABASE_URL set).";
+    }
+
+    const body: { error: string; detail?: string } = { error: errorMessage };
+    if (process.env.NODE_ENV === "development" || schemaError || isMissingTable) {
+      body.detail = message;
+    }
     return NextResponse.json(body, { status: 500 });
   }
 }
