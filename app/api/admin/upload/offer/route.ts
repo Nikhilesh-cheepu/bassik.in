@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServer, OFFERS_BUCKET } from "@/lib/supabase-server";
+import { put } from "@vercel/blob";
 
+/** Offer poster upload: Vercel Blob only. Save returned URL in Postgres (no image bytes in DB). */
 export const runtime = "nodejs";
 const MAX_SIZE = 1024 * 1024; // 1MB
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -30,37 +31,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServer();
-    if (supabase) {
-      const ext = file.type === "image/webp" ? "webp" : "webp";
-      const name = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-      const path = `offers/${slug}/${name}`;
-      const { data, error } = await supabase.storage
-        .from(OFFERS_BUCKET)
-        .upload(path, file, {
-          contentType: file.type,
-          upsert: false,
-        });
-      if (error) {
-        console.error("[upload/offer] Supabase storage error:", error);
-        return NextResponse.json(
-          { error: error.message || "Storage upload failed" },
-          { status: 500 }
-        );
-      }
-      const { data: urlData } = supabase.storage.from(OFFERS_BUCKET).getPublicUrl(data.path);
-      return NextResponse.json({ url: urlData.publicUrl });
-    }
+    const name = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.webp`;
+    const pathname = `offers/${slug}/${name}`;
 
-    return NextResponse.json(
-      { error: "Supabase not configured. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY." },
-      { status: 503 }
-    );
+    const blob = await put(pathname, file, {
+      access: "public",
+      contentType: file.type,
+      addRandomSuffix: false,
+    });
+
+    return NextResponse.json({ url: blob.url });
   } catch (err: unknown) {
     console.error("[upload/offer]", err);
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Upload failed" },
-      { status: 500 }
-    );
+    const message =
+      err instanceof Error ? err.message : "Upload failed";
+    if (message.includes("BLOB_READ_WRITE_TOKEN") || message.includes("token")) {
+      return NextResponse.json(
+        { error: "Storage not configured. Add Vercel Blob (or set BLOB_READ_WRITE_TOKEN)." },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

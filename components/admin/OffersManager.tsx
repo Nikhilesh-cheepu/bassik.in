@@ -209,7 +209,7 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
                 <span className="text-xs text-green-600">Poster set</span>
               )}
             </div>
-            <p className="text-xs text-gray-500 mt-1">Auto-crops to 9:16 and compresses to WebP (600–900KB). Stored in Supabase.</p>
+            <p className="text-xs text-gray-500 mt-1">Auto-crops to 9:16 and compresses to WebP (600–900KB). Stored on Vercel Blob.</p>
             <input
               type="url"
               value={form.imageUrl}
