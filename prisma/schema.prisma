@@ -44,17 +44,16 @@ model Venue {
 }
 
 model VenueOffer {
-  id          String   @id @default(cuid())
-  venueId     String
-  imageUrl    String
-  title       String
-  description String?  // null = show placeholder on frontend
-  active      Boolean  @default(true)
-  startDate   String?  // optional display date
-  endDate     String?
-  order       Int      @default(0) // display order
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  venueId   String
+  imageUrl  String
+  title     String
+  active    Boolean  @default(true)
+  startDate String?
+  endDate   String?
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
 

@@ -10,7 +10,7 @@ import { BRANDS } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 import { trackWhatsAppClick, trackCallClick } from "@/lib/analytics";
 import EventsOffersHero from "@/components/EventsOffersHero";
-import GalleryStack from "@/components/GalleryStack";
+import GalleryCarousel from "@/components/GalleryCarousel";
 
 const MenuModal = dynamic(() => import("@/components/MenuModal"));
 const GalleryModal = dynamic(() => import("@/components/GalleryModal"));
@@ -42,7 +42,7 @@ function OutletContent() {
   const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
   type VenueContact = { phone: string; label?: string };
   const [venueData, setVenueData] = useState({
-    offers: [] as { id: string; imageUrl: string; title: string; description: string | null; startDate?: string; endDate?: string; order: number }[],
+    offers: [] as { id: string; imageUrl: string; title: string; startDate?: string; endDate?: string; order: number }[],
     galleryImages: [] as string[],
     menus: [] as any[],
     location: { address: "", mapUrl: "" },
@@ -421,19 +421,6 @@ function OutletContent() {
                   </a>
                 )}
               </div>
-              <a
-                href={`/${selectedBrandId}/reservations`}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold text-white backdrop-blur-xl border border-white/20 transition-colors touch-manipulation"
-                style={{
-                  backgroundColor: `${selectedBrand.accentColor}`,
-                  boxShadow: `0 4px 20px ${selectedBrand.accentColor}50`,
-                }}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                Book
-              </a>
               </>
             );
           })()}
@@ -564,7 +551,7 @@ function OutletContent() {
           </motion.section>
         )}
 
-        {/* Photos Section - Vertical stack, 16:9, swipe up */}
+        {/* Photos Section - Horizontal carousel, 16:9 */}
         {loading ? (
           <div className="aspect-video bg-white/5 rounded-xl animate-pulse" />
         ) : (
@@ -577,7 +564,7 @@ function OutletContent() {
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-semibold text-white">Photos</h2>
             </div>
-            <GalleryStack
+            <GalleryCarousel
               images={validGalleryImages}
               accentColor={selectedBrand.accentColor}
               onViewAll={
@@ -589,7 +576,6 @@ function OutletContent() {
                   : undefined
               }
             />
-            <p className="text-[10px] text-white/40 mt-2 text-center">Swipe up for next</p>
           </motion.section>
         )}
 

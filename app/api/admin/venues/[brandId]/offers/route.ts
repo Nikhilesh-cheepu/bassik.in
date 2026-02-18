@@ -43,7 +43,7 @@ export async function POST(
   try {
     const { brandId } = await params;
     const body = await request.json();
-    const { id, imageUrl, title, description, active, startDate, endDate, order } = body;
+    const { id, imageUrl, title, active, startDate, endDate, order } = body;
 
     const venue = await prisma.venue.findUnique({ where: { brandId } });
     if (!venue) {
@@ -60,7 +60,6 @@ export async function POST(
     const data = {
       imageUrl: String(imageUrl).trim(),
       title: String(title).trim(),
-      description: description != null ? String(description).trim() || null : null,
       active: active !== false,
       startDate: startDate != null ? String(startDate).trim() || null : null,
       endDate: endDate != null ? String(endDate).trim() || null : null,

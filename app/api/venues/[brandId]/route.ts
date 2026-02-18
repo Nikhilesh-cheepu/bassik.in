@@ -66,11 +66,10 @@ export async function GET(
     const contactPhone = contactNumbers[0]?.phone ?? getContactForBrand(brandId);
     const whatsappMessage = getWhatsAppMessageForBrand(brandId, venue.shortName);
 
-    const offers = (venue as any).offers.map((o: { id: string; imageUrl: string; title: string; description: string | null; startDate: string | null; endDate: string | null; order: number }) => ({
+    const offers = (venue as any).offers.map((o: { id: string; imageUrl: string; title: string; startDate: string | null; endDate: string | null; order: number }) => ({
       id: o.id,
       imageUrl: o.imageUrl,
       title: o.title,
-      description: o.description ?? null,
       startDate: o.startDate ?? undefined,
       endDate: o.endDate ?? undefined,
       order: o.order,

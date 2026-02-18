@@ -8,7 +8,6 @@ type Offer = {
   id: string;
   imageUrl: string;
   title: string;
-  description: string | null;
   active: boolean;
   startDate: string | null;
   endDate: string | null;
@@ -29,7 +28,6 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
   const [form, setForm] = useState({
     imageUrl: "",
     title: "",
-    description: "",
     active: true,
     startDate: "",
     endDate: "",
@@ -79,7 +77,6 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
           ...(id && { id }),
           imageUrl: form.imageUrl.trim(),
           title: form.title.trim(),
-          description: form.description.trim() || null,
           active: form.active,
           startDate: form.startDate.trim() || null,
           endDate: form.endDate.trim() || null,
@@ -90,10 +87,10 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
       if (res.ok) {
         if (data.offers && Array.isArray(data.offers)) {
           setOffers(data.offers);
-          setForm((f) => ({ imageUrl: "", title: "", description: "", active: true, startDate: "", endDate: "", order: data.offers.length }));
+          setForm((f) => ({ imageUrl: "", title: "", active: true, startDate: "", endDate: "", order: data.offers.length }));
         } else {
           await loadOffers();
-          setForm((f) => ({ ...f, imageUrl: "", title: "", description: "", order: offers.length }));
+          setForm((f) => ({ ...f, imageUrl: "", title: "", order: offers.length }));
         }
         onUpdate();
         setEditingId(null);
@@ -164,7 +161,6 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
     setForm({
       imageUrl: o.imageUrl,
       title: o.title,
-      description: o.description ?? "",
       active: o.active,
       startDate: o.startDate ?? "",
       endDate: o.endDate ?? "",
@@ -228,16 +224,6 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Description (1–2 lines)</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="Short description or leave blank for placeholder"
-              rows={2}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
-          </div>
           <div className="flex flex-wrap gap-4">
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -290,7 +276,7 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
               type="button"
               onClick={() => {
                 setEditingId(null);
-                setForm({ imageUrl: "", title: "", description: "", active: true, startDate: "", endDate: "", order: offers.length });
+                setForm({ imageUrl: "", title: "", active: true, startDate: "", endDate: "", order: offers.length });
               }}
               className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium"
             >
@@ -324,7 +310,6 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{o.title}</p>
-                  <p className="text-xs text-gray-500 truncate">{o.description || "—"}</p>
                 </div>
                 <div className="flex items-center gap-1">
                   <button

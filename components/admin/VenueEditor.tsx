@@ -18,7 +18,6 @@ type VenueOffer = {
   id: string;
   imageUrl: string;
   title: string;
-  description: string | null;
   active: boolean;
   startDate: string | null;
   endDate: string | null;
