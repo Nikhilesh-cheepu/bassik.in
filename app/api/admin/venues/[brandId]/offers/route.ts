@@ -47,7 +47,15 @@ export async function GET(
     const t = now();
     const active = venue.offers.filter((o) => o.endDate == null || o.endDate > t);
     const expired = venue.offers.filter((o) => o.endDate != null && o.endDate <= t);
-    return NextResponse.json({ active, expired });
+    return NextResponse.json(
+      { active, expired },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          Pragma: "no-cache",
+        },
+      }
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     const code = error && typeof error === "object" && "code" in error ? (error as { code?: string }).code : null;

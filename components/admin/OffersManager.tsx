@@ -13,13 +13,13 @@ type Offer = {
 
 interface OffersManagerProps {
   brandId: string;
-  existingOffers: { active: Offer[]; expired: Offer[] };
   onUpdate: () => void;
 }
 
-export default function OffersManager({ brandId, existingOffers, onUpdate }: OffersManagerProps) {
-  const [active, setActive] = useState<Offer[]>(existingOffers.active);
-  const [expired, setExpired] = useState<Offer[]>(existingOffers.expired);
+export default function OffersManager({ brandId, onUpdate }: OffersManagerProps) {
+  const [active, setActive] = useState<Offer[]>([]);
+  const [expired, setExpired] = useState<Offer[]>([]);
+  const [listLoading, setListLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -33,25 +33,26 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
 
   const loadOffers = useCallback(async () => {
     setError(null);
+    setListLoading(true);
     try {
-      const res = await fetch(`/api/admin/venues/${brandId}/offers`);
+      const res = await fetch(`/api/admin/venues/${brandId}/offers`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setActive(data.active ?? []);
-        setExpired(data.expired ?? []);
+        setActive(Array.isArray(data.active) ? data.active : []);
+        setExpired(Array.isArray(data.expired) ? data.expired : []);
       } else {
         setError(data.error || data.detail || `Failed to load offers (${res.status})`);
       }
     } catch (err) {
       console.error("Failed to load offers", err);
       setError("Network error loading offers.");
+    } finally {
+      setListLoading(false);
     }
   }, [brandId]);
-
-  useEffect(() => {
-    setActive(existingOffers.active);
-    setExpired(existingOffers.expired);
-  }, [existingOffers.active, existingOffers.expired]);
 
   useEffect(() => {
     loadOffers();
@@ -80,7 +81,7 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
           setActive(data.active);
           setExpired(data.expired);
         } else {
-          await loadOffers();
+          loadOffers();
         }
         setForm({ imageUrl: "", endDate: "" });
         onUpdate();
@@ -106,7 +107,7 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
         body: JSON.stringify({ id }),
       });
       if (res.ok) {
-        await loadOffers();
+        loadOffers();
         onUpdate();
         if (editingId === id) setEditingId(null);
       }
@@ -155,8 +156,6 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
     });
   };
 
-  const allOffers = [...active, ...expired];
-
   return (
     <div className="space-y-6">
       <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Events &amp; Offers</h2>
@@ -195,13 +194,6 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
               )}
             </div>
             <p className="text-xs text-gray-500 mt-1">Auto-crops to 9:16 and compresses to WebP. Stored on Vercel Blob.</p>
-            <input
-              type="url"
-              value={form.imageUrl}
-              onChange={(e) => { setError(null); setForm((f) => ({ ...f, imageUrl: e.target.value })); }}
-              placeholder="Or paste image URL"
-              className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">End date (optional)</label>
@@ -253,7 +245,9 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
       {/* Active */}
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-gray-900">Active ({active.length})</h3>
-        {active.length === 0 ? (
+        {listLoading ? (
+          <p className="text-sm text-gray-500">Loading offers…</p>
+        ) : active.length === 0 ? (
           <p className="text-sm text-gray-500">No active offers. Add one above.</p>
         ) : (
           <ul className="space-y-2">
@@ -303,7 +297,9 @@ export default function OffersManager({ brandId, existingOffers, onUpdate }: Off
       {/* Expired */}
       <div className="space-y-2">
         <h3 className="text-sm font-semibold text-gray-900">Expired ({expired.length})</h3>
-        {expired.length === 0 ? (
+        {listLoading ? (
+          <p className="text-sm text-gray-500">Loading…</p>
+        ) : expired.length === 0 ? (
           <p className="text-sm text-gray-500">No expired offers.</p>
         ) : (
           <ul className="space-y-2">

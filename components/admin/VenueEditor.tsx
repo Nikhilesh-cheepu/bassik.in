@@ -130,12 +130,6 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
   };
 
   const galleryImages = currentVenue.images?.filter((i) => i.type === "GALLERY") || [];
-  const rawOffers = (currentVenue.offers ?? []) as VenueOffer[];
-  const nowIso = new Date().toISOString();
-  const venueOffers = {
-    active: rawOffers.filter((o) => o.endDate == null || o.endDate > nowIso),
-    expired: rawOffers.filter((o) => o.endDate != null && o.endDate <= nowIso),
-  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -198,11 +192,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
 
         {/* Events & Offers Tab */}
         {activeTab === "offers" && (
-          <OffersManager
-            brandId={currentVenue.brandId}
-            existingOffers={venueOffers}
-            onUpdate={onSave}
-          />
+          <OffersManager brandId={currentVenue.brandId} onUpdate={onSave} />
         )}
 
         {/* Gallery Tab */}
