@@ -22,9 +22,10 @@ interface EventsOffersHeroProps {
 }
 
 const PLACEHOLDER = "No active offers right now";
-const BORDER_RADIUS = 20;
+const BORDER_RADIUS = 16;
+const CARD_MAX_HEIGHT_VH = 58;
+const CARD_WIDTH = "min(92vw, 420px)";
 
-/* Card width via slidesPerView: ~1.35 so main card + 30–40% of next visible. No fixed height. */
 export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProps) {
   const swiperRef = useRef<SwiperType | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -42,8 +43,8 @@ export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProp
           transform: scale(1);
         }
       `}} />
-      {/* Top spacing so venue dropdown does not overlap */}
-      <div className="relative z-10 flex flex-col items-center pt-14 sm:pt-16 pb-2">
+      {/* Small top padding; dropdown can overlap slightly, stays above with z-index */}
+      <div className="relative z-10 flex flex-col items-center pt-2 pb-3">
         {hasOffers ? (
           <div className="w-full overflow-hidden">
             <Swiper
@@ -65,37 +66,44 @@ export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProp
             >
               {offers.map((offer, i) => (
                 <SwiperSlide key={offer.id}>
-                  <div
-                    className="offer-card-inner w-full overflow-hidden rounded-[20px] bg-black/20 relative"
-                    style={{
-                      aspectRatio: "9 / 16",
-                      borderRadius: BORDER_RADIUS,
-                    }}
-                  >
-                    <div className="relative w-full h-full">
-                      <Image
-                        src={offer.imageUrl}
-                        alt={offer.title}
-                        fill
-                        sizes="(max-width: 768px) 78vw, 400px"
-                        className="object-contain"
-                        style={{ borderRadius: BORDER_RADIUS }}
-                        priority={i === 0}
-                        loading={i === 0 ? "eager" : "lazy"}
-                        quality={85}
-                      />
-                    </div>
-                    {total > 1 && (
-                      <div
-                        className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 px-2.5 py-1 rounded-full text-[11px] font-medium tabular-nums backdrop-blur-md border border-white/10"
-                        style={{
-                          backgroundColor: "rgba(0,0,0,0.35)",
-                          color: "rgba(212, 175, 55, 0.95)",
-                        }}
-                      >
-                        {activeIndex + 1} / {total}
+                  <div className="flex justify-center">
+                    <div
+                      className="offer-card-inner overflow-hidden rounded-[16px] relative flex flex-col items-center justify-center"
+                      style={{
+                        width: CARD_WIDTH,
+                        maxHeight: `${CARD_MAX_HEIGHT_VH}vh`,
+                        aspectRatio: "9 / 16",
+                        borderRadius: BORDER_RADIUS,
+                        boxShadow: "0 4px 24px rgba(0,0,0,0.25)",
+                      }}
+                    >
+                      {/* Dark background for letterboxing when image doesn't fill */}
+                      <div className="absolute inset-0 bg-black/50 rounded-[16px]" />
+                      <div className="relative w-full h-full min-h-0">
+                        <Image
+                          src={offer.imageUrl}
+                          alt={offer.title}
+                          fill
+                          sizes="(max-width: 768px) 92vw, 420px"
+                          className="object-contain"
+                          style={{ borderRadius: BORDER_RADIUS }}
+                          priority={i === 0}
+                          loading={i === 0 ? "eager" : "lazy"}
+                          quality={85}
+                        />
                       </div>
-                    )}
+                      {total > 1 && (
+                        <div
+                          className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 px-2.5 py-1 rounded-full text-[11px] font-medium tabular-nums backdrop-blur-md border border-white/10"
+                          style={{
+                            backgroundColor: "rgba(0,0,0,0.4)",
+                            color: "rgba(212, 175, 55, 0.95)",
+                          }}
+                        >
+                          {activeIndex + 1} / {total}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </SwiperSlide>
               ))}
@@ -103,10 +111,11 @@ export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProp
           </div>
         ) : (
           <div
-            className="rounded-[20px] flex items-center justify-center bg-black/30 border border-white/10"
+            className="rounded-[16px] flex items-center justify-center bg-black/30 border border-white/10"
             style={{
               aspectRatio: "9 / 16",
-              width: "min(78vw, 360px)",
+              width: CARD_WIDTH,
+              maxHeight: `${CARD_MAX_HEIGHT_VH}vh`,
               borderRadius: BORDER_RADIUS,
             }}
           >

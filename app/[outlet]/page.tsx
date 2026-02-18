@@ -264,8 +264,8 @@ function OutletContent() {
         </div>
       </div>
 
-      {/* CTA row: WhatsApp (green) + Call (blue) + Book (gold) – directly under hero, no heading */}
-      <div className="relative -mt-3 z-20 pointer-events-auto">
+      {/* CTA row: WhatsApp + Call – spacing from carousel (8–12px) */}
+      <div className="relative mt-3 z-20 pointer-events-auto">
         <div className="max-w-4xl mx-auto px-4 flex flex-wrap justify-center gap-2">
           {(() => {
             const contacts =
@@ -427,8 +427,8 @@ function OutletContent() {
         </div>
       </div>
 
-      {/* Content Sections */}
-      <div className="max-w-4xl mx-auto px-4 -mt-3 relative z-10 space-y-3 pb-32">
+      {/* Content Sections – spacing from CTA row (10–14px) */}
+      <div className="max-w-4xl mx-auto px-4 mt-4 relative z-10 space-y-3 pb-32">
         {fetchError && (
           <button
             type="button"
