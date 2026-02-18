@@ -106,9 +106,8 @@ function OutletContent() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 12000);
       const res = await fetch(`/api/venues/${selectedBrandId}`, {
-        cache: "no-store",
+        next: { revalidate: 30 },
         signal: controller.signal,
-        headers: { "Cache-Control": "no-cache" },
       });
       clearTimeout(timeoutId);
       const data = await res.json();
@@ -173,7 +172,7 @@ function OutletContent() {
     <div className="min-h-screen bg-black">
       {/* Events & Offers hero (Swiggy-style carousel) */}
       <div className="relative w-full z-0">
-        <EventsOffersHero offers={venueOffers} brand={selectedBrand} />
+        <EventsOffersHero offers={venueOffers} brand={selectedBrand} isLoading={loading} />
         {/* Outlet switcher overlay – above carousel so first tap works */}
         <div ref={dropdownRef} className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
           <motion.button
