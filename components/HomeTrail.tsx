@@ -147,25 +147,17 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
       );
     };
 
-    const firstBatch = orderedVenues.slice(0, 6);
-    const remaining = orderedVenues.slice(6);
-
-    const t0 = requestAnimationFrame(() => fetchGalleries(firstBatch));
-
     let idleId: number | null = null;
-    if (remaining.length > 0) {
-      if (typeof window !== "undefined") {
-        const w = window as any;
-        if (typeof w.requestIdleCallback === "function") {
-          idleId = w.requestIdleCallback(() => fetchGalleries(remaining));
-        } else {
-          idleId = window.setTimeout(() => fetchGalleries(remaining), 2000);
-        }
+    if (orderedVenues.length > 0 && typeof window !== "undefined") {
+      const w = window as any;
+      if (typeof w.requestIdleCallback === "function") {
+        idleId = w.requestIdleCallback(() => fetchGalleries(orderedVenues));
+      } else {
+        idleId = window.setTimeout(() => fetchGalleries(orderedVenues), 2000);
       }
     }
 
     return () => {
-      cancelAnimationFrame(t0);
       if (idleId !== null && typeof window !== "undefined") {
         const w = window as any;
         if (typeof w.cancelIdleCallback === "function") {
