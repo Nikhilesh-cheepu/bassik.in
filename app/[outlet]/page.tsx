@@ -551,19 +551,17 @@ function OutletContent() {
           </motion.section>
         )}
 
-        {/* Photos Section - Horizontal carousel, 16:9 */}
+        {/* Photos Section - Edge-to-edge 16:9 carousel, no outer box */}
         {loading ? (
-          <div className="aspect-video bg-white/5 rounded-xl animate-pulse" />
+          <div className="aspect-video w-full bg-white/5 animate-pulse" />
         ) : (
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-3"
+            className="w-full"
           >
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold text-white">Photos</h2>
-            </div>
+            <h2 className="text-sm font-semibold text-white mb-2 px-1">Photos</h2>
             <GalleryCarousel
               images={validGalleryImages}
               accentColor={selectedBrand.accentColor}
