@@ -31,6 +31,13 @@ export async function POST(
       );
     }
 
+    if (type === ImageType.COVER) {
+      return NextResponse.json(
+        { error: "Cover images are no longer used. Use the Events & Offers tab to add offer images." },
+        { status: 400 }
+      );
+    }
+
     console.log(`[API] Processing ${images.length} images of type ${type} for venue ${brandId}`);
 
     const venue = await prisma.venue.findUnique({

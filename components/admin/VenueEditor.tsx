@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import ImageUploader from "./ImageUploader";
 import MenuManager from "./MenuManager";
+import OffersManager from "./OffersManager";
 
 interface Admin {
   id: string;
@@ -13,6 +14,17 @@ interface Admin {
 
 type VenueContact = { phone: string; label?: string };
 
+type VenueOffer = {
+  id: string;
+  imageUrl: string;
+  title: string;
+  description: string | null;
+  active: boolean;
+  startDate: string | null;
+  endDate: string | null;
+  order: number;
+};
+
 interface Venue {
   id: string;
   brandId: string;
@@ -22,9 +34,9 @@ interface Venue {
   mapUrl: string | null;
   contactPhone?: string | null;
   contactNumbers?: VenueContact[] | null;
-  coverVideoUrl?: string | null;
   images: any[];
   menus: any[];
+  offers?: VenueOffer[];
 }
 
 interface VenueEditorProps {
@@ -44,13 +56,10 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
       : venue.contactPhone
         ? [{ phone: String(venue.contactPhone), label: "Contact" }]
         : []) as VenueContact[],
-    coverVideoUrl: (venue.coverVideoUrl ?? "").toString(),
   });
-  const [activeTab, setActiveTab] = useState<"cover" | "gallery" | "menus" | "location" | "contact">("cover");
+  const [activeTab, setActiveTab] = useState<"offers" | "gallery" | "menus" | "location" | "contact">("offers");
   const [saving, setSaving] = useState(false);
-  const [videoUploading, setVideoUploading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
 
   // Update currentVenue when venue prop changes (after onSave refreshes data)
   useEffect(() => {
@@ -63,18 +72,16 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
         : venue.contactPhone
           ? [{ phone: String(venue.contactPhone), label: "Contact" }]
           : []) as VenueContact[],
-      coverVideoUrl: (venue.coverVideoUrl ?? "").toString(),
     });
   }, [venue]);
 
-  const handleSave = async (payload?: { mapUrl?: string; contactPhone?: string; contactNumbers?: VenueContact[]; coverVideoUrl?: string }) => {
+  const handleSave = async (payload?: { mapUrl?: string; contactPhone?: string; contactNumbers?: VenueContact[] }) => {
     setSaving(true);
     setMessage(null);
     const dataToSend = payload ?? {
       mapUrl: formData.mapUrl,
       contactPhone: formData.contactPhone || null,
       contactNumbers: formData.contactNumbers,
-      coverVideoUrl: formData.coverVideoUrl || null,
     };
 
     try {
@@ -87,12 +94,11 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
           ...(dataToSend.mapUrl !== undefined && { mapUrl: dataToSend.mapUrl }),
           ...(dataToSend.contactPhone !== undefined && { contactPhone: dataToSend.contactPhone || "" }),
           ...(dataToSend.contactNumbers !== undefined && { contactNumbers: dataToSend.contactNumbers }),
-          ...(dataToSend.coverVideoUrl !== undefined && { coverVideoUrl: dataToSend.coverVideoUrl || "" }),
         }),
       });
 
       if (res.ok) {
-        const msg = payload?.contactNumbers !== undefined || payload?.contactPhone !== undefined ? "Contact numbers saved!" : payload?.coverVideoUrl !== undefined ? "Cover video saved!" : "Location saved successfully!";
+        const msg = payload?.contactNumbers !== undefined || payload?.contactPhone !== undefined ? "Contact numbers saved!" : "Location saved successfully!";
         setMessage({ type: "success", text: msg });
         onSave();
       } else {
@@ -127,50 +133,8 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
     }));
   };
 
-  const handleVideoFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("video/")) {
-      setMessage({ type: "error", text: "Please select a video file (MP4 or MOV)." });
-      return;
-    }
-    const maxSize = 80 * 1024 * 1024; // 80MB
-    if (file.size > maxSize) {
-      setMessage({ type: "error", text: "Video must be under 80MB." });
-      return;
-    }
-    setVideoUploading(true);
-    setMessage(null);
-    try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Failed to read file"));
-        reader.readAsDataURL(file);
-      });
-      const res = await fetch("/api/admin/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ video: dataUrl }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Upload failed");
-      }
-      const { url } = await res.json();
-      setFormData((prev) => ({ ...prev, coverVideoUrl: url }));
-      await handleSave({ coverVideoUrl: url });
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Video upload failed" });
-    } finally {
-      setVideoUploading(false);
-      e.target.value = "";
-      if (videoInputRef.current) videoInputRef.current.value = "";
-    }
-  };
-
-  const coverImages = currentVenue.images?.filter((i) => i.type === "COVER") || [];
   const galleryImages = currentVenue.images?.filter((i) => i.type === "GALLERY") || [];
+  const venueOffers = currentVenue.offers ?? [];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -196,7 +160,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
         <div className="max-w-7xl mx-auto px-3 sm:px-4">
           <nav className="flex space-x-4 sm:space-x-8 overflow-x-auto scrollbar-hide -mb-px">
             {[
-              { id: "cover", label: "Cover Photos" },
+              { id: "offers", label: "Events & Offers" },
               { id: "gallery", label: "Gallery" },
               { id: "menus", label: "Menus" },
               { id: "location", label: "Location" },
@@ -204,7 +168,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id as typeof activeTab)}
                 className={`px-2 sm:px-1 py-3 sm:py-4 text-xs sm:text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
                   activeTab === tab.id
                     ? "border-orange-500 text-orange-600"
@@ -231,89 +195,13 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
           </div>
         )}
 
-        {/* Cover Photos Tab */}
-        {activeTab === "cover" && (
-          <div className="space-y-6">
-            {/* Cover video only for The Hub; all other outlets use cover images only */}
-            {currentVenue.brandId === "the-hub" && (
-              <div className="bg-white rounded-lg shadow p-4 sm:p-6 space-y-4">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Cover Video (optional)</h3>
-                <p className="text-xs text-gray-600 mb-3">
-                  Use a direct video URL (recommended for large files) or upload a small file (max ~4MB on Vercel).
-                </p>
-                {/* Video URL - no size limit, avoids 413 */}
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Video URL</label>
-                  <div className="flex flex-wrap gap-2">
-                    <input
-                      type="url"
-                      value={formData.coverVideoUrl && formData.coverVideoUrl.startsWith("http") ? formData.coverVideoUrl : ""}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, coverVideoUrl: e.target.value.trim() }))}
-                      placeholder="https://example.com/video.mp4"
-                      className="flex-1 min-w-[200px] px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const url = formData.coverVideoUrl?.trim();
-                        if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
-                          await handleSave({ coverVideoUrl: url });
-                        } else if (url) {
-                          setMessage({ type: "error", text: "Enter a valid http or https URL" });
-                        }
-                      }}
-                      disabled={saving}
-                      className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
-                    >
-                      Save URL
-                    </button>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="file"
-                    ref={videoInputRef}
-                    accept="video/mp4,video/webm,video/quicktime"
-                    onChange={handleVideoFileSelect}
-                    className="hidden"
-                  />
-                  <span className="text-xs text-gray-500">Or upload file (max ~4MB):</span>
-                  <button
-                    type="button"
-                    onClick={() => videoInputRef.current?.click()}
-                    disabled={videoUploading || saving}
-                    className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                  >
-                    {videoUploading ? "Uploading…" : "Upload video"}
-                  </button>
-                  {formData.coverVideoUrl ? (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        setFormData((prev) => ({ ...prev, coverVideoUrl: "" }));
-                        await handleSave({ coverVideoUrl: "" });
-                      }}
-                      disabled={saving}
-                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-                    >
-                      Remove video
-                    </button>
-                  ) : null}
-                </div>
-                {formData.coverVideoUrl ? (
-                  <p className="text-xs text-green-600">Cover video is set. Paste a new URL and click Save URL, or upload a new file.</p>
-                ) : null}
-              </div>
-            )}
-            <ImageUploader
-              venueId={currentVenue.brandId}
-              imageType="COVER"
-              existingImages={coverImages}
-              maxImages={3}
-              aspectRatio="any"
-              onUpdate={onSave}
-            />
-          </div>
+        {/* Events & Offers Tab */}
+        {activeTab === "offers" && (
+          <OffersManager
+            brandId={currentVenue.brandId}
+            existingOffers={venueOffers}
+            onUpdate={onSave}
+          />
         )}
 
         {/* Gallery Tab */}

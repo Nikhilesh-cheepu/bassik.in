@@ -139,6 +139,8 @@ export const BRANDS: Brand[] = [
     websiteUrl: "https://example.com/thezenzspot", // TODO: Replace with real website URL
     description: "Club nights • Party vibes",
     tag: "Club",
+    // Use placeholder until /logos/thezenzspot.png is added (avoids 404 loop)
+    logoPath: "/logos/bassik.png",
   },
   {
     id: "firefly",

@@ -27,6 +27,7 @@ export async function GET(request: NextRequest) {
         images: {
           orderBy: [{ type: "asc" }, { order: "asc" }],
         },
+        offers: { orderBy: { order: "asc" } },
         menus: {
           include: {
             images: {
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { brandId, name, shortName, address, mapUrl, contactPhone, contactNumbers, coverVideoUrl } = body;
+    const { brandId, name, shortName, address, mapUrl, contactPhone, contactNumbers } = body;
 
     if (!brandId) {
       return NextResponse.json(
@@ -88,11 +89,6 @@ export async function POST(request: NextRequest) {
         : [];
       updateData.contactNumbers = valid.length > 0 ? valid : null;
     }
-    // Cover video only for The Hub; other outlets use cover images only
-    if (coverVideoUrl !== undefined) {
-      updateData.coverVideoUrl = brandId === "the-hub" ? (coverVideoUrl === "" ? null : coverVideoUrl || null) : null;
-    }
-
     let venue;
     if (existingVenue) {
       // Update existing venue
@@ -117,7 +113,6 @@ export async function POST(request: NextRequest) {
         shortName,
         address: address || "Address to be updated",
         mapUrl: mapUrl || null,
-        coverVideoUrl: brandId === "the-hub" ? (coverVideoUrl === "" ? null : coverVideoUrl || null) : null,
       };
       if (contactNumbers !== undefined) {
         const valid = Array.isArray(contactNumbers)

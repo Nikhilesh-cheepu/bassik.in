@@ -63,10 +63,13 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
           });
           if (res.ok) {
             const data = await res.json();
-            const coverImages = data.venue?.coverImages || [];
+            const offers = data.venue?.offers || [];
+            const gallery = data.venue?.galleryImages || [];
+            const coverImage =
+              offers.length > 0 ? offers[0].imageUrl : gallery.length > 0 ? gallery[0] : null;
             return {
               brandId: brand.id,
-              coverImage: coverImages.length > 0 ? coverImages[0] : null,
+              coverImage: typeof coverImage === "string" ? coverImage : null,
               loading: false,
             };
           }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { BRANDS } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 import { trackWhatsAppClick, trackCallClick } from "@/lib/analytics";
+import EventsOffersHero from "@/components/EventsOffersHero";
 
 const MenuModal = dynamic(() => import("@/components/MenuModal"));
 const GalleryModal = dynamic(() => import("@/components/GalleryModal"));
@@ -40,8 +41,7 @@ function OutletContent() {
   const [selectedMenuId, setSelectedMenuId] = useState<string | null>(null);
   type VenueContact = { phone: string; label?: string };
   const [venueData, setVenueData] = useState({
-    coverImages: [] as string[],
-    coverVideoUrl: null as string | null,
+    offers: [] as { id: string; imageUrl: string; title: string; description: string | null; startDate?: string; endDate?: string; order: number }[],
     galleryImages: [] as string[],
     menus: [] as any[],
     location: { address: "", mapUrl: "" },
@@ -49,6 +49,7 @@ function OutletContent() {
     contactNumbers: [] as VenueContact[],
     whatsappMessage: "",
   });
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedContactIndex, setSelectedContactIndex] = useState(0);
   const [whatsappDropdownOpen, setWhatsappDropdownOpen] = useState(false);
   const [contactDropdownOpen, setContactDropdownOpen] = useState(false);
@@ -57,28 +58,11 @@ function OutletContent() {
   const [failedGalleryImages, setFailedGalleryImages] = useState<Set<number>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
   const contactDropdownRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
 
   const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
-  // Cover video only for The Hub; all other outlets use cover image only
-  const coverVideoUrl = selectedBrandId === "the-hub" ? (venueData.coverVideoUrl || null) : null;
-  const coverImage = venueData.coverImages[0] || null;
+  const venueOffers = venueData.offers;
   const validGalleryImages = venueData.galleryImages.filter((_, index) => !failedGalleryImages.has(index));
   const logoPath = selectedBrand.logoPath ?? (selectedBrand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${selectedBrand.id}.png`);
-
-  const handleVideoToggle = async () => {
-    const el = videoRef.current;
-    if (!el) return;
-    // Single action: play once when user taps the button
-    if (!el.paused) return;
-    try {
-      await el.play();
-      setIsVideoPlaying(true);
-    } catch (err) {
-      console.error("[Outlet] Failed to play cover video:", err);
-    }
-  };
 
   // Set mounted and sync with URL
   useEffect(() => {
@@ -112,109 +96,54 @@ function OutletContent() {
     setSelectedContactIndex(0);
   }, [selectedBrandId]);
 
-  // Load venue data when brand changes - optimized for faster loading
-  useEffect(() => {
-    let cancelled = false;
-    
-    const loadVenueData = async () => {
-      // Don't block UI - show page immediately, load data progressively
-      setLoading(true);
-      setLoadedGalleryImages(new Set());
-      setFailedGalleryImages(new Set());
-      
-      try {
-        // Use AbortController for cancellation
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
-        
-        const res = await fetch(`/api/venues/${selectedBrandId}`, {
-          cache: 'no-store', // Always fetch fresh data
-          signal: controller.signal,
-          headers: {
-            'Cache-Control': 'no-cache',
-          },
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (cancelled) return;
-        
-        if (res.ok) {
-          const data = await res.json();
-          if (cancelled) return;
-          
-          // Update state progressively - cover first
-          setVenueData(prev => ({
-            ...prev,
-            coverImages: data.venue.coverImages || [],
-            coverVideoUrl: data.venue.coverVideoUrl || null,
-          }));
-          
-          // Then update rest of data
-          setTimeout(() => {
-            if (!cancelled) {
-              setVenueData(prev => ({
-                ...prev,
-                galleryImages: data.venue.galleryImages || [],
-                menus: data.venue.menus || [],
-                location: {
-                  address: data.venue.address || "",
-                  mapUrl: data.venue.mapUrl || "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
-                },
-                contactPhone: data.venue.contactPhone || "",
-                contactNumbers: data.venue.contactNumbers || [],
-                whatsappMessage: data.venue.whatsappMessage || "",
-              }));
-              setLoading(false);
-            }
-          }, 50); // Small delay to show cover first
-        } else {
-          if (cancelled) return;
-          setVenueData({
-            coverImages: [],
-            coverVideoUrl: null,
-            galleryImages: [],
-            menus: [],
-            location: {
-              address: "",
-              mapUrl: "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
-            },
-            contactPhone: "",
-            contactNumbers: [],
-            whatsappMessage: "",
-          });
-          setLoading(false);
-        }
-      } catch (error: any) {
-        if (error.name === 'AbortError') {
-          console.log('Request cancelled');
-          return;
-        }
-        if (cancelled) return;
-        console.error("Error fetching venue data:", error);
-        setVenueData({
-          coverImages: [],
-          coverVideoUrl: null,
-          galleryImages: [],
-          menus: [],
-          location: {
-            address: "",
-            mapUrl: "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
-          },
-          contactPhone: "",
-          contactNumbers: [],
-          whatsappMessage: "",
-        });
+  const loadVenueData = useCallback(async () => {
+    setFetchError(null);
+    setLoading(true);
+    setLoadedGalleryImages(new Set());
+    setFailedGalleryImages(new Set());
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(`/api/venues/${selectedBrandId}`, {
+        cache: "no-store",
+        signal: controller.signal,
+        headers: { "Cache-Control": "no-cache" },
+      });
+      clearTimeout(timeoutId);
+      const data = await res.json();
+      if (!res.ok) {
+        setFetchError(data.error || "Failed to load");
+        setVenueData(prev => ({ ...prev, offers: [], galleryImages: [], menus: [], location: { address: "", mapUrl: "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6" }, contactPhone: "", contactNumbers: [], whatsappMessage: "" }));
         setLoading(false);
+        return;
       }
-    };
-
-    loadVenueData();
-    
-    return () => {
-      cancelled = true;
-    };
+      const v = data.venue || {};
+      setVenueData({
+        offers: Array.isArray(v.offers) ? v.offers : [],
+        galleryImages: Array.isArray(v.galleryImages) ? v.galleryImages : [],
+        menus: Array.isArray(v.menus) ? v.menus : [],
+        location: {
+          address: v.address ?? "",
+          mapUrl: v.mapUrl ?? "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6",
+        },
+        contactPhone: v.contactPhone ?? "",
+        contactNumbers: Array.isArray(v.contactNumbers) ? v.contactNumbers : [],
+        whatsappMessage: v.whatsappMessage ?? "",
+      });
+      setFetchError(null);
+    } catch (err: any) {
+      if (err.name === "AbortError") return;
+      console.error("Error fetching venue data:", err);
+      setFetchError("Failed to load. Tap to retry.");
+      setVenueData(prev => ({ ...prev, offers: [], galleryImages: [], menus: [], location: { address: "", mapUrl: "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6" }, contactPhone: "", contactNumbers: [], whatsappMessage: "" }));
+    } finally {
+      setLoading(false);
+    }
   }, [selectedBrandId]);
+
+  useEffect(() => {
+    loadVenueData();
+  }, [loadVenueData]);
 
   const handleBookNow = () => {
     router.push(`/${selectedBrandId}/reservations`);
@@ -241,68 +170,10 @@ function OutletContent() {
 
   return (
     <div className="min-h-screen bg-black">
-      {/* Full-bleed Cover - Video or Image */}
-      <div className="relative w-full h-[60vh] sm:h-[65vh] overflow-hidden">
-        {/* Show brand gradient immediately while loading */}
-        {!coverVideoUrl && !coverImage && (
-          <div 
-            className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black"
-            style={{
-              background: `linear-gradient(135deg, ${selectedBrand.accentColor}20, ${selectedBrand.accentColor}40, black)`,
-            }}
-          />
-        )}
-        {loading && (coverVideoUrl || coverImage) ? (
-          <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black animate-pulse" />
-        ) : coverVideoUrl ? (
-          <video
-            ref={videoRef}
-            loop
-            playsInline
-            controls={false}
-            className="absolute inset-0 w-full h-full object-cover brightness-100"
-            src={coverVideoUrl}
-            onPlay={() => setIsVideoPlaying(true)}
-            onPause={() => setIsVideoPlaying(false)}
-          />
-        ) : coverImage ? (
-          <Image
-            src={coverImage}
-            alt={selectedBrand.shortName}
-            fill
-            sizes="100vw"
-            className="object-cover brightness-100"
-            unoptimized
-            priority
-            quality={85}
-          />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black" />
-        )}
-        
-        {/* Centered play button - shown only before video starts */}
-        {coverVideoUrl && !isVideoPlaying && (
-          <button
-            type="button"
-            onClick={handleVideoToggle}
-            className="absolute inset-0 z-20 flex items-center justify-center"
-          >
-            <span className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-black/70 text-white shadow-xl border border-white/40">
-              <svg
-                className="w-7 h-7 sm:w-8 sm:h-8"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            </span>
-          </button>
-        )}
-
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/30 to-black/80" />
-        
-        {/* Compact Outlet Switcher Dropdown */}
+      {/* Events & Offers hero (Swiggy-style carousel) */}
+      <div className="relative w-full">
+        <EventsOffersHero offers={venueOffers} brand={selectedBrand} />
+        {/* Outlet switcher overlay */}
         <div ref={dropdownRef} className="absolute top-4 left-1/2 -translate-x-1/2 z-20">
           <motion.button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -393,8 +264,8 @@ function OutletContent() {
         </div>
       </div>
 
-      {/* Compact contact actions – dropdown when multiple numbers */}
-      <div className="relative -mt-6 z-20">
+      {/* WhatsApp + Call – compact row under hero */}
+      <div className="relative -mt-4 z-20">
         <div className="max-w-4xl mx-auto px-4 flex justify-center">
           {(() => {
             const contacts =
@@ -556,6 +427,15 @@ function OutletContent() {
 
       {/* Content Sections */}
       <div className="max-w-4xl mx-auto px-4 -mt-3 relative z-10 space-y-3 pb-32">
+        {fetchError && (
+          <button
+            type="button"
+            onClick={loadVenueData}
+            className="w-full py-4 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-sm font-medium"
+          >
+            {fetchError}
+          </button>
+        )}
         {/* The Hub: Book a table at these spots */}
         {selectedBrand.showSpotsSection && (
           <motion.section

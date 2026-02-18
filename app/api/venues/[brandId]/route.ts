@@ -19,12 +19,13 @@ export async function GET(
       'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
     };
 
-    // Fetch venue data with all related images and menus
+    // Fetch venue data with images, menus, and offers
     const venue = await prisma.venue.findUnique({
       where: { brandId },
       include: {
         images: {
-          orderBy: [{ type: "asc" }, { order: "asc" }],
+          where: { type: "GALLERY" },
+          orderBy: { order: "asc" },
         },
         menus: {
           include: {
@@ -34,6 +35,10 @@ export async function GET(
           },
           orderBy: { name: "asc" },
         },
+        offers: {
+          where: { active: true },
+          orderBy: { order: "asc" },
+        },
       },
     });
 
@@ -41,14 +46,7 @@ export async function GET(
       return NextResponse.json({ error: "Venue not found" }, { status: 404 });
     }
 
-    // Format data for frontend
-    const coverImages = venue.images
-      .filter((img: { type: string }) => img.type === "COVER")
-      .map((img: { url: string }) => img.url);
-    
-    const galleryImages = venue.images
-      .filter((img: { type: string }) => img.type === "GALLERY")
-      .map((img: { url: string }) => img.url);
+    const galleryImages = venue.images.map((img: { url: string }) => img.url);
 
     const menus = venue.menus.map((menu: { id: string; name: string; thumbnailUrl: string; images: { url: string }[] }) => ({
       id: menu.id,
@@ -57,7 +55,7 @@ export async function GET(
       images: menu.images.map((img: { url: string }) => img.url),
     }));
 
-    const venueExt = venue as { contactPhone?: string | null; contactNumbers?: { phone: string; label?: string }[] | null; coverVideoUrl?: string | null };
+    const venueExt = venue as { contactPhone?: string | null; contactNumbers?: { phone: string; label?: string }[] | null };
     const rawContacts = venueExt.contactNumbers;
     const contactNumbers: { phone: string; label?: string }[] = Array.isArray(rawContacts) && rawContacts.length > 0
       ? rawContacts.filter((c: any) => c && typeof c.phone === "string" && c.phone.trim())
@@ -67,6 +65,16 @@ export async function GET(
         })();
     const contactPhone = contactNumbers[0]?.phone ?? getContactForBrand(brandId);
     const whatsappMessage = getWhatsAppMessageForBrand(brandId, venue.shortName);
+
+    const offers = (venue as any).offers.map((o: { id: string; imageUrl: string; title: string; description: string | null; startDate: string | null; endDate: string | null; order: number }) => ({
+      id: o.id,
+      imageUrl: o.imageUrl,
+      title: o.title,
+      description: o.description ?? null,
+      startDate: o.startDate ?? undefined,
+      endDate: o.endDate ?? undefined,
+      order: o.order,
+    }));
 
     return NextResponse.json(
       {
@@ -80,10 +88,9 @@ export async function GET(
           contactPhone,
           contactNumbers,
           whatsappMessage,
-          coverVideoUrl: venueExt.coverVideoUrl ?? null,
-          coverImages,
           galleryImages,
           menus,
+          offers,
         },
       },
       { headers }
@@ -120,15 +127,14 @@ export async function GET(
               brandId,
               name: brand.name,
               shortName: brand.shortName,
-              address: null,
+              address: "",
               mapUrl: null,
               contactPhone,
               contactNumbers: [{ phone: contactPhone, label: "Contact" }],
               whatsappMessage,
-              coverVideoUrl: null,
-              coverImages: [],
               galleryImages: [],
               menus: [],
+              offers: [],
             },
           },
           { headers }
