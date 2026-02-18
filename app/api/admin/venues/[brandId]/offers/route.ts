@@ -1,9 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
 
 const now = () => new Date().toISOString();
+
+// Fallback for DB that still has old VenueOffer columns (title, active, startDate, order) before migration
+async function createOfferLegacy(
+  venueId: string,
+  imageUrl: string,
+  endDate: string | null
+): Promise<void> {
+  const id = randomUUID();
+  const ts = new Date().toISOString();
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "VenueOffer" ("id", "venueId", "imageUrl", "title", "active", "startDate", "endDate", "order", "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10::timestamptz)`,
+    id,
+    venueId,
+    imageUrl,
+    "", // title
+    true, // active
+    null, // startDate
+    endDate,
+    0, // order
+    ts,
+    ts
+  );
+}
 
 // GET - List offers for a venue (by brandId), grouped into active and expired
 export async function GET(
@@ -92,12 +117,22 @@ export async function POST(
         data,
       });
     } else {
-      await prisma.venueOffer.create({
-        data: {
-          venueId: venue.id,
-          ...data,
-        },
-      });
+      try {
+        await prisma.venueOffer.create({
+          data: {
+            venueId: venue.id,
+            ...data,
+          },
+        });
+      } catch (createErr: unknown) {
+        const code = (createErr as { code?: string })?.code;
+        // P2011 = null constraint violation = DB still has old schema (title NOT NULL etc.)
+        if (code === "P2011") {
+          await createOfferLegacy(venue.id, data.imageUrl, data.endDate);
+        } else {
+          throw createErr;
+        }
+      }
     }
     const allOffers = await prisma.venueOffer.findMany({
       where: { venueId: venue.id },
