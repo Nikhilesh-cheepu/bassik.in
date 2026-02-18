@@ -264,9 +264,9 @@ function OutletContent() {
         </div>
         </div>
 
-        {/* CTA row: glass pills, 12–16px below carousel */}
+        {/* CTA row: two pills only, no extra outer box */}
         <div className="flex-shrink-0 mt-3 px-4 z-20 pointer-events-auto flex justify-center">
-          <div className="flex items-center gap-2 w-full max-w-[280px] rounded-full bg-white/5 backdrop-blur-xl border border-white/10 px-2 py-1.5">
+          <div className="flex items-center gap-2 w-full max-w-[280px] justify-center">
             {(() => {
             const contacts =
               venueData.contactNumbers.length > 0
@@ -283,7 +283,7 @@ function OutletContent() {
 
             return (
               <>
-              <div className="inline-flex items-center gap-2 rounded-full bg-black/50 backdrop-blur-xl border border-white/15 px-2 py-1 flex-wrap justify-center">
+              <div className="flex items-center gap-2 flex-wrap justify-center">
                 {hasMultiple ? (
                   <div ref={contactDropdownRef} className="relative">
                     <button
@@ -427,9 +427,9 @@ function OutletContent() {
           </div>
         </div>
 
-        {/* MENU row: label + 2 cards, compact, inside hero */}
-        <div className="flex-shrink-0 mt-3 px-4 pb-3 z-10">
-          <p className="text-[12px] font-medium uppercase tracking-wider text-white/50 mb-2">Menu</p>
+        {/* MENU row: label + 2 cards, compact spacing */}
+        <div className="flex-shrink-0 mt-2 px-4 pb-2 z-10">
+          <p className="text-[12px] font-medium uppercase tracking-wider text-white/50 mb-1.5">Menu</p>
           {loading ? (
             <div className="flex gap-2">
               <div className="flex-1 h-14 rounded-xl bg-white/5 animate-pulse" />
@@ -477,7 +477,7 @@ function OutletContent() {
       </div>
 
       {/* Content Sections – below hero (Photos, Location, etc.) */}
-      <div className="max-w-4xl mx-auto px-4 pt-4 relative z-10 space-y-3 pb-32">
+      <div className="max-w-4xl mx-auto px-4 pt-3 relative z-10 space-y-3 pb-32">
         {fetchError && (
           <button
             type="button"
