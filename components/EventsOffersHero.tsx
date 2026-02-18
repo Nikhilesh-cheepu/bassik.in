@@ -31,11 +31,11 @@ interface EventsOffersHeroProps {
   brand: Brand;
 }
 
-/** 9:16 card width (vw) so left/right peek ~12% each */
+/** Card width (vw) for peek; height comes from aspect-ratio 9:16 only */
 const CARD_WIDTH_VW = 76;
 const CARD_GAP_PX = 12;
-/** Max hero height 70–75vh so CTA stays visible; no 3:4. */
-const HERO_MAX_HEIGHT_VH = 72;
+/** On mobile, cap hero so CTA below is slightly visible (80–85vh). */
+const HERO_MAX_HEIGHT_VH = 85;
 
 export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProps) {
   const [emblaRef, emblaApi] = useEmblaCarousel({
@@ -121,16 +121,17 @@ export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProp
         />
       </div>
 
-      <div className="relative z-10 py-4 sm:py-5">
-        {/* Carousel: 9:16 cards, constrained so CTA fits in viewport */}
+      <div className="relative z-10 pt-3 pb-2 sm:pt-4 sm:pb-3">
+        {/* Carousel: height driven by 9:16 cards only; wrapper does not set height */}
         <div
           className="overflow-hidden"
           ref={emblaRef}
           onTouchStart={pauseAutoSlide}
           onPointerDown={pauseAutoSlide}
+          style={{ minHeight: 0 }}
         >
           <div
-            className="flex touch-pan-x items-center"
+            className="flex touch-pan-x items-stretch"
             style={{
               gap: CARD_GAP_PX,
               paddingLeft: "12vw",
@@ -140,14 +141,13 @@ export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProp
             {displayOffers.map((offer, i) => (
               <div
                 key={offer.id}
-                className="flex-shrink-0 min-w-0 rounded-2xl overflow-hidden shadow-xl border border-white/10 bg-black/30"
+                className="flex-shrink-0 min-w-0 rounded-2xl overflow-hidden"
                 style={{
-                  width: `${CARD_WIDTH_VW}vw`,
+                  width: `min(${CARD_WIDTH_VW}vw, calc((${HERO_MAX_HEIGHT_VH}vh - 7.5rem) * 9 / 16))`,
                   aspectRatio: "9 / 16",
-                  maxHeight: `min(calc(${HERO_MAX_HEIGHT_VH}vh - 120px), 420px)`,
                 }}
               >
-                <div className="relative w-full h-full">
+                <div className="relative w-full h-full block">
                   {offer.imageUrl ? (
                     <Image
                       src={offer.imageUrl}
@@ -155,6 +155,7 @@ export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProp
                       fill
                       sizes="(max-width: 640px) 76vw, 380px"
                       className="object-cover"
+                      style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }}
                       priority={i === 0}
                       loading={i === 0 ? "eager" : "lazy"}
                       quality={85}
