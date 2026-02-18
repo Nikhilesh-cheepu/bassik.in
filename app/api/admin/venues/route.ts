@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         images: {
           orderBy: [{ type: "asc" }, { order: "asc" }],
         },
-        offers: { orderBy: { order: "asc" } },
+        offers: { orderBy: { createdAt: "desc" } },
         menus: {
           include: {
             images: {

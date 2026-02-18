@@ -3,7 +3,9 @@ import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
 
-// GET - List offers for a venue (by brandId)
+const now = () => new Date().toISOString();
+
+// GET - List offers for a venue (by brandId), grouped into active and expired
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ brandId: string }> }
@@ -12,12 +14,15 @@ export async function GET(
     const { brandId } = await params;
     const venue = await prisma.venue.findUnique({
       where: { brandId },
-      include: { offers: { orderBy: { order: "asc" } } },
+      include: { offers: { orderBy: { createdAt: "desc" } } },
     });
     if (!venue) {
       return NextResponse.json({ error: "Venue not found" }, { status: 404 });
     }
-    return NextResponse.json({ offers: venue.offers });
+    const t = now();
+    const active = venue.offers.filter((o) => o.endDate == null || o.endDate > t);
+    const expired = venue.offers.filter((o) => o.endDate != null && o.endDate <= t);
+    return NextResponse.json({ active, expired });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     const code = error && typeof error === "object" && "code" in error ? (error as { code?: string }).code : null;
@@ -35,7 +40,7 @@ export async function GET(
   }
 }
 
-// POST - Create or update an offer
+// POST - Create or update an offer (imageUrl required, endDate optional)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ brandId: string }> }
@@ -43,27 +48,23 @@ export async function POST(
   try {
     const { brandId } = await params;
     const body = await request.json();
-    const { id, imageUrl, title, active, startDate, endDate, order } = body;
+    const { id, imageUrl, endDate } = body;
 
     const venue = await prisma.venue.findUnique({ where: { brandId } });
     if (!venue) {
       return NextResponse.json({ error: "Venue not found" }, { status: 404 });
     }
 
-    if (!imageUrl || !title) {
+    if (!imageUrl || typeof imageUrl !== "string" || !imageUrl.trim()) {
       return NextResponse.json(
-        { error: "imageUrl and title are required" },
+        { error: "imageUrl is required" },
         { status: 400 }
       );
     }
 
     const data = {
       imageUrl: String(imageUrl).trim(),
-      title: String(title).trim(),
-      active: active !== false,
-      startDate: startDate != null ? String(startDate).trim() || null : null,
-      endDate: endDate != null ? String(endDate).trim() || null : null,
-      order: typeof order === "number" ? order : 0,
+      endDate: endDate != null && String(endDate).trim() ? String(endDate).trim() : null,
     };
 
     if (id) {
@@ -83,11 +84,14 @@ export async function POST(
         },
       });
     }
-    const offers = await prisma.venueOffer.findMany({
+    const allOffers = await prisma.venueOffer.findMany({
       where: { venueId: venue.id },
-      orderBy: { order: "asc" },
+      orderBy: { createdAt: "desc" },
     });
-    return NextResponse.json({ offers });
+    const t = now();
+    const active = allOffers.filter((o) => o.endDate == null || o.endDate > t);
+    const expired = allOffers.filter((o) => o.endDate != null && o.endDate <= t);
+    return NextResponse.json({ active, expired });
   } catch (error: unknown) {
     const err = error as { code?: string; message?: string };
     if (err?.code === "P2025") {

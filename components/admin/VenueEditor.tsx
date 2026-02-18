@@ -17,11 +17,8 @@ type VenueContact = { phone: string; label?: string };
 type VenueOffer = {
   id: string;
   imageUrl: string;
-  title: string;
-  active: boolean;
-  startDate: string | null;
   endDate: string | null;
-  order: number;
+  createdAt?: string;
 };
 
 interface Venue {
@@ -133,7 +130,12 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
   };
 
   const galleryImages = currentVenue.images?.filter((i) => i.type === "GALLERY") || [];
-  const venueOffers = currentVenue.offers ?? [];
+  const rawOffers = (currentVenue.offers ?? []) as VenueOffer[];
+  const nowIso = new Date().toISOString();
+  const venueOffers = {
+    active: rawOffers.filter((o) => o.endDate == null || o.endDate > nowIso),
+    expired: rawOffers.filter((o) => o.endDate != null && o.endDate <= nowIso),
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">

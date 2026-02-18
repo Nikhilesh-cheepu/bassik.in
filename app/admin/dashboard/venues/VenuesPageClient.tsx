@@ -11,11 +11,8 @@ type VenueContact = { phone: string; label?: string };
 type VenueOffer = {
   id: string;
   imageUrl: string;
-  title: string;
-  active: boolean;
-  startDate: string | null;
   endDate: string | null;
-  order: number;
+  createdAt?: string;
 };
 
 interface Venue {

@@ -4,7 +4,7 @@ import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-con
 import { Prisma } from "@prisma/client";
 
 export type VenuePayload = {
-  offers: { id: string; imageUrl: string; title: string; startDate?: string; endDate?: string; order: number }[];
+  offers: { id: string; imageUrl: string }[];
   galleryImages: string[];
   menus: { id: string; name: string; thumbnail: string; images: string[] }[];
   location: { address: string; mapUrl: string | null };
@@ -26,7 +26,15 @@ export async function getVenueDataByBrandId(brandId: string): Promise<VenuePaylo
           include: { images: { orderBy: { order: "asc" } } },
           orderBy: { name: "asc" },
         },
-        offers: { where: { active: true }, orderBy: { order: "asc" } },
+        offers: {
+          where: {
+            OR: [
+              { endDate: null },
+              { endDate: { gt: new Date().toISOString() } },
+            ],
+          },
+          orderBy: { createdAt: "desc" },
+        },
       },
     });
 
@@ -50,13 +58,9 @@ export async function getVenueDataByBrandId(brandId: string): Promise<VenuePaylo
           })();
     const contactPhone = contactNumbers[0]?.phone ?? getContactForBrand(brandId);
     const whatsappMessage = getWhatsAppMessageForBrand(brandId, venue.shortName);
-    const offers = (venue as any).offers.map((o: { id: string; imageUrl: string; title: string; startDate: string | null; endDate: string | null; order: number }) => ({
+    const offers = (venue as any).offers.map((o: { id: string; imageUrl: string }) => ({
       id: o.id,
       imageUrl: o.imageUrl,
-      title: o.title,
-      startDate: o.startDate ?? undefined,
-      endDate: o.endDate ?? undefined,
-      order: o.order,
     }));
 
     return {

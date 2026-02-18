@@ -11,9 +11,6 @@ import "swiper/css";
 export type HeroOffer = {
   id: string;
   imageUrl: string;
-  title: string;
-  startDate?: string;
-  endDate?: string;
 };
 
 interface EventsOffersHeroProps {
@@ -161,7 +158,7 @@ export default function EventsOffersHero({ offers, brand, isLoading = false }: E
                     <div className="relative w-full h-full min-h-0">
                       <Image
                         src={offer.imageUrl}
-                        alt={offer.title}
+                        alt="Offer"
                         fill
                         sizes="(max-width: 768px) 78vw, 400px"
                         className="object-contain"
