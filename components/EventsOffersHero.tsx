@@ -34,6 +34,7 @@ interface EventsOffersHeroProps {
 /** 9:16 card width (vw) so left/right peek ~12% each */
 const CARD_WIDTH_VW = 76;
 const CARD_GAP_PX = 12;
+/** Max hero height 70–75vh so CTA stays visible; no 3:4. */
 const HERO_MAX_HEIGHT_VH = 72;
 
 export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProps) {
@@ -142,7 +143,7 @@ export default function EventsOffersHero({ offers, brand }: EventsOffersHeroProp
                 className="flex-shrink-0 min-w-0 rounded-2xl overflow-hidden shadow-xl border border-white/10 bg-black/30"
                 style={{
                   width: `${CARD_WIDTH_VW}vw`,
-                  aspectRatio: "9/16",
+                  aspectRatio: "9 / 16",
                   maxHeight: `min(calc(${HERO_MAX_HEIGHT_VH}vh - 120px), 420px)`,
                 }}
               >

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-// Increase body size limit for menu uploads (admin menus API)
-export const maxDuration = 60; // 60 seconds timeout
-export const runtime = 'nodejs';
+export const maxDuration = 30;
+export const runtime = "nodejs";
+
+function isBlobOrHttpUrl(url: string): boolean {
+  if (!url || typeof url !== "string") return false;
+  const t = url.trim().toLowerCase();
+  return t.startsWith("https://") || t.startsWith("http://");
+}
 
 // POST - Create or update menu
 export async function POST(
@@ -44,12 +49,17 @@ export async function POST(
       return NextResponse.json({ error: `Venue not found: ${brandId}` }, { status: 404 });
     }
 
-    // Validate image URLs
-    const invalidImages = images.filter((img: any) => !img.url || typeof img.url !== "string");
-    if (invalidImages.length > 0) {
-      console.error(`[API] Invalid image data: ${invalidImages.length} images missing valid URLs`);
+    // Only allow Blob or http(s) URLs — no raw image data in DB
+    if (!isBlobOrHttpUrl(thumbnailUrl)) {
       return NextResponse.json(
-        { error: `Invalid image data: ${invalidImages.length} image(s) missing valid URLs` },
+        { error: "Thumbnail URL must be from Vercel Blob (upload via Admin). No base64 or data URLs." },
+        { status: 400 }
+      );
+    }
+    const invalidImages = images.filter((img: any) => !isBlobOrHttpUrl(img?.url));
+    if (invalidImages.length > 0) {
+      return NextResponse.json(
+        { error: "All menu image URLs must be from Vercel Blob (upload via Admin). No base64 or data URLs." },
         { status: 400 }
       );
     }

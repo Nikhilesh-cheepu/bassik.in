@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { compressImage } from "@/lib/image-compression";
+
+const MENU_MAX_FILE_SIZE = 3 * 1024 * 1024; // 3MB
 
 interface MenuManagerProps {
   venueId: string;
@@ -46,66 +47,27 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
     setEditingMenu(menu);
   };
 
-  const handleThumbnailUpload = async (file: File) => {
-    console.log(`[MenuManager] Uploading thumbnail: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
-    
-    // Check file size (limit to 10MB before compression)
-    if (file.size > 10 * 1024 * 1024) {
-      throw new Error(`File "${file.name}" is too large. Maximum size is 10MB.`);
+  const uploadToBlob = async (file: File): Promise<string> => {
+    if (file.size > MENU_MAX_FILE_SIZE) {
+      throw new Error(`"${file.name}" is too large. Maximum 3MB per image.`);
     }
-
-    try {
-      // Compress thumbnail (smaller size for thumbnails)
-      const compressedBase64 = await compressImage(file, {
-        maxWidth: 800,
-        maxHeight: 800,
-        quality: 0.8,
-        maxSizeKB: 200, // Thumbnails should be smaller
-      });
-      
-      const sizeKB = (compressedBase64.length / 1024).toFixed(2);
-      console.log(`[MenuManager] Thumbnail compressed and converted (${sizeKB} KB)`);
-      return compressedBase64;
-    } catch (error: any) {
-      console.error(`[MenuManager] Error compressing thumbnail:`, error);
-      throw new Error(`Failed to compress thumbnail: ${error.message}`);
-    }
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("venueSlug", venueId);
+    const res = await fetch("/api/admin/upload/menu", { method: "POST", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.url) throw new Error(data.error || "Upload failed");
+    return data.url;
   };
 
-  const handleMenuImagesUpload = async (files: FileList) => {
-    console.log(`[MenuManager] Uploading ${files.length} menu image(s)`);
-    
-    // Process images one at a time to avoid memory issues
-    const results: string[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      console.log(`[MenuManager] Processing file ${i + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
-      
-      // Check file size (limit to 10MB per image before compression)
-      if (file.size > 10 * 1024 * 1024) {
-        throw new Error(`File "${file.name}" is too large. Maximum size is 10MB.`);
-      }
+  const handleThumbnailUpload = async (file: File): Promise<string> => uploadToBlob(file);
 
-      try {
-        // Compress menu images (more aggressive compression for menus)
-        const compressedBase64 = await compressImage(file, {
-          maxWidth: 1400, // Reduced from 1600
-          maxHeight: 2000, // Reduced from 2400
-          quality: 0.65, // More aggressive compression
-          maxSizeKB: 250, // Reduced from 400KB
-        });
-        
-        const sizeKB = (compressedBase64.length / 1024).toFixed(2);
-        console.log(`[MenuManager] File ${i + 1} compressed and converted (${sizeKB} KB)`);
-        results.push(compressedBase64);
-      } catch (error: any) {
-        console.error(`[MenuManager] Error processing file ${i + 1}:`, error);
-        throw new Error(`Failed to process "${file.name}": ${error.message}`);
-      }
+  const handleMenuImagesUpload = async (files: FileList): Promise<string[]> => {
+    const urls: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      urls.push(await uploadToBlob(files[i]));
     }
-    
-    console.log(`[MenuManager] All ${results.length} menu images compressed and converted`);
-    return results;
+    return urls;
   };
 
   const handleSaveMenu = async () => {
@@ -122,122 +84,37 @@ export default function MenuManager({ venueId, existingMenus, onUpdate }: MenuMa
     setMessage(null);
 
     try {
-      console.log(`[MenuManager] Saving menu section: "${editingMenu.name}" with ${editingMenu.images.length} image(s) for venue ${venueId}`);
-      
-      const imageData = editingMenu.images.map((img: any, idx: number) => ({
+      const imageData = editingMenu.images.map((img: string | { url: string }, idx: number) => ({
         url: typeof img === "string" ? img : img.url,
         order: idx,
       }));
 
-      // Calculate payload size
       const payload = {
         menuId: editingMenu.id,
         name: editingMenu.name,
         thumbnailUrl: editingMenu.thumbnailUrl,
         images: imageData,
       };
-      const payloadSize = JSON.stringify(payload).length;
-      
-      console.log(`[MenuManager] Sending menu data to API:`, {
-        menuId: editingMenu.id,
-        name: editingMenu.name,
-        thumbnailUrl: editingMenu.thumbnailUrl.substring(0, 50) + "...",
-        imageCount: imageData.length,
-        payloadSize: `${(payloadSize / 1024).toFixed(2)} KB`,
-      });
 
-      // If payload is too large, split into smaller batches
-      const MAX_PAYLOAD_SIZE = 3 * 1024 * 1024; // 3MB limit for safety
-      if (payloadSize > MAX_PAYLOAD_SIZE) {
-        console.log(`[MenuManager] Payload too large (${(payloadSize / 1024).toFixed(2)} KB), splitting into batches`);
-        
-        // Calculate how many images per batch (leave room for metadata ~50KB)
-        const metadataSize = 200; // Approximate size of name, thumbnailUrl, menuId
-        const availableSize = MAX_PAYLOAD_SIZE - metadataSize;
-        const avgImageSize = imageData.length > 0 ? imageData[0].url.length : 0;
-        const batchSize = Math.max(1, Math.floor((availableSize * 0.8) / avgImageSize));
-        console.log(`[MenuManager] Batch size: ${batchSize} images per request (avg image size: ${(avgImageSize / 1024).toFixed(2)} KB)`);
-
-        // Process in batches - accumulate images across batches
-        let currentMenuId = editingMenu.id;
-        let accumulatedImages: any[] = [];
-        
-        for (let i = 0; i < imageData.length; i += batchSize) {
-          const batch = imageData.slice(i, i + batchSize);
-          accumulatedImages = [...accumulatedImages, ...batch.map((img: any, idx: number) => ({ ...img, order: accumulatedImages.length + idx }))];
-          
-          // Check if accumulated payload is still too large
-          const accumulatedPayload = {
-            menuId: i === 0 ? editingMenu.id : currentMenuId,
-            name: editingMenu.name,
-            thumbnailUrl: editingMenu.thumbnailUrl,
-            images: accumulatedImages,
-          };
-          const accumulatedSize = JSON.stringify(accumulatedPayload).length;
-          
-          // If still too large, reduce batch size and retry
-          if (accumulatedSize > MAX_PAYLOAD_SIZE && accumulatedImages.length > batch.length) {
-            // Remove the last batch and try with smaller size
-            accumulatedImages = accumulatedImages.slice(0, -batch.length);
-            const smallerBatch = batch.slice(0, Math.floor(batch.length * 0.7));
-            accumulatedImages = [...accumulatedImages, ...smallerBatch.map((img: any, idx: number) => ({ ...img, order: accumulatedImages.length + idx }))];
-          }
-
-          const batchPayload = {
-            menuId: i === 0 ? editingMenu.id : currentMenuId,
-            name: editingMenu.name,
-            thumbnailUrl: editingMenu.thumbnailUrl,
-            images: accumulatedImages,
-          };
-
-          const batchRes = await fetch(`/api/admin/venues/${venueId}/menus`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(batchPayload),
-          });
-
-          if (!batchRes.ok) {
-            const errorData = await batchRes.json().catch(() => ({}));
-            throw new Error(errorData.error || `Failed to upload batch ${Math.floor(i / batchSize) + 1} (${batchRes.status})`);
-          }
-
-          const batchResult = await batchRes.json();
-          if (batchResult.menu?.id) {
-            currentMenuId = batchResult.menu.id;
-          }
-
-          console.log(`[MenuManager] Batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(imageData.length / batchSize)} uploaded (${accumulatedImages.length} total images)`);
-        }
-
-        setMessage({ type: "success", text: `Menu section saved successfully with ${imageData.length} images!` });
-        setEditingMenu(null);
-        await onUpdate();
-        return;
-      }
-
-      // Normal upload if payload is small enough
       const res = await fetch(`/api/admin/venues/${venueId}/menus`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      console.log(`[MenuManager] API response status: ${res.status}`);
-
       if (res.ok) {
-        const result = await res.json();
-        console.log(`[MenuManager] Menu saved successfully:`, result);
-        setMessage({ type: "success", text: "Menu section saved successfully!" });
+        setMessage({ type: "success", text: "Menu section saved. Images stored in Vercel Blob." });
         setEditingMenu(null);
-        await onUpdate();
+        onUpdate();
       } else {
-        const errorData = await res.json().catch(() => ({ error: `HTTP ${res.status}: ${res.statusText}` }));
-        console.error(`[MenuManager] Save failed:`, errorData);
-        throw new Error(errorData.error || `Failed to save menu section (${res.status})`);
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Save failed (${res.status})`);
       }
-    } catch (error: any) {
-      console.error(`[MenuManager] Save error:`, error);
-      setMessage({ type: "error", text: error.message || "Failed to save menu. Please check the console for details." });
+    } catch (err: unknown) {
+      setMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to save menu. Use Blob URLs only (re-upload images if needed).",
+      });
     } finally {
       setUploading(false);
     }

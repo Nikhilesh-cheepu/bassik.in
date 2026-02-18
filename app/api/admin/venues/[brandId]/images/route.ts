@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-// Increase body size limit for image uploads (default is 1MB, we need more for base64)
-export const maxDuration = 60; // 60 seconds timeout
-export const runtime = 'nodejs';
+export const maxDuration = 30;
+export const runtime = "nodejs";
+
+function isBlobOrHttpUrl(url: string): boolean {
+  if (!url || typeof url !== "string") return false;
+  const t = url.trim().toLowerCase();
+  return t.startsWith("https://") || t.startsWith("http://");
+}
 
 // Define ImageType enum
 enum ImageType {
@@ -58,12 +63,11 @@ export async function POST(
     });
     console.log(`[API] Deleted ${deleteResult.count} existing ${type} images for venue ${venue.id}`);
 
-    // Validate image URLs (should be base64 data URLs)
-    const invalidImages = images.filter((img: any) => !img.url || typeof img.url !== "string");
+    // Only allow Blob or http(s) URLs — no raw image data in DB
+    const invalidImages = images.filter((img: any) => !isBlobOrHttpUrl(img?.url));
     if (invalidImages.length > 0) {
-      console.error(`[API] Invalid image data: ${invalidImages.length} images missing valid URLs`);
       return NextResponse.json(
-        { error: `Invalid image data: ${invalidImages.length} image(s) missing valid URLs` },
+        { error: "All image URLs must be from Vercel Blob (upload via Admin Gallery). No base64 or data URLs." },
         { status: 400 }
       );
     }

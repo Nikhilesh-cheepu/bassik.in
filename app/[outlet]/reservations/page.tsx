@@ -30,7 +30,7 @@ function ReservationsContent() {
   }, [activeBrandId, outletSlug, router]);
 
   return (
-    <div className="min-h-screen bg-black relative overflow-hidden">
+    <div className="min-h-screen bg-black relative overflow-x-hidden">
       {/* Animated gradient background */}
       <motion.div
         className="fixed inset-0 -z-10"

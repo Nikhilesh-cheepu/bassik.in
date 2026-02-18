@@ -445,7 +445,8 @@ function OutletContent() {
           <button
             type="button"
             onClick={loadVenueData}
-            className="w-full py-4 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-sm font-medium"
+            className="w-full py-4 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-sm font-medium touch-manipulation"
+            style={{ touchAction: "manipulation" }}
           >
             {fetchError}
           </button>
