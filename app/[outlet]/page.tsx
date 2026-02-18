@@ -170,11 +170,12 @@ function OutletContent() {
 
   return (
     <div className="min-h-screen bg-black">
-      {/* Events & Offers hero (Swiggy-style carousel) */}
-      <div className="relative w-full z-0">
-        <EventsOffersHero offers={venueOffers} brand={selectedBrand} isLoading={loading} />
-        {/* Outlet switcher overlay – above carousel so first tap works */}
-        <div ref={dropdownRef} className="absolute top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+      {/* Hero stack: 100vh = carousel + CTA + menu (no scroll) */}
+      <div className="relative w-full z-0 max-h-[100vh] min-h-0 flex flex-col">
+        <div className="relative flex-shrink-0">
+          <EventsOffersHero offers={venueOffers} brand={selectedBrand} isLoading={loading} />
+          {/* Outlet switcher overlay – above carousel */}
+          <div ref={dropdownRef} className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
           <motion.button
             type="button"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -261,12 +262,12 @@ function OutletContent() {
             )}
           </AnimatePresence>
         </div>
-      </div>
+        </div>
 
-      {/* CTA row: WhatsApp + Call – spacing from carousel (8–12px) */}
-      <div className="relative mt-3 z-20 pointer-events-auto">
-        <div className="max-w-4xl mx-auto px-4 flex flex-wrap justify-center gap-2">
-          {(() => {
+        {/* CTA row: glass pills, 12–16px below carousel */}
+        <div className="flex-shrink-0 mt-3 px-4 z-20 pointer-events-auto flex justify-center">
+          <div className="flex items-center gap-2 w-full max-w-[280px] rounded-full bg-white/5 backdrop-blur-xl border border-white/10 px-2 py-1.5">
+            {(() => {
             const contacts =
               venueData.contactNumbers.length > 0
                 ? venueData.contactNumbers
@@ -288,7 +289,7 @@ function OutletContent() {
                     <button
                       type="button"
                       onClick={() => setWhatsappDropdownOpen((o) => !o)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-emerald-100 bg-emerald-500/15 hover:bg-emerald-500/25 transition-colors"
+                      className="inline-flex items-center justify-center gap-1.5 flex-1 min-w-0 px-3 py-2 rounded-full text-xs font-medium text-emerald-100 bg-emerald-500/20 backdrop-blur-sm border border-emerald-400/30 hover:bg-emerald-500/30 transition-colors"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884" />
@@ -345,9 +346,9 @@ function OutletContent() {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => trackWhatsAppClick({ number: full, outlet: selectedBrandId })}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-emerald-100 bg-emerald-500/15 hover:bg-emerald-500/25 transition-colors"
+                    className="inline-flex items-center justify-center gap-1.5 flex-1 min-w-0 px-3 py-2 rounded-full text-xs font-medium text-emerald-100 bg-emerald-500/20 backdrop-blur-sm border border-emerald-400/30 hover:bg-emerald-500/30 transition-colors"
                   >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884" />
                     </svg>
                     <span>WhatsApp</span>
@@ -358,7 +359,7 @@ function OutletContent() {
                     <button
                       type="button"
                       onClick={() => setContactDropdownOpen((o) => !o)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-sky-100 bg-sky-500/15 hover:bg-sky-500/25 transition-colors"
+                      className="inline-flex items-center justify-center gap-1.5 flex-1 min-w-0 px-3 py-2 rounded-full text-xs font-medium text-sky-100 bg-sky-500/20 backdrop-blur-sm border border-sky-400/30 hover:bg-sky-500/30 transition-colors"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
@@ -411,9 +412,9 @@ function OutletContent() {
                   <a
                     href={telUrl}
                     onClick={() => trackCallClick({ number: full, outlet: selectedBrandId })}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-sky-100 bg-sky-500/15 hover:bg-sky-500/25 transition-colors"
+                    className="inline-flex items-center justify-center gap-1.5 flex-1 min-w-0 px-3 py-2 rounded-full text-xs font-medium text-sky-100 bg-sky-500/20 backdrop-blur-sm border border-sky-400/30 hover:bg-sky-500/30 transition-colors"
                   >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                     </svg>
                     <span>Call</span>
@@ -423,11 +424,60 @@ function OutletContent() {
               </>
             );
           })()}
+          </div>
+        </div>
+
+        {/* MENU row: label + 2 cards, compact, inside hero */}
+        <div className="flex-shrink-0 mt-3 px-4 pb-3 z-10">
+          <p className="text-[12px] font-medium uppercase tracking-wider text-white/50 mb-2">Menu</p>
+          {loading ? (
+            <div className="flex gap-2">
+              <div className="flex-1 h-14 rounded-xl bg-white/5 animate-pulse" />
+              <div className="flex-1 h-14 rounded-xl bg-white/5 animate-pulse" />
+            </div>
+          ) : venueData.menus.length === 0 ? (
+            <div className="py-2 text-center text-white/40 text-xs">No menu</div>
+          ) : venueData.menus.length === 1 ? (
+            <motion.button
+              onClick={() => { setSelectedMenuId(venueData.menus[0].id); setIsMenuModalOpen(true); }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 p-2.5 hover:bg-white/10 transition-all text-left"
+            >
+              <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+                <Image src={venueData.menus[0].thumbnail} alt={venueData.menus[0].name} fill sizes="40px" className="object-cover" unoptimized loading="lazy" quality={80} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-white font-medium text-sm truncate">{venueData.menus[0].name}</h3>
+                <p className="text-white/40 text-[10px]">{venueData.menus[0].images.length} pages</p>
+              </div>
+              <svg className="w-4 h-4 text-white/40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            </motion.button>
+          ) : (
+            <div className="flex gap-2">
+              {venueData.menus.map((menu) => (
+                <motion.button
+                  key={menu.id}
+                  onClick={() => { setSelectedMenuId(menu.id); setIsMenuModalOpen(true); }}
+                  whileTap={{ scale: 0.96 }}
+                  className="flex-1 flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 p-2 hover:bg-white/10 transition-all text-left min-w-0"
+                >
+                  <div className="relative w-9 h-9 rounded-lg overflow-hidden flex-shrink-0">
+                    <Image src={menu.thumbnail} alt={menu.name} fill sizes="36px" className="object-cover" unoptimized loading="lazy" quality={80} priority={venueData.menus.indexOf(menu) === 0} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-white font-medium text-xs truncate">{menu.name}</h3>
+                    <p className="text-white/40 text-[10px]">{menu.images.length} p</p>
+                  </div>
+                  <svg className="w-3.5 h-3.5 text-white/40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                </motion.button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Content Sections – spacing from CTA row (10–14px) */}
-      <div className="max-w-4xl mx-auto px-4 mt-4 relative z-10 space-y-3 pb-32">
+      {/* Content Sections – below hero (Photos, Location, etc.) */}
+      <div className="max-w-4xl mx-auto px-4 pt-4 relative z-10 space-y-3 pb-32">
         {fetchError && (
           <button
             type="button"
@@ -469,84 +519,6 @@ function OutletContent() {
                 <span className="text-xs font-medium text-white/80">Firefly</span>
               </Link>
             </div>
-          </motion.section>
-        )}
-
-        {/* Menu Section - Single Compact Card */}
-        {loading ? (
-          <div className="h-20 bg-white/5 rounded-xl animate-pulse" />
-        ) : (
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-3"
-          >
-            {venueData.menus.length === 0 ? (
-              <div className="text-center py-3 text-gray-400">
-                <p className="text-xs">Menu section is empty</p>
-              </div>
-            ) : venueData.menus.length === 1 ? (
-              <motion.button
-                onClick={() => {
-                  setSelectedMenuId(venueData.menus[0].id);
-                  setIsMenuModalOpen(true);
-                }}
-                whileTap={{ scale: 0.98 }}
-                className="w-full flex items-center gap-3 bg-white/5 rounded-lg p-3 hover:bg-white/10 transition-all"
-              >
-                <div className="relative w-14 h-14 rounded-lg overflow-hidden flex-shrink-0">
-                  <Image
-                    src={venueData.menus[0].thumbnail}
-                    alt={venueData.menus[0].name}
-                    fill
-                    sizes="56px"
-                    className="object-cover"
-                    unoptimized
-                    loading="lazy"
-                    quality={80}
-                  />
-                </div>
-                <div className="flex-1 text-left">
-                  <h3 className="text-white font-medium text-sm mb-0.5">{venueData.menus[0].name}</h3>
-                  <p className="text-gray-400 text-xs">{venueData.menus[0].images.length} pages</p>
-                </div>
-                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </motion.button>
-            ) : (
-              <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-                {venueData.menus.map((menu) => (
-                  <motion.button
-                    key={menu.id}
-                    onClick={() => {
-                      setSelectedMenuId(menu.id);
-                      setIsMenuModalOpen(true);
-                    }}
-                    whileTap={{ scale: 0.96 }}
-                    className="flex-shrink-0 flex items-center gap-2 bg-white/5 rounded-lg p-2 hover:bg-white/10 transition-all min-w-[140px]"
-                  >
-                    <div className="relative w-10 h-10 rounded overflow-hidden flex-shrink-0">
-                      <Image
-                        src={menu.thumbnail}
-                        alt={menu.name}
-                        fill
-                        sizes="40px"
-                        className="object-cover"
-                        unoptimized
-                        loading="lazy"
-                        quality={80}
-                      />
-                    </div>
-                    <div className="flex-1 text-left min-w-0">
-                      <h3 className="text-white font-medium text-xs mb-0.5 truncate">{menu.name}</h3>
-                      <p className="text-gray-400 text-[10px]">{menu.images.length} pages</p>
-                    </div>
-                  </motion.button>
-                ))}
-              </div>
-            )}
           </motion.section>
         )}
 

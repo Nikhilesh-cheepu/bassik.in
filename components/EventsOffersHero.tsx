@@ -24,19 +24,21 @@ interface EventsOffersHeroProps {
 }
 
 const PLACEHOLDER = "No active offers right now";
-const BORDER_RADIUS = 16;
-const CARD_MAX_HEIGHT_VH = 58;
+const BORDER_RADIUS = 20;
+const CARD_MAX_HEIGHT_VH = 54;
 const AUTOPLAY_DELAY_MS = 1000;
-const AUTOPLAY_RESUME_AFTER_MS = 2000;
+const AUTOPLAY_RESUME_AFTER_MS = 2500;
+const GAP_PX = 12;
+const PADDING_INLINE_PX = 16;
 
 function ShimmerCard() {
   return (
     <div
-      className="flex-shrink-0 overflow-hidden rounded-[16px] bg-white/10 animate-pulse"
+      className="flex-shrink-0 overflow-hidden bg-white/10 animate-pulse"
       style={{
         aspectRatio: "9 / 16",
         maxHeight: `${CARD_MAX_HEIGHT_VH}vh`,
-        width: "100%",
+        width: "78vw",
         borderRadius: BORDER_RADIUS,
       }}
     />
@@ -67,31 +69,27 @@ export default function EventsOffersHero({ offers, brand, isLoading = false }: E
     }, AUTOPLAY_RESUME_AFTER_MS);
   }, []);
 
-  // Loading: show shimmer only during real fetch (9:16 cards, same size as carousel)
   if (isLoading) {
     return (
-      <div className="offers-hero-carousel w-full bg-black/40 backdrop-blur-sm border-b border-white/10 relative overflow-hidden">
-        <div className="relative z-10 flex flex-col items-center pt-2 pb-3">
-          <div className="w-full flex justify-center">
-            <div className="flex gap-3 justify-center" style={{ width: "min(92vw, 420px)" }}>
-              <ShimmerCard />
-            </div>
+      <div className="offers-hero-carousel w-full bg-black/40 backdrop-blur-sm border-b border-white/10 relative overflow-hidden flex-shrink-0">
+        <div className="relative z-10 flex flex-col items-center pt-2 pb-2" style={{ paddingInline: PADDING_INLINE_PX }}>
+          <div className="w-full flex justify-center" style={{ maxHeight: `${CARD_MAX_HEIGHT_VH}vh` }}>
+            <ShimmerCard />
           </div>
         </div>
       </div>
     );
   }
 
-  // No offers after fetch completed
   if (!hasOffers) {
     return (
-      <div className="offers-hero-carousel w-full bg-black/40 backdrop-blur-sm border-b border-white/10 relative overflow-hidden">
-        <div className="relative z-10 flex flex-col items-center pt-2 pb-3">
+      <div className="offers-hero-carousel w-full bg-black/40 backdrop-blur-sm border-b border-white/10 relative overflow-hidden flex-shrink-0">
+        <div className="relative z-10 flex flex-col items-center pt-2 pb-2" style={{ paddingInline: PADDING_INLINE_PX }}>
           <div
-            className="rounded-[16px] flex items-center justify-center bg-black/30 border border-white/10"
+            className="flex items-center justify-center bg-black/30 border border-white/10 rounded-[20px]"
             style={{
               aspectRatio: "9 / 16",
-              width: "min(92vw, 420px)",
+              width: "78vw",
               maxHeight: `${CARD_MAX_HEIGHT_VH}vh`,
               borderRadius: BORDER_RADIUS,
             }}
@@ -104,20 +102,20 @@ export default function EventsOffersHero({ offers, brand, isLoading = false }: E
   }
 
   return (
-    <div className="offers-hero-carousel w-full bg-black/40 backdrop-blur-sm border-b border-white/10 relative overflow-visible">
+    <div className="offers-hero-carousel w-full bg-black/40 backdrop-blur-sm border-b border-white/10 relative overflow-visible flex-shrink-0">
       <style dangerouslySetInnerHTML={{ __html: `
         .offers-hero-carousel .swiper-slide .offer-card-inner {
           transform: scale(0.92);
-          opacity: 0.85;
+          opacity: 0.88;
           transition: transform 0.25s ease-out, opacity 0.25s ease-out, box-shadow 0.25s ease-out;
         }
         .offers-hero-carousel .swiper-slide-active .offer-card-inner {
           transform: scale(1);
           opacity: 1;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06);
+          box-shadow: 0 12px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.08);
         }
       `}} />
-      <div className="relative z-10 flex flex-col items-center pt-2 pb-3">
+      <div className="relative z-10 flex flex-col items-center pt-2 pb-1" style={{ paddingInline: PADDING_INLINE_PX }}>
         <div
           className="w-full overflow-visible"
           style={{ touchAction: "pan-x", WebkitOverflowScrolling: "touch" }}
@@ -136,8 +134,8 @@ export default function EventsOffersHero({ offers, brand, isLoading = false }: E
             className="!overflow-visible w-full"
             loop
             centeredSlides
-            slidesPerView={1.5}
-            spaceBetween={12}
+            slidesPerView={1.3}
+            spaceBetween={GAP_PX}
             speed={350}
             allowTouchMove
             grabCursor
@@ -152,62 +150,57 @@ export default function EventsOffersHero({ offers, brand, isLoading = false }: E
               <SwiperSlide key={offer.id}>
                 <div className="flex justify-center w-full h-full">
                   <div
-                    className="offer-card-inner overflow-hidden rounded-[16px] relative flex flex-col items-center justify-center w-full"
+                    className="offer-card-inner overflow-hidden relative flex flex-col items-center justify-center w-full rounded-[20px]"
                     style={{
                       maxHeight: `${CARD_MAX_HEIGHT_VH}vh`,
                       aspectRatio: "9 / 16",
                       borderRadius: BORDER_RADIUS,
                     }}
                   >
-                    <div className="absolute inset-0 bg-black/50 rounded-[16px]" />
+                    <div className="absolute inset-0 bg-black/50 rounded-[20px]" />
                     <div className="relative w-full h-full min-h-0">
                       <Image
                         src={offer.imageUrl}
                         alt={offer.title}
                         fill
-                        sizes="(max-width: 768px) 67vw, 400px"
+                        sizes="(max-width: 768px) 78vw, 400px"
                         className="object-contain"
                         style={{ borderRadius: BORDER_RADIUS }}
-                        priority={i === 0}
-                        loading={i === 0 ? "eager" : "lazy"}
+                        priority={i <= 1}
+                        loading={i <= 1 ? "eager" : "lazy"}
                         quality={85}
                         onLoad={() => handleImageLoad(offer.id)}
                       />
                       {!imageLoaded[offer.id] && (
                         <div
-                          className="absolute inset-0 rounded-[16px] bg-white/10 animate-pulse"
+                          className="absolute inset-0 bg-white/10 animate-pulse rounded-[20px]"
                           style={{ borderRadius: BORDER_RADIUS }}
                         />
                       )}
                     </div>
-                    {total > 1 && (
-                      <div
-                        className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-2 py-1 rounded-full backdrop-blur-md border border-white/10"
-                        style={{
-                          backgroundColor: "rgba(0,0,0,0.35)",
-                        }}
-                      >
-                        {Array.from({ length: total }).map((_, idx) => (
-                          <span
-                            key={idx}
-                            className="rounded-full transition-all duration-200"
-                            style={{
-                              width: idx === activeIndex ? 14 : 6,
-                              height: 6,
-                              backgroundColor: idx === activeIndex
-                                ? "rgba(212, 175, 55, 0.95)"
-                                : "rgba(255,255,255,0.35)",
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
               </SwiperSlide>
             ))}
           </Swiper>
         </div>
+        {total > 1 && (
+          <div className="flex items-center justify-center gap-1.5 mt-2">
+            {Array.from({ length: total }).map((_, idx) => (
+              <span
+                key={idx}
+                className="rounded-full transition-all duration-200"
+                style={{
+                  width: idx === activeIndex ? 18 : 6,
+                  height: 6,
+                  backgroundColor: idx === activeIndex
+                    ? "rgba(255,255,255,0.9)"
+                    : "rgba(255,255,255,0.3)",
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
