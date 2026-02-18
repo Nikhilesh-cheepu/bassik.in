@@ -149,9 +149,9 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
   };
 
   return (
-    <div className="min-h-screen bg-black">
-      <div className="relative w-full z-0 max-h-[100vh] min-h-0 flex flex-col">
-        <div className="relative flex-shrink-0">
+    <div className="min-h-screen bg-black w-full max-w-full overflow-x-hidden">
+      <div className="relative w-full max-w-full z-0 max-h-[100vh] min-h-0 min-w-0 flex flex-col overflow-x-hidden">
+        <div className="relative flex-shrink-0 min-w-0 overflow-x-hidden">
           <EventsOffersHero offers={venueOffers} brand={selectedBrand} isLoading={loading} />
           <div ref={dropdownRef} className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
             <motion.button
@@ -428,7 +428,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 pt-3 relative z-10 space-y-3 pb-32">
+      <div className="max-w-4xl mx-auto px-4 pt-3 relative z-10 space-y-3 pb-32 w-full min-w-0 overflow-x-hidden">
         {fetchError && (
           <button type="button" onClick={loadVenueData} className="w-full py-4 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-sm font-medium touch-manipulation" style={{ touchAction: "manipulation" }}>
             {fetchError}

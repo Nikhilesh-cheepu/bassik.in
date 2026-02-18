@@ -24,7 +24,7 @@ export default function GalleryCarousel({ images, accentColor = "#f97316", onVie
   }
 
   return (
-    <div className="relative w-full">
+    <div className="relative w-full min-w-0 overflow-x-hidden">
       <Swiper
         onSwiper={(sw) => sw && setActiveIndex(sw.realIndex)}
         onSlideChange={(sw) => setActiveIndex(sw.realIndex)}

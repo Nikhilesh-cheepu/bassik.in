@@ -68,7 +68,7 @@ export default function EventsOffersHero({ offers, brand, isLoading = false }: E
 
   if (isLoading) {
     return (
-      <div className="offers-hero-carousel w-full bg-black/40 backdrop-blur-sm border-b border-white/10 relative overflow-hidden flex-shrink-0">
+      <div className="offers-hero-carousel w-full max-w-full overflow-x-hidden bg-black/40 backdrop-blur-sm border-b border-white/10 relative overflow-hidden flex-shrink-0">
         <div className="relative z-10 flex flex-col items-center pt-2 pb-2" style={{ paddingInline: PADDING_INLINE_PX }}>
           <div className="w-full flex justify-center" style={{ maxHeight: `${CARD_MAX_HEIGHT_VH}vh` }}>
             <ShimmerCard />
@@ -80,7 +80,7 @@ export default function EventsOffersHero({ offers, brand, isLoading = false }: E
 
   if (!hasOffers) {
     return (
-      <div className="offers-hero-carousel w-full bg-black/40 backdrop-blur-sm border-b border-white/10 relative overflow-hidden flex-shrink-0">
+      <div className="offers-hero-carousel w-full max-w-full overflow-x-hidden bg-black/40 backdrop-blur-sm border-b border-white/10 relative overflow-hidden flex-shrink-0">
         <div className="relative z-10 flex flex-col items-center pt-2 pb-2" style={{ paddingInline: PADDING_INLINE_PX }}>
           <div
             className="flex items-center justify-center bg-black/30 border border-white/10 rounded-[20px]"
@@ -99,9 +99,9 @@ export default function EventsOffersHero({ offers, brand, isLoading = false }: E
   }
 
   return (
-    <div className="offers-hero-carousel w-full bg-black/40 backdrop-blur-sm border-b border-white/10 relative flex-shrink-0">
+    <div className="offers-hero-carousel w-full max-w-full overflow-x-hidden bg-black/40 backdrop-blur-sm border-b border-white/10 relative flex-shrink-0">
       <style dangerouslySetInnerHTML={{ __html: `
-        .offers-hero-carousel .swiper { overflow: visible !important; }
+        .offers-hero-carousel .swiper { overflow-x: clip !important; overflow-y: visible; }
         .offers-hero-carousel .swiper-wrapper { align-items: center; }
         .offers-hero-carousel .swiper-slide .offer-card-inner {
           transform: scale(0.94);

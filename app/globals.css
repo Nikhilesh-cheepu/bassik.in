@@ -29,6 +29,7 @@
 html {
   background-color: #ffffff;
   background: #ffffff;
+  overflow-x: hidden;
 }
 
 body {
