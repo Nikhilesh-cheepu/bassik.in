@@ -3,11 +3,19 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import type { VenueOffer } from "@/lib/venue-offers";
 import type { Brand } from "@/lib/brands";
 
 const AUTO_SLIDE_MS = 3800;
 const PAUSE_AFTER_INTERACTION_MS = 4000;
+
+type HeroOffer = {
+  id: string;
+  imageUrl: string;
+  title: string;
+  description: string | null;
+  startDate?: string;
+  endDate?: string;
+};
 
 const DESCRIPTION_PLACEHOLDERS = [
   "New offers dropping soon 👀✨",
@@ -15,7 +23,7 @@ const DESCRIPTION_PLACEHOLDERS = [
 ];
 
 interface EventsOffersHeroProps {
-  offers: VenueOffer[];
+  offers: HeroOffer[];
   brand: Brand;
 }
 
