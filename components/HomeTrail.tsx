@@ -154,21 +154,22 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
 
     let idleId: number | null = null;
     if (remaining.length > 0) {
-      const scheduleIdle = () => {
-        if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-          idleId = (window as any).requestIdleCallback(() => fetchGalleries(remaining));
+      if (typeof window !== "undefined") {
+        const w = window as any;
+        if (typeof w.requestIdleCallback === "function") {
+          idleId = w.requestIdleCallback(() => fetchGalleries(remaining));
         } else {
           idleId = window.setTimeout(() => fetchGalleries(remaining), 2000);
         }
-      };
-      scheduleIdle();
+      }
     }
 
     return () => {
       cancelAnimationFrame(t0);
-      if (idleId !== null) {
-        if (typeof window !== "undefined" && "cancelIdleCallback" in window) {
-          (window as any).cancelIdleCallback(idleId);
+      if (idleId !== null && typeof window !== "undefined") {
+        const w = window as any;
+        if (typeof w.cancelIdleCallback === "function") {
+          w.cancelIdleCallback(idleId);
         } else {
           clearTimeout(idleId);
         }
