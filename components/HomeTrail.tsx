@@ -147,14 +147,32 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
       );
     };
 
-    const t0 = requestAnimationFrame(() => fetchGalleries(orderedVenues.slice(0, 6)));
-    let t1: ReturnType<typeof setTimeout> | null = null;
-    if (orderedVenues.length > 6) {
-      t1 = setTimeout(() => fetchGalleries(orderedVenues.slice(6)), 800);
+    const firstBatch = orderedVenues.slice(0, 6);
+    const remaining = orderedVenues.slice(6);
+
+    const t0 = requestAnimationFrame(() => fetchGalleries(firstBatch));
+
+    let idleId: number | null = null;
+    if (remaining.length > 0) {
+      const scheduleIdle = () => {
+        if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+          idleId = (window as any).requestIdleCallback(() => fetchGalleries(remaining));
+        } else {
+          idleId = window.setTimeout(() => fetchGalleries(remaining), 2000);
+        }
+      };
+      scheduleIdle();
     }
+
     return () => {
       cancelAnimationFrame(t0);
-      if (t1) clearTimeout(t1);
+      if (idleId !== null) {
+        if (typeof window !== "undefined" && "cancelIdleCallback" in window) {
+          (window as any).cancelIdleCallback(idleId);
+        } else {
+          clearTimeout(idleId);
+        }
+      }
     };
   }, [orderedVenues]);
 

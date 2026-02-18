@@ -10,10 +10,11 @@ import { BRANDS } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 import { trackWhatsAppClick, trackCallClick } from "@/lib/analytics";
 import EventsOffersHero from "@/components/EventsOffersHero";
-import GalleryCarousel from "@/components/GalleryCarousel";
 
 const MenuModal = dynamic(() => import("@/components/MenuModal"));
 const GalleryModal = dynamic(() => import("@/components/GalleryModal"));
+const VenuePhotosSection = dynamic(() => import("@/components/VenuePhotosSection"));
+const VenueLocationSection = dynamic(() => import("@/components/VenueLocationSection"));
 
 function OutletContent() {
   const router = useRouter();
@@ -522,82 +523,28 @@ function OutletContent() {
           </motion.section>
         )}
 
-        {/* Photos Section - Edge-to-edge 16:9 carousel, no outer box */}
-        {loading ? (
-          <div className="aspect-video w-full bg-white/5 animate-pulse" />
-        ) : (
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="w-full"
-          >
-            <h2 className="text-sm font-semibold text-white mb-2 px-1">Photos</h2>
-            <GalleryCarousel
-              images={validGalleryImages}
-              accentColor={selectedBrand.accentColor}
-              onViewAll={
-                validGalleryImages.length > 0
-                  ? () => {
-                      setGalleryStartIndex(0);
-                      setIsGalleryModalOpen(true);
-                    }
-                  : undefined
-              }
-            />
-          </motion.section>
-        )}
+        {/* Photos Section - lazy-loaded component */}
+        <VenuePhotosSection
+          loading={loading}
+          images={validGalleryImages}
+          accentColor={selectedBrand.accentColor}
+          onOpenGallery={
+            validGalleryImages.length > 0
+              ? () => {
+                  setGalleryStartIndex(0);
+                  setIsGalleryModalOpen(true);
+                }
+              : undefined
+          }
+        />
 
-        {/* Location Section - Compact */}
-        {loading ? (
-          <div className="h-20 bg-white/5 rounded-xl animate-pulse" />
-        ) : (
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-3 overflow-hidden"
-          >
-            <h2 className="text-sm font-semibold text-white mb-2">Location</h2>
-            {venueData.location.mapUrl ? (
-              <a
-                href={venueData.location.mapUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block group"
-              >
-                <div className="relative h-16 rounded-lg overflow-hidden bg-gradient-to-br from-gray-800 to-gray-900 border border-white/10 mb-2">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <svg
-                      className="w-6 h-6 transition-colors"
-                      style={{ color: selectedBrand.accentColor }}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <svg className="w-3 h-3 mt-0.5 flex-shrink-0" style={{ color: selectedBrand.accentColor }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-xs font-medium mb-0.5 truncate">{venueData.location.address || "Address"}</p>
-                    <p className="text-[10px] font-medium transition-colors group-hover:opacity-80" style={{ color: selectedBrand.accentColor }}>Open in Google Maps →</p>
-                  </div>
-                </div>
-              </a>
-            ) : (
-              <div className="py-3 text-center text-gray-400">
-                <p className="text-xs">Location not set</p>
-              </div>
-            )}
-          </motion.section>
-        )}
+        {/* Location Section - lazy-loaded component */}
+        <VenueLocationSection
+          loading={loading}
+          address={venueData.location.address}
+          mapUrl={venueData.location.mapUrl}
+          accentColor={selectedBrand.accentColor}
+        />
       </div>
 
       {/* Fixed Book Table Button - Always Visible */}
