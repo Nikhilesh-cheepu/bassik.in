@@ -4,8 +4,6 @@ import { useState, useEffect } from "react";
 import ImageUploader from "./ImageUploader";
 import MenuManager from "./MenuManager";
 import OffersManager from "./OffersManager";
-import DiscountsManager from "./DiscountsManager";
-
 interface Admin {
   id: string;
   username: string;
@@ -54,7 +52,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
         ? [{ phone: String(venue.contactPhone), label: "Contact" }]
         : []) as VenueContact[],
   });
-  const [activeTab, setActiveTab] = useState<"offers" | "gallery" | "menus" | "discounts" | "location" | "contact">("offers");
+  const [activeTab, setActiveTab] = useState<"offers" | "gallery" | "menus" | "location" | "contact">("offers");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -159,7 +157,6 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
               { id: "offers", label: "Events & Offers" },
               { id: "gallery", label: "Gallery" },
               { id: "menus", label: "Menus" },
-              { id: "discounts", label: "Discounts" },
               { id: "location", label: "Location" },
               { id: "contact", label: "Contact" },
             ].map((tab) => (
@@ -212,11 +209,6 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
         {/* Menus Tab */}
         {activeTab === "menus" && (
           <MenuManager venueId={currentVenue.brandId} existingMenus={currentVenue.menus || []} onUpdate={onSave} />
-        )}
-
-        {/* Discounts Tab */}
-        {activeTab === "discounts" && (
-          <DiscountsManager brandId={currentVenue.brandId} onUpdate={onSave} />
         )}
 
         {/* Location Tab */}

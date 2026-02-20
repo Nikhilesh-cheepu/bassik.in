@@ -184,18 +184,17 @@ export async function POST(request: NextRequest) {
     }
 
     const discountIds = Array.isArray(selectedDiscounts) ? selectedDiscounts.filter((id: unknown) => typeof id === "string") : [];
-    let discountTitles: string[] = [];
-    if (discountIds.length > 0) {
-      const discounts = await prisma.discount.findMany({
-        where: { id: { in: discountIds }, venue: { brandId } },
-      });
-      if (discounts.length !== discountIds.length) {
+    const { getDiscountLabel, isValidDiscountId } = await import("@/lib/reservation-discounts");
+    const discountTitles: string[] = [];
+    for (const id of discountIds) {
+      if (!isValidDiscountId(brandId, id)) {
         return NextResponse.json(
           { error: "One or more selected discounts are invalid." },
           { status: 400 }
         );
       }
-      discountTitles = discounts.map((d) => d.title);
+      const label = getDiscountLabel(brandId, id);
+      if (label) discountTitles.push(label);
     }
 
     // Build offers section from DB discount titles (after validation)
@@ -236,46 +235,12 @@ Reservation submitted via bassik.in`;
     });
 
     let reservation;
-    const runWithDiscounts = discountIds.length > 0;
     try {
-      if (runWithDiscounts) {
-        reservation = await prisma.$transaction(async (tx) => {
-          for (const discountId of discountIds) {
-            await tx.$executeRawUnsafe(
-              `INSERT INTO "DiscountDailyUsage" (id, "discountId", date, "usedCount")
-               VALUES (gen_random_uuid()::text, $1, $2, 0)
-               ON CONFLICT ("discountId", date) DO NOTHING`,
-              discountId,
-              date
-            );
-            const rows = await tx.$queryRawUnsafe<{ id: string }[]>(
-              `UPDATE "DiscountDailyUsage" u SET "usedCount" = u."usedCount" + 1
-               FROM "Discount" d
-               WHERE u."discountId" = d.id AND u."discountId" = $1 AND u.date = $2
-                 AND u."usedCount" < d."limitPerDay"
-               RETURNING u.id`,
-              discountId,
-              date
-            );
-            if (!rows || rows.length === 0) {
-              throw new Error("SOLD_OUT");
-            }
-          }
-          return tx.reservation.create({ data: reservationData });
-        });
-      } else {
-        reservation = await prisma.reservation.create({
-          data: reservationData,
-        });
-      }
+      reservation = await prisma.reservation.create({
+        data: reservationData,
+      });
       console.log("[RESERVATION API] Reservation created successfully:", reservation.id);
     } catch (createError: any) {
-      if (createError?.message === "SOLD_OUT") {
-        return NextResponse.json(
-          { error: "This discount just sold out. Please choose another." },
-          { status: 400 }
-        );
-      }
       console.error("[RESERVATION API] Reservation creation failed:", {
         code: createError?.code,
         message: createError?.message,
