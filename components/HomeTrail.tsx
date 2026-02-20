@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { BRANDS, Brand } from "@/lib/brands";
 
-const ROTATE_INTERVAL_MS = 3000;
-const FADE_DURATION_MS = 400;
+const ROTATE_INTERVAL_MS = 2500;
+const FADE_DURATION_MS = 500;
 
 interface VenueData {
   brandId: string;
@@ -34,6 +34,9 @@ const VENUE_ORDER = [
   "firefly",
 ];
 
+const BLUR_PLACEHOLDER =
+  "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AkgD/2Q==";
+
 function VenueCardImage({
   galleryImages,
   brand,
@@ -46,19 +49,22 @@ function VenueCardImage({
   priority: boolean;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [loaded, setLoaded] = useState<Record<number, boolean>>({});
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const images = galleryImages.slice(0, 3);
+
   useEffect(() => {
-    if (galleryImages.length <= 1) return;
+    if (images.length <= 1) return;
     intervalRef.current = setInterval(() => {
-      setCurrentIndex((i) => (i + 1) % galleryImages.length);
+      setCurrentIndex((i) => (i + 1) % images.length);
     }, ROTATE_INTERVAL_MS);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [galleryImages.length]);
+  }, [images.length]);
 
-  if (galleryImages.length === 0) {
+  if (images.length === 0) {
     return (
       <div
         className="absolute inset-0 rounded-[18px]"
@@ -71,10 +77,10 @@ function VenueCardImage({
 
   return (
     <>
-      {galleryImages.map((src, i) => (
+      {images.map((src, i) => (
         <div
           key={src}
-          className="absolute inset-0 rounded-[18px] overflow-hidden relative"
+          className="absolute inset-0 rounded-[18px] overflow-hidden"
           style={{
             opacity: i === currentIndex ? 1 : 0,
             transition: `opacity ${FADE_DURATION_MS}ms ease-in-out`,
@@ -85,14 +91,25 @@ function VenueCardImage({
             src={src}
             alt=""
             fill
-            sizes="(max-width: 768px) 45vw, 30vw"
+            sizes="(max-width: 768px) 50vw, 33vw"
             className="object-cover"
+            style={{ objectFit: "cover" }}
             loading={priority ? "eager" : "lazy"}
-            quality={80}
-            priority={priority}
+            quality={85}
+            priority={priority && i === 0}
             placeholder="blur"
-            blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AkgD/2Q=="
+            blurDataURL={BLUR_PLACEHOLDER}
+            onLoad={() => setLoaded((p) => ({ ...p, [i]: true }))}
+            unoptimized={src.startsWith("blob:")}
           />
+          {!loaded[i] && (
+            <div
+              className="absolute inset-0 animate-pulse rounded-[18px]"
+              style={{
+                background: `linear-gradient(135deg, ${brand.accentColor}15, rgba(0,0,0,0.3))`,
+              }}
+            />
+          )}
         </div>
       ))}
     </>
@@ -100,16 +117,20 @@ function VenueCardImage({
 }
 
 export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
-  const orderedVenues = [...venues].sort((a, b) => {
-    const indexA = VENUE_ORDER.indexOf(a.id);
-    const indexB = VENUE_ORDER.indexOf(b.id);
-    if (indexA === -1 && indexB === -1) return 0;
-    if (indexA === -1) return 1;
-    if (indexB === -1) return -1;
-    return indexA - indexB;
-  });
+  const orderedVenues = useMemo(
+    () =>
+      [...venues].sort((a, b) => {
+        const indexA = VENUE_ORDER.indexOf(a.id);
+        const indexB = VENUE_ORDER.indexOf(b.id);
+        if (indexA === -1 && indexB === -1) return 0;
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        return indexA - indexB;
+      }),
+    [venues]
+  );
 
-  const [venuesData, setVenuesData] = useState<VenueData[]>(
+  const [venuesData, setVenuesData] = useState<VenueData[]>(() =>
     orderedVenues.map((brand) => ({
       brandId: brand.id,
       galleryImages: [],
@@ -117,57 +138,55 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
     }))
   );
 
+  const venueIdsKey = orderedVenues.map((v) => v.id).join(",");
+
   useEffect(() => {
-    const fetchGalleries = async (brandsToLoad: Brand[]) => {
-      const promises = brandsToLoad.map(async (brand) => {
-        try {
-          const res = await fetch(`/api/venues/${brand.id}`, { cache: "force-cache" });
-          if (res.ok) {
-            const data = await res.json();
-            const gallery: string[] = Array.isArray(data.venue?.galleryImages)
-              ? data.venue.galleryImages
-              : [];
-            return {
-              brandId: brand.id,
-              galleryImages: gallery.filter((u): u is string => typeof u === "string"),
-              loading: false,
-            };
+    if (orderedVenues.length === 0) return;
+
+    let cancelled = false;
+
+    const fetchGalleries = async () => {
+      const results = await Promise.all(
+        orderedVenues.map(async (brand) => {
+          try {
+            const res = await fetch(`/api/venues/${brand.id}`, {
+              cache: "force-cache",
+              headers: { "Cache-Control": "public, max-age=60, stale-while-revalidate=120" },
+            });
+            if (res.ok) {
+              const data = await res.json();
+              const gallery: string[] = Array.isArray(data.venue?.galleryImages)
+                ? data.venue.galleryImages
+                : [];
+              return {
+                brandId: brand.id,
+                galleryImages: gallery.filter((u): u is string => typeof u === "string"),
+                loading: false,
+              };
+            }
+          } catch {
+            /* ignore */
           }
           return { brandId: brand.id, galleryImages: [], loading: false };
-        } catch {
-          return { brandId: brand.id, galleryImages: [], loading: false };
-        }
-      });
-      const results = await Promise.all(promises);
-      setVenuesData((prev) =>
-        prev.map((item) => {
-          const r = results.find((x) => x.brandId === item.brandId);
-          return r ? { ...item, ...r } : item;
         })
       );
+
+      if (!cancelled) {
+        setVenuesData(
+          orderedVenues.map((brand) => {
+            const r = results.find((x) => x.brandId === brand.id);
+            return r ?? { brandId: brand.id, galleryImages: [], loading: false };
+          })
+        );
+      }
     };
 
-    let idleId: number | null = null;
-    if (orderedVenues.length > 0 && typeof window !== "undefined") {
-      const w = window as any;
-      if (typeof w.requestIdleCallback === "function") {
-        idleId = w.requestIdleCallback(() => fetchGalleries(orderedVenues));
-      } else {
-        idleId = window.setTimeout(() => fetchGalleries(orderedVenues), 2000);
-      }
-    }
+    fetchGalleries();
 
     return () => {
-      if (idleId !== null && typeof window !== "undefined") {
-        const w = window as any;
-        if (typeof w.cancelIdleCallback === "function") {
-          w.cancelIdleCallback(idleId);
-        } else {
-          clearTimeout(idleId);
-        }
-      }
+      cancelled = true;
     };
-  }, [orderedVenues]);
+  }, [venueIdsKey, orderedVenues]);
 
   const getLogoPath = (brand: Brand) =>
     brand.logoPath ?? (brand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${brand.id}.png`);
