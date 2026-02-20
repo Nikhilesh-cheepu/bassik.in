@@ -255,7 +255,22 @@ Reservation submitted via bassik.in`;
       if (runWithDiscounts) {
         reservation = await prisma.$transaction(async (tx) => {
           for (const discountId of discountIds) {
-            const rows = await tx.$queryRaw<{ id: string }[]>`UPDATE "Discount" SET "slotsUsed" = "slotsUsed" + 1 WHERE "id" = ${discountId} AND "slotsUsed" < "totalSlots" RETURNING "id"`;
+            await tx.$executeRawUnsafe(
+              `INSERT INTO "DiscountDailyUsage" (id, "discountId", date, "usedCount")
+               VALUES (gen_random_uuid()::text, $1, $2, 0)
+               ON CONFLICT ("discountId", date) DO NOTHING`,
+              discountId,
+              date
+            );
+            const rows = await tx.$queryRawUnsafe<{ id: string }[]>(
+              `UPDATE "DiscountDailyUsage" u SET "usedCount" = u."usedCount" + 1
+               FROM "Discount" d
+               WHERE u."discountId" = d.id AND u."discountId" = $1 AND u.date = $2
+                 AND u."usedCount" < d."limitPerDay"
+               RETURNING u.id`,
+              discountId,
+              date
+            );
             if (!rows || rows.length === 0) {
               throw new Error("SOLD_OUT");
             }

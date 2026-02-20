@@ -6,8 +6,7 @@ type DiscountItem = {
   id: string;
   title: string;
   description: string;
-  totalSlots: number;
-  slotsUsed: number;
+  limitPerDay: number;
   slotsLeft: number;
   startTime: string | null;
   endTime: string | null;
@@ -22,6 +21,23 @@ function formatTime(time24: string): string {
   const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
   return `${h12}:${m.toString().padStart(2, "0")}${period}`;
 }
+
+// Time options for 12-hour picker: 12:00 AM - 11:30 PM, 30-min increments
+const TIME_OPTIONS: { value: string; label: string }[] = (() => {
+  const opts: { value: string; label: string }[] = [{ value: "", label: "—" }];
+  for (let h = 0; h < 24; h++) {
+    for (let m = 0; m < 60; m += 30) {
+      const h24 = h;
+      const period = h24 >= 12 ? "PM" : "AM";
+      const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
+      opts.push({
+        value: `${h24.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`,
+        label: `${h12}:${m.toString().padStart(2, "0")} ${period}`,
+      });
+    }
+  }
+  return opts;
+})();
 
 interface DiscountsManagerProps {
   brandId: string;
@@ -38,9 +54,9 @@ export default function DiscountsManager({ brandId, onUpdate }: DiscountsManager
   const [form, setForm] = useState({
     title: "",
     description: "",
-    totalSlots: 20,
-    startTime: "",
-    endTime: "",
+    limitPerDay: 20,
+    startTime: "" as string,
+    endTime: "" as string,
     session: "" as "" | "LUNCH" | "DINNER" | "BOTH",
     active: true,
   });
@@ -67,7 +83,7 @@ export default function DiscountsManager({ brandId, onUpdate }: DiscountsManager
     setForm({
       title: "",
       description: "",
-      totalSlots: 20,
+      limitPerDay: 20,
       startTime: "",
       endTime: "",
       session: "",
@@ -81,7 +97,7 @@ export default function DiscountsManager({ brandId, onUpdate }: DiscountsManager
     setForm({
       title: item.title,
       description: item.description ?? "",
-      totalSlots: item.totalSlots,
+      limitPerDay: item.limitPerDay,
       startTime: item.startTime ?? "",
       endTime: item.endTime ?? "",
       session: (item.session as "" | "LUNCH" | "DINNER" | "BOTH") ?? "",
@@ -97,62 +113,36 @@ export default function DiscountsManager({ brandId, onUpdate }: DiscountsManager
       setMessage({ type: "error", text: "Title is required." });
       return;
     }
+    const startTime = form.startTime || null;
+    const endTime = form.endTime || null;
+    if (startTime && endTime && endTime <= startTime) {
+      setMessage({ type: "error", text: "End time must be after start time." });
+      return;
+    }
     setSaving(true);
     setMessage(null);
     try {
-      const to24 = (s: string) => {
-        if (!s) return null;
-        const m = s.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
-        if (!m) return s.length === 5 && s[2] === ":" ? s : null;
-        let h = parseInt(m[1], 10);
-        const min = parseInt(m[2], 10);
-        if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
-        if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
-        return `${h.toString().padStart(2, "0")}:${min.toString().padStart(2, "0")}`;
+      const payload = {
+        ...(editingId ? { id: editingId } : {}),
+        title: form.title.trim(),
+        description: form.description.trim() || null,
+        limitPerDay: form.limitPerDay,
+        startTime,
+        endTime,
+        session: form.session || null,
+        active: form.active,
       };
-      const startTime = to24(form.startTime) || null;
-      const endTime = to24(form.endTime) || null;
-
-      if (editingId) {
-        const res = await fetch(`/api/admin/venues/${brandId}/discounts`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: editingId,
-            title: form.title.trim(),
-            description: form.description.trim() || null,
-            totalSlots: form.totalSlots,
-            startTime,
-            endTime,
-            session: form.session || null,
-            active: form.active,
-          }),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || "Failed to update");
-        }
-        setMessage({ type: "success", text: "Discount updated." });
-      } else {
-        const res = await fetch(`/api/admin/venues/${brandId}/discounts`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: form.title.trim(),
-            description: form.description.trim() || null,
-            totalSlots: form.totalSlots,
-            startTime,
-            endTime,
-            session: form.session || null,
-            active: form.active,
-          }),
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || "Failed to create");
-        }
-        setMessage({ type: "success", text: "Discount created." });
+      const method = editingId ? "PATCH" : "POST";
+      const res = await fetch(`/api/admin/venues/${brandId}/discounts`, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to save");
       }
+      setMessage({ type: "success", text: editingId ? "Discount updated." : "Discount created." });
       await fetchItems();
       onUpdate?.();
       resetForm();
@@ -227,35 +217,39 @@ export default function DiscountsManager({ brandId, onUpdate }: DiscountsManager
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Total slots (required)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Total slots per day (required)</label>
             <input
               type="number"
               min={1}
-              value={form.totalSlots}
-              onChange={(e) => setForm((p) => ({ ...p, totalSlots: Math.max(1, parseInt(e.target.value, 10) || 1) }))}
+              value={form.limitPerDay}
+              onChange={(e) => setForm((p) => ({ ...p, limitPerDay: Math.max(1, parseInt(e.target.value, 10) || 1) }))}
               className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Start time (optional)</label>
-              <input
-                type="text"
+              <select
                 value={form.startTime}
                 onChange={(e) => setForm((p) => ({ ...p, startTime: e.target.value }))}
-                placeholder="12:00 or 12PM"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
+              >
+                {TIME_OPTIONS.map((o) => (
+                  <option key={o.value || "empty"} value={o.value}>{o.label}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">End time (optional)</label>
-              <input
-                type="text"
+              <select
                 value={form.endTime}
                 onChange={(e) => setForm((p) => ({ ...p, endTime: e.target.value }))}
-                placeholder="18:00 or 6PM"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
+              >
+                {TIME_OPTIONS.map((o) => (
+                  <option key={o.value || "empty2"} value={o.value}>{o.label}</option>
+                ))}
+              </select>
             </div>
           </div>
           <div>
@@ -304,7 +298,7 @@ export default function DiscountsManager({ brandId, onUpdate }: DiscountsManager
                 <div className="font-medium text-gray-900">{item.title}</div>
                 {item.description && <div className="text-xs text-gray-600 mt-0.5">{item.description}</div>}
                 <div className="flex flex-wrap gap-2 mt-1">
-                  <span className="text-xs text-gray-500">{item.slotsLeft} left</span>
+                  <span className="text-xs text-gray-500">{item.slotsLeft} left today</span>
                   {item.startTime && item.endTime && (
                     <span className="text-xs px-1.5 py-0.5 bg-gray-200 rounded">{formatTime(item.startTime)}–{formatTime(item.endTime)}</span>
                   )}

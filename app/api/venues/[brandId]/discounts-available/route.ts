@@ -20,6 +20,7 @@ function timeInWindow(slot: string, start: string | null, end: string | null): b
 /**
  * GET ?date=YYYY-MM-DD&timeSlot=HH:MM&session=lunch|dinner
  * Returns discounts available for the given date, time slot, and session.
+ * Slots are per-day; availability = limitPerDay - usedCount for that date.
  */
 export async function GET(
   req: NextRequest,
@@ -46,11 +47,19 @@ export async function GET(
     const all = await prisma.discount.findMany({
       where: { venueId: venue.id, active: true },
     });
-    const available = all.filter((d) => d.slotsUsed < d.totalSlots);
-
+    const discountIds = all.map((d) => d.id);
+    const usages = await prisma.discountDailyUsage.findMany({
+      where: {
+        discountId: { in: discountIds },
+        date,
+      },
+    });
+    const usageMap = new Map(usages.map((u) => [u.discountId, u.usedCount]));
     const sessionUpper = session === "lunch" ? "LUNCH" : session === "dinner" ? "DINNER" : null;
 
-    const filtered = available.filter((d) => {
+    const filtered = all.filter((d) => {
+      const used = usageMap.get(d.id) ?? 0;
+      if (used >= d.limitPerDay) return false;
       if (sessionUpper) {
         if (d.session && d.session !== "BOTH" && d.session !== sessionUpper) return false;
       }
@@ -58,21 +67,24 @@ export async function GET(
       return true;
     });
 
-    const items = filtered.map((d) => ({
-      id: d.id,
-      title: d.title,
-      description: d.description ?? "",
-      totalSlots: d.totalSlots,
-      slotsUsed: d.slotsUsed,
-      slotsLeft: Math.max(0, d.totalSlots - d.slotsUsed),
-      soldOut: d.slotsUsed >= d.totalSlots,
-      startTime: d.startTime,
-      endTime: d.endTime,
-      timeWindowLabel: d.startTime && d.endTime
-        ? `${formatTo12Hour(d.startTime)}–${formatTo12Hour(d.endTime)}`
-        : null,
-      session: d.session,
-    }));
+    const items = filtered.map((d) => {
+      const used = usageMap.get(d.id) ?? 0;
+      const slotsLeft = Math.max(0, d.limitPerDay - used);
+      return {
+        id: d.id,
+        title: d.title,
+        description: d.description ?? "",
+        limitPerDay: d.limitPerDay,
+        slotsLeft,
+        soldOut: used >= d.limitPerDay,
+        startTime: d.startTime,
+        endTime: d.endTime,
+        timeWindowLabel: d.startTime && d.endTime
+          ? `${formatTo12Hour(d.startTime)}–${formatTo12Hour(d.endTime)}`
+          : null,
+        session: d.session,
+      };
+    });
 
     return NextResponse.json(
       { discounts: items },

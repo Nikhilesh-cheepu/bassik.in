@@ -3,6 +3,12 @@ import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
 
+const VENUE_TZ = "Asia/Kolkata";
+
+function todayInVenueTz(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: VENUE_TZ });
+}
+
 /** GET - List discounts for venue (by brandId) */
 export async function GET(
   _req: NextRequest,
@@ -18,19 +24,30 @@ export async function GET(
       where: { venueId: venue.id },
       orderBy: { createdAt: "desc" },
     });
-    const items = discounts.map((d) => ({
-      id: d.id,
-      title: d.title,
-      description: d.description ?? "",
-      totalSlots: d.totalSlots,
-      slotsUsed: d.slotsUsed,
-      slotsLeft: Math.max(0, d.totalSlots - d.slotsUsed),
-      startTime: d.startTime,
-      endTime: d.endTime,
-      session: d.session,
-      active: d.active,
-      createdAt: d.createdAt,
-    }));
+    const today = todayInVenueTz();
+    const usages = await prisma.discountDailyUsage.findMany({
+      where: {
+        discountId: { in: discounts.map((d) => d.id) },
+        date: today,
+      },
+    });
+    const usageMap = new Map(usages.map((u) => [u.discountId, u.usedCount]));
+    const items = discounts.map((d) => {
+      const used = usageMap.get(d.id) ?? 0;
+      const slotsLeft = Math.max(0, d.limitPerDay - used);
+      return {
+        id: d.id,
+        title: d.title,
+        description: d.description ?? "",
+        limitPerDay: d.limitPerDay,
+        slotsLeft,
+        startTime: d.startTime,
+        endTime: d.endTime,
+        session: d.session,
+        active: d.active,
+        createdAt: d.createdAt,
+      };
+    });
     return NextResponse.json({ items });
   } catch (error) {
     console.error("[admin discounts GET]", error);
@@ -54,10 +71,13 @@ export async function POST(
     if (!title) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
     }
-    const totalSlots = Math.max(1, Math.floor(Number(body.totalSlots) || 1));
+    const limitPerDay = Math.max(1, Math.floor(Number(body.limitPerDay) ?? Number(body.totalSlots) ?? 1));
     const description = typeof body.description === "string" ? body.description.trim() || null : null;
-    const startTime = typeof body.startTime === "string" && /^\d{2}:\d{2}$/.test(body.startTime) ? body.startTime : null;
-    const endTime = typeof body.endTime === "string" && /^\d{2}:\d{2}$/.test(body.endTime) ? body.endTime : null;
+    let startTime: string | null = typeof body.startTime === "string" && /^\d{2}:\d{2}$/.test(body.startTime) ? body.startTime : null;
+    let endTime: string | null = typeof body.endTime === "string" && /^\d{2}:\d{2}$/.test(body.endTime) ? body.endTime : null;
+    if (startTime && endTime && endTime <= startTime) {
+      return NextResponse.json({ error: "End time must be after start time" }, { status: 400 });
+    }
     const session = ["LUNCH", "DINNER", "BOTH"].includes(body.session) ? body.session : null;
     const active = body.active !== false;
 
@@ -66,8 +86,7 @@ export async function POST(
         venueId: venue.id,
         title,
         description,
-        totalSlots,
-        slotsUsed: 0,
+        limitPerDay,
         startTime,
         endTime,
         session: session as "LUNCH" | "DINNER" | "BOTH" | null,
@@ -111,9 +130,30 @@ export async function PATCH(
       updates.title = t;
     }
     if (body.description !== undefined) updates.description = typeof body.description === "string" ? body.description.trim() || null : null;
-    if (body.totalSlots !== undefined) updates.totalSlots = Math.max(existing.slotsUsed, Math.max(1, Math.floor(Number(body.totalSlots) || 1)));
+    if (body.limitPerDay !== undefined || body.totalSlots !== undefined) {
+      const limit = Math.max(1, Math.floor(Number(body.limitPerDay ?? body.totalSlots) ?? existing.limitPerDay));
+      const today = todayInVenueTz();
+      const usage = await prisma.discountDailyUsage.findUnique({
+        where: { discountId_date: { discountId: id, date: today } },
+      });
+      const used = usage?.usedCount ?? 0;
+      if (limit < used) {
+        return NextResponse.json(
+          { error: `Cannot set limit below today's usage (${used})` },
+          { status: 400 }
+        );
+      }
+      updates.limitPerDay = limit;
+    }
     if (body.startTime !== undefined) updates.startTime = typeof body.startTime === "string" && /^\d{2}:\d{2}$/.test(body.startTime) ? body.startTime : null;
     if (body.endTime !== undefined) updates.endTime = typeof body.endTime === "string" && /^\d{2}:\d{2}$/.test(body.endTime) ? body.endTime : null;
+    if (body.startTime !== undefined || body.endTime !== undefined) {
+      const st = (updates.startTime ?? existing.startTime) as string | null;
+      const et = (updates.endTime ?? existing.endTime) as string | null;
+      if (st && et && et <= st) {
+        return NextResponse.json({ error: "End time must be after start time" }, { status: 400 });
+      }
+    }
     if (body.session !== undefined) updates.session = ["LUNCH", "DINNER", "BOTH"].includes(body.session) ? body.session : null;
     if (typeof body.active === "boolean") updates.active = body.active;
 

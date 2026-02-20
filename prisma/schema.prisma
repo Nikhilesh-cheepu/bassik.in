@@ -45,22 +45,35 @@ model Venue {
 }
 
 model Discount {
-  id          String        @id @default(cuid())
-  venueId     String
-  title       String
-  description String?
-  totalSlots  Int           // e.g. 20
-  slotsUsed   Int           @default(0)
-  startTime   String?       // "12:00" 24h
-  endTime     String?       // "18:00" 24h
-  session     DiscountSession? // LUNCH | DINNER | BOTH
-  active      Boolean       @default(true)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id           String              @id @default(cuid())
+  venueId      String
+  title        String
+  description  String?
+  limitPerDay  Int                 // max slots per day (resets daily)
+  startTime    String?             // "12:00" 24h
+  endTime      String?             // "18:00" 24h
+  session      DiscountSession?    // LUNCH | DINNER | BOTH
+  active       Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 
-  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  venue  Venue                @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  usages DiscountDailyUsage[]
 
   @@index([venueId])
+}
+
+model DiscountDailyUsage {
+  id         String   @id @default(cuid())
+  discountId String
+  date       String   // YYYY-MM-DD (venue local)
+  usedCount  Int      @default(0)
+
+  discount Discount @relation(fields: [discountId], references: [id], onDelete: Cascade)
+
+  @@unique([discountId, date])
+  @@index([discountId])
+  @@index([discountId, date])
 }
 
 enum DiscountSession {

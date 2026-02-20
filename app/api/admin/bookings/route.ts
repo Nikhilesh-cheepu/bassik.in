@@ -238,9 +238,40 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const updated = await prisma.reservation.update({
+    const previousStatus = reservation.status;
+    const newStatus = status as ReservationStatus;
+
+    await prisma.$transaction(async (tx) => {
+      // If changing to CANCELLED, free discount slots (were consumed at creation)
+      if (newStatus === "CANCELLED" && (previousStatus === "CONFIRMED" || previousStatus === "PENDING")) {
+        const discountIds: string[] = (() => {
+          try {
+            const parsed = JSON.parse(reservation.selectedDiscounts || "[]");
+            return Array.isArray(parsed) ? parsed.filter((id: unknown) => typeof id === "string") : [];
+          } catch {
+            return [];
+          }
+        })();
+        if (discountIds.length > 0) {
+          for (const discountId of discountIds) {
+            await tx.$executeRawUnsafe(
+              `UPDATE "DiscountDailyUsage" SET "usedCount" = GREATEST(0, "usedCount" - 1)
+               WHERE "discountId" = $1 AND date = $2`,
+              discountId,
+              reservation.date
+            );
+          }
+        }
+      }
+
+      await tx.reservation.update({
+        where: { id: reservationIdToUse },
+        data: { status: newStatus },
+      });
+    });
+
+    const updated = await prisma.reservation.findUnique({
       where: { id: reservationIdToUse },
-      data: { status: status as ReservationStatus },
     });
 
     return NextResponse.json({ reservation: updated });
@@ -264,8 +295,30 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       );
     }
-    await prisma.reservation.delete({
-      where: { id: String(id) },
+    const reservation = await prisma.reservation.findUnique({ where: { id: String(id) } });
+    if (!reservation) {
+      return NextResponse.json({ error: "Reservation not found" }, { status: 404 });
+    }
+    await prisma.$transaction(async (tx) => {
+      const discountIds: string[] = (() => {
+        try {
+          const parsed = JSON.parse(reservation.selectedDiscounts || "[]");
+          return Array.isArray(parsed) ? parsed.filter((id: unknown) => typeof id === "string") : [];
+        } catch {
+          return [];
+        }
+      })();
+      if (discountIds.length > 0 && reservation.status !== "CANCELLED") {
+        for (const discountId of discountIds) {
+          await tx.$executeRawUnsafe(
+            `UPDATE "DiscountDailyUsage" SET "usedCount" = GREATEST(0, "usedCount" - 1)
+             WHERE "discountId" = $1 AND date = $2`,
+            discountId,
+            reservation.date
+          );
+        }
+      }
+      await tx.reservation.delete({ where: { id: String(id) } });
     });
     return NextResponse.json({ success: true });
   } catch (error: any) {
