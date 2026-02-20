@@ -49,7 +49,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   const datePickerDays = useMemo(() => {
     const days: { dateStr: string; dayName: string; dayNum: string }[] = [];
     const today = new Date();
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 15; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
       days.push({
@@ -62,9 +62,12 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   }, []);
 
   useEffect(() => {
+    const t = new Date();
+    const now24 = `${t.getHours().toString().padStart(2, "0")}:${t.getMinutes().toString().padStart(2, "0")}`;
+    const lunchEnd = (brand.id === "kiik69" || brand.id === "alehouse" || brand.id === "skyhy") ? "20:00" : "19:00";
     setFormData((prev) => ({ ...prev, date: todayStr, timeSlot: "", selectedDiscounts: [] }));
     setGuests(2);
-    setTimeSlotTab("lunch");
+    setTimeSlotTab(now24 >= lunchEnd ? "dinner" : "lunch");
     setDiscounts([]);
     setSubmitStatus({ type: null, message: "" });
   }, [brand.id, todayStr]);
@@ -107,7 +110,14 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     return slots;
   }, [brand.id]);
 
-  const timeSlots = useMemo(() => allTimeSlots.filter((s) => s.category === timeSlotTab), [allTimeSlots, timeSlotTab]);
+  const timeSlots = useMemo(() => {
+    const filtered = allTimeSlots.filter((s) => s.category === timeSlotTab);
+    if (formData.date === todayStr) {
+      const now = Date.now();
+      return filtered.filter((s) => new Date(`${formData.date}T${s.value24}`).getTime() > now);
+    }
+    return filtered;
+  }, [allTimeSlots, timeSlotTab, formData.date, todayStr]);
 
   const isSlotInPast = (date: string, slot: string) => {
     if (!date || !slot) return false;
@@ -308,8 +318,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-white">{offer.title}</div>
                       {offer.description && <div className="text-xs text-gray-400 mt-0.5">{offer.description}</div>}
-                      {!soldOut && <div className="text-xs text-gray-500 mt-1">{offer.slotsLeft} left</div>}
-                      {soldOut && <div className="text-xs font-medium text-amber-400 mt-1">Sold out</div>}
+                      {!soldOut && <div className="text-xs font-medium text-gray-400 mt-1">{offer.slotsLeft} LEFT</div>}
+                      {soldOut && <div className="text-xs font-semibold text-amber-400 mt-1">SOLD OUT</div>}
                     </div>
                   </motion.button>
                 );

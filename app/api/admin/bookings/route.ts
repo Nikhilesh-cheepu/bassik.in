@@ -238,9 +238,31 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    const prevStatus = reservation.status;
+    const newStatus = status as ReservationStatus;
+
+    if (newStatus === "CANCELLED" && (prevStatus === "PENDING" || prevStatus === "CONFIRMED")) {
+      const discountIds: string[] = (() => {
+        try {
+          const parsed = JSON.parse(reservation.selectedDiscounts || "[]");
+          return Array.isArray(parsed) ? parsed.filter((id: unknown) => typeof id === "string") : [];
+        } catch {
+          return [];
+        }
+      })();
+      for (const discountId of discountIds) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE "DiscountDailyUsage" SET "usedCount" = GREATEST(0, "usedCount" - 1)
+           WHERE "discountId" = $1 AND date = $2`,
+          discountId,
+          reservation.date
+        );
+      }
+    }
+
     const updated = await prisma.reservation.update({
       where: { id: reservationIdToUse },
-      data: { status: status as ReservationStatus },
+      data: { status: newStatus },
     });
 
     return NextResponse.json({ reservation: updated });
@@ -263,6 +285,28 @@ export async function DELETE(request: NextRequest) {
         { error: "Reservation ID is required" },
         { status: 400 }
       );
+    }
+    const reservation = await prisma.reservation.findUnique({ where: { id: String(id) } });
+    if (!reservation) {
+      return NextResponse.json({ error: "Reservation not found" }, { status: 404 });
+    }
+    if (reservation.status !== "CANCELLED") {
+      const discountIds: string[] = (() => {
+        try {
+          const parsed = JSON.parse(reservation.selectedDiscounts || "[]");
+          return Array.isArray(parsed) ? parsed.filter((i: unknown) => typeof i === "string") : [];
+        } catch {
+          return [];
+        }
+      })();
+      for (const discountId of discountIds) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE "DiscountDailyUsage" SET "usedCount" = GREATEST(0, "usedCount" - 1)
+           WHERE "discountId" = $1 AND date = $2`,
+          discountId,
+          reservation.date
+        );
+      }
     }
     await prisma.reservation.delete({
       where: { id: String(id) },
