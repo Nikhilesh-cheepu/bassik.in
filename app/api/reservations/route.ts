@@ -212,26 +212,34 @@ Reservation submitted via bassik.in`;
       throw venueError;
     }
 
-    // Check discount limits before creating reservation
+    // Check discount limits before creating reservation (skip if tables don't exist yet)
     const discountIds = Array.isArray(selectedDiscounts) ? selectedDiscounts : [];
     if (discountIds.length > 0) {
-      const limits = await prisma.discountLimit.findMany({
-        where: { brandId, discountId: { in: discountIds } },
-      });
-      const usageRows = await prisma.discountUsage.findMany({
-        where: { brandId, date, discountId: { in: discountIds } },
-      });
-      const usageByDiscount = Object.fromEntries(
-        usageRows.map((u) => [u.discountId, u.usedCount])
-      );
-      for (const limit of limits) {
-        if (limit.maxPerDay <= 0) continue;
-        const used = usageByDiscount[limit.discountId] ?? 0;
-        if (used >= limit.maxPerDay) {
-          return NextResponse.json(
-            { error: `Discount "${limit.discountId}" is sold out for this date.` },
-            { status: 400 }
-          );
+      try {
+        const limits = await prisma.discountLimit.findMany({
+          where: { brandId, discountId: { in: discountIds } },
+        });
+        const usageRows = await prisma.discountUsage.findMany({
+          where: { brandId, date, discountId: { in: discountIds } },
+        });
+        const usageByDiscount = Object.fromEntries(
+          usageRows.map((u) => [u.discountId, u.usedCount])
+        );
+        for (const limit of limits) {
+          if (limit.maxPerDay <= 0) continue;
+          const used = usageByDiscount[limit.discountId] ?? 0;
+          if (used >= limit.maxPerDay) {
+            return NextResponse.json(
+              { error: `Discount "${limit.discountId}" is sold out for this date.` },
+              { status: 400 }
+            );
+          }
+        }
+      } catch (limitError: any) {
+        if (limitError?.code === "P2021" || limitError?.message?.includes("does not exist")) {
+          console.warn("[RESERVATION API] DiscountLimit/DiscountUsage tables not found, skipping limit check (run prisma migrate deploy)");
+        } else {
+          throw limitError;
         }
       }
     }

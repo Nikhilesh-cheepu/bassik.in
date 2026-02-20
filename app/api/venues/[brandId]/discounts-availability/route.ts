@@ -53,7 +53,15 @@ export async function GET(
         },
       }
     );
-  } catch (error) {
+  } catch (error: any) {
+    // P2021 = table does not exist (migration not applied); return empty availability so flow continues
+    if (error?.code === "P2021" || error?.message?.includes("does not exist")) {
+      console.warn("[discounts-availability GET] DiscountLimit/DiscountUsage tables not found, returning empty (run prisma migrate deploy)");
+      return NextResponse.json(
+        { date: request.nextUrl.searchParams.get("date") ?? "", availability: [] },
+        { headers: { "Cache-Control": "public, s-maxage=10, stale-while-revalidate=30" } }
+      );
+    }
     console.error("[discounts-availability GET]", error);
     return NextResponse.json(
       { error: "Failed to load discount availability" },
