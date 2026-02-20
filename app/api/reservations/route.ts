@@ -212,6 +212,30 @@ Reservation submitted via bassik.in`;
       throw venueError;
     }
 
+    // Check discount limits before creating reservation
+    const discountIds = Array.isArray(selectedDiscounts) ? selectedDiscounts : [];
+    if (discountIds.length > 0) {
+      const limits = await prisma.discountLimit.findMany({
+        where: { brandId, discountId: { in: discountIds } },
+      });
+      const usageRows = await prisma.discountUsage.findMany({
+        where: { brandId, date, discountId: { in: discountIds } },
+      });
+      const usageByDiscount = Object.fromEntries(
+        usageRows.map((u) => [u.discountId, u.usedCount])
+      );
+      for (const limit of limits) {
+        if (limit.maxPerDay <= 0) continue;
+        const used = usageByDiscount[limit.discountId] ?? 0;
+        if (used >= limit.maxPerDay) {
+          return NextResponse.json(
+            { error: `Discount "${limit.discountId}" is sold out for this date.` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     // Build reservation data object (no server-side user linkage; reservations are anonymous here)
     const reservationData: any = {
       venueId: venue.id,
@@ -381,6 +405,24 @@ Reservation submitted via bassik.in`;
           stack: createError?.stack?.split('\n').slice(0, 5).join('\n'),
         });
         throw createError;
+      }
+    }
+
+    // Increment discount usage for each selected discount
+    if (discountIds.length > 0) {
+      try {
+        for (const discountId of discountIds) {
+          await prisma.discountUsage.upsert({
+            where: {
+              brandId_discountId_date: { brandId, discountId, date },
+            },
+            create: { brandId, discountId, date, usedCount: 1 },
+            update: { usedCount: { increment: 1 } },
+          });
+        }
+      } catch (usageError: any) {
+        console.error("[RESERVATION API] Discount usage increment failed:", usageError?.message);
+        // Don't fail the reservation; usage tracking is best-effort
       }
     }
 

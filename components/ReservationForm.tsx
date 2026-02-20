@@ -28,6 +28,8 @@ type Discount = {
   title: string;
   description: string;
   applicable: boolean;
+  /** From API: false when limit reached for selected date */
+  soldOut?: boolean;
 };
 
 export default function ReservationForm({ brand }: ReservationFormProps) {
@@ -53,6 +55,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   }>({ type: null, message: "" });
   const [timeSlotTab, setTimeSlotTab] = useState<"lunch" | "dinner">("lunch");
   const [timeSlotPickerOpen, setTimeSlotPickerOpen] = useState(true);
+  /** Discount availability for selected date (used/max, sold out). Fetched when date is set. */
+  const [discountAvailability, setDiscountAvailability] = useState<Record<string, { available: boolean; used?: number; max?: number | null }>>({});
 
   // Helper function (not a hook)
   const formatTo12Hour = (time24: string): string => {
@@ -158,6 +162,14 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     return discounts;
   }, [brand.id, formData.timeSlot]);
 
+  /** Merge API availability: mark soldOut when limit reached for selected date */
+  const availableDiscountsWithAvailability = useMemo((): Discount[] => {
+    return availableDiscounts.map((d) => ({
+      ...d,
+      soldOut: discountAvailability[d.id]?.available === false,
+    }));
+  }, [availableDiscounts, discountAvailability]);
+
   const todayStr = useMemo(() => {
     const now = new Date();
     return now.toISOString().split("T")[0];
@@ -180,7 +192,30 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     setTimeSlotTab("lunch");
     setTimeSlotPickerOpen(false);
     setSubmitStatus({ type: null, message: "" });
+    setDiscountAvailability({});
   }, [brand.id]);
+
+  // Fetch discount availability once when date is set (no repeated loops)
+  useEffect(() => {
+    if (!formData.date || !/^\d{4}-\d{2}-\d{2}$/.test(formData.date)) {
+      setDiscountAvailability({});
+      return;
+    }
+    if (brand.id.startsWith("club-rogue")) return;
+    let cancelled = false;
+    fetch(`/api/venues/${brand.id}/discounts-availability?date=${formData.date}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((data: { availability?: { discountId: string; available: boolean; used?: number; max?: number | null }[] } | null) => {
+        if (cancelled || !data?.availability) return;
+        const map: Record<string, { available: boolean; used?: number; max?: number | null }> = {};
+        data.availability.forEach((a: { discountId: string; available: boolean; used?: number; max?: number | null }) => {
+          map[a.discountId] = { available: a.available, used: a.used, max: a.max };
+        });
+        setDiscountAvailability(map);
+      })
+      .catch(() => { if (!cancelled) setDiscountAvailability({}); });
+    return () => { cancelled = true; };
+  }, [brand.id, formData.date]);
 
   const isSlotInPast = (date: string, slot: string): boolean => {
     if (!date || !slot) return false;
@@ -262,6 +297,10 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   };
 
   const canProceedToStep2 = () => {
+    return !!formData.date;
+  };
+
+  const canProceedToStep2To3 = () => {
     return formData.date && formData.timeSlot;
   };
 
@@ -304,18 +343,25 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     if (currentStep === 1 && !canProceedToStep2()) {
       setSubmitStatus({
         type: "error",
-        message: "Please select a date and time slot.",
+        message: "Please select a date.",
       });
       return;
     }
-    if (currentStep === 2 && !canProceedToStep3()) {
+    if (currentStep === 2 && !canProceedToStep2To3()) {
+      setSubmitStatus({
+        type: "error",
+        message: "Please select a time slot.",
+      });
+      return;
+    }
+    if (currentStep === 3 && !canProceedToStep3()) {
       setSubmitStatus({
         type: "error",
         message: "Please enter at least one guest count.",
       });
       return;
     }
-    if (currentStep === 3 && !canProceedToStep4()) {
+    if (currentStep === 4 && !canProceedToStep4()) {
       setSubmitStatus({
         type: "error",
         message: "Please enter your name and a valid 10-digit contact number before continuing.",
@@ -426,11 +472,44 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   };
 
   const steps = [
-    { number: 1, title: "Date & Time", icon: "📅" },
-    { number: 2, title: "Guests", icon: "👥" },
-    { number: 3, title: "Contact", icon: "📞" },
-    { number: 4, title: "Review", icon: "✓" },
+    { number: 1, title: "Date", icon: "📅" },
+    { number: 2, title: "Time", icon: "🕐" },
+    { number: 3, title: "Guests & Offers", icon: "👥" },
+    { number: 4, title: "Contact & Confirm", icon: "✓" },
   ];
+
+  // Next 14 days for tap-only date picker (no past dates)
+  const datePickerDays = useMemo(() => {
+    const days: { dateStr: string; dayName: string; dayNum: string; monthShort: string }[] = [];
+    const today = new Date();
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      const dateStr = d.toISOString().split("T")[0];
+      days.push({
+        dateStr,
+        dayName: d.toLocaleDateString("en-IN", { weekday: "short" }),
+        dayNum: d.getDate().toString(),
+        monthShort: d.toLocaleDateString("en-IN", { month: "short" }),
+      });
+    }
+    return days;
+  }, []);
+
+  const handleDateSelect = (dateStr: string) => {
+    setFormData((prev) => ({ ...prev, date: dateStr, timeSlot: "" }));
+    setTimeSlotPickerOpen(true);
+    if (dateStr === todayStr) {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const currentTime24 = `${currentHour.toString().padStart(2, "0")}:${currentMinute.toString().padStart(2, "0")}`;
+      const lunchEndTime = (brand.id === "kiik69" || brand.id === "alehouse" || brand.id === "skyhy") ? "20:00" : "19:00";
+      setTimeSlotTab(currentTime24 >= lunchEndTime ? "dinner" : "lunch");
+    } else {
+      setTimeSlotTab("lunch");
+    }
+  };
 
   return (
     <div className="w-full">
@@ -541,7 +620,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
 
       <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
         <AnimatePresence mode="wait">
-          {/* Step 1: Date & Time */}
+          {/* Step 1: Date only – tap-only picker */}
         {currentStep === 1 && (
             <motion.div
               key="step1"
@@ -549,265 +628,121 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
-              className="space-y-6 min-w-0 overflow-visible"
+              className="space-y-4 min-w-0 overflow-visible"
             >
               <div className="min-w-0">
-                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2 sm:gap-3">
+                <h3 className="text-xl sm:text-2xl font-bold text-white mb-1 flex items-center gap-2">
                   <span className="w-1 h-6 sm:h-8 rounded-full flex-shrink-0" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
-                  <span>Select Date & Time</span>
+                  Select Date
                 </h3>
-                <p className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6">Choose when you&apos;d like to visit us</p>
+                <p className="text-xs sm:text-sm text-gray-400 mb-3 sm:mb-4">Tap a date to continue</p>
 
-                {/* Date Selection – padding so native picker isn't cut on mobile */}
-                <div className="mb-4 sm:mb-6 min-w-0 w-full max-w-full overflow-visible px-1">
-                  <label className="block text-xs sm:text-sm font-semibold text-gray-300 mb-2 sm:mb-3">
-                    Select Date <span className="text-red-400">*</span>
-                  </label>
-                  <div className="relative w-full min-w-0 max-w-full overflow-visible">
-                    <div className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 pointer-events-none z-10">
-                      <svg className="w-4 h-4 sm:w-5 sm:h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                    </div>
-                    <input
-                      type="date"
-                      value={formData.date || ""}
-                      onChange={handleDateChange}
-                      min={todayStr}
-                      className="w-full min-w-0 max-w-full pl-10 sm:pl-12 pr-3 sm:pr-4 py-3 sm:py-4 text-xs sm:text-sm font-medium backdrop-blur-xl bg-white/10 border-2 border-white/20 rounded-xl sm:rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:border-white/40 transition-all shadow-lg hover:shadow-xl touch-manipulation box-border"
-                      style={{
-                        borderColor: formData.date ? `${brand.accentColor}60` : undefined,
-                        boxShadow: formData.date ? `0 0 20px ${brand.accentColor}30` : undefined,
-                        touchAction: 'manipulation',
-                        minWidth: 0,
-                      }}
-                      onFocus={(e) => {
-                        e.target.style.borderColor = brand.accentColor;
-                        e.target.style.boxShadow = `0 0 30px ${brand.accentColor}50`;
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.borderColor = formData.date ? `${brand.accentColor}60` : "rgba(255, 255, 255, 0.2)";
-                        e.target.style.boxShadow = formData.date ? `0 0 20px ${brand.accentColor}30` : "";
-                      }}
-                    />
-                  </div>
-                </div>
-
-              {/* Time Slot Selection */}
-              {formData.date && (
-                <div>
-                    <label className="block text-sm font-semibold text-gray-300 mb-3">
-                      Select Time Slot <span className="text-red-400">*</span>
-                  </label>
-                  
-                    {/* Lunch/Dinner Toggle - Animated Pills */}
-                    <div className="flex gap-2 sm:gap-3 mb-3 sm:mb-4 backdrop-blur-xl bg-white/5 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border border-white/10">
+                <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 sm:gap-3">
+                  {datePickerDays.map((day) => {
+                    const isSelected = formData.date === day.dateStr;
+                    return (
                       <motion.button
+                        key={day.dateStr}
                         type="button"
-                        onClick={() => {
-                          setTimeSlotTab("lunch");
-                          setFormData((prev) => ({ ...prev, timeSlot: "" }));
-                          setTimeSlotPickerOpen(true);
-                        }}
-                        className={`flex-1 py-2 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 sm:gap-2 touch-manipulation ${
-                          timeSlotTab === "lunch" ? "text-white" : "text-gray-400"
+                        onClick={() => handleDateSelect(day.dateStr)}
+                        className={`flex flex-col items-center justify-center py-3 sm:py-4 px-2 rounded-xl border-2 transition-all touch-manipulation ${
+                          isSelected
+                            ? "text-white border-transparent"
+                            : "bg-white/10 text-gray-300 border-white/20 hover:bg-white/15 hover:border-white/30"
                         }`}
                         style={{
-                          backgroundColor: timeSlotTab === "lunch" ? `${brand.accentColor}80` : "transparent",
-                          boxShadow: timeSlotTab === "lunch" ? `0 4px 20px ${brand.accentColor}40` : undefined,
-                          touchAction: 'manipulation',
-                          WebkitTapHighlightColor: 'transparent',
+                          backgroundColor: isSelected ? brand.accentColor : undefined,
+                          boxShadow: isSelected ? `0 0 16px ${brand.accentColor}50` : undefined,
+                          touchAction: "manipulation",
+                          WebkitTapHighlightColor: "transparent",
                         }}
-                        whileTap={{ scale: 0.95 }}
+                        whileTap={{ scale: 0.96 }}
                       >
-                        <span className="text-base sm:text-lg">🍽️</span>
-                        <span>Lunch</span>
+                        <span className="text-[10px] sm:text-xs font-medium text-current opacity-90">{day.dayName}</span>
+                        <span className="text-base sm:text-lg font-bold mt-0.5">{day.dayNum}</span>
+                        <span className="text-[10px] sm:text-xs text-current opacity-75">{day.monthShort}</span>
                       </motion.button>
-                      <motion.button
-                        type="button"
-                        onClick={() => {
-                          setTimeSlotTab("dinner");
-                          setFormData((prev) => ({ ...prev, timeSlot: "" }));
-                          setTimeSlotPickerOpen(true);
-                        }}
-                        className={`flex-1 py-2 sm:py-3 px-3 sm:px-4 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 sm:gap-2 touch-manipulation ${
-                          timeSlotTab === "dinner" ? "text-white" : "text-gray-400"
-                        }`}
-                        style={{
-                          backgroundColor: timeSlotTab === "dinner" ? `${brand.accentColor}80` : "transparent",
-                          boxShadow: timeSlotTab === "dinner" ? `0 4px 20px ${brand.accentColor}40` : undefined,
-                          touchAction: 'manipulation',
-                          WebkitTapHighlightColor: 'transparent',
-                        }}
-                        whileTap={{ scale: 0.95 }}
-                      >
-                        <span className="text-base sm:text-lg">🌙</span>
-                        <span>Dinner</span>
-                      </motion.button>
-                    </div>
-
-                    {/* Time Slot: collapsed "Selected" or full grid */}
-                    {formData.timeSlot && !timeSlotPickerOpen ? (
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="flex items-center justify-between gap-3 p-3 sm:p-4 backdrop-blur-xl bg-white/5 rounded-xl sm:rounded-2xl border border-white/10"
-                      >
-                        <span className="text-sm sm:text-base font-semibold text-white">
-                          {formatTo12Hour(formData.timeSlot)}
-                          <span className="ml-2 text-green-400">✓</span>
-                        </span>
-                        <motion.button
-                          type="button"
-                          onClick={() => setTimeSlotPickerOpen(true)}
-                          className="text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg transition-colors touch-manipulation"
-                          style={{ color: brand.accentColor, backgroundColor: `${brand.accentColor}30` }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          Change
-                        </motion.button>
-                      </motion.div>
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5 sm:gap-2 md:gap-3 max-h-56 sm:max-h-64 md:max-h-72 overflow-y-auto p-2 sm:p-3 backdrop-blur-xl bg-white/5 rounded-xl sm:rounded-2xl border border-white/10 scrollbar-hide">
-                          {timeSlots.map((slot) => {
-                            const isPast = isSlotInPast(formData.date, slot.value24);
-                            const isSelected = formData.timeSlot === slot.value24;
-                            return (
-                              <motion.button
-                                key={slot.value24}
-                                type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  if (!isPast) handleSlotSelect(slot.value24);
-                                }}
-                                disabled={isPast}
-                                className={`w-full px-2 sm:px-3 py-2 sm:py-2.5 text-[10px] sm:text-xs md:text-sm font-medium rounded-lg sm:rounded-xl border-2 transition-all touch-manipulation ${
-                                  isPast
-                                    ? "bg-white/5 text-gray-600 border-white/5 cursor-not-allowed"
-                                    : isSelected
-                                    ? "text-white border-transparent"
-                                    : "backdrop-blur-md bg-white/10 text-gray-300 border-white/20 hover:bg-white/20 hover:border-white/30"
-                                }`}
-                                style={{
-                                  backgroundColor: isSelected ? brand.accentColor : undefined,
-                                  boxShadow: isSelected ? `0 0 20px ${brand.accentColor}60, 0 4px 14px ${brand.accentColor}40` : undefined,
-                                  touchAction: "manipulation",
-                                  WebkitTapHighlightColor: "transparent",
-                                }}
-                                whileHover={!isPast && !isSelected ? { scale: 1.05 } : {}}
-                                whileTap={!isPast ? { scale: 0.95 } : {}}
-                                animate={isSelected ? { boxShadow: [`0 0 20px ${brand.accentColor}60`, `0 0 30px ${brand.accentColor}80`, `0 0 20px ${brand.accentColor}60`] } : {}}
-                                transition={{ duration: 2, repeat: isSelected ? Infinity : 0 }}
-                              >
-                                {slot.display12}
-                              </motion.button>
-                            );
-                          })}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-3">
-                          {timeSlotTab === "lunch"
-                            ? brand.id.startsWith("club-rogue")
-                              ? "Lunch slots: 5:00 PM - 6:45 PM"
-                              : "Lunch slots: 12:00 PM - 6:45 PM"
-                            : "Dinner slots: 7:00 PM - 11:45 PM"}
-                        </p>
-                      </>
-                    )}
+                    );
+                  })}
                 </div>
-              )}
-
-                {/* Premium Offers Cards */}
-              {formData.timeSlot && availableDiscounts.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-6 p-4 backdrop-blur-xl bg-white/5 rounded-2xl border border-white/10"
-                  >
-                    <h4 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                      <span className="text-lg">✨</span>
-                    Available Offers for {formatTo12Hour(formData.timeSlot)}
-                  </h4>
-                    <div className="space-y-3">
-                    {availableDiscounts.map((discount) => (
-                        <motion.div
-                        key={discount.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => handleDiscountToggle(discount.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              handleDiscountToggle(discount.id);
-                            }
-                          }}
-                          className={`flex items-start gap-3 p-4 backdrop-blur-md rounded-xl border-2 cursor-pointer transition-all ${
-                            formData.selectedDiscounts.includes(discount.id)
-                              ? "border-white/30"
-                              : "border-white/10 hover:border-white/20"
-                          }`}
-                        style={{
-                            backgroundColor: formData.selectedDiscounts.includes(discount.id)
-                              ? `${brand.accentColor}20`
-                              : "rgba(255, 255, 255, 0.05)",
-                            boxShadow: formData.selectedDiscounts.includes(discount.id)
-                              ? `0 0 20px ${brand.accentColor}30`
-                            : undefined,
-                        }}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                        >
-                          <motion.div
-                            className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                              formData.selectedDiscounts.includes(discount.id)
-                                ? "border-white"
-                                : "border-white/30"
-                            }`}
-                          style={{
-                              backgroundColor: formData.selectedDiscounts.includes(discount.id)
-                                ? brand.accentColor
-                                : "transparent",
-                            }}
-                            animate={{
-                              scale: formData.selectedDiscounts.includes(discount.id) ? [1, 1.2, 1] : 1,
-                            }}
-                            transition={{ duration: 0.3 }}
-                          >
-                            {formData.selectedDiscounts.includes(discount.id) && (
-                              <motion.svg
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                className="w-3 h-3 text-white"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                              </motion.svg>
-                            )}
-                          </motion.div>
-                        <div className="flex-1 min-w-0">
-                            <div className="font-medium text-white text-sm mb-1">
-                            {discount.title}
-                          </div>
-                            <div className="text-xs text-gray-400">
-                            {discount.description}
-                          </div>
-                        </div>
-                        </motion.div>
-                    ))}
-                  </div>
-                  </motion.div>
-                )}
-                </div>
+              </div>
             </motion.div>
         )}
 
-          {/* Step 2: Guests */}
-        {currentStep === 2 && (
+          {/* Step 2: Time only */}
+        {currentStep === 2 && formData.date && (
             <motion.div
               key="step2"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4"
+            >
+              <div>
+                <h3 className="text-xl sm:text-2xl font-bold text-white mb-1 flex items-center gap-2">
+                  <span className="w-1 h-6 sm:h-8 rounded-full flex-shrink-0" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
+                  Select Time
+                </h3>
+                <p className="text-xs sm:text-sm text-gray-400 mb-3">Choose your preferred slot</p>
+
+                <div className="flex gap-2 mb-3 backdrop-blur-xl bg-white/5 p-1 rounded-xl border border-white/10">
+                  <motion.button
+                    type="button"
+                    onClick={() => { setTimeSlotTab("lunch"); setFormData((prev) => ({ ...prev, timeSlot: "" })); setTimeSlotPickerOpen(true); }}
+                    className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-semibold rounded-lg transition-all touch-manipulation ${timeSlotTab === "lunch" ? "text-white" : "text-gray-400"}`}
+                    style={{ backgroundColor: timeSlotTab === "lunch" ? `${brand.accentColor}80` : "transparent", touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    🍽️ Lunch
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    onClick={() => { setTimeSlotTab("dinner"); setFormData((prev) => ({ ...prev, timeSlot: "" })); setTimeSlotPickerOpen(true); }}
+                    className={`flex-1 py-2.5 px-3 text-xs sm:text-sm font-semibold rounded-lg transition-all touch-manipulation ${timeSlotTab === "dinner" ? "text-white" : "text-gray-400"}`}
+                    style={{ backgroundColor: timeSlotTab === "dinner" ? `${brand.accentColor}80` : "transparent", touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    🌙 Dinner
+                  </motion.button>
+                </div>
+
+                {formData.timeSlot && !timeSlotPickerOpen ? (
+                  <motion.div className="flex items-center justify-between gap-3 p-3 backdrop-blur-xl bg-white/5 rounded-xl border border-white/10">
+                    <span className="text-sm font-semibold text-white">{formatTo12Hour(formData.timeSlot)} <span className="text-green-400">✓</span></span>
+                    <motion.button type="button" onClick={() => setTimeSlotPickerOpen(true)} className="text-xs font-medium px-3 py-1.5 rounded-lg" style={{ color: brand.accentColor, backgroundColor: `${brand.accentColor}30` }} whileTap={{ scale: 0.95 }}>Change</motion.button>
+                  </motion.div>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-52 sm:max-h-60 overflow-y-auto p-2 backdrop-blur-xl bg-white/5 rounded-xl border border-white/10 scrollbar-hide">
+                    {timeSlots.map((slot) => {
+                      const isPast = isSlotInPast(formData.date, slot.value24);
+                      const isSelected = formData.timeSlot === slot.value24;
+                      return (
+                        <motion.button
+                          key={slot.value24}
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); if (!isPast) handleSlotSelect(slot.value24); }}
+                          disabled={isPast}
+                          className={`w-full px-2 py-2.5 text-xs font-medium rounded-lg border-2 transition-all touch-manipulation ${
+                            isPast ? "bg-white/5 text-gray-600 border-white/5 cursor-not-allowed" : isSelected ? "text-white border-transparent" : "bg-white/10 text-gray-300 border-white/20 hover:bg-white/20"
+                          }`}
+                          style={{ backgroundColor: isSelected ? brand.accentColor : undefined, boxShadow: isSelected ? `0 0 14px ${brand.accentColor}50` : undefined, touchAction: "manipulation", WebkitTapHighlightColor: "transparent" }}
+                          whileTap={!isPast ? { scale: 0.95 } : {}}
+                        >
+                          {slot.display12}
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+        )}
+
+          {/* Step 3: Guests & Offers */}
+        {currentStep === 3 && (
+            <motion.div
+              key="step3"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
@@ -890,79 +825,55 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                 </div>
             </div>
 
-              {/* Offers in Step 2 */}
-            {availableDiscounts.length > 0 && (
+              {/* Optional Offers in Step 3 – sold out from API when limit reached */}
+            {availableDiscountsWithAvailability.length > 0 && (
               <div>
                   <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                    <span>✨</span> Available Offers
+                    <span>✨</span> Optional Offers
                 </h3>
                 <div className="space-y-3">
-                  {availableDiscounts.map((discount) => (
+                  {availableDiscountsWithAvailability.map((discount) => {
+                    const soldOut = discount.soldOut;
+                    const isSelected = formData.selectedDiscounts.includes(discount.id);
+                    return (
                       <motion.div
-                      key={discount.id}
+                        key={discount.id}
                         role="button"
-                        tabIndex={0}
-                        onClick={() => handleDiscountToggle(discount.id)}
+                        tabIndex={soldOut ? -1 : 0}
+                        onClick={() => !soldOut && handleDiscountToggle(discount.id)}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            handleDiscountToggle(discount.id);
-                          }
+                          if (!soldOut && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); handleDiscountToggle(discount.id); }
                         }}
-                        className={`flex items-start gap-3 p-4 backdrop-blur-md rounded-xl border-2 cursor-pointer transition-all ${
-                          formData.selectedDiscounts.includes(discount.id)
-                            ? "border-white/30"
-                            : "border-white/10 hover:border-white/20"
-                        }`}
-                      style={{
-                          backgroundColor: formData.selectedDiscounts.includes(discount.id)
-                            ? `${brand.accentColor}20`
-                            : "rgba(255, 255, 255, 0.05)",
-                          boxShadow: formData.selectedDiscounts.includes(discount.id)
-                            ? `0 0 20px ${brand.accentColor}30`
-                          : undefined,
-                      }}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
+                        className={`flex items-start gap-3 p-4 backdrop-blur-md rounded-xl border-2 transition-all ${
+                          soldOut ? "cursor-not-allowed opacity-75 border-white/5 bg-white/5" : "cursor-pointer border-white/10 hover:border-white/20"
+                        } ${isSelected ? "border-white/30" : ""}`}
+                        style={{
+                          backgroundColor: isSelected ? `${brand.accentColor}20` : "rgba(255, 255, 255, 0.05)",
+                          boxShadow: isSelected ? `0 0 20px ${brand.accentColor}30` : undefined,
+                        }}
+                        whileHover={!soldOut ? { scale: 1.02 } : {}}
+                        whileTap={!soldOut ? { scale: 0.98 } : {}}
                       >
                         <motion.div
                           className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                            formData.selectedDiscounts.includes(discount.id)
-                              ? "border-white"
-                              : "border-white/30"
+                            isSelected ? "border-white" : "border-white/30"
                           }`}
-                        style={{
-                            backgroundColor: formData.selectedDiscounts.includes(discount.id)
-                              ? brand.accentColor
-                              : "transparent",
-                          }}
-                          animate={{
-                            scale: formData.selectedDiscounts.includes(discount.id) ? [1, 1.2, 1] : 1,
-                          }}
+                          style={{ backgroundColor: isSelected ? brand.accentColor : "transparent" }}
                         >
-                          {formData.selectedDiscounts.includes(discount.id) && (
-                            <motion.svg
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              className="w-3 h-3 text-white"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
+                          {isSelected && (
+                            <motion.svg initial={{ scale: 0 }} animate={{ scale: 1 }} className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                             </motion.svg>
                           )}
                         </motion.div>
-                      <div className="flex-1">
-                          <div className="font-medium text-white text-sm">
-                          {discount.title}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-white text-sm">{discount.title}</div>
+                          <div className="text-xs text-gray-400 mt-1">{discount.description}</div>
+                          {soldOut && <div className="text-xs font-medium text-amber-400 mt-1">Sold out for this date</div>}
                         </div>
-                          <div className="text-xs text-gray-400 mt-1">
-                          {discount.description}
-                        </div>
-                      </div>
                       </motion.div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -996,22 +907,40 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
             </motion.div>
         )}
 
-          {/* Step 3: Contact */}
-        {currentStep === 3 && (
+          {/* Step 4: Contact & Confirm */}
+        {currentStep === 4 && (
             <motion.div
-              key="step3"
+              key="step4"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
               className="space-y-6"
             >
+              {/* Review summary at top of step 4 */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="backdrop-blur-xl bg-white/5 rounded-2xl border border-white/10 p-4 space-y-2"
+              >
+                <div className="text-xs text-gray-400">Booking summary</div>
+                <div className="font-semibold text-white">
+                  {formData.date && formData.timeSlot
+                    ? `${new Date(formData.date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })} at ${formatTo12Hour(formData.timeSlot)}`
+                    : "—"}
+                </div>
+                <div className="text-sm text-gray-300">
+                  {[formData.numberOfMen !== "" && formData.numberOfMen !== "0" ? `${formData.numberOfMen} Men` : null, formData.numberOfWomen !== "" && formData.numberOfWomen !== "0" ? `${formData.numberOfWomen} Women` : null, formData.numberOfCouples !== "" && formData.numberOfCouples !== "0" ? `${formData.numberOfCouples} Couples` : null].filter(Boolean).join(", ") || "0"} guests
+                  {formData.selectedDiscounts.length > 0 && ` · ${formData.selectedDiscounts.length} offer(s)`}
+                </div>
+              </motion.div>
+
               <div>
-                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-2 flex items-center gap-2 sm:gap-3">
+                <h3 className="text-xl sm:text-2xl font-bold text-white mb-2 flex items-center gap-2">
                   <span className="w-1 h-6 sm:h-8 rounded-full flex-shrink-0" style={{ backgroundColor: brand.accentColor, boxShadow: `0 0 20px ${brand.accentColor}60` }} />
-                  <span>Contact Information</span>
+                  Contact Information
                 </h3>
-                <p className="text-xs sm:text-sm text-gray-400 mb-4 sm:mb-6">We&apos;ll use this to confirm your reservation</p>
+                <p className="text-xs sm:text-sm text-gray-400 mb-4">We&apos;ll use this to confirm your reservation</p>
                 <div className="space-y-4 sm:space-y-5">
                 <div>
                     <label className="block text-xs sm:text-sm font-semibold text-gray-300 mb-2 sm:mb-3">
@@ -1142,10 +1071,10 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
             </motion.div>
         )}
 
-          {/* Step 4: Review - VIP Ticket Style */}
-        {currentStep === 4 && (
+          {/* Step 4 Review card removed – summary now shown at top of Contact & Confirm step */}
+        {false && currentStep === 4 && (
             <motion.div
-              key="step4"
+              key="step4-review"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -1331,8 +1260,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
             (() => {
               const canAdvance =
                 (currentStep === 1 && canProceedToStep2()) ||
-                (currentStep === 2 && canProceedToStep3()) ||
-                (currentStep === 3 && canProceedToStep4());
+                (currentStep === 2 && canProceedToStep2To3()) ||
+                (currentStep === 3 && canProceedToStep3());
               return (
                 <motion.button
                   type="button"

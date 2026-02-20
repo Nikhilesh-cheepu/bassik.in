@@ -35,12 +35,41 @@ model Venue {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  images       VenueImage[]
-  menus        Menu[]
-  offers       VenueOffer[]
-  reservations Reservation[]
+  images          VenueImage[]
+  menus           Menu[]
+  offers          VenueOffer[]
+  reservations    Reservation[]
+  discountLimits  DiscountLimit[]
 
   @@index([brandId])
+}
+
+model DiscountLimit {
+  id        String   @id @default(cuid())
+  brandId   String   // Matches brand.id
+  discountId String // e.g. "kiik-lunch", "alehouse-lunch"
+  maxPerDay Int     @default(0) // 0 = unlimited
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  venue Venue @relation(fields: [brandId], references: [brandId], onDelete: Cascade)
+
+  @@unique([brandId, discountId])
+  @@index([brandId])
+}
+
+model DiscountUsage {
+  id         String   @id @default(cuid())
+  brandId    String
+  discountId String
+  date       String   // YYYY-MM-DD
+  usedCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([brandId, discountId, date])
+  @@index([brandId])
+  @@index([brandId, date])
 }
 
 model VenueOffer {
