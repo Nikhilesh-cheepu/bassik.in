@@ -3,7 +3,6 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { BRANDS } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-contacts";
-import { getOffersForVenue } from "@/lib/venue-offers";
 
 export const runtime = "nodejs";
 
@@ -72,15 +71,10 @@ export async function GET(
     const contactPhone = contactNumbers[0]?.phone ?? getContactForBrand(brandId);
     const whatsappMessage = getWhatsAppMessageForBrand(brandId, venue.shortName);
 
-    let offers = (venue as any).offers.map((o: { id: string; imageUrl: string }) => ({
+    const offers = (venue as any).offers.map((o: { id: string; imageUrl: string }) => ({
       id: o.id,
       imageUrl: o.imageUrl,
     }));
-    // Fallback to old static offers when DB has none (user page shows them; admin can add/edit via Events & Offers)
-    if (offers.length === 0) {
-      const staticOffers = getOffersForVenue(brandId);
-      offers = staticOffers.map((o) => ({ id: o.id, imageUrl: o.imageUrl }));
-    }
 
     return NextResponse.json(
       {
@@ -126,7 +120,6 @@ export async function GET(
         const headers = {
           "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
         };
-        const staticOffers = getOffersForVenue(brandId).map((o) => ({ id: o.id, imageUrl: o.imageUrl }));
         return NextResponse.json(
           {
             venue: {
@@ -141,7 +134,7 @@ export async function GET(
               whatsappMessage,
               galleryImages: [],
               menus: [],
-              offers: staticOffers,
+              offers: [],
             },
           },
           { headers }
