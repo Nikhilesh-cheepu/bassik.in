@@ -108,16 +108,6 @@ export async function POST(request: NextRequest) {
       return date.toLocaleDateString("en-IN", options);
     };
 
-    // Map discount IDs to friendly names
-    const discountNames: Record<string, string> = {
-      "kiik-10-percent": "10% off on total bill",
-      "kiik-lunch": "Lunch Special @ ₹128",
-      "lunch-special": "Lunch Special @ ₹127",
-      "alehouse-lunch": "Lunch Special @ ₹128",
-      "alehouse-liquor": "50% off on liquor",
-      "skyhy-lunch": "Lunch Special @ ₹128",
-    };
-
     const timeToFormat = timeSlot || time;
     const formattedTime = timeSlot ? formatTime(timeSlot) : time;
 
@@ -131,15 +121,6 @@ export async function POST(request: NextRequest) {
     if (parseInt(numberOfWomen) > 0) guestParts.push(`${numberOfWomen}W`);
     if (parseInt(numberOfCouples) > 0) guestParts.push(`${numberOfCouples} Couple${parseInt(numberOfCouples) > 1 ? "s" : ""}`);
     const guestCountStr = `${totalGuests} Guests (${guestParts.join(" / ")})`;
-
-    // Build offers section (plain text, no emojis)
-    let offersSection = "";
-    if (selectedDiscounts && Array.isArray(selectedDiscounts) && selectedDiscounts.length > 0) {
-      const offerList = selectedDiscounts
-        .map((discountId: string) => discountNames[discountId] || discountId)
-        .join("\n");
-      offersSection = `\n\n${offerList}`;
-    }
 
     // Build notes section (plain text, no emojis)
     let notesSection = "";
@@ -155,16 +136,6 @@ export async function POST(request: NextRequest) {
         notesSection = `\n\n${notes.trim()}`;
       }
     }
-
-    const message = `Table Reservation | ${brandName}
-
-${fullName} | ${contactNumber}
-
-${formatDateShort(date)} | ${formattedTime}
-
-${guestCountStr}${offersSection}${notesSection}
-
-Reservation submitted via bassik.in`;
 
     // Find or create venue
     console.log("[RESERVATION API] Looking for venue:", brandId);
@@ -213,6 +184,7 @@ Reservation submitted via bassik.in`;
     }
 
     const discountIds = Array.isArray(selectedDiscounts) ? selectedDiscounts.filter((id: unknown) => typeof id === "string") : [];
+    let discountTitles: string[] = [];
     if (discountIds.length > 0) {
       const discounts = await prisma.discount.findMany({
         where: { id: { in: discountIds }, venue: { brandId } },
@@ -223,7 +195,21 @@ Reservation submitted via bassik.in`;
           { status: 400 }
         );
       }
+      discountTitles = discounts.map((d) => d.title);
     }
+
+    // Build offers section from DB discount titles (after validation)
+    const offersSection = discountTitles.length > 0 ? `\n\n${discountTitles.join("\n")}` : "";
+
+    const message = `Table Reservation | ${brandName}
+
+${fullName} | ${contactNumber}
+
+${formatDateShort(date)} | ${formattedTime}
+
+${guestCountStr}${offersSection}${notesSection}
+
+Reservation submitted via bassik.in`;
 
     // Build reservation data object (no server-side user linkage; reservations are anonymous here)
     const reservationData: any = {
