@@ -35,11 +35,6 @@ export default function VenuesPageClient() {
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setLoading(false);
-    loadVenues();
-  }, [loadVenues]);
-
   const loadVenues = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/venues", {
@@ -58,6 +53,11 @@ export default function VenuesPageClient() {
       return [];
     }
   }, []);
+
+  useEffect(() => {
+    setLoading(false);
+    loadVenues();
+  }, [loadVenues]);
 
   const handleVenueSelect = (venue: Venue) => {
     setSelectedVenue(venue);
