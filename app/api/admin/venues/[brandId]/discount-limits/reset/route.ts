@@ -5,8 +5,8 @@ import { getDiscountIdsForBrand } from "@/lib/reservation-discounts";
 export const runtime = "nodejs";
 
 /**
- * POST body: { date: string (YYYY-MM-DD), discountId?: string }
- * Resets usage for the given date. If discountId is provided, only that discount; otherwise all for that date.
+ * POST body: { date?: string, discountId?: string, resetClaims?: boolean }
+ * resetClaims: reset claimsUsed (total) on DiscountLimit. Else reset per-day DiscountUsage.
  */
 export async function POST(
   request: NextRequest,
@@ -15,18 +15,36 @@ export async function POST(
   try {
     const { brandId } = await params;
     const body = await request.json();
+    const resetClaims = !!body.resetClaims;
+    const discountId = typeof body.discountId === "string" ? body.discountId.trim() || null : null;
+
+    if (resetClaims) {
+      if (discountId) {
+        const allowed = getDiscountIdsForBrand(brandId).some((d) => d.id === discountId);
+        if (!allowed) {
+          return NextResponse.json({ error: "Invalid discountId" }, { status: 400 });
+        }
+        await prisma.discountLimit.updateMany({
+          where: { brandId, discountId },
+          data: { claimsUsed: 0 },
+        });
+      } else {
+        await prisma.discountLimit.updateMany({
+          where: { brandId },
+          data: { claimsUsed: 0 },
+        });
+      }
+      return NextResponse.json({ success: true, resetClaims: true, discountId: discountId ?? "all" });
+    }
+
     const date = typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
       ? body.date
       : new Date().toISOString().split("T")[0];
-    const discountId = typeof body.discountId === "string" ? body.discountId.trim() || null : null;
 
     if (discountId) {
       const allowed = getDiscountIdsForBrand(brandId).some((d) => d.id === discountId);
       if (!allowed) {
-        return NextResponse.json(
-          { error: "Invalid discountId for this brand" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Invalid discountId" }, { status: 400 });
       }
       await prisma.discountUsage.updateMany({
         where: { brandId, discountId, date },

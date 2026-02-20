@@ -344,7 +344,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-white">{offer.title}</div>
                       <div className="text-xs text-gray-400 mt-0.5">{offer.description}</div>
-                      {left != null && !soldOut && <div className="text-xs text-gray-500 mt-1">{left} left today</div>}
+                      {left != null && !soldOut && <div className="text-xs text-gray-500 mt-1">{left} left</div>}
                       {soldOut && <div className="text-xs font-medium text-amber-400 mt-1">Sold out</div>}
                     </div>
                   </motion.button>
@@ -378,14 +378,15 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
         </div>
       </div>
 
-      {/* Contact - compact */}
+      {/* Contact - compact; text-base prevents iOS zoom on focus */}
       <div className="space-y-2">
         <input
           type="text"
           placeholder="Full name *"
           value={formData.fullName}
           onChange={(e) => setFormData((p) => ({ ...p, fullName: e.target.value }))}
-          className="w-full px-3 py-2.5 text-sm bg-white/5 border border-white/15 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-white/30 transition-colors"
+          className="w-full px-3 py-2.5 text-base bg-white/5 border border-white/15 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-white/30 transition-colors"
+          style={{ fontSize: "16px" }}
         />
         <input
           type="tel"
@@ -394,7 +395,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
           maxLength={10}
           value={formData.contactNumber}
           onChange={(e) => setFormData((p) => ({ ...p, contactNumber: e.target.value.replace(/\D/g, "").slice(0, 10) }))}
-          className={`w-full px-3 py-2.5 text-sm bg-white/5 border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-white/30 transition-colors ${formData.contactNumber && !isValidPhone(formData.contactNumber) ? "border-red-500/50" : "border-white/15"}`}
+          className={`w-full px-3 py-2.5 text-base bg-white/5 border rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-white/30 transition-colors ${formData.contactNumber && !isValidPhone(formData.contactNumber) ? "border-red-500/50" : "border-white/15"}`}
+          style={{ fontSize: "16px" }}
         />
         {formData.contactNumber && !isValidPhone(formData.contactNumber) && (
           <p className="text-xs text-red-400">Enter a valid 10-digit number</p>

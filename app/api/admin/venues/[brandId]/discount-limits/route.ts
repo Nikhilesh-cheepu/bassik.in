@@ -19,26 +19,43 @@ export async function GET(
       ? dateParam
       : new Date().toISOString().split("T")[0];
 
-    const [limits, usageRows] = await Promise.all([
-      prisma.discountLimit.findMany({ where: { brandId } }),
-      prisma.discountUsage.findMany({ where: { brandId, date } }),
-    ]);
-
+    const limits = await prisma.discountLimit.findMany({ where: { brandId } });
+    const usageRows = await prisma.discountUsage.findMany({ where: { brandId, date } });
     const usageByDiscount = Object.fromEntries(
       usageRows.map((u) => [u.discountId, u.usedCount])
     );
+    const limitsByDiscount = Object.fromEntries(limits.map((l) => [l.discountId, l]));
 
     const discountOptions = getDiscountIdsForBrand(brandId);
     const items = discountOptions.map((opt) => {
-      const limit = limits.find((l) => l.discountId === opt.id);
-      const used = usageByDiscount[opt.id] ?? 0;
-      const max = limit?.maxPerDay ?? 0;
+      const limit = limitsByDiscount[opt.id];
+      const maxClaims = limit?.maxClaims ?? null;
+      const claimsUsed = limit?.claimsUsed ?? 0;
+      const perDayUsed = usageByDiscount[opt.id] ?? 0;
+      const maxPerDay = limit?.maxPerDay ?? 0;
+
+      let used = claimsUsed;
+      let max = maxClaims;
+      let available = true;
+      if (maxClaims != null && maxClaims > 0) {
+        used = claimsUsed;
+        max = maxClaims;
+        available = claimsUsed < maxClaims;
+      } else if (maxPerDay > 0) {
+        used = perDayUsed;
+        max = maxPerDay;
+        available = perDayUsed < maxPerDay;
+      }
+
       return {
         discountId: opt.id,
         label: opt.label,
-        maxPerDay: max,
+        maxPerDay,
+        maxClaims: maxClaims ?? undefined,
+        claimsUsed,
         used,
-        available: max <= 0 ? true : used < max,
+        max: max ?? undefined,
+        available,
       };
     });
 
@@ -53,8 +70,8 @@ export async function GET(
 }
 
 /**
- * POST body: { discountId: string, maxPerDay: number }
- * Creates or updates limit for this brand. maxPerDay 0 = unlimited.
+ * POST body: { discountId: string, maxPerDay?: number, maxClaims?: number }
+ * Creates or updates limit. maxPerDay 0 = unlimited per day. maxClaims null/empty = unlimited total.
  */
 export async function POST(
   request: NextRequest,
@@ -64,7 +81,9 @@ export async function POST(
     const { brandId } = await params;
     const body = await request.json();
     const discountId = typeof body.discountId === "string" ? body.discountId.trim() : null;
-    const maxPerDay = typeof body.maxPerDay === "number" ? body.maxPerDay : Number(body.maxPerDay);
+    const maxPerDay = typeof body.maxPerDay === "number" ? body.maxPerDay : Math.max(0, Math.floor(Number(body.maxPerDay) || 0));
+    const maxClaimsRaw = body.maxClaims;
+    const maxClaims = maxClaimsRaw === "" || maxClaimsRaw == null ? null : Math.max(0, Math.floor(Number(maxClaimsRaw) || 0));
 
     if (!discountId) {
       return NextResponse.json(
@@ -82,11 +101,9 @@ export async function POST(
     }
 
     const limit = await prisma.discountLimit.upsert({
-      where: {
-        brandId_discountId: { brandId, discountId },
-      },
-      create: { brandId, discountId, maxPerDay: Math.max(0, Math.floor(maxPerDay)) },
-      update: { maxPerDay: Math.max(0, Math.floor(maxPerDay)) },
+      where: { brandId_discountId: { brandId, discountId } },
+      create: { brandId, discountId, maxPerDay, maxClaims },
+      update: { maxPerDay, maxClaims },
     });
 
     return NextResponse.json(limit);

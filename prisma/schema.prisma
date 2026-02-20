@@ -45,12 +45,14 @@ model Venue {
 }
 
 model DiscountLimit {
-  id        String   @id @default(cuid())
-  brandId   String   // Matches brand.id
-  discountId String // e.g. "kiik-lunch", "alehouse-lunch"
-  maxPerDay Int     @default(0) // 0 = unlimited
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  brandId    String   // Matches brand.id
+  discountId String   // e.g. "kiik-lunch", "alehouse-lunch"
+  maxPerDay  Int      @default(0)  // 0 = unlimited (per-day)
+  maxClaims  Int?     // null = unlimited total claims
+  claimsUsed Int      @default(0)  // total claims used
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   venue Venue @relation(fields: [brandId], references: [brandId], onDelete: Cascade)
 

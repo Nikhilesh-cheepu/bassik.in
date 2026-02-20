@@ -212,7 +212,7 @@ Reservation submitted via bassik.in`;
       throw venueError;
     }
 
-    // Check discount limits before creating reservation (skip if tables don't exist yet)
+    // Check discount limits before creating (maxClaims or maxPerDay)
     const discountIds = Array.isArray(selectedDiscounts) ? selectedDiscounts : [];
     if (discountIds.length > 0) {
       try {
@@ -226,18 +226,30 @@ Reservation submitted via bassik.in`;
           usageRows.map((u) => [u.discountId, u.usedCount])
         );
         for (const limit of limits) {
-          if (limit.maxPerDay <= 0) continue;
-          const used = usageByDiscount[limit.discountId] ?? 0;
-          if (used >= limit.maxPerDay) {
-            return NextResponse.json(
-              { error: `Discount "${limit.discountId}" is sold out for this date.` },
-              { status: 400 }
-            );
+          const maxClaims = limit.maxClaims ?? null;
+          const claimsUsed = limit.claimsUsed ?? 0;
+          const perDayUsed = usageByDiscount[limit.discountId] ?? 0;
+          const maxPerDay = limit.maxPerDay ?? 0;
+
+          if (maxClaims != null && maxClaims > 0) {
+            if (claimsUsed >= maxClaims) {
+              return NextResponse.json(
+                { error: `Offer "${limit.discountId}" has reached its limit. Please choose another or continue without.` },
+                { status: 400 }
+              );
+            }
+          } else if (maxPerDay > 0) {
+            if (perDayUsed >= maxPerDay) {
+              return NextResponse.json(
+                { error: `Offer "${limit.discountId}" is sold out for this date.` },
+                { status: 400 }
+              );
+            }
           }
         }
       } catch (limitError: any) {
         if (limitError?.code === "P2021" || limitError?.message?.includes("does not exist")) {
-          console.warn("[RESERVATION API] DiscountLimit/DiscountUsage tables not found, skipping limit check (run prisma migrate deploy)");
+          console.warn("[RESERVATION API] DiscountLimit tables not found, skipping limit check (run prisma migrate deploy)");
         } else {
           throw limitError;
         }
@@ -416,21 +428,29 @@ Reservation submitted via bassik.in`;
       }
     }
 
-    // Increment discount usage for each selected discount
+    // Increment discount usage: claimsUsed (total) and per-day
     if (discountIds.length > 0) {
       try {
         for (const discountId of discountIds) {
+          const limit = await prisma.discountLimit.findUnique({
+            where: { brandId_discountId: { brandId, discountId } },
+          });
+          if (limit) {
+            if (limit.maxClaims != null && limit.maxClaims > 0) {
+              await prisma.discountLimit.update({
+                where: { brandId_discountId: { brandId, discountId } },
+                data: { claimsUsed: { increment: 1 } },
+              });
+            }
+          }
           await prisma.discountUsage.upsert({
-            where: {
-              brandId_discountId_date: { brandId, discountId, date },
-            },
+            where: { brandId_discountId_date: { brandId, discountId, date } },
             create: { brandId, discountId, date, usedCount: 1 },
             update: { usedCount: { increment: 1 } },
           });
         }
       } catch (usageError: any) {
         console.error("[RESERVATION API] Discount usage increment failed:", usageError?.message);
-        // Don't fail the reservation; usage tracking is best-effort
       }
     }
 

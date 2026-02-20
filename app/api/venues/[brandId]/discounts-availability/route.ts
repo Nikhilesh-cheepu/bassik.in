@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getDiscountIdsForBrand } from "@/lib/reservation-discounts";
 
 export const runtime = "nodejs";
 
 /**
  * GET ?date=YYYY-MM-DD
- * Returns discount availability for the brand on the given date.
- * Only call when user has selected a date (no over-fetch).
+ * Returns discount availability for the brand.
+ * maxClaims = total claims cap (used when set); else maxPerDay = per-day cap.
  */
 export async function GET(
   request: NextRequest,
@@ -14,35 +15,44 @@ export async function GET(
 ) {
   try {
     const { brandId } = await params;
-    const date = request.nextUrl.searchParams.get("date");
-    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return NextResponse.json(
-        { error: "Query param date (YYYY-MM-DD) is required" },
-        { status: 400 }
-      );
-    }
+    const dateParam = request.nextUrl.searchParams.get("date");
+    const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : new Date().toISOString().split("T")[0];
 
     const [limits, usageRows] = await Promise.all([
       prisma.discountLimit.findMany({ where: { brandId } }),
-      prisma.discountUsage.findMany({
-        where: { brandId, date },
-      }),
+      prisma.discountUsage.findMany({ where: { brandId, date } }),
     ]);
-
     const usageByDiscount = Object.fromEntries(
       usageRows.map((u) => [u.discountId, u.usedCount])
     );
+    const limitsByDiscount = Object.fromEntries(limits.map((l) => [l.discountId, l]));
 
-    const availability = limits.map((limit) => {
-      const used = usageByDiscount[limit.discountId] ?? 0;
-      const max = limit.maxPerDay;
-      const available = max <= 0 ? true : used < max;
-      return {
-        discountId: limit.discountId,
-        used,
-        max: max <= 0 ? null : max,
-        available,
-      };
+    const discountIds = getDiscountIdsForBrand(brandId).map((d) => d.id);
+    const availability = discountIds.map((discountId) => {
+      const limit = limitsByDiscount[discountId];
+      if (!limit) {
+        return { discountId, used: 0, max: null, available: true };
+      }
+      const maxClaims = limit.maxClaims ?? null;
+      const claimsUsed = limit.claimsUsed ?? 0;
+      const perDayUsed = usageByDiscount[discountId] ?? 0;
+      const maxPerDay = limit.maxPerDay ?? 0;
+
+      let available = true;
+      let used = 0;
+      let max: number | null = null;
+
+      if (maxClaims != null && maxClaims > 0) {
+        used = claimsUsed;
+        max = maxClaims;
+        available = claimsUsed < maxClaims;
+      } else if (maxPerDay > 0) {
+        used = perDayUsed;
+        max = maxPerDay;
+        available = perDayUsed < maxPerDay;
+      }
+
+      return { discountId, used, max, available };
     });
 
     return NextResponse.json(
@@ -54,8 +64,7 @@ export async function GET(
       }
     );
   } catch (error: any) {
-    // P2021 = table does not exist (migration not applied); return empty availability so flow continues
-    if (error?.code === "P2021" || error?.message?.includes("does not exist")) {
+    if (error?.code === "P2021" || error?.code === "P2022" || error?.message?.includes("does not exist")) {
       console.warn("[discounts-availability GET] DiscountLimit/DiscountUsage tables not found, returning empty (run prisma migrate deploy)");
       return NextResponse.json(
         { date: request.nextUrl.searchParams.get("date") ?? "", availability: [] },

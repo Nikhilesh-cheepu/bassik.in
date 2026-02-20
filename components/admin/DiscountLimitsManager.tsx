@@ -6,7 +6,10 @@ interface DiscountLimitItem {
   discountId: string;
   label: string;
   maxPerDay: number;
+  maxClaims?: number;
+  claimsUsed: number;
   used: number;
+  max?: number;
   available: boolean;
 }
 
@@ -45,14 +48,18 @@ export default function DiscountLimitsManager({ brandId, onUpdate }: DiscountLim
     fetchLimits();
   }, [fetchLimits]);
 
-  const handleSaveMax = async (discountId: string, maxPerDay: number) => {
+  const handleSave = async (discountId: string, maxClaims: number | "", maxPerDay: number) => {
     setSaving(discountId);
     setMessage(null);
     try {
       const res = await fetch(`/api/admin/venues/${brandId}/discount-limits`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ discountId, maxPerDay }),
+        body: JSON.stringify({
+          discountId,
+          maxClaims: maxClaims === "" ? null : maxClaims,
+          maxPerDay,
+        }),
       });
       if (res.ok) {
         setMessage({ type: "success", text: "Limit saved." });
@@ -69,7 +76,34 @@ export default function DiscountLimitsManager({ brandId, onUpdate }: DiscountLim
     }
   };
 
-  const handleReset = async (discountId: string | "all") => {
+  const handleResetClaims = async (discountId: string | "all") => {
+    setResetting(discountId);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/venues/${brandId}/discount-limits/reset`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resetClaims: true,
+          ...(discountId !== "all" ? { discountId } : {}),
+        }),
+      });
+      if (res.ok) {
+        setMessage({ type: "success", text: "Total claims reset." });
+        await fetchLimits();
+        onUpdate?.();
+      } else {
+        const data = await res.json();
+        setMessage({ type: "error", text: data.error || "Failed to reset" });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Request failed" });
+    } finally {
+      setResetting(null);
+    }
+  };
+
+  const handleResetPerDay = async (discountId: string | "all") => {
     setResetting(discountId);
     setMessage(null);
     try {
@@ -117,9 +151,9 @@ export default function DiscountLimitsManager({ brandId, onUpdate }: DiscountLim
 
   return (
     <div className="bg-white rounded-lg shadow p-4 sm:p-6 space-y-4">
-      <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Reservation discount limits</h2>
+      <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Offer limits</h2>
       <p className="text-sm text-gray-600">
-        Set max redemptions per day per offer. When the limit is reached, that discount shows as &quot;Sold out&quot; in the reservation form. Use &quot;Reset&quot; to clear usage for a date (e.g. start of day).
+        <strong>Max claims</strong> = total redemptions allowed per offer (e.g. 20). When reached, offer shows &quot;Sold out&quot;. Leave empty for unlimited. <strong>Reset claims</strong> resets total used count.
       </p>
 
       {message && (
@@ -150,71 +184,74 @@ export default function DiscountLimitsManager({ brandId, onUpdate }: DiscountLim
             key={item.discountId}
             className="flex flex-wrap items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
           >
-            <div className="flex-1 min-w-[180px]">
+            <div className="flex-1 min-w-[160px]">
               <div className="font-medium text-gray-900">{item.label}</div>
               <div className="text-xs text-gray-500 mt-0.5">
-                ID: {item.discountId}
-                {!item.available && (
-                  <span className="ml-2 text-amber-600 font-medium">Sold out for this date</span>
-                )}
+                {item.discountId}
+                {!item.available && <span className="ml-2 text-amber-600 font-medium">Sold out</span>}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600 whitespace-nowrap">
-                {item.used} / {item.maxPerDay <= 0 ? "∞" : item.maxPerDay} used
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm text-gray-600">
+                {item.claimsUsed ?? item.used} / {item.maxClaims ?? item.max ?? "∞"} claimed
               </span>
               <input
                 type="number"
                 min={0}
-                value={item.maxPerDay <= 0 ? "" : item.maxPerDay}
+                placeholder="∞"
+                value={item.maxClaims != null ? item.maxClaims : ""}
                 onChange={(e) => {
-                  const v = e.target.value === "" ? 0 : parseInt(e.target.value, 10);
+                  const v = e.target.value;
+                  const num = v === "" ? "" : Math.max(0, parseInt(v, 10) || 0);
                   setItems((prev) =>
                     prev.map((i) =>
                       i.discountId === item.discountId
-                        ? { ...i, maxPerDay: isNaN(v) ? 0 : Math.max(0, v) }
+                        ? { ...i, maxClaims: num === "" ? undefined : num }
                         : i
                     )
                   );
                 }}
-                onBlur={(e) => {
-                  const v = e.target.value === "" ? 0 : parseInt(e.target.value, 10);
-                  const num = isNaN(v) ? 0 : Math.max(0, v);
-                  if (num !== item.maxPerDay) handleSaveMax(item.discountId, num);
-                }}
-                placeholder="∞"
-                className="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                onBlur={() => handleSave(item.discountId, item.maxClaims ?? "", item.maxPerDay)}
+                className="w-16 px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
-              <span className="text-xs text-gray-500">max/day</span>
+              <span className="text-xs text-gray-500">max claims</span>
+              <button
+                type="button"
+                onClick={() => handleSave(item.discountId, item.maxClaims != null ? item.maxClaims : "", item.maxPerDay)}
+                disabled={saving === item.discountId}
+                className="px-2 py-1 text-xs font-medium text-orange-600 bg-orange-50 rounded hover:bg-orange-100 disabled:opacity-50"
+              >
+                {saving === item.discountId ? "Saving..." : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleResetClaims(item.discountId)}
+                disabled={resetting !== null}
+                className="px-2 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+              >
+                Reset claims
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => handleSaveMax(item.discountId, item.maxPerDay)}
-              disabled={saving === item.discountId}
-              className="px-3 py-1.5 text-sm font-medium text-orange-600 bg-orange-50 rounded-lg hover:bg-orange-100 disabled:opacity-50"
-            >
-              {saving === item.discountId ? "Saving..." : "Save"}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleReset(item.discountId)}
-              disabled={resetting !== null}
-              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              {resetting === item.discountId ? "Resetting..." : "Reset this date"}
-            </button>
           </div>
         ))}
       </div>
 
-      <div className="pt-2 border-t border-gray-200">
+      <div className="pt-2 border-t border-gray-200 flex gap-2">
         <button
           type="button"
-          onClick={() => handleReset("all")}
+          onClick={() => handleResetClaims("all")}
           disabled={resetting !== null}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+          className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
         >
-          {resetting === "all" ? "Resetting..." : "Reset all discounts for this date"}
+          Reset all claims
+        </button>
+        <button
+          type="button"
+          onClick={() => handleResetPerDay("all")}
+          disabled={resetting !== null}
+          className="px-3 py-1.5 text-sm font-medium text-gray-500 bg-gray-50 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+        >
+          Reset per-day usage
         </button>
       </div>
     </div>
