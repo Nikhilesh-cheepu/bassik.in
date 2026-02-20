@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import ImageUploader from "./ImageUploader";
 import MenuManager from "./MenuManager";
 import OffersManager from "./OffersManager";
-import DiscountLimitsManager from "./DiscountLimitsManager";
+import DiscountsManager from "./DiscountsManager";
 
 interface Admin {
   id: string;
@@ -159,7 +159,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
               { id: "offers", label: "Events & Offers" },
               { id: "gallery", label: "Gallery" },
               { id: "menus", label: "Menus" },
-              { id: "discounts", label: "Discount limits" },
+              { id: "discounts", label: "Discounts" },
               { id: "location", label: "Location" },
               { id: "contact", label: "Contact" },
             ].map((tab) => (
@@ -214,9 +214,9 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
           <MenuManager venueId={currentVenue.brandId} existingMenus={currentVenue.menus || []} onUpdate={onSave} />
         )}
 
-        {/* Discount limits Tab */}
+        {/* Discounts Tab */}
         {activeTab === "discounts" && (
-          <DiscountLimitsManager brandId={currentVenue.brandId} onUpdate={onSave} />
+          <DiscountsManager brandId={currentVenue.brandId} onUpdate={onSave} />
         )}
 
         {/* Location Tab */}

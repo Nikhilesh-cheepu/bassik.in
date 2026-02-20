@@ -212,47 +212,16 @@ Reservation submitted via bassik.in`;
       throw venueError;
     }
 
-    // Check discount limits before creating (maxClaims or maxPerDay)
-    const discountIds = Array.isArray(selectedDiscounts) ? selectedDiscounts : [];
+    const discountIds = Array.isArray(selectedDiscounts) ? selectedDiscounts.filter((id: unknown) => typeof id === "string") : [];
     if (discountIds.length > 0) {
-      try {
-        const limits = await prisma.discountLimit.findMany({
-          where: { brandId, discountId: { in: discountIds } },
-        });
-        const usageRows = await prisma.discountUsage.findMany({
-          where: { brandId, date, discountId: { in: discountIds } },
-        });
-        const usageByDiscount = Object.fromEntries(
-          usageRows.map((u) => [u.discountId, u.usedCount])
+      const discounts = await prisma.discount.findMany({
+        where: { id: { in: discountIds }, venue: { brandId } },
+      });
+      if (discounts.length !== discountIds.length) {
+        return NextResponse.json(
+          { error: "One or more selected discounts are invalid." },
+          { status: 400 }
         );
-        for (const limit of limits) {
-          const maxClaims = limit.maxClaims ?? null;
-          const claimsUsed = limit.claimsUsed ?? 0;
-          const perDayUsed = usageByDiscount[limit.discountId] ?? 0;
-          const maxPerDay = limit.maxPerDay ?? 0;
-
-          if (maxClaims != null && maxClaims > 0) {
-            if (claimsUsed >= maxClaims) {
-              return NextResponse.json(
-                { error: `Offer "${limit.discountId}" has reached its limit. Please choose another or continue without.` },
-                { status: 400 }
-              );
-            }
-          } else if (maxPerDay > 0) {
-            if (perDayUsed >= maxPerDay) {
-              return NextResponse.json(
-                { error: `Offer "${limit.discountId}" is sold out for this date.` },
-                { status: 400 }
-              );
-            }
-          }
-        }
-      } catch (limitError: any) {
-        if (limitError?.code === "P2021" || limitError?.message?.includes("does not exist")) {
-          console.warn("[RESERVATION API] DiscountLimit tables not found, skipping limit check (run prisma migrate deploy)");
-        } else {
-          throw limitError;
-        }
       }
     }
 
@@ -281,12 +250,31 @@ Reservation submitted via bassik.in`;
     });
 
     let reservation;
+    const runWithDiscounts = discountIds.length > 0;
     try {
-      reservation = await prisma.reservation.create({
-        data: reservationData,
-      });
+      if (runWithDiscounts) {
+        reservation = await prisma.$transaction(async (tx) => {
+          for (const discountId of discountIds) {
+            const rows = await tx.$queryRaw<{ id: string }[]>`UPDATE "Discount" SET "slotsUsed" = "slotsUsed" + 1 WHERE "id" = ${discountId} AND "slotsUsed" < "totalSlots" RETURNING "id"`;
+            if (!rows || rows.length === 0) {
+              throw new Error("SOLD_OUT");
+            }
+          }
+          return tx.reservation.create({ data: reservationData });
+        });
+      } else {
+        reservation = await prisma.reservation.create({
+          data: reservationData,
+        });
+      }
       console.log("[RESERVATION API] Reservation created successfully:", reservation.id);
     } catch (createError: any) {
+      if (createError?.message === "SOLD_OUT") {
+        return NextResponse.json(
+          { error: "This discount just sold out. Please choose another." },
+          { status: 400 }
+        );
+      }
       console.error("[RESERVATION API] Reservation creation failed:", {
         code: createError?.code,
         message: createError?.message,
@@ -425,32 +413,6 @@ Reservation submitted via bassik.in`;
           stack: createError?.stack?.split('\n').slice(0, 5).join('\n'),
         });
         throw createError;
-      }
-    }
-
-    // Increment discount usage: claimsUsed (total) and per-day
-    if (discountIds.length > 0) {
-      try {
-        for (const discountId of discountIds) {
-          const limit = await prisma.discountLimit.findUnique({
-            where: { brandId_discountId: { brandId, discountId } },
-          });
-          if (limit) {
-            if (limit.maxClaims != null && limit.maxClaims > 0) {
-              await prisma.discountLimit.update({
-                where: { brandId_discountId: { brandId, discountId } },
-                data: { claimsUsed: { increment: 1 } },
-              });
-            }
-          }
-          await prisma.discountUsage.upsert({
-            where: { brandId_discountId_date: { brandId, discountId, date } },
-            create: { brandId, discountId, date, usedCount: 1 },
-            update: { usedCount: { increment: 1 } },
-          });
-        }
-      } catch (usageError: any) {
-        console.error("[RESERVATION API] Discount usage increment failed:", usageError?.message);
       }
     }
 

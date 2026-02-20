@@ -9,12 +9,13 @@ interface ReservationFormProps {
   brand: Brand;
 }
 
-type Discount = {
+type DiscountItem = {
   id: string;
   title: string;
   description: string;
-  applicable: boolean;
-  soldOut?: boolean;
+  slotsLeft: number;
+  soldOut: boolean;
+  timeWindowLabel?: string | null;
 };
 
 export default function ReservationForm({ brand }: ReservationFormProps) {
@@ -30,7 +31,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   }));
   const [guests, setGuests] = useState(2);
   const [timeSlotTab, setTimeSlotTab] = useState<"lunch" | "dinner">("lunch");
-  const [discountAvailability, setDiscountAvailability] = useState<Record<string, { available: boolean; used?: number; max?: number | null }>>({});
+  const [discounts, setDiscounts] = useState<DiscountItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
   const dateScrollRef = useRef<HTMLDivElement>(null);
@@ -64,30 +65,26 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     setFormData((prev) => ({ ...prev, date: todayStr, timeSlot: "", selectedDiscounts: [] }));
     setGuests(2);
     setTimeSlotTab("lunch");
-    setDiscountAvailability({});
+    setDiscounts([]);
     setSubmitStatus({ type: null, message: "" });
   }, [brand.id, todayStr]);
 
   useEffect(() => {
-    if (!formData.date || !/^\d{4}-\d{2}-\d{2}$/.test(formData.date)) {
-      setDiscountAvailability({});
+    if (!formData.date || !formData.timeSlot || !/^\d{4}-\d{2}-\d{2}$/.test(formData.date)) {
+      setDiscounts([]);
       return;
     }
-    if (brand.id.startsWith("club-rogue")) return;
     let cancelled = false;
-    fetch(`/api/venues/${brand.id}/discounts-availability?date=${formData.date}`)
+    const session = timeSlotTab === "lunch" ? "lunch" : "dinner";
+    fetch(`/api/venues/${brand.id}/discounts-available?date=${formData.date}&timeSlot=${formData.timeSlot}&session=${session}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { availability?: { discountId: string; available: boolean; used?: number; max?: number | null }[] } | null) => {
-        if (cancelled || !data?.availability) return;
-        const map: Record<string, { available: boolean; used?: number; max?: number | null }> = {};
-        data.availability.forEach((a) => {
-          map[a.discountId] = { available: a.available, used: a.used, max: a.max };
-        });
-        setDiscountAvailability(map);
+      .then((data: { discounts?: DiscountItem[] } | null) => {
+        if (cancelled) return;
+        setDiscounts(data?.discounts ?? []);
       })
-      .catch(() => { if (!cancelled) setDiscountAvailability({}); });
+      .catch(() => { if (!cancelled) setDiscounts([]); });
     return () => { cancelled = true; };
-  }, [brand.id, formData.date]);
+  }, [brand.id, formData.date, formData.timeSlot, timeSlotTab]);
 
   useEffect(() => {
     if (formData.date) setFormData((prev) => (prev.timeSlot || prev.selectedDiscounts.length ? { ...prev, timeSlot: "", selectedDiscounts: [] } : prev));
@@ -111,37 +108,6 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   }, [brand.id]);
 
   const timeSlots = useMemo(() => allTimeSlots.filter((s) => s.category === timeSlotTab), [allTimeSlots, timeSlotTab]);
-
-  const availableDiscounts = useMemo((): Discount[] => {
-    const list: Discount[] = [];
-    const isClubRogue = brand.id.startsWith("club-rogue");
-    const lunchStart = isClubRogue ? "17:00" : "12:00";
-    const isLunch = formData.timeSlot && formData.timeSlot >= lunchStart &&
-      ((brand.id === "kiik69" || brand.id === "alehouse" || brand.id === "skyhy") ? formData.timeSlot < "20:00" : formData.timeSlot < "19:00");
-
-    if (brand.id.startsWith("club-rogue")) return [];
-
-    if (brand.id === "kiik69") {
-      list.push({ id: "kiik-10-percent", title: "10% off on total bill", description: "Get 10% discount on your total bill", applicable: true });
-      if (isLunch) list.push({ id: "kiik-lunch", title: "Lunch Special @ ₹128", description: "Eat & drink anything @ ₹128 (12PM - 8PM)", applicable: true });
-    }
-    if ((brand.id === "c53" || brand.id === "boiler-room") && isLunch) {
-      list.push({ id: "lunch-special", title: "Lunch Special @ ₹127", description: "Eat & drink anything @ ₹127 (12PM - 7PM)", applicable: true });
-    }
-    if (brand.id === "alehouse") {
-      if (isLunch) list.push({ id: "alehouse-lunch", title: "Lunch Special @ ₹128", description: "Eat & drink anything @ ₹128 (12PM - 8PM)", applicable: true });
-      list.push({ id: "alehouse-liquor", title: "50% off on liquor", description: "Get 50% discount on all liquor (All day)", applicable: true });
-    }
-    if (brand.id === "skyhy" && isLunch) {
-      list.push({ id: "skyhy-lunch", title: "Lunch Special @ ₹128", description: "Eat & drink anything @ ₹128 (12PM - 8PM)", applicable: true });
-    }
-    return list;
-  }, [brand.id, formData.timeSlot]);
-
-  const offersWithAvailability = useMemo(() =>
-    availableDiscounts.map((d) => ({ ...d, soldOut: discountAvailability[d.id]?.available === false })),
-    [availableDiscounts, discountAvailability]
-  );
 
   const isSlotInPast = (date: string, slot: string) => {
     if (!date || !slot) return false;
@@ -168,7 +134,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   };
 
   const handleDiscountToggle = (id: string) => {
-    const d = offersWithAvailability.find((o) => o.id === id);
+    const d = discounts.find((o) => o.id === id);
     if (d?.soldOut) return;
     setFormData((prev) => ({
       ...prev,
@@ -311,9 +277,9 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
         </div>
       )}
 
-      {/* C. Offers - reveal only after slot selected */}
+      {/* C. Discounts - reveal only after slot selected */}
       <AnimatePresence>
-        {formData.timeSlot && offersWithAvailability.length > 0 && (
+        {formData.timeSlot && discounts.length > 0 && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
@@ -321,14 +287,12 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
             className="space-y-2 overflow-hidden"
           >
             <p className="text-xs font-semibold text-gray-300">
-              ✨ Available offers for {formatTo12Hour(formData.timeSlot)}
+              ✨ Available discounts for {formatTo12Hour(formData.timeSlot)}
             </p>
             <div className="flex flex-col gap-2">
-              {offersWithAvailability.map((offer) => {
+              {discounts.map((offer) => {
                 const soldOut = offer.soldOut;
                 const sel = formData.selectedDiscounts.includes(offer.id);
-                const avail = discountAvailability[offer.id];
-                const left = avail?.max != null && avail.max > 0 ? Math.max(0, (avail.max ?? 0) - (avail.used ?? 0)) : null;
                 return (
                   <motion.button
                     key={offer.id}
@@ -343,8 +307,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-white">{offer.title}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">{offer.description}</div>
-                      {left != null && !soldOut && <div className="text-xs text-gray-500 mt-1">{left} left</div>}
+                      {offer.description && <div className="text-xs text-gray-400 mt-0.5">{offer.description}</div>}
+                      {!soldOut && <div className="text-xs text-gray-500 mt-1">{offer.slotsLeft} left</div>}
                       {soldOut && <div className="text-xs font-medium text-amber-400 mt-1">Sold out</div>}
                     </div>
                   </motion.button>

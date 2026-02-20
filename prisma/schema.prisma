@@ -35,43 +35,38 @@ model Venue {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  images          VenueImage[]
-  menus           Menu[]
-  offers          VenueOffer[]
-  reservations    Reservation[]
-  discountLimits  DiscountLimit[]
+  images       VenueImage[]
+  menus        Menu[]
+  offers       VenueOffer[]
+  reservations Reservation[]
+  discounts    Discount[]
 
   @@index([brandId])
 }
 
-model DiscountLimit {
-  id         String   @id @default(cuid())
-  brandId    String   // Matches brand.id
-  discountId String   // e.g. "kiik-lunch", "alehouse-lunch"
-  maxPerDay  Int      @default(0)  // 0 = unlimited (per-day)
-  maxClaims  Int?     // null = unlimited total claims
-  claimsUsed Int      @default(0)  // total claims used
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+model Discount {
+  id          String        @id @default(cuid())
+  venueId     String
+  title       String
+  description String?
+  totalSlots  Int           // e.g. 20
+  slotsUsed   Int           @default(0)
+  startTime   String?       // "12:00" 24h
+  endTime     String?       // "18:00" 24h
+  session     DiscountSession? // LUNCH | DINNER | BOTH
+  active      Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
-  venue Venue @relation(fields: [brandId], references: [brandId], onDelete: Cascade)
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
 
-  @@unique([brandId, discountId])
-  @@index([brandId])
+  @@index([venueId])
 }
 
-model DiscountUsage {
-  id         String   @id @default(cuid())
-  brandId    String
-  discountId String
-  date       String   // YYYY-MM-DD
-  usedCount  Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@unique([brandId, discountId, date])
-  @@index([brandId])
-  @@index([brandId, date])
+enum DiscountSession {
+  LUNCH
+  DINNER
+  BOTH
 }
 
 model VenueOffer {
