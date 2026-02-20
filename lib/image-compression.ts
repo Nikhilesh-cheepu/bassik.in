@@ -157,11 +157,9 @@ export async function compressOfferImage(file: File): Promise<Blob> {
   });
 }
 
-const TARGET_MIN_KB = 600;
-const TARGET_MAX_KB = 900;
-const TARGET_MAX_BYTES = TARGET_MAX_KB * 1024;
+const MAX_SIZE_BYTES = 1024 * 1024; // 1MB - never reject, always optimize to under this
 
-/** Center-crop image to 9:16 and compress to WebP 600–900KB for poster upload. */
+/** Center-crop to 9:16, resize if needed, compress to WebP. Always returns blob < 1MB. */
 export async function cropTo9x16AndCompress(file: File): Promise<Blob> {
   const accepted = ["image/jpeg", "image/png", "image/webp"];
   if (!accepted.includes(file.type)) {
@@ -187,48 +185,52 @@ export async function cropTo9x16AndCompress(file: File): Promise<Blob> {
           cropH = Math.round(w / targetRatio);
           sy = (h - cropH) / 2;
         }
-        const outW = Math.min(cropW, 1080);
-        const outH = Math.round(outW / (9 / 16));
-        const canvas = document.createElement("canvas");
-        canvas.width = outW;
-        canvas.height = outH;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          reject(new Error("Failed to get canvas context"));
-          return;
-        }
-        ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, outW, outH);
 
-        const tryQuality = (quality: number) => {
+        const tryDimensions = (outW: number, outH: number, quality: number) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = outW;
+          canvas.height = outH;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Failed to get canvas context"));
+            return;
+          }
+          ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, outW, outH);
+
           canvas.toBlob(
             (blob) => {
               if (!blob) {
                 reject(new Error("Failed to compress image"));
                 return;
               }
-              const sizeKB = blob.size / 1024;
-              if (blob.size <= TARGET_MAX_BYTES && sizeKB >= TARGET_MIN_KB) {
+              if (blob.size <= MAX_SIZE_BYTES) {
                 resolve(blob);
                 return;
               }
-              if (blob.size <= TARGET_MAX_BYTES && quality >= 0.9) {
-                resolve(blob);
+              if (quality > 0.2) {
+                tryDimensions(outW, outH, Math.max(0.2, quality - 0.12));
                 return;
               }
-              if (blob.size > TARGET_MAX_BYTES && quality <= 0.25) {
-                reject(new Error("Image is too large after crop. Use a smaller or less detailed image."));
+              if (outW > 300) {
+                const nextW = Math.max(300, Math.round(outW * 0.6));
+                const nextH = Math.round(nextW / targetRatio);
+                tryDimensions(nextW, nextH, 0.75);
                 return;
               }
-              const nextQ = blob.size > TARGET_MAX_BYTES
-                ? Math.max(0.25, quality - 0.1)
-                : Math.min(0.95, quality + 0.05);
-              tryQuality(nextQ);
+              if (outW > 200 && quality > 0.15) {
+                tryDimensions(outW, outH, 0.15);
+                return;
+              }
+              resolve(blob);
             },
             "image/webp",
             quality
           );
         };
-        tryQuality(0.8);
+
+        const outW = Math.min(cropW, 1080);
+        const outH = Math.round(outW / targetRatio);
+        tryDimensions(outW, outH, 0.82);
       };
       img.onerror = () => reject(new Error("Failed to load image"));
       img.src = e.target?.result as string;

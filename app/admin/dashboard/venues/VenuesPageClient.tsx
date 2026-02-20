@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { BRANDS } from "@/lib/brands";
@@ -38,9 +38,9 @@ export default function VenuesPageClient() {
   useEffect(() => {
     setLoading(false);
     loadVenues();
-  }, []);
+  }, [loadVenues]);
 
-  const loadVenues = async () => {
+  const loadVenues = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/venues", {
         cache: "no-store",
@@ -48,12 +48,16 @@ export default function VenuesPageClient() {
       });
       if (res.ok) {
         const data = await res.json();
-        setVenues(data.venues || []);
+        const list = data.venues || [];
+        setVenues(list);
+        return list;
       }
+      return [];
     } catch (error) {
       console.error("Error loading venues:", error);
+      return [];
     }
-  };
+  }, []);
 
   const handleVenueSelect = (venue: Venue) => {
     setSelectedVenue(venue);
@@ -64,20 +68,13 @@ export default function VenuesPageClient() {
     await loadVenues();
   };
 
-  const handleSave = async () => {
-    await loadVenues();
-    if (selectedVenue) {
-      const res = await fetch("/api/admin/venues", {
-        cache: "no-store",
-        headers: { "Cache-Control": "no-cache" },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const updatedVenue = data.venues?.find((v: Venue) => v.brandId === selectedVenue.brandId);
-        if (updatedVenue) setSelectedVenue(updatedVenue);
-      }
+  const handleSave = useCallback(async () => {
+    const list = await loadVenues();
+    if (selectedVenue && list.length > 0) {
+      const updatedVenue = list.find((v: Venue) => v.brandId === selectedVenue.brandId);
+      if (updatedVenue) setSelectedVenue(updatedVenue);
     }
-  };
+  }, [loadVenues, selectedVenue]);
 
   if (loading) {
     return (
