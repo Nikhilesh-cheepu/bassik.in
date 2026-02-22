@@ -250,13 +250,21 @@ export async function PATCH(request: NextRequest) {
           return [];
         }
       })();
-      for (const discountId of discountIds) {
-        await prisma.$executeRawUnsafe(
-          `UPDATE "DiscountDailyUsage" SET "usedCount" = GREATEST(0, "usedCount" - 1)
-           WHERE "discountId" = $1 AND date = $2`,
-          discountId,
-          reservation.date
-        );
+      try {
+        for (const discountId of discountIds) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE "DiscountDailyUsage" SET "usedCount" = GREATEST(0, "usedCount" - 1)
+             WHERE "discountId" = $1 AND date = $2`,
+            discountId,
+            reservation.date
+          );
+        }
+      } catch (usageError: any) {
+        if (usageError?.code === "P2010" || usageError?.message?.includes("does not exist")) {
+          console.warn("[admin bookings PATCH] DiscountDailyUsage table missing, skipping slot free:", usageError?.message);
+        } else {
+          throw usageError;
+        }
       }
     }
 
@@ -299,13 +307,21 @@ export async function DELETE(request: NextRequest) {
           return [];
         }
       })();
-      for (const discountId of discountIds) {
-        await prisma.$executeRawUnsafe(
-          `UPDATE "DiscountDailyUsage" SET "usedCount" = GREATEST(0, "usedCount" - 1)
-           WHERE "discountId" = $1 AND date = $2`,
-          discountId,
-          reservation.date
-        );
+      try {
+        for (const discountId of discountIds) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE "DiscountDailyUsage" SET "usedCount" = GREATEST(0, "usedCount" - 1)
+             WHERE "discountId" = $1 AND date = $2`,
+            discountId,
+            reservation.date
+          );
+        }
+      } catch (usageError: any) {
+        if (usageError?.code === "P2010" || usageError?.message?.includes("does not exist")) {
+          console.warn("[admin bookings DELETE] DiscountDailyUsage table missing, skipping slot free:", usageError?.message);
+        } else {
+          throw usageError;
+        }
       }
     }
     await prisma.reservation.delete({
