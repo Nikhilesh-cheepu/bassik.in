@@ -8,6 +8,9 @@ export type StaticDiscount = {
   description?: string;
   /** When true, UI should not show remaining slot count; only SOLD OUT vs normal. */
   hideSlotsLeft?: boolean;
+  /** Optional time window for the offer (24h). */
+  startTime?: string;
+  endTime?: string;
 };
 
 const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
@@ -17,6 +20,8 @@ const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
       id: "kiik-128",
       label: "Eat & Drink Anything @ ₹128",
       description: "12PM – 8PM",
+      startTime: "12:00",
+      endTime: "20:00",
     },
   ],
   "skyhy": [
@@ -24,12 +29,16 @@ const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
       id: "skyhy-128",
       label: "Eat & Drink Anything @ ₹128",
       description: "12PM – 8PM",
+      startTime: "12:00",
+      endTime: "20:00",
     },
     {
       id: "skyhy-flat-30",
       label: "30% Flat Discount",
       description: "12PM – 10PM",
       hideSlotsLeft: true,
+      startTime: "12:00",
+      endTime: "22:00",
     },
   ],
 
@@ -39,12 +48,16 @@ const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
       id: "alehouse-127",
       label: "Eat & Drink Anything @ ₹127",
       description: "12PM – 7PM",
+      startTime: "12:00",
+      endTime: "19:00",
     },
     {
       id: "alehouse-flat-30",
       label: "30% Flat Discount",
       description: "12PM – 10PM",
       hideSlotsLeft: true,
+      startTime: "12:00",
+      endTime: "22:00",
     },
   ],
   "c53": [
@@ -52,12 +65,16 @@ const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
       id: "c53-127",
       label: "Eat & Drink Anything @ ₹127",
       description: "12PM – 7PM",
+      startTime: "12:00",
+      endTime: "19:00",
     },
     {
       id: "c53-flat-25",
       label: "25% Flat Discount",
       description: "12PM – 10PM",
       hideSlotsLeft: true,
+      startTime: "12:00",
+      endTime: "22:00",
     },
   ],
   "boiler-room": [
@@ -65,12 +82,16 @@ const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
       id: "boiler-127",
       label: "Eat & Drink Anything @ ₹127",
       description: "12PM – 7PM",
+      startTime: "12:00",
+      endTime: "19:00",
     },
     {
       id: "boiler-flat-30",
       label: "30% Flat Discount",
       description: "12PM – 10PM",
       hideSlotsLeft: true,
+      startTime: "12:00",
+      endTime: "22:00",
     },
   ],
 
@@ -81,6 +102,8 @@ const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
       label: "30% Flat Discount",
       description: "12PM – 10PM",
       hideSlotsLeft: true,
+      startTime: "12:00",
+      endTime: "22:00",
     },
   ],
 };

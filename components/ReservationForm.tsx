@@ -16,7 +16,7 @@ type DiscountItem = {
   slotsLeft: number;
   soldOut: boolean;
   timeWindowLabel?: string | null;
-   /** When true, do not show remaining slot count in UI; only SOLD OUT state. */
+  /** Optional hint from API; currently not used for logic but kept for compatibility. */
   hideSlotsLeft?: boolean;
 };
 
@@ -66,7 +66,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   useEffect(() => {
     const t = new Date();
     const now24 = `${t.getHours().toString().padStart(2, "0")}:${t.getMinutes().toString().padStart(2, "0")}`;
-    const lunchEnd = (brand.id === "kiik69" || brand.id === "alehouse" || brand.id === "skyhy") ? "20:00" : "19:00";
+    const lunchEnd = "18:00"; // Global lunch window end
     setFormData((prev) => ({ ...prev, date: todayStr, timeSlot: "", selectedDiscounts: [] }));
     setGuests(2);
     setTimeSlotTab(now24 >= lunchEnd ? "dinner" : "lunch");
@@ -97,20 +97,26 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
 
   const allTimeSlots = useMemo(() => {
     const slots: { value24: string; display12: string; category: "lunch" | "dinner" }[] = [];
-    const isClubRogue = brand.id.startsWith("club-rogue");
-    const startHour = isClubRogue ? 17 : 12;
-    for (let hour = startHour; hour < 24; hour++) {
+    const LUNCH_START = "12:00";
+    const LUNCH_END = "18:00";   // includes 6:00 PM
+    const DINNER_START = "18:15"; // starts at 6:15 PM
+
+    for (let hour = 12; hour < 24; hour++) {
       for (let minute = 0; minute < 60; minute += 15) {
         const time24 = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+        if (time24 < LUNCH_START) continue;
+        const isLunch = time24 >= LUNCH_START && time24 <= LUNCH_END;
+        const isDinner = time24 >= DINNER_START;
+        if (!isLunch && !isDinner) continue;
         slots.push({
           value24: time24,
           display12: formatTo12Hour(time24),
-          category: hour < 19 ? "lunch" : "dinner",
+          category: isLunch ? "lunch" : "dinner",
         });
       }
     }
     return slots;
-  }, [brand.id]);
+  }, []);
 
   const timeSlots = useMemo(() => {
     const filtered = allTimeSlots.filter((s) => s.category === timeSlotTab);
@@ -131,7 +137,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     if (dateStr === todayStr) {
       const t = new Date();
       const now24 = `${t.getHours().toString().padStart(2, "0")}:${t.getMinutes().toString().padStart(2, "0")}`;
-      const lunchEnd = (brand.id === "kiik69" || brand.id === "alehouse" || brand.id === "skyhy") ? "20:00" : "19:00";
+      const lunchEnd = "18:00";
       setTimeSlotTab(now24 >= lunchEnd ? "dinner" : "lunch");
     } else setTimeSlotTab("lunch");
   };
@@ -152,6 +158,14 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
       ...prev,
       selectedDiscounts: prev.selectedDiscounts.includes(id) ? prev.selectedDiscounts.filter((x) => x !== id) : [...prev.selectedDiscounts, id],
     }));
+  };
+
+  const getUrgencyLabel = (slotsLeft: number | undefined): string | null => {
+    if (typeof slotsLeft !== "number" || slotsLeft <= 0) return null;
+    if (slotsLeft <= 5) return "Few slots left";
+    if (slotsLeft <= 10) return "Selling out fast";
+    if (slotsLeft <= 20) return "Limited slots available";
+    return null;
   };
 
   const isValidPhone = (p: string) => /^\d{10}$/.test(p.replace(/\D/g, ""));
@@ -305,6 +319,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
               {discounts.map((offer) => {
                 const soldOut = offer.soldOut;
                 const sel = formData.selectedDiscounts.includes(offer.id);
+                const urgencyLabel = getUrgencyLabel(offer.slotsLeft);
                 return (
                   <motion.button
                     key={offer.id}
@@ -320,9 +335,9 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-white">{offer.title}</div>
                       {offer.description && <div className="text-xs text-gray-400 mt-0.5">{offer.description}</div>}
-                      {!soldOut && !offer.hideSlotsLeft && (
+                      {!soldOut && urgencyLabel && (
                         <div className="text-xs font-medium text-gray-400 mt-1">
-                          {offer.slotsLeft} LEFT
+                          {urgencyLabel}
                         </div>
                       )}
                       {soldOut && <div className="text-xs font-semibold text-amber-400 mt-1">SOLD OUT</div>}

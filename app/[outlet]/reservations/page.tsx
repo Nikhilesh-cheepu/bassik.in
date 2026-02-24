@@ -61,7 +61,7 @@ function ReservationsContent() {
           onClick={() => router.push(`/${activeBrandId}`)}
           className="p-2 -ml-1 text-white hover:text-white/80 rounded-lg touch-manipulation"
           aria-label="Back"
-          style={{ WebkitTapHighlightColor: "transparent" }}
+          style={{ WebkitTapHighlightColor: "transparent", touchAction: "manipulation" }}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -72,8 +72,8 @@ function ReservationsContent() {
           <button
             type="button"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="flex items-center gap-2 px-3 py-2 rounded-full backdrop-blur-md bg-white/10 border border-white/20 max-w-[180px] min-w-0"
-            style={{ borderColor: `${activeBrand.accentColor}50` }}
+            className="flex items-center gap-2 px-3 py-2 rounded-full backdrop-blur-md bg-white/10 border border-white/20 max-w-[180px] min-w-0 touch-manipulation"
+            style={{ borderColor: `${activeBrand.accentColor}50`, WebkitTapHighlightColor: "transparent", touchAction: "manipulation" }}
           >
             <div className="relative w-5 h-5 flex-shrink-0">
               <Image src={logoPath} alt="" fill className="object-contain" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} />
@@ -124,7 +124,7 @@ function ReservationsContent() {
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className="p-2 -mr-1 text-white rounded-lg touch-manipulation"
             aria-label="Menu"
-            style={{ WebkitTapHighlightColor: "transparent" }}
+            style={{ WebkitTapHighlightColor: "transparent", touchAction: "manipulation" }}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {isMenuOpen ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /> : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}

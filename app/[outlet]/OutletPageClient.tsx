@@ -464,10 +464,31 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
       </div>
 
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[calc(100%-2rem)]">
-        <motion.button onClick={handleBookNow} whileTap={{ scale: 0.95 }} whileHover={{ scale: 1.02 }} className="w-full py-2.5 px-6 rounded-full font-semibold text-white transition-all duration-300 relative overflow-hidden group backdrop-blur-xl border border-white/20 shadow-2xl" style={{ backgroundColor: selectedBrand.accentColor, boxShadow: `0 8px 32px ${selectedBrand.accentColor}50` }}>
-          <motion.span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent" initial={{ x: "-100%" }} whileHover={{ x: "100%" }} transition={{ duration: 0.6 }} />
+        <div className="mb-2 flex justify-center">
+          <span
+            className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-medium bg-black/70 border border-white/20 text-white/85"
+            style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}
+          >
+            Book now to unlock website-only offers
+          </span>
+        </div>
+        <motion.button
+          onClick={handleBookNow}
+          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.02 }}
+          className="w-full py-2.5 px-6 rounded-full font-semibold text-white transition-all duration-300 relative overflow-hidden group backdrop-blur-xl border border-white/20 shadow-2xl touch-manipulation"
+          style={{ backgroundColor: selectedBrand.accentColor, boxShadow: `0 8px 32px ${selectedBrand.accentColor}50`, WebkitTapHighlightColor: "transparent" }}
+        >
+          <motion.span
+            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+            initial={{ x: "-100%" }}
+            whileHover={{ x: "100%" }}
+            transition={{ duration: 0.6 }}
+          />
           <span className="relative z-10 flex items-center justify-center gap-2 text-sm">
-            <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
             Book a table
           </span>
         </motion.button>

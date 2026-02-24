@@ -243,9 +243,9 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="text-sm sm:text-base text-gray-400 max-w-xl mx-auto"
+            className="text-sm sm:text-base text-gray-300 max-w-xl mx-auto"
           >
-            Unlock exclusive benefits when you book directly
+            Website bookings unlock better deals than Swiggy/Zomato
           </motion.p>
         </div>
 
@@ -270,6 +270,7 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
                     href={`/${brand.id}`}
                     prefetch={false}
                     className="flex flex-col items-center text-center w-full group/card"
+                    style={{ touchAction: "manipulation" }}
                   >
                     <motion.div
                       whileHover={{ scale: 1.02 }}

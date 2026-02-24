@@ -38,7 +38,7 @@ export async function GET(
     });
 
     if (dbDiscounts.length === 0) {
-      return fallbackStatic(brandId);
+      return fallbackStatic(brandId, timeSlot);
     }
 
     const discountIds = dbDiscounts.map((d) => d.id);
@@ -74,7 +74,7 @@ export async function GET(
     );
   } catch (error) {
     console.error("[discounts-available GET]", error);
-    return fallbackStatic(brandId);
+    return fallbackStatic(brandId, timeSlot);
   }
 }
 
@@ -85,16 +85,29 @@ function format12(time24: string): string {
   return `${h12}:${m.toString().padStart(2, "0")}${period}`;
 }
 
-function fallbackStatic(brandId: string) {
+function fallbackStatic(brandId: string, timeSlot?: string | null) {
   const list = getDiscountsForBrand(brandId);
-  const discounts = list.map((d) => ({
+  const timeForFilter =
+    timeSlot && /^\d{2}:\d{2}$/.test(timeSlot) ? timeSlot : null;
+  const filteredList =
+    timeForFilter == null
+      ? list
+      : list.filter((d) =>
+          timeInWindow(
+            timeForFilter,
+            d.startTime ?? null,
+            d.endTime ?? null
+          )
+        );
+  const discounts = filteredList.map((d) => ({
     id: d.id,
     title: d.label,
     description: d.description ?? "",
     slotsLeft: 999,
     soldOut: false,
     hideSlotsLeft: d.hideSlotsLeft ?? false,
-    timeWindowLabel: null,
+    timeWindowLabel:
+      d.startTime && d.endTime ? `${format12(d.startTime)}–${format12(d.endTime)}` : null,
   }));
   return NextResponse.json(
     { discounts },
