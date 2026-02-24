@@ -49,6 +49,7 @@ export async function GET(
     const usageMap = new Map(usages.map((u) => [u.discountId, u.usedCount]));
 
     const filtered = dbDiscounts.filter((d) => {
+      if (!timeSlot) return false;
       if (!timeInWindow(timeSlot, d.startTime, d.endTime)) return false;
       const used = usageMap.get(d.id) ?? 0;
       return used < d.limitPerDay;
