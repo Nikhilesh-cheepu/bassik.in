@@ -19,6 +19,13 @@ const VenueLocationSection = dynamic(() => import("@/components/VenueLocationSec
 
 const DEFAULT_MAP = "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6";
 
+const CTA_LINES = [
+  "Website-only offers • Limited slots",
+  "More savings than Swiggy/Zomato",
+  "Unlock extra discounts when you book direct",
+  "Selling fast • Book now",
+];
+
 function toClientVenueState(p: VenuePayload) {
   return {
     offers: p.offers,
@@ -68,6 +75,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
   const [failedGalleryImages, setFailedGalleryImages] = useState<Set<number>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
   const contactDropdownRef = useRef<HTMLDivElement>(null);
+  const [ctaIndex, setCtaIndex] = useState(0);
 
   const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
   const venueOffers = venueData.offers;
@@ -93,9 +101,22 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isDropdownOpen, contactDropdownOpen]);
+  }, []);
 
   useEffect(() => setSelectedContactIndex(0), [selectedBrandId]);
+
+  // Prefetch booking page for snappier navigation
+  useEffect(() => {
+    router.prefetch(`/${selectedBrandId}/reservations`);
+  }, [router, selectedBrandId]);
+
+  // Rotate CTA line inside the Book button
+  useEffect(() => {
+    const id = setInterval(() => {
+      setCtaIndex((i) => (i + 1) % CTA_LINES.length);
+    }, 4500);
+    return () => clearInterval(id);
+  }, []);
 
   const loadVenueData = useCallback(async () => {
     setFetchError(null);
@@ -231,6 +252,18 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
                       </button>
                     );
                   })}
+                  <div className="border-t border-white/10 mt-1 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsDropdownOpen(false);
+                        router.push("/");
+                      }}
+                      className="w-full px-3 py-2.5 text-xs font-medium text-gray-300 hover:text-white hover:bg-white/5 text-left"
+                    >
+                      Main Page
+                    </button>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -464,14 +497,6 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
       </div>
 
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[calc(100%-2rem)]">
-        <div className="mb-2 flex justify-center">
-          <span
-            className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-medium bg-black/70 border border-white/20 text-white/85"
-            style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}
-          >
-            Book now to unlock website-only offers
-          </span>
-        </div>
         <motion.button
           onClick={handleBookNow}
           whileTap={{ scale: 0.95 }}
@@ -485,11 +510,27 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
             whileHover={{ x: "100%" }}
             transition={{ duration: 0.6 }}
           />
-          <span className="relative z-10 flex items-center justify-center gap-2 text-sm">
-            <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-            Book a table
+          <span className="relative z-10 flex flex-col items-center justify-center gap-0.5 text-sm">
+            <span className="flex items-center justify-center gap-2">
+              <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              Book a table
+            </span>
+            <div className="h-4 overflow-hidden">
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={ctaIndex}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 0.9, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.35 }}
+                  className="text-[11px] font-medium text-white/85"
+                >
+                  {CTA_LINES[ctaIndex]}
+                </motion.span>
+              </AnimatePresence>
+            </div>
           </span>
         </motion.button>
       </div>

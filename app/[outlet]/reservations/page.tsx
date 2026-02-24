@@ -29,6 +29,11 @@ function ReservationsContent() {
     }
   }, [activeBrandId, outletSlug, router]);
 
+  // Prefetch brand page so back navigation feels instant
+  useEffect(() => {
+    router.prefetch(`/${activeBrandId}`);
+  }, [router, activeBrandId]);
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setIsDropdownOpen(false);
@@ -89,7 +94,7 @@ function ReservationsContent() {
                 initial={{ opacity: 0, y: -8, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[200px] max-h-[240px] overflow-y-auto scrollbar-hide rounded-xl border border-white/20 backdrop-blur-xl bg-black/95 shadow-xl z-30"
+                className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[200px] max-h-[260px] overflow-y-auto scrollbar-hide rounded-xl border border-white/20 backdrop-blur-xl bg-black/95 shadow-xl z-30"
                 style={{ boxShadow: `0 8px 32px ${activeBrand.accentColor}20` }}
               >
                 {BRANDS.map((brand) => {
@@ -113,6 +118,18 @@ function ReservationsContent() {
                     </button>
                   );
                 })}
+                <div className="border-t border-white/10 mt-1 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDropdownOpen(false);
+                      router.push("/");
+                    }}
+                    className="w-full px-3 py-2.5 text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 text-left"
+                  >
+                    Main Page
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
