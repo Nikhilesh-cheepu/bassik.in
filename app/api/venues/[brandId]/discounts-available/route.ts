@@ -20,9 +20,10 @@ export async function GET(
   { params }: { params: Promise<{ brandId: string }> }
 ) {
   const { brandId } = await params;
+  let timeSlot: string | null = null;
   try {
     const date = req.nextUrl.searchParams.get("date");
-    const timeSlot = req.nextUrl.searchParams.get("timeSlot");
+    timeSlot = req.nextUrl.searchParams.get("timeSlot");
 
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !timeSlot || !/^\d{2}:\d{2}$/.test(timeSlot)) {
       return NextResponse.json({ discounts: [] });
