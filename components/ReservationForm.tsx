@@ -16,6 +16,8 @@ type DiscountItem = {
   slotsLeft: number;
   soldOut: boolean;
   timeWindowLabel?: string | null;
+   /** When true, do not show remaining slot count in UI; only SOLD OUT state. */
+  hideSlotsLeft?: boolean;
 };
 
 export default function ReservationForm({ brand }: ReservationFormProps) {
@@ -318,7 +320,11 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-white">{offer.title}</div>
                       {offer.description && <div className="text-xs text-gray-400 mt-0.5">{offer.description}</div>}
-                      {!soldOut && <div className="text-xs font-medium text-gray-400 mt-1">{offer.slotsLeft} LEFT</div>}
+                      {!soldOut && !offer.hideSlotsLeft && (
+                        <div className="text-xs font-medium text-gray-400 mt-1">
+                          {offer.slotsLeft} LEFT
+                        </div>
+                      )}
                       {soldOut && <div className="text-xs font-semibold text-amber-400 mt-1">SOLD OUT</div>}
                     </div>
                   </motion.button>

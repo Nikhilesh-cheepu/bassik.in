@@ -6,46 +6,82 @@ export type StaticDiscount = {
   id: string;
   label: string;
   description?: string;
+  /** When true, UI should not show remaining slot count; only SOLD OUT vs normal. */
+  hideSlotsLeft?: boolean;
 };
 
 const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
+  // ₹128 offer (12PM–8PM)
   "kiik69": [
-    { id: "kiik-10-percent", label: "10% off on total bill" },
-    { id: "kiik-lunch", label: "Lunch Special @ ₹128", description: "Eat & drink anything @ ₹128" },
-  ],
-  "alehouse": [
-    { id: "alehouse-lunch", label: "Lunch Special @ ₹128", description: "Eat & drink anything @ ₹128" },
-    { id: "alehouse-liquor", label: "50% off on liquor" },
+    {
+      id: "kiik-128",
+      label: "Eat & Drink Anything @ ₹128",
+      description: "12PM – 8PM",
+    },
   ],
   "skyhy": [
-    { id: "skyhy-lunch", label: "Lunch Special @ ₹128", description: "Eat & drink anything @ ₹128" },
+    {
+      id: "skyhy-128",
+      label: "Eat & Drink Anything @ ₹128",
+      description: "12PM – 8PM",
+    },
+    {
+      id: "skyhy-flat-30",
+      label: "30% Flat Discount",
+      description: "12PM – 10PM",
+      hideSlotsLeft: true,
+    },
+  ],
+
+  // ₹127 offer (12PM–7PM)
+  "alehouse": [
+    {
+      id: "alehouse-127",
+      label: "Eat & Drink Anything @ ₹127",
+      description: "12PM – 7PM",
+    },
+    {
+      id: "alehouse-flat-30",
+      label: "30% Flat Discount",
+      description: "12PM – 10PM",
+      hideSlotsLeft: true,
+    },
   ],
   "c53": [
-    { id: "lunch-special", label: "Lunch Special @ ₹127", description: "Eat & drink anything 12PM–7PM" },
+    {
+      id: "c53-127",
+      label: "Eat & Drink Anything @ ₹127",
+      description: "12PM – 7PM",
+    },
+    {
+      id: "c53-flat-25",
+      label: "25% Flat Discount",
+      description: "12PM – 10PM",
+      hideSlotsLeft: true,
+    },
   ],
   "boiler-room": [
-    { id: "eat-drink-128", label: "Eat & Drink @ ₹128", description: "Eat & drink anything @ ₹128" },
+    {
+      id: "boiler-127",
+      label: "Eat & Drink Anything @ ₹127",
+      description: "12PM – 7PM",
+    },
+    {
+      id: "boiler-flat-30",
+      label: "30% Flat Discount",
+      description: "12PM – 10PM",
+      hideSlotsLeft: true,
+    },
   ],
-  "firefly": [
-    { id: "eat-drink-128", label: "Eat & Drink @ ₹128", description: "Eat & drink anything @ ₹128" },
-  ],
-  "club-rogue-gachibowli": [
-    { id: "eat-drink-128", label: "Eat & Drink @ ₹128", description: "Eat & drink anything @ ₹128" },
-  ],
-  "club-rogue-kondapur": [
-    { id: "eat-drink-128", label: "Eat & Drink @ ₹128", description: "Eat & drink anything @ ₹128" },
-  ],
-  "club-rogue-jubilee-hills": [
-    { id: "eat-drink-128", label: "Eat & Drink @ ₹128", description: "Eat & drink anything @ ₹128" },
-  ],
+
+  // Additional flat discount only
   "sound-of-soul": [
-    { id: "eat-drink-128", label: "Eat & Drink @ ₹128", description: "Eat & drink anything @ ₹128" },
-  ],
-  "thezenzspot": [
-    { id: "eat-drink-128", label: "Eat & Drink @ ₹128", description: "Eat & drink anything @ ₹128" },
-  ],
-  "the-hub": [
-    { id: "eat-drink-128", label: "Eat & Drink @ ₹128", description: "Eat & drink anything @ ₹128" },
+    {
+      id: "sos-flat-30",
+      label: "30% Flat Discount",
+      description: "12PM – 10PM",
+      hideSlotsLeft: true,
+    },
   ],
 };
 

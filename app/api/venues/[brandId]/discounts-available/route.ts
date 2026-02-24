@@ -56,6 +56,7 @@ export async function GET(
     const discounts = filtered.map((d) => {
       const used = usageMap.get(d.id) ?? 0;
       const slotsLeft = Math.max(0, d.limitPerDay - used);
+      const hideSlotsLeft = d.title.toLowerCase().includes("flat discount");
       return {
         id: d.id,
         title: d.title,
@@ -63,6 +64,7 @@ export async function GET(
         slotsLeft,
         soldOut: used >= d.limitPerDay,
         timeWindowLabel: d.startTime && d.endTime ? `${format12(d.startTime)}–${format12(d.endTime)}` : null,
+        hideSlotsLeft,
       };
     });
 
@@ -91,6 +93,7 @@ function fallbackStatic(brandId: string) {
     description: d.description ?? "",
     slotsLeft: 999,
     soldOut: false,
+    hideSlotsLeft: d.hideSlotsLeft ?? false,
     timeWindowLabel: null,
   }));
   return NextResponse.json(
