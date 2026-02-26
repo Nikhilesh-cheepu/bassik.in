@@ -144,8 +144,8 @@ export const BRANDS: Brand[] = [
   },
   {
     id: "firefly",
-    name: "Firefly Club & Socialroom",
-    shortName: "Firefly",
+    name: "Firely Telugu Club",
+    shortName: "Firely",
     accentColor: "#D97706",
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/fireflyclub/"],

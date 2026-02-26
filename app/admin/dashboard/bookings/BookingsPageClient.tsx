@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { trackWhatsAppClick } from "@/lib/analytics";
+import { BRANDS } from "@/lib/brands";
 
 interface Reservation {
   id: string;
@@ -47,6 +48,7 @@ export default function BookingsPageClient() {
     dateFrom: undefined,
     dateTo: undefined,
   });
+  const [brandFilter, setBrandFilter] = useState<string>("all");
 
   const isAllTime = filter.dateFrom == null && filter.dateTo == null;
 
@@ -55,6 +57,7 @@ export default function BookingsPageClient() {
       const queryParams = new URLSearchParams();
       if (filter.dateFrom) queryParams.append("dateFrom", filter.dateFrom);
       if (filter.dateTo) queryParams.append("dateTo", filter.dateTo);
+      if (brandFilter && brandFilter !== "all") queryParams.append("venueId", brandFilter);
       const res = await fetch(`/api/admin/bookings?${queryParams.toString()}`);
       if (res.ok) {
         const data = await res.json();
@@ -65,7 +68,7 @@ export default function BookingsPageClient() {
     } catch (error) {
       console.error("Error loading bookings:", error);
     }
-  }, [filter]);
+  }, [filter, brandFilter]);
 
   useEffect(() => {
     setLoading(false);
@@ -274,6 +277,20 @@ Reservation ID: ${reservation.id}`;
             >
               Reset
             </button>
+            <div className="h-6 w-px bg-gray-200 hidden sm:block" />
+            <label className="text-xs sm:text-sm text-gray-600 font-medium">Outlet:</label>
+            <select
+              value={brandFilter}
+              onChange={(e) => setBrandFilter(e.target.value)}
+              className="px-2 py-1.5 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
+            >
+              <option value="all">All outlets</option>
+              {BRANDS.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.shortName}
+                </option>
+              ))}
+            </select>
             <div className="flex-1" />
             <button
               onClick={exportToPDF}
