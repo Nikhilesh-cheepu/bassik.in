@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
+import { Swiper, SwiperSlide } from "swiper/react";
+import "swiper/css";
 
 interface GalleryCarouselProps {
   images: string[];
@@ -8,96 +11,72 @@ interface GalleryCarouselProps {
   onViewAll?: () => void;
 }
 
-/**
- * Build row content as two identical halves for seamless -50% translate loop.
- * Repeats images so each half has at least 4 tiles (~2x viewport coverage), then duplicates once.
- */
-function buildMarqueeItems<T>(list: T[]): T[] {
-  if (list.length === 0) return [];
-  let half: T[] = [];
-  const minTilesPerHalf = 4;
-  while (half.length < minTilesPerHalf) half.push(...list);
-  return [...half, ...half];
-}
+export default function GalleryCarousel({ images, accentColor = "#f97316", onViewAll }: GalleryCarouselProps) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const total = images.length;
 
-export default function GalleryCarousel({
-  images,
-  accentColor = "#f97316",
-  onViewAll,
-}: GalleryCarouselProps) {
   if (images.length === 0) {
     return (
-      <div className="aspect-video w-full bg-white/5 flex items-center justify-center rounded-2xl">
+      <div className="aspect-video w-full bg-white/5 flex items-center justify-center rounded-lg">
         <p className="text-sm text-white/50">No photos</p>
       </div>
     );
   }
 
-  /* Two identical halves so -50% translate loops seamlessly; enough tiles to cover ~2x viewport */
-  const rowItems = buildMarqueeItems(images);
-
-  const tileClass =
-    "flex-shrink-0 w-[min(280px,42vw)] aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black/20 shadow-lg";
-
   return (
-    <div className="group/marquee w-full min-w-0 overflow-hidden">
-      {/* Row A: moves left */}
-      <div className="flex overflow-hidden" style={{ marginBottom: "0.5rem" }}>
-        <div
-          className="flex gap-3 py-0.5 animate-marquee-left group-hover/marquee:[animation-play-state:paused]"
-          style={{ width: "max-content" }}
-        >
-          {rowItems.map((src, i) => (
-            <div key={`a-${i}`} className={tileClass}>
+    <div className="relative w-full min-w-0 overflow-x-hidden">
+      <Swiper
+        onSwiper={(sw) => sw && setActiveIndex(sw.realIndex)}
+        onSlideChange={(sw) => setActiveIndex(sw.realIndex)}
+        className="!overflow-hidden w-full"
+        loop
+        centeredSlides
+        slidesPerView={1.15}
+        spaceBetween={12}
+        speed={400}
+        grabCursor
+        allowTouchMove
+      >
+        {images.map((src, i) => (
+          <SwiperSlide key={`${src}-${i}`}>
+            <div
+              className="relative w-full overflow-hidden bg-black/20"
+              style={{ aspectRatio: "16 / 9" }}
+            >
               <Image
                 src={src}
                 alt=""
-                width={280}
-                height={157}
-                sizes="(max-width: 768px) 42vw, 280px"
-                className="h-full w-full object-cover"
+                fill
+                sizes="(max-width: 768px) 90vw, 500px"
+                className="object-cover"
                 unoptimized
                 loading="lazy"
               />
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Row B: moves right */}
-      <div className="flex overflow-hidden">
+          </SwiperSlide>
+        ))}
+      </Swiper>
+      {/* Counter: bottom center, glass, subtle */}
+      {total > 1 && (
         <div
-          className="flex gap-3 py-0.5 animate-marquee-right group-hover/marquee:[animation-play-state:paused]"
-          style={{ width: "max-content" }}
+          className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 px-2.5 py-1 rounded-full text-[11px] font-medium tabular-nums backdrop-blur-md border border-white/10"
+          style={{
+            backgroundColor: "rgba(0,0,0,0.35)",
+            color: "rgba(212, 175, 55, 0.9)",
+          }}
         >
-          {rowItems.map((src, i) => (
-            <div key={`b-${i}`} className={tileClass}>
-              <Image
-                src={src}
-                alt=""
-                width={280}
-                height={157}
-                sizes="(max-width: 768px) 42vw, 280px"
-                className="h-full w-full object-cover"
-                unoptimized
-                loading="lazy"
-              />
-            </div>
-          ))}
+          {activeIndex + 1} / {total}
         </div>
-      </div>
-
+      )}
       {onViewAll && (
-        <div className="mt-2 flex justify-end">
-          <button
-            type="button"
-            onClick={onViewAll}
-            className="text-xs font-medium text-white/70 hover:text-white transition-colors touch-manipulation"
-            style={{ color: accentColor }}
-          >
-            View all →
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onViewAll}
+          className="absolute bottom-2 right-2 z-10 px-2.5 py-1 rounded-lg text-xs font-medium bg-black/50 backdrop-blur-sm border border-white/10 text-white/90 hover:bg-black/60 transition-colors touch-manipulation"
+          style={{ color: accentColor }}
+        >
+          View all →
+        </button>
       )}
     </div>
   );
