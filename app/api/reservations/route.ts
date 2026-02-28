@@ -3,8 +3,6 @@ import { prisma } from "@/lib/db";
 import { Pool } from "pg";
 import { getContactForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 
-const RESERVATION_PHONE_NUMBER = "917013884485"; // India + business 10-digit
-
 export async function POST(request: NextRequest) {
   try {
     console.log("[RESERVATION API] Starting reservation request");
@@ -426,16 +424,25 @@ Reservation submitted via bassik.in`;
       }
     }
 
-    // Encode message for WhatsApp URL
+    // Resolve contact: same number for CTA, booking WhatsApp, etc. DB first, then outlet-contacts, then default
+    const effectiveBrandId =
+      brandId === "the-hub" && hubSpotId && typeof hubSpotId === "string" ? hubSpotId : brandId;
+    let contactVenue: { contactPhone?: string | null; contactNumbers?: { phone: string }[] } | null = null;
+    try {
+      contactVenue = await prisma.venue.findUnique({
+        where: { brandId: effectiveBrandId },
+        select: { contactPhone: true, contactNumbers: true },
+      });
+    } catch (_) {}
+    const rawContacts = contactVenue?.contactNumbers;
+    const contactFromDb =
+      Array.isArray(rawContacts) && rawContacts.length > 0
+        ? rawContacts[0]?.phone?.trim()
+        : contactVenue?.contactPhone?.trim();
+    const phone = contactFromDb || getContactForBrand(effectiveBrandId);
+    const waNumber = getFullPhoneNumber(phone);
+
     const encodedMessage = encodeURIComponent(message);
-    const hubOutlets = ["c53", "boiler-room", "firefly"] as const;
-    const waNumber =
-      brandId === "the-hub" &&
-      hubSpotId &&
-      typeof hubSpotId === "string" &&
-      hubOutlets.includes(hubSpotId as (typeof hubOutlets)[number])
-        ? getFullPhoneNumber(getContactForBrand(hubSpotId))
-        : RESERVATION_PHONE_NUMBER;
     const whatsappUrl = `https://wa.me/${waNumber}?text=${encodedMessage}`;
 
     if (!reservation) {

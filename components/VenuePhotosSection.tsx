@@ -27,7 +27,7 @@ export default function VenuePhotosSection({
       transition={{ delay: 0.2 }}
       className="w-full min-w-0 overflow-x-hidden"
     >
-      <h2 className="text-sm font-semibold text-white mb-2 px-1">Photos</h2>
+      <h2 className="text-sm font-semibold text-white mb-2 px-1">Gallery</h2>
       <GalleryCarousel
         images={images}
         accentColor={accentColor}
