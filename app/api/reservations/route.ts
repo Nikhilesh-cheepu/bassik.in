@@ -427,14 +427,14 @@ Reservation submitted via bassik.in`;
     // Resolve contact: same number for CTA, booking WhatsApp, etc. DB first, then outlet-contacts, then default
     const effectiveBrandId =
       brandId === "the-hub" && hubSpotId && typeof hubSpotId === "string" ? hubSpotId : brandId;
-    let contactVenue: { contactPhone?: string | null; contactNumbers?: { phone: string }[] } | null = null;
+    let contactVenue: { contactPhone?: string | null; contactNumbers?: unknown } | null = null;
     try {
       contactVenue = await prisma.venue.findUnique({
         where: { brandId: effectiveBrandId },
         select: { contactPhone: true, contactNumbers: true },
       });
     } catch (_) {}
-    const rawContacts = contactVenue?.contactNumbers;
+    const rawContacts = contactVenue?.contactNumbers as { phone?: string }[] | null | undefined;
     const contactFromDb =
       Array.isArray(rawContacts) && rawContacts.length > 0
         ? rawContacts[0]?.phone?.trim()
