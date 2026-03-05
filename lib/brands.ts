@@ -155,6 +155,10 @@ export const BRANDS: Brand[] = [
   },
 ];
 
+export const HIDDEN_BRAND_IDS = new Set<string>(["the-hub", "thezenzspot"]);
+
+export const getPublicBrands = () => BRANDS.filter((b) => !HIDDEN_BRAND_IDS.has(b.id));
+
 // Helper: Get unique brands for homepage "Connect" section
 // Returns all brands separately, including all 3 Club Rogue locations
 export const getHomepageConnectBrands = () => {

@@ -5,22 +5,23 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { BRANDS } from "@/lib/brands";
+import { BRANDS, HIDDEN_BRAND_IDS } from "@/lib/brands";
 import ReservationForm from "@/components/ReservationForm";
 
 function ReservationsContent() {
   const params = useParams();
   const router = useRouter();
   const outletSlug = params?.outlet as string;
+  const PUBLIC_BRANDS = BRANDS.filter((b) => !HIDDEN_BRAND_IDS.has(b.id));
   const [activeBrandId, setActiveBrandId] = useState(() => {
-    const b = BRANDS.find((b) => b.id === outletSlug) || BRANDS[0];
+    const b = PUBLIC_BRANDS.find((b) => b.id === outletSlug) || PUBLIC_BRANDS[0];
     return b.id;
   });
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const activeBrand = BRANDS.find((b) => b.id === activeBrandId) || BRANDS[0];
+  const activeBrand = PUBLIC_BRANDS.find((b) => b.id === activeBrandId) || PUBLIC_BRANDS[0];
   const logoPath = activeBrand.logoPath ?? (activeBrand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${activeBrand.id}.png`);
 
   useEffect(() => {
@@ -97,7 +98,7 @@ function ReservationsContent() {
                 className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[200px] max-h-[260px] overflow-y-auto scrollbar-hide rounded-xl border border-white/20 backdrop-blur-xl bg-black/95 shadow-xl z-30"
                 style={{ boxShadow: `0 8px 32px ${activeBrand.accentColor}20` }}
               >
-                {BRANDS.map((brand) => {
+                {PUBLIC_BRANDS.map((brand) => {
                   const bp = brand.logoPath ?? (brand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${brand.id}.png`);
                   const sel = brand.id === activeBrandId;
                   return (

@@ -6,7 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
-import { BRANDS } from "@/lib/brands";
+import { BRANDS, HIDDEN_BRAND_IDS } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 import { trackWhatsAppClick, trackCallClick } from "@/lib/analytics";
 import EventsOffersHero from "@/components/EventsOffersHero";
@@ -213,7 +213,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
                   className="pointer-events-auto absolute top-full left-1/2 -translate-x-1/2 mt-2 w-[180px] backdrop-blur-xl bg-black/90 border border-white/20 rounded-xl shadow-2xl overflow-hidden max-h-[200px] overflow-y-auto scrollbar-hide"
                   style={{ boxShadow: `0 8px 32px ${selectedBrand.accentColor}30` }}
                 >
-                  {BRANDS.map((brand) => {
+                  {BRANDS.filter((brand) => !HIDDEN_BRAND_IDS.has(brand.id)).map((brand) => {
                     const brandLogoPath =
                       brand.logoPath ??
                       (brand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${brand.id}.png`);

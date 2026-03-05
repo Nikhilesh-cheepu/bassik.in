@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { BRANDS, Brand } from "@/lib/brands";
+import { BRANDS, Brand, HIDDEN_BRAND_IDS } from "@/lib/brands";
 
 interface HomeTrailProps {
   venues?: Brand[];
@@ -45,6 +45,7 @@ function getLogoPath(brand: Brand) {
 }
 
 function getVibeLabel(brand: Brand): string {
+  if (brand.id === "firefly") return "Menu items starting from ₹75";
   if (brand.tag) return brand.tag;
   switch (brand.id) {
     case "skyhy":
@@ -67,30 +68,63 @@ function getVibeLabel(brand: Brand): string {
 function getOffersCopy(brandId: string): string[] {
   switch (brandId) {
     case "alehouse":
+      return [
+        "Eat & Drink @ ₹127 (12PM – 7PM)",
+        "30% Flat Discount (12PM – 10PM)",
+      ];
     case "c53":
+      return [
+        "Eat & Drink @ ₹127 (12PM – 7PM)",
+        "25% Flat Discount (12PM – 10PM)",
+      ];
     case "boiler-room":
       return [
         "Eat & Drink @ ₹127 (12PM – 7PM)",
-        "Flat 25–30% Discount (12PM – 10PM)",
+        "30% Flat Discount (12PM – 10PM)",
       ];
     case "kiik69":
+      return [
+        "Eat & Drink @ ₹128 (12PM – 8PM)",
+        "10% Flat Discount (12PM – 10PM)",
+      ];
     case "skyhy":
       return [
         "Eat & Drink @ ₹128 (12PM – 8PM)",
-        "Flat 30% Discount (12PM – 10PM)",
+        "23% Flat Discount (12PM – 10PM)",
+      ];
+    case "sound-of-soul":
+      return [
+        "30% Flat Discount (12PM – 10PM)",
+        "Live music nights & events",
+      ];
+    case "firefly":
+      return [
+        "Menu items starting from ₹75",
+        "Telugu club nights with a low-rate menu",
+      ];
+    case "club-rogue-gachibowli":
+    case "club-rogue-kondapur":
+    case "club-rogue-jubilee-hills":
+      return [
+        "Premium club nights & parties",
+        "Cover, tables & packages vary by day",
       ];
     default:
       return [
-        "Flat 25–30% Discounts (12PM – 10PM)",
-        "Website-only offers for this venue",
+        "Curated experiences at this venue",
+        "Check menu & events before you book",
       ];
   }
 }
 
 export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
+  const visibleVenues = useMemo(
+    () => (venues || BRANDS).filter((b) => !HIDDEN_BRAND_IDS.has(b.id)),
+    [venues]
+  );
   const orderedVenues = useMemo(
     () =>
-      [...venues].sort((a, b) => {
+      [...visibleVenues].sort((a, b) => {
         const indexA = VENUE_ORDER.indexOf(a.id);
         const indexB = VENUE_ORDER.indexOf(b.id);
         if (indexA === -1 && indexB === -1) return 0;
@@ -98,7 +132,7 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
         if (indexB === -1) return -1;
         return indexA - indexB;
       }),
-    [venues]
+    [visibleVenues]
   );
   const [openBrandId, setOpenBrandId] = useState<string | null>(null);
   const [ctaIndex, setCtaIndex] = useState(0);
@@ -237,7 +271,16 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
                     {isOpen && (
                       <div className="px-4 pb-4 pt-1 text-sm border-t border-white/10 bg-black/50">
                         <p className="text-xs font-semibold text-gray-300 mb-1">
-                          Available offers today
+                          {[
+                            "alehouse",
+                            "c53",
+                            "boiler-room",
+                            "sound-of-soul",
+                            "skyhy",
+                            "kiik69",
+                          ].includes(brand.id)
+                            ? "Available offers today"
+                            : "Good to know"}
                         </p>
                         <ul className="text-xs text-gray-200 space-y-1 mb-2">
                           {offersLines.map((line) => (
@@ -247,9 +290,18 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
                             </li>
                           ))}
                         </ul>
-                        <p className="text-[11px] text-amber-200 mb-2">
-                          Potential savings: ₹500 – ₹1500 • Limited slots available
-                        </p>
+                        {[
+                          "alehouse",
+                          "c53",
+                          "boiler-room",
+                          "sound-of-soul",
+                          "skyhy",
+                          "kiik69",
+                        ].includes(brand.id) && (
+                          <p className="text-[11px] text-amber-200 mb-2">
+                            Potential savings: ₹500 – ₹1500 • Limited slots available
+                          </p>
+                        )}
                         <div className="flex flex-wrap gap-2">
                           <Link
                             href={`/${brand.id}/reservations`}

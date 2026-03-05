@@ -14,7 +14,7 @@ export type StaticDiscount = {
 };
 
 const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
-  // ₹128 offer (12PM–8PM)
+  // ₹128 offer (12PM–8PM) + flat discounts
   "kiik69": [
     {
       id: "kiik-128",
@@ -22,6 +22,14 @@ const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
       description: "12PM – 8PM",
       startTime: "12:00",
       endTime: "20:00",
+    },
+    {
+      id: "kiik-flat-10",
+      label: "10% Flat Discount",
+      description: "12PM – 10PM",
+      hideSlotsLeft: true,
+      startTime: "12:00",
+      endTime: "22:00",
     },
   ],
   "skyhy": [
@@ -34,7 +42,7 @@ const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
     },
     {
       id: "skyhy-flat-30",
-      label: "30% Flat Discount",
+      label: "23% Flat Discount",
       description: "12PM – 10PM",
       hideSlotsLeft: true,
       startTime: "12:00",
