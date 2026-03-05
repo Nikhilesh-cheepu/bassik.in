@@ -65,6 +65,27 @@ body {
     display: none;
   }
   
+  /* Simple horizontal ticker animation for landing page banner */
+  @keyframes ticker-left {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  .animate-ticker {
+    animation: ticker-left 22s linear infinite;
+    will-change: transform;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-ticker {
+      animation-duration: 60s;
+    }
+  }
+  
   @keyframes shimmer {
     0% {
       transform: translateX(-100%);
