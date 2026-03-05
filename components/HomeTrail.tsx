@@ -304,18 +304,11 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
                         )}
                         <div className="flex flex-wrap gap-2">
                           <Link
-                            href={`/${brand.id}/reservations`}
-                            prefetch={false}
-                            className="inline-flex flex-1 items-center justify-center sm:flex-none sm:px-4 sm:flex-initial px-3 py-2 rounded-full bg-amber-500 text-black text-xs font-semibold hover:bg-amber-400 transition-colors"
-                          >
-                            Book Now
-                          </Link>
-                          <Link
                             href={`/${brand.id}`}
                             prefetch={false}
-                            className="inline-flex flex-1 items-center justify-center sm:flex-none sm:px-4 sm:flex-initial px-3 py-2 rounded-full border border-white/20 text-xs text-white/90 hover:bg-white/10 transition-colors"
+                            className="inline-flex flex-1 items-center justify-center px-3 py-2 rounded-full border border-white/20 text-xs text-white/90 hover:bg-white/10 transition-colors"
                           >
-                            View details
+                            Explore website
                           </Link>
                         </div>
                       </div>
