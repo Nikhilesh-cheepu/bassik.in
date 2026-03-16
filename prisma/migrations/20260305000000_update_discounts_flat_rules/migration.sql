@@ -127,14 +127,14 @@ BEGIN
   END IF;
 
   -- 4) Flat discounts (12:00–22:00). Limits kept at 30/day.
-  -- Boiler Room: 30% Flat Discount
+  -- Boiler Room: 15% Flat Discount
   IF v_boiler_id IS NOT NULL THEN
     INSERT INTO "Discount" (id, "venueId", title, description, "limitPerDay", "startTime", "endTime", session, active, "createdAt", "updatedAt")
     VALUES (
       gen_random_uuid()::text,
       v_boiler_id,
-      '30% Flat Discount',
-      '30% flat discount (12PM–10PM)',
+      '15% Flat Discount',
+      '15% flat discount (12PM–10PM)',
       30,
       '12:00',
       '22:00',
@@ -145,14 +145,14 @@ BEGIN
     );
   END IF;
 
-  -- C53: 25% Flat Discount
+  -- C53: 15% Flat Discount
   IF v_c53_id IS NOT NULL THEN
     INSERT INTO "Discount" (id, "venueId", title, description, "limitPerDay", "startTime", "endTime", session, active, "createdAt", "updatedAt")
     VALUES (
       gen_random_uuid()::text,
       v_c53_id,
-      '25% Flat Discount',
-      '25% flat discount (12PM–10PM)',
+      '15% Flat Discount',
+      '15% flat discount (12PM–10PM)',
       30,
       '12:00',
       '22:00',
@@ -163,14 +163,14 @@ BEGIN
     );
   END IF;
 
-  -- Alehouse: 30% Flat Discount
+  -- Alehouse: 15% Flat Discount
   IF v_alehouse_id IS NOT NULL THEN
     INSERT INTO "Discount" (id, "venueId", title, description, "limitPerDay", "startTime", "endTime", session, active, "createdAt", "updatedAt")
     VALUES (
       gen_random_uuid()::text,
       v_alehouse_id,
-      '30% Flat Discount',
-      '30% flat discount (12PM–10PM)',
+      '15% Flat Discount',
+      '15% flat discount (12PM–10PM)',
       30,
       '12:00',
       '22:00',
@@ -181,14 +181,14 @@ BEGIN
     );
   END IF;
 
-  -- Sound of Soul: 30% Flat Discount
+  -- Sound of Soul: 15% Flat Discount
   IF v_sos_id IS NOT NULL THEN
     INSERT INTO "Discount" (id, "venueId", title, description, "limitPerDay", "startTime", "endTime", session, active, "createdAt", "updatedAt")
     VALUES (
       gen_random_uuid()::text,
       v_sos_id,
-      '30% Flat Discount',
-      '30% flat discount (12PM–10PM)',
+      '15% Flat Discount',
+      '15% flat discount (12PM–10PM)',
       30,
       '12:00',
       '22:00',
@@ -199,14 +199,14 @@ BEGIN
     );
   END IF;
 
-  -- SkyHy Live: 23% Flat Discount
+  -- SkyHy Live: 15% Flat Discount
   IF v_skyhy_id IS NOT NULL THEN
     INSERT INTO "Discount" (id, "venueId", title, description, "limitPerDay", "startTime", "endTime", session, active, "createdAt", "updatedAt")
     VALUES (
       gen_random_uuid()::text,
       v_skyhy_id,
-      '23% Flat Discount',
-      '23% flat discount (12PM–10PM)',
+      '15% Flat Discount',
+      '15% flat discount (12PM–10PM)',
       30,
       '12:00',
       '22:00',

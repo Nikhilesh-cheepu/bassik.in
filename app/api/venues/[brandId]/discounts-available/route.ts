@@ -55,7 +55,7 @@ export async function GET(
       return used < d.limitPerDay;
     });
 
-    const discounts = filtered.map((d) => {
+    const discountsRaw = filtered.map((d) => {
       const used = usageMap.get(d.id) ?? 0;
       const slotsLeft = Math.max(0, d.limitPerDay - used);
       const hideSlotsLeft = d.title.toLowerCase().includes("flat discount");
@@ -68,6 +68,25 @@ export async function GET(
         timeWindowLabel: d.startTime && d.endTime ? `${format12(d.startTime)}–${format12(d.endTime)}` : null,
         hideSlotsLeft,
       };
+    });
+
+    // Normalize flat discount copy for key venues without touching DB structure.
+    const discounts = discountsRaw.map((d) => {
+      const isTargetBrand =
+        brandId === "boiler-room" ||
+        brandId === "c53" ||
+        brandId === "skyhy" ||
+        brandId === "alehouse" ||
+        brandId === "sound-of-soul";
+      const isFlatDiscount = d.title.toLowerCase().includes("flat discount");
+      if (isTargetBrand && isFlatDiscount) {
+        return {
+          ...d,
+          title: "15% flat discount on à la carte",
+          description: "12PM – 10PM",
+        };
+      }
+      return d;
     });
 
     return NextResponse.json(

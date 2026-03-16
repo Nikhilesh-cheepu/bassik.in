@@ -105,33 +105,34 @@ export default function BookingsPageClient() {
   const generateWhatsAppMessage = (reservation: Reservation): string => {
     const dateStr = formatDate(reservation.date);
     const timeStr = formatTime(reservation.timeSlot);
-    const guestCountParts: string[] = [];
-    if (reservation.numberOfMen && reservation.numberOfMen !== "0")
-      guestCountParts.push(`${reservation.numberOfMen} ${reservation.numberOfMen === "1" ? "Man" : "Men"}`);
-    if (reservation.numberOfWomen && reservation.numberOfWomen !== "0")
-      guestCountParts.push(`${reservation.numberOfWomen} ${reservation.numberOfWomen === "1" ? "Woman" : "Women"}`);
-    if (reservation.numberOfCouples && reservation.numberOfCouples !== "0")
-      guestCountParts.push(`${reservation.numberOfCouples} ${reservation.numberOfCouples === "1" ? "Couple" : "Couples"}`);
-    const guestCountStr = guestCountParts.join(" | ");
-    let notesSection = "";
-    if (reservation.notes?.trim()) {
-      const notesLower = reservation.notes.toLowerCase();
-      if (notesLower.includes("birthday") || notesLower.includes("bday")) notesSection = "\n\nBirthday";
-      else if (notesLower.includes("anniversary")) notesSection = "\n\nAnniversary";
-      else if (notesLower.includes("celebration")) notesSection = "\n\nCelebration";
-      else notesSection = `\n\n${reservation.notes.trim()}`;
-    }
-    return `Table Reservation | ${reservation.brandName}
+    const men = parseInt(reservation.numberOfMen || "0", 10) || 0;
+    const women = parseInt(reservation.numberOfWomen || "0", 10) || 0;
+    const couples = parseInt(reservation.numberOfCouples || "0", 10) || 0;
+    const totalGuests = men + women + couples * 2;
+    const noteText = reservation.notes?.trim() || "-";
 
-${reservation.fullName} | ${reservation.contactNumber}
+    const isClubRogue =
+      reservation.brandId === "club-rogue-gachibowli" ||
+      reservation.brandId === "club-rogue-kondapur" ||
+      reservation.brandId === "club-rogue-jubilee-hills";
 
-${dateStr} | ${timeStr}
+    const coverLine = isClubRogue
+      ? "\n\nCover charge: ₹2000 (fully refundable at the venue)"
+      : "";
 
-${guestCountStr}${notesSection}
+    return `${reservation.brandName}
 
-Status: ${reservation.status}
+Name : ${reservation.fullName}
+Mobile number : ${reservation.contactNumber}
+Date : ${dateStr}
+Time : ${timeStr}
+Total pax : ${totalGuests} guests
+Note : ${noteText}
 
-Reservation ID: ${reservation.id}`;
+Booking status :
+${reservation.status}
+
+Reservation made through bassik.in${coverLine}`;
   };
 
   const handleWhatsAppMessage = (reservation: Reservation) => {

@@ -28,7 +28,7 @@ const VENUE_ORDER = [
 const TICKER_MESSAGES = [
   "Eat & Drink @ ₹127",
   "Eat & Drink @ ₹128",
-  "Flat 25–30% Discounts",
+  "Flat up to 15% Discounts",
   "Limited slots daily",
   "Website-only offers",
   "Book now before slots fill",
@@ -70,17 +70,17 @@ function getOffersCopy(brandId: string): string[] {
     case "alehouse":
       return [
         "Eat & Drink @ ₹127 (12PM – 7PM)",
-        "30% Flat Discount (12PM – 10PM)",
+        "15% flat discount on à la carte (12PM – 10PM)",
       ];
     case "c53":
       return [
         "Eat & Drink @ ₹127 (12PM – 7PM)",
-        "25% Flat Discount (12PM – 10PM)",
+        "15% flat discount on à la carte (12PM – 10PM)",
       ];
     case "boiler-room":
       return [
         "Eat & Drink @ ₹127 (12PM – 7PM)",
-        "30% Flat Discount (12PM – 10PM)",
+        "15% flat discount on à la carte (12PM – 10PM)",
       ];
     case "kiik69":
       return [
@@ -90,11 +90,11 @@ function getOffersCopy(brandId: string): string[] {
     case "skyhy":
       return [
         "Eat & Drink @ ₹128 (12PM – 8PM)",
-        "23% Flat Discount (12PM – 10PM)",
+        "15% flat discount on à la carte (12PM – 10PM)",
       ];
     case "sound-of-soul":
       return [
-        "30% Flat Discount (12PM – 10PM)",
+        "15% flat discount on à la carte (12PM – 10PM)",
         "Live music nights & events",
       ];
     case "firefly":

@@ -209,13 +209,22 @@ export async function POST(request: NextRequest) {
     // Build offers section from discount titles (DB or static)
     const offersSection = discountTitles.length > 0 ? `\n\n${discountTitles.join("\n")}` : "";
 
+    const isClubRogue =
+      brandId === "club-rogue-gachibowli" ||
+      brandId === "club-rogue-kondapur" ||
+      brandId === "club-rogue-jubilee-hills";
+
+    const coverLine = isClubRogue
+      ? "\n\nCover charge: ₹2000 (fully refundable at the venue)"
+      : "";
+
     const message = `Table Reservation | ${brandName}
 
 ${fullName} | ${contactNumber}
 
 ${formatDateShort(date)} | ${formattedTime}
 
-${guestCountStr}${offersSection}${notesSection}
+${guestCountStr}${offersSection}${notesSection}${coverLine}
 
 Reservation submitted via bassik.in`;
 

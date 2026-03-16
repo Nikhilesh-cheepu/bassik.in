@@ -42,7 +42,7 @@ const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
     },
     {
       id: "skyhy-flat-30",
-      label: "23% Flat Discount",
+      label: "15% flat discount on à la carte",
       description: "12PM – 10PM",
       hideSlotsLeft: true,
       startTime: "12:00",
@@ -61,7 +61,7 @@ const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
     },
     {
       id: "alehouse-flat-30",
-      label: "30% Flat Discount",
+      label: "15% flat discount on à la carte",
       description: "12PM – 10PM",
       hideSlotsLeft: true,
       startTime: "12:00",
@@ -78,7 +78,7 @@ const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
     },
     {
       id: "c53-flat-25",
-      label: "25% Flat Discount",
+      label: "15% flat discount on à la carte",
       description: "12PM – 10PM",
       hideSlotsLeft: true,
       startTime: "12:00",
@@ -95,7 +95,7 @@ const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
     },
     {
       id: "boiler-flat-30",
-      label: "30% Flat Discount",
+      label: "15% flat discount on à la carte",
       description: "12PM – 10PM",
       hideSlotsLeft: true,
       startTime: "12:00",
@@ -107,7 +107,7 @@ const DISCOUNTS_BY_BRAND: Record<string, StaticDiscount[]> = {
   "sound-of-soul": [
     {
       id: "sos-flat-30",
-      label: "30% Flat Discount",
+      label: "15% flat discount on à la carte",
       description: "12PM – 10PM",
       hideSlotsLeft: true,
       startTime: "12:00",
