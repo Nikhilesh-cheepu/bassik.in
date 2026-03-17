@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { Pool } from "pg";
 import { getContactForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
+import { getDiscountLabel } from "@/lib/reservation-discounts";
 
 export async function POST(request: NextRequest) {
+  // Fallback WhatsApp URL that we can still return even if DB calls fail.
+  let fallbackWhatsappUrl: string | null = null;
   try {
     console.log("[RESERVATION API] Starting reservation request");
 
@@ -125,346 +128,88 @@ export async function POST(request: NextRequest) {
     if (notes && notes.trim()) {
       const notesLower = notes.toLowerCase();
       if (notesLower.includes("birthday") || notesLower.includes("bday")) {
-        notesSection = "\n\nBirthday";
+        notesSection = "Birthday";
       } else if (notesLower.includes("anniversary")) {
-        notesSection = "\n\nAnniversary";
+        notesSection = "Anniversary";
       } else if (notesLower.includes("celebration")) {
-        notesSection = "\n\nCelebration";
+        notesSection = "Celebration";
       } else {
-        notesSection = `\n\n${notes.trim()}`;
+        notesSection = notes.trim();
       }
     }
 
-    // Find or create venue
-    console.log("[RESERVATION API] Looking for venue:", brandId);
-    let venue;
-    try {
-      // Test database connection first
-      await prisma.$connect().catch((connError) => {
-        console.error("[RESERVATION API] Database connection error:", connError);
-      });
-      
-      venue = await prisma.venue.findUnique({
-        where: { brandId },
-      });
-      console.log("[RESERVATION API] Venue found:", venue?.id || "not found");
-
-      if (!venue) {
-        // Create venue if it doesn't exist
-        console.log("[RESERVATION API] Creating new venue:", brandId);
-        try {
-          venue = await prisma.venue.create({
-            data: {
-              brandId,
-              name: brandName,
-              shortName: brandName,
-              address: "Address to be updated",
-            },
-          });
-          console.log("[RESERVATION API] Venue created:", venue.id);
-        } catch (createVenueError: any) {
-          console.error("[RESERVATION API] Error creating venue:", {
-            code: createVenueError?.code,
-            message: createVenueError?.message,
-            meta: createVenueError?.meta,
-          });
-          throw createVenueError;
-        }
-      }
-    } catch (venueError: any) {
-      console.error("[RESERVATION API] Error with venue:", {
-        code: venueError?.code,
-        message: venueError?.message,
-        meta: venueError?.meta,
-        stack: venueError?.stack?.split('\n').slice(0, 3).join('\n'),
-      });
-      throw venueError;
-    }
-
-    const discountIds = Array.isArray(selectedDiscounts) ? selectedDiscounts.filter((id: unknown) => typeof id === "string") : [];
-    let discountTitles: string[] = [];
-    let useDbSlots = false;
-    if (discountIds.length > 0) {
-      const dbDiscounts = await prisma.discount.findMany({
-        where: { id: { in: discountIds }, venueId: venue.id },
-      });
-      if (dbDiscounts.length === discountIds.length) {
-        discountTitles = dbDiscounts.map((d) => d.title);
-        useDbSlots = true;
-      } else {
-        const { getDiscountLabel, isValidDiscountId } = await import("@/lib/reservation-discounts");
-        for (const id of discountIds) {
-          if (!isValidDiscountId(brandId, id)) {
-            return NextResponse.json(
-              { error: "One or more selected discounts are invalid." },
-              { status: 400 }
-            );
-          }
-          const label = getDiscountLabel(brandId, id);
-          if (label) discountTitles.push(label);
-        }
-      }
-    }
-
-    // Build offers section from discount titles (DB or static)
-    const offersSection = discountTitles.length > 0 ? `\n\n${discountTitles.join("\n")}` : "";
-
-    const isClubRogue =
-      brandId === "club-rogue-gachibowli" ||
-      brandId === "club-rogue-kondapur" ||
-      brandId === "club-rogue-jubilee-hills";
-
-    const coverLine = isClubRogue
-      ? "\n\nCover charge: ₹2000 (fully refundable at the venue)"
-      : "";
-
-    const message = `Table Reservation | ${brandName}
-
-${fullName} | ${contactNumber}
-
-${formatDateShort(date)} | ${formattedTime}
-
-${guestCountStr}${offersSection}${notesSection}${coverLine}
-
-Reservation submitted via bassik.in`;
-
-    // Build reservation data object (no server-side user linkage; reservations are anonymous here)
-    const reservationData: any = {
-      venueId: venue.id,
-      brandId,
-      brandName,
-      fullName,
-      contactNumber,
-      numberOfMen: numberOfMen || "0",
-      numberOfWomen: numberOfWomen || "0",
-      numberOfCouples: numberOfCouples || "0",
-      date,
-      timeSlot: timeSlot || time || "",
-      notes: notes || null,
-      selectedDiscounts: selectedDiscounts
-        ? JSON.stringify(selectedDiscounts)
-        : null,
-      status: "PENDING",
-    };
-
-    console.log("[RESERVATION API] Creating reservation with data:", {
-      venueId: reservationData.venueId,
-      brandId: reservationData.brandId,
-    });
-
-    let reservation;
-    try {
-      if (useDbSlots && discountIds.length > 0) {
-        reservation = await prisma.$transaction(async (tx) => {
-          for (const discountId of discountIds) {
-            await tx.$executeRawUnsafe(
-              `INSERT INTO "DiscountDailyUsage" (id, "discountId", date, "usedCount")
-               VALUES (gen_random_uuid()::text, $1, $2, 0)
-               ON CONFLICT ("discountId", date) DO NOTHING`,
-              discountId,
-              date
-            );
-            const rows = await tx.$queryRawUnsafe<{ id: string }[]>(
-              `UPDATE "DiscountDailyUsage" u SET "usedCount" = u."usedCount" + 1
-               FROM "Discount" d
-               WHERE u."discountId" = d.id AND u."discountId" = $1 AND u.date = $2
-                 AND u."usedCount" < d."limitPerDay"
-               RETURNING u.id`,
-              discountId,
-              date
-            );
-            if (!rows || rows.length === 0) {
-              throw new Error("SOLD_OUT");
-            }
-          }
-          return tx.reservation.create({ data: reservationData });
-        });
-      } else {
-        reservation = await prisma.reservation.create({
-          data: reservationData,
-        });
-      }
-      console.log("[RESERVATION API] Reservation created successfully:", reservation.id);
-    } catch (createError: any) {
-      if (createError?.message === "SOLD_OUT") {
-        return NextResponse.json(
-          { error: "This discount just sold out. Please choose another." },
-          { status: 400 }
-        );
-      }
-      console.error("[RESERVATION API] Reservation creation failed:", {
-        code: createError?.code,
-        message: createError?.message,
-        meta: createError?.meta,
-        errorName: createError?.name,
-      });
-      
-      // If creation fails due to userId foreign key constraint, field doesn't exist, or unknown argument
-      // Try again without userId
-      const isUserIdRelatedError = 
-        createError?.code === "P2003" || // Foreign key constraint
-        createError?.code === "P2014" || // Related record not found
-        createError?.code === "P2009" || // Unknown argument
-        createError?.code === "P2011" || // Null constraint
-        createError?.code === "P2021" || // Table does not exist
-        createError?.code === "P2022" || // Column does not exist (CRITICAL - this is the current error)
-        createError?.message?.includes("Unknown argument") ||
-        createError?.message?.includes("Unknown field") ||
-        createError?.message?.includes("userId") ||
-        createError?.message?.includes("does not exist") ||
-        createError?.message?.includes("column") && createError?.message?.includes("not exist") ||
-        (createError?.meta?.target && Array.isArray(createError.meta.target) && createError.meta.target.includes("userId")) ||
-        (createError?.meta?.driverAdapterError?.cause?.kind === "ColumnNotFound");
-      
-      // If it's a userId-related error, use raw SQL to bypass Prisma schema validation
-      // This handles cases where Prisma Client expects the column but it doesn't exist in DB
-      if (isUserIdRelatedError) {
-        console.warn("[RESERVATION API] userId-related error detected (code: " + createError?.code + ")");
-        console.warn("[RESERVATION API] Original error:", createError.message);
-        console.warn("[RESERVATION API] This usually means the database migration hasn't been run.");
-        console.warn("[RESERVATION API] Using raw SQL to create reservation (bypassing Prisma schema)...");
-        
-        try {
-          // Use raw SQL via direct database pool to insert reservation without userId column
-          // This bypasses Prisma's schema validation which expects the column to exist
-          // Generate a unique ID first
-          const newId = `res_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-          
-          console.log("[RESERVATION API] Executing raw SQL insert via database pool (bypassing Prisma schema)...");
-          
-          // Create a new pool connection for raw SQL (or reuse existing one)
-          const pool = new Pool({
-            connectionString: process.env.DATABASE_URL,
-          });
-          
-          try {
-            // Use parameterized query for safety
-            const insertQuery = `
-              INSERT INTO "Reservation" (
-                "id", "venueId", "brandId", "brandName", "fullName", 
-                "contactNumber", "numberOfMen", "numberOfWomen", "numberOfCouples",
-                "date", "timeSlot", "notes", "selectedDiscounts", "status", 
-                "createdAt", "updatedAt"
-              )
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
-              RETURNING "id"
-            `;
-            
-            const insertResult = await pool.query(insertQuery, [
-              newId,
-              reservationData.venueId,
-              reservationData.brandId,
-              reservationData.brandName,
-              reservationData.fullName,
-              reservationData.contactNumber,
-              reservationData.numberOfMen,
-              reservationData.numberOfWomen,
-              reservationData.numberOfCouples,
-              reservationData.date,
-              reservationData.timeSlot,
-              reservationData.notes || null,
-              reservationData.selectedDiscounts || null,
-              reservationData.status,
-            ]);
-            
-            console.log("[RESERVATION API] Raw SQL insert completed, inserted ID:", insertResult.rows[0]?.id);
-            
-            // Fetch the created reservation
-            const fetchResult = await pool.query(
-              `SELECT * FROM "Reservation" WHERE "id" = $1`,
-              [newId]
-            );
-            
-            if (fetchResult.rows && fetchResult.rows[0]) {
-              const row = fetchResult.rows[0];
-              // Create a reservation object that matches Prisma's expected format
-              reservation = {
-                id: row.id,
-                venueId: row.venueId,
-                brandId: row.brandId,
-                brandName: row.brandName,
-                fullName: row.fullName,
-                contactNumber: row.contactNumber,
-                numberOfMen: row.numberOfMen,
-                numberOfWomen: row.numberOfWomen,
-                numberOfCouples: row.numberOfCouples,
-                date: row.date,
-                timeSlot: row.timeSlot,
-                notes: row.notes,
-                selectedDiscounts: row.selectedDiscounts,
-                status: row.status,
-                createdAt: row.createdAt,
-                updatedAt: row.updatedAt,
-              } as any;
-              
-              console.log("[RESERVATION API] Reservation created successfully via raw SQL:", reservation.id);
-              console.warn("[RESERVATION API] ⚠️  Please run 'npm run db:migrate' to enable user linking!");
-            } else {
-              throw new Error("Failed to retrieve created reservation - no data returned");
-            }
-          } finally {
-            // Close the pool connection
-            await pool.end();
-          }
-        } catch (rawSqlError: any) {
-          console.error("[RESERVATION API] Raw SQL insertion also failed:", {
-            code: rawSqlError?.code,
-            message: rawSqlError?.message,
-            errorName: rawSqlError?.name,
-          });
-          
-          // If raw SQL also fails, it's a more serious database issue
-          console.error("[RESERVATION API] Database schema mismatch detected!");
-          console.error("[RESERVATION API] The Prisma schema includes 'userId' but the database column doesn't exist.");
-          console.error("[RESERVATION API] SOLUTION: Run 'npm run db:migrate' to sync the database schema.");
-          
-          throw rawSqlError;
-        }
-      } else {
-        // Log the full error for debugging
-        console.error("[RESERVATION API] Reservation creation error (non-recoverable):", {
-          code: createError?.code,
-          message: createError?.message,
-          meta: createError?.meta,
-          errorName: createError?.name,
-          stack: createError?.stack?.split('\n').slice(0, 5).join('\n'),
-        });
-        throw createError;
-      }
-    }
-
-    // Resolve contact: same number for CTA, booking WhatsApp, etc. DB first, then outlet-contacts, then default
+    // We are currently running in "WhatsApp-only" mode: do NOT depend on the DB.
+    // Use static outlet contacts to build the WhatsApp URL and return success immediately.
     const effectiveBrandId =
       brandId === "the-hub" && hubSpotId && typeof hubSpotId === "string" ? hubSpotId : brandId;
-    let contactVenue: { contactPhone?: string | null; contactNumbers?: unknown } | null = null;
-    try {
-      contactVenue = await prisma.venue.findUnique({
-        where: { brandId: effectiveBrandId },
-        select: { contactPhone: true, contactNumbers: true },
-      });
-    } catch (_) {}
-    const rawContacts = contactVenue?.contactNumbers as { phone?: string }[] | null | undefined;
-    const contactFromDb =
-      Array.isArray(rawContacts) && rawContacts.length > 0
-        ? rawContacts[0]?.phone?.trim()
-        : contactVenue?.contactPhone?.trim();
-    const phone = contactFromDb || getContactForBrand(effectiveBrandId);
-    const waNumber = getFullPhoneNumber(phone);
 
+    const dateShort = formatDateShort(date);
+    const timeLabel = timeToFormat ? formatTime(timeToFormat) : "";
+    const brandLabel = brandName || (brandId === "skyhy" ? "SkyHy" : brandId);
+
+    // Resolve discount labels (prefer static mapping so text is consistent)
+    const discountLabels: string[] = [];
+    if (Array.isArray(selectedDiscounts) && selectedDiscounts.length > 0) {
+      for (const d of selectedDiscounts) {
+        let label: string | null = null;
+
+        if (typeof d === "string") {
+          // Treat as discount id first
+          label = getDiscountLabel(effectiveBrandId, d) || d;
+        } else if (d && typeof d === "object") {
+          if (d.id && typeof d.id === "string") {
+            label = getDiscountLabel(effectiveBrandId, d.id) || null;
+          }
+          if (!label) {
+            label =
+              (typeof d.title === "string" && d.title) ||
+              (typeof d.label === "string" && d.label) ||
+              (typeof d.name === "string" && d.name) ||
+              (typeof d.id === "string" && d.id) ||
+              null;
+          }
+        }
+
+        if (label) discountLabels.push(label);
+      }
+    }
+
+    const offerText =
+      discountLabels.length > 0 ? discountLabels.join(" / ") : "NA";
+
+    // Build WhatsApp message text in required format
+    const messageLines: string[] = [];
+    messageLines.push(`🌃 ${brandLabel}`);
+    messageLines.push("");
+    messageLines.push(`👤 Name: ${fullName}`);
+    messageLines.push(`📱 Mobile number: ${contactNumber}`);
+    messageLines.push(`📅 Date: ${dateShort}`);
+    messageLines.push(`⏰ Time: ${timeLabel}`);
+    messageLines.push(`👥 Total pax: ${totalGuests}`);
+    messageLines.push(`🎁 Offer / Discount: ${offerText}`);
+    if (notesSection) {
+      messageLines.push(`📝 Notes: ${notesSection}`);
+    }
+    messageLines.push("");
+    messageLines.push("Booking status:");
+    messageLines.push("✅ CONFIRMED");
+    messageLines.push("");
+    messageLines.push("Bassik.in");
+
+    const message = messageLines.join("\n");
+
+    const phone = getContactForBrand(effectiveBrandId);
+    const waNumber = getFullPhoneNumber(phone);
     const encodedMessage = encodeURIComponent(message);
     const whatsappUrl = `https://wa.me/${waNumber}?text=${encodedMessage}`;
 
-    if (!reservation) {
-      throw new Error("Reservation was not created successfully");
-    }
-
-    console.log("[RESERVATION API] Reservation successful, returning response");
+    console.log("[RESERVATION API] WhatsApp-only mode, returning URL:", whatsappUrl);
     return NextResponse.json(
       {
         success: true,
         message: "Reservation submitted successfully",
-        whatsappUrl: whatsappUrl,
-        reservationId: reservation.id,
+        whatsappUrl,
+        reservationId: null,
       },
       { status: 200 }
     );
@@ -484,11 +229,9 @@ Reservation submitted via bassik.in`;
       stack: error?.stack?.split('\n').slice(0, 5).join('\n'), // First 5 lines of stack
     });
 
-    // Return user-friendly error message with details for debugging
     return NextResponse.json(
-      { 
-        error: "Failed to process reservation. Please try again.",
-        // Always include details in response for debugging (can be removed in production if needed)
+      {
+        error: "Failed to process reservation. Please try again or use the WhatsApp button on the outlet page.",
         details: errorMessage,
         code: errorCode,
       },

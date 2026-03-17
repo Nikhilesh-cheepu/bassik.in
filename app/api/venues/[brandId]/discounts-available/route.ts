@@ -21,82 +21,16 @@ export async function GET(
 ) {
   const { brandId } = await params;
   let timeSlot: string | null = null;
-  try {
-    const date = req.nextUrl.searchParams.get("date");
-    timeSlot = req.nextUrl.searchParams.get("timeSlot");
+  const date = req.nextUrl.searchParams.get("date");
+  timeSlot = req.nextUrl.searchParams.get("timeSlot");
 
-    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !timeSlot || !/^\d{2}:\d{2}$/.test(timeSlot)) {
-      return NextResponse.json({ discounts: [] });
-    }
-
-    const venue = await prisma.venue.findUnique({ where: { brandId } });
-    if (!venue) {
-      return fallbackStatic(brandId);
-    }
-
-    const dbDiscounts = await prisma.discount.findMany({
-      where: { venueId: venue.id, active: true },
-    });
-
-    if (dbDiscounts.length === 0) {
-      return fallbackStatic(brandId, timeSlot);
-    }
-
-    const discountIds = dbDiscounts.map((d) => d.id);
-    const usages = await prisma.discountDailyUsage.findMany({
-      where: { discountId: { in: discountIds }, date },
-    });
-    const usageMap = new Map(usages.map((u) => [u.discountId, u.usedCount]));
-
-    const filtered = dbDiscounts.filter((d) => {
-      if (!timeSlot) return false;
-      if (!timeInWindow(timeSlot, d.startTime, d.endTime)) return false;
-      const used = usageMap.get(d.id) ?? 0;
-      return used < d.limitPerDay;
-    });
-
-    const discountsRaw = filtered.map((d) => {
-      const used = usageMap.get(d.id) ?? 0;
-      const slotsLeft = Math.max(0, d.limitPerDay - used);
-      const hideSlotsLeft = d.title.toLowerCase().includes("flat discount");
-      return {
-        id: d.id,
-        title: d.title,
-        description: d.description ?? "",
-        slotsLeft,
-        soldOut: used >= d.limitPerDay,
-        timeWindowLabel: d.startTime && d.endTime ? `${format12(d.startTime)}–${format12(d.endTime)}` : null,
-        hideSlotsLeft,
-      };
-    });
-
-    // Normalize flat discount copy for key venues without touching DB structure.
-    const discounts = discountsRaw.map((d) => {
-      const isTargetBrand =
-        brandId === "boiler-room" ||
-        brandId === "c53" ||
-        brandId === "skyhy" ||
-        brandId === "alehouse" ||
-        brandId === "sound-of-soul";
-      const isFlatDiscount = d.title.toLowerCase().includes("flat discount");
-      if (isTargetBrand && isFlatDiscount) {
-        return {
-          ...d,
-          title: "15% flat discount on à la carte",
-          description: "12PM – 10PM",
-        };
-      }
-      return d;
-    });
-
-    return NextResponse.json(
-      { discounts },
-      { headers: { "Cache-Control": "public, s-maxage=10, stale-while-revalidate=30" } }
-    );
-  } catch (error) {
-    console.error("[discounts-available GET]", error);
-    return fallbackStatic(brandId, timeSlot);
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !timeSlot || !/^\d{2}:\d{2}$/.test(timeSlot)) {
+    return NextResponse.json({ discounts: [] });
   }
+
+  // Temporarily run in "static-only" mode so we don't depend on
+  // the Discount tables existing in the production database.
+  return fallbackStatic(brandId, timeSlot);
 }
 
 function format12(time24: string): string {
