@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { BRANDS } from "@/lib/brands";
 import VenueEditor from "@/components/admin/VenueEditor";
+import AdminShell from "@/components/admin/AdminShell";
 
 type VenueContact = { phone: string; label?: string };
 
@@ -30,7 +30,6 @@ interface Venue {
 }
 
 export default function VenuesPageClient() {
-  const router = useRouter();
   const [venues, setVenues] = useState<Venue[]>([]);
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,19 +77,15 @@ export default function VenuesPageClient() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto" />
-          <p className="mt-4 text-gray-600">Loading...</p>
+      <AdminShell title="Venues">
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-fuchsia-500/60 border-t-transparent" />
+            <p className="mt-3 text-xs text-slate-400">Loading venues…</p>
+          </div>
         </div>
-      </div>
+      </AdminShell>
     );
-  }
-
-  async function handleLogout() {
-    await fetch("/api/admin/logout", { method: "POST" });
-    router.push("/admin");
-    router.refresh();
   }
 
   if (selectedVenue) {
@@ -105,32 +100,12 @@ export default function VenuesPageClient() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900">Manage Venues</h1>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => router.push("/admin/dashboard")}
-                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                ← Back
-              </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
+    <AdminShell title="Manage Venues">
+      <main className="pb-8 pt-2">
+        <div className="mb-4 text-xs text-slate-400">
+          Configure logos, galleries, offers, discounts and contact numbers for each outlet.
         </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5">
           {BRANDS.map((brand) => {
             const venue = venues.find((v) => v.brandId === brand.id);
             const offersCount = venue?.offers?.length ?? 0;
@@ -159,10 +134,10 @@ export default function VenuesPageClient() {
                     });
                   }
                 }}
-                className="bg-white rounded-xl shadow-sm p-3 sm:p-4 border border-gray-100 hover:shadow-md transition-all text-left"
+                className="group text-left rounded-2xl border border-slate-800 bg-slate-900/70 p-3 shadow-[0_18px_45px_rgba(15,23,42,0.9)] transition-all hover:-translate-y-0.5 hover:border-slate-500/70 hover:bg-slate-900"
               >
-                <div className="flex flex-col items-center text-center space-y-2">
-                  <div className="relative w-12 h-12 sm:w-14 sm:h-14 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                <div className="flex flex-col items-center space-y-2 text-center">
+                  <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl bg-slate-800/80 ring-1 ring-slate-700/80 sm:h-14 sm:w-14">
                     <Image
                       src={brand.logoPath ?? (brand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${brand.id}.png`)}
                       alt={brand.shortName}
@@ -174,30 +149,40 @@ export default function VenuesPageClient() {
                       }}
                     />
                   </div>
-                  <div className="flex-1 min-w-0 w-full">
-                    <h3 className="text-xs sm:text-sm font-semibold text-gray-900 truncate mb-0.5">
+                  <div className="w-full flex-1 min-w-0">
+                    <h3 className="mb-0.5 truncate text-xs font-semibold text-slate-50 sm:text-sm">
                       {brand.shortName}
                     </h3>
                     <span
-                      className="px-1.5 py-0.5 rounded text-xs font-medium text-white"
+                      className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium text-slate-950"
                       style={{ backgroundColor: brand.accentColor }}
                     >
-                      {venue ? "✓" : "New"}
+                      <span className="h-1.5 w-1.5 rounded-full bg-slate-950/60" />
+                      {venue ? "Configured" : "New"}
                     </span>
                   </div>
                   {venue && (
-                    <div className="text-xs text-gray-500 space-y-0.5 w-full">
-                      <div className="flex justify-between">
-                        <span>O:</span>
-                        <span className="font-medium">{offersCount}</span>
+                    <div className="mt-1 w-full space-y-0.5 text-[11px] text-slate-400">
+                      <div className="flex items-center justify-between rounded-xl bg-slate-900/80 px-2 py-1">
+                        <span className="flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-400" />
+                          Offers
+                        </span>
+                        <span className="font-semibold text-slate-100">{offersCount}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span>G:</span>
-                        <span className="font-medium">{galleryCount}</span>
+                      <div className="flex items-center justify-between rounded-xl bg-slate-900/80 px-2 py-1">
+                        <span className="flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+                          Gallery
+                        </span>
+                        <span className="font-semibold text-slate-100">{galleryCount}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span>M:</span>
-                        <span className="font-medium">{menuCount}</span>
+                      <div className="flex items-center justify-between rounded-xl bg-slate-900/80 px-2 py-1">
+                        <span className="flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                          Menus
+                        </span>
+                        <span className="font-semibold text-slate-100">{menuCount}</span>
                       </div>
                     </div>
                   )}
@@ -207,6 +192,6 @@ export default function VenuesPageClient() {
           })}
         </div>
       </main>
-    </div>
+    </AdminShell>
   );
 }

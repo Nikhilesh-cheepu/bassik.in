@@ -9,15 +9,16 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { id, password } = body;
-    if (!id || !password) {
+    if (!password) {
       return NextResponse.json(
-        { error: "ID and password required" },
+        { error: "Passcode required" },
         { status: 400 }
       );
     }
-    if (!verifyCredentials(id, password)) {
+    const effectiveId = id || "bassikadmin";
+    if (!verifyCredentials(effectiveId, password)) {
       return NextResponse.json(
-        { error: "Invalid ID or password" },
+        { error: "Invalid passcode" },
         { status: 401 }
       );
     }

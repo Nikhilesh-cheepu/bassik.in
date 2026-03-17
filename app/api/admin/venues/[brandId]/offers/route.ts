@@ -57,26 +57,18 @@ export async function GET(
       }
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    const code = error && typeof error === "object" && "code" in error ? (error as { code?: string }).code : null;
     console.error("[admin offers GET]", error);
-    const isMissingTable =
-      typeof message === "string" &&
-      (message.includes("VenueOffer") || message.includes("does not exist") || code === "P2021");
-    const schemaError =
-      typeof message === "string" &&
-      (message.includes("title") ||
-        message.includes("column") ||
-        message.includes("null value") ||
-        code === "P2011" ||
-        code === "P2022");
-    const errorMessage =
-      isMissingTable || schemaError
-        ? "Database schema is out of date. Run: npx prisma migrate deploy (with DATABASE_URL set)."
-        : "Internal server error";
-    const body: { error: string; detail?: string } = { error: errorMessage };
-    if (process.env.NODE_ENV === "development" || isMissingTable || schemaError) body.detail = message;
-    return NextResponse.json(body, { status: 500 });
+    // Graceful fallback: never block the admin UI with a 500 here.
+    // If the schema/table is not ready we simply surface an empty list.
+    return NextResponse.json(
+      {
+        active: [],
+        expired: [],
+        warning:
+          "Offers could not be loaded (likely database schema not ready). Admin UI is running in read-only mode.",
+      },
+      { status: 200 }
+    );
   }
 }
 

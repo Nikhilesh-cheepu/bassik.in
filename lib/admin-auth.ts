@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 
 const ADMIN_ID = "bassikadmin";
-const ADMIN_PASSWORD = "bassik@143";
+const ADMIN_PASSWORD = "7013";
 const COOKIE_NAME = "admin_session";
 const JWT_SECRET = new TextEncoder().encode(
   process.env.ADMIN_SESSION_SECRET || "dev-secret-change-in-production"

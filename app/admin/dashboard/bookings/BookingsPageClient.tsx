@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { trackWhatsAppClick } from "@/lib/analytics";
 import { BRANDS } from "@/lib/brands";
+import AdminShell from "@/components/admin/AdminShell";
 
 interface Reservation {
   id: string;
@@ -28,7 +28,6 @@ interface Reservation {
 }
 
 export default function BookingsPageClient() {
-  const router = useRouter();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -188,102 +187,86 @@ Reservation made through bassik.in${coverLine}`;
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto" />
-          <p className="mt-4 text-gray-600">Loading...</p>
+      <AdminShell title="Bookings">
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-fuchsia-500/60 border-t-transparent" />
+            <p className="mt-3 text-xs text-slate-400">Loading bookings…</p>
+          </div>
         </div>
-      </div>
+      </AdminShell>
     );
   }
 
-  async function handleLogout() {
-    await fetch("/api/admin/logout", { method: "POST" });
-    router.push("/admin");
-    router.refresh();
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900">Bookings</h1>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => router.push("/admin/dashboard")}
-                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                ← Back
-              </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
+    <AdminShell title="Bookings">
+      <main className="pb-8 pt-2">
+        <div className="mb-3 text-xs text-slate-400">
+          Filter, review and export reservations across all outlets.
         </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
-        <div className="bg-white rounded-xl shadow-sm p-3 sm:p-4 mb-3 sm:mb-4 border border-gray-100">
-          <div className="flex flex-wrap items-center gap-2 mb-3 pb-3 border-b border-gray-200">
-            <span className="text-xs sm:text-sm text-gray-600 font-medium">Quick:</span>
+        <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4">
+          <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+            <span className="text-xs font-medium text-slate-300 sm:text-sm">Quick range:</span>
             <button
               onClick={() => setFilter({ dateFrom: undefined, dateTo: undefined })}
-              className={`px-3 py-1.5 text-xs sm:text-sm rounded-lg transition-colors font-medium ${isAllTime ? "text-white bg-orange-500 hover:bg-orange-600" : "text-gray-700 bg-gray-100 hover:bg-gray-200"}`}
+              className={`rounded-full px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${
+                isAllTime
+                  ? "bg-fuchsia-500 text-slate-950 hover:bg-fuchsia-400"
+                  : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+              }`}
             >
               All time
             </button>
             <button
               onClick={() => setFilter({ dateFrom: getYesterday(), dateTo: getYesterday() })}
-              className="px-3 py-1.5 text-xs sm:text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              className="rounded-full bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 sm:text-sm"
             >
               Yesterday
             </button>
             <button
               onClick={() => setFilter({ dateFrom: getToday(), dateTo: getToday() })}
-              className={`px-3 py-1.5 text-xs sm:text-sm rounded-lg transition-colors ${!isAllTime && filter.dateFrom === getToday() && filter.dateTo === getToday() ? "text-white bg-orange-500 hover:bg-orange-600 font-medium" : "text-gray-700 bg-gray-100 hover:bg-gray-200"}`}
+              className={`rounded-full px-3 py-1.5 text-xs sm:text-sm transition-colors ${
+                !isAllTime && filter.dateFrom === getToday() && filter.dateTo === getToday()
+                  ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400 font-medium"
+                  : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+              }`}
             >
               Today
             </button>
             <button
               onClick={() => setFilter({ dateFrom: getTomorrow(), dateTo: getTomorrow() })}
-              className="px-3 py-1.5 text-xs sm:text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              className="rounded-full bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 sm:text-sm"
             >
               Tomorrow
             </button>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <label className="text-xs sm:text-sm text-gray-600 font-medium">From:</label>
+            <label className="text-xs font-medium text-slate-300 sm:text-sm">From:</label>
             <input
               type="date"
               value={filter.dateFrom ?? ""}
               onChange={(e) => setFilter({ ...filter, dateFrom: e.target.value || undefined })}
-              className="px-2 py-1.5 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 sm:text-sm"
             />
-            <label className="text-xs sm:text-sm text-gray-600 font-medium">To:</label>
+            <label className="text-xs font-medium text-slate-300 sm:text-sm">To:</label>
             <input
               type="date"
               value={filter.dateTo ?? ""}
               onChange={(e) => setFilter({ ...filter, dateTo: e.target.value || undefined })}
-              className="px-2 py-1.5 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 sm:text-sm"
             />
             <button
               onClick={() => setFilter({ dateFrom: undefined, dateTo: undefined })}
-              className="px-3 py-1.5 text-xs text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors"
             >
               Reset
             </button>
-            <div className="h-6 w-px bg-gray-200 hidden sm:block" />
-            <label className="text-xs sm:text-sm text-gray-600 font-medium">Outlet:</label>
+            <div className="hidden h-6 w-px bg-slate-800 sm:block" />
+            <label className="text-xs font-medium text-slate-300 sm:text-sm">Outlet:</label>
             <select
               value={brandFilter}
               onChange={(e) => setBrandFilter(e.target.value)}
-              className="px-2 py-1.5 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
+              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 sm:text-sm"
             >
               <option value="all">All outlets</option>
               {BRANDS.map((b) => (
@@ -295,7 +278,7 @@ Reservation made through bassik.in${coverLine}`;
             <div className="flex-1" />
             <button
               onClick={exportToPDF}
-              className="px-3 py-1.5 text-xs sm:text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1.5"
+              className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-medium text-slate-950 shadow hover:bg-sky-400 sm:text-sm"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -307,72 +290,85 @@ Reservation made through bassik.in${coverLine}`;
 
         <div className="space-y-2 sm:space-y-3">
           {reservations.length === 0 ? (
-            <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-gray-100">
-              <p className="text-gray-500">No bookings found</p>
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 px-6 py-10 text-center">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-slate-300">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 7V3m8 4V3M5 11h14M5 19h14M7 15h.01M11 15h.01M15 15h.01"
+                  />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-slate-100">No bookings found</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Try adjusting the date range or selecting a different outlet.
+              </p>
             </div>
           ) : (
             reservations.map((reservation) => (
               <div
                 key={reservation.id}
-                className="bg-white rounded-xl shadow-sm p-3 sm:p-4 border border-gray-100 hover:shadow-md transition-all"
+                className="rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-[0_18px_45px_rgba(15,23,42,0.9)] transition-all hover:-translate-y-0.5 hover:border-slate-600/80"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="text-sm sm:text-base font-semibold text-gray-900">
+                        <div className="mb-1 flex items-center gap-2">
+                          <div className="text-sm font-semibold text-slate-50 sm:text-base">
                             {new Date(reservation.date).toLocaleDateString("en-IN", {
                               day: "numeric",
                               month: "short",
                               year: "numeric",
                             })}
                           </div>
-                          <span className="text-xs sm:text-sm text-gray-500">•</span>
-                          <div className="text-sm sm:text-base font-medium text-gray-700">
+                          <span className="text-xs text-slate-500 sm:text-sm">•</span>
+                          <div className="text-sm font-medium text-slate-100 sm:text-base">
                             {formatTime(reservation.timeSlot)}
                           </div>
                         </div>
-                        <div className="text-sm sm:text-base font-semibold text-gray-900 truncate">
+                        <div className="truncate text-sm font-semibold text-slate-50 sm:text-base">
                           {reservation.fullName}
                         </div>
-                        <div className="text-xs sm:text-sm text-gray-500 space-y-0.5">
-                          <div>{reservation.contactNumber}</div>
+                        <div className="space-y-0.5 text-xs text-slate-400 sm:text-sm">
+                          <div className="font-mono text-slate-300">{reservation.contactNumber}</div>
                           {reservation.user?.email && (
-                            <div className="text-gray-400">{reservation.user.email}</div>
+                            <div className="text-slate-500">{reservation.user.email}</div>
                           )}
                           {(reservation.user?.firstName || reservation.user?.lastName) && (
-                            <div className="text-gray-400">
+                            <div className="text-slate-500">
                               {[reservation.user?.firstName, reservation.user?.lastName].filter(Boolean).join(" ")}
                             </div>
                           )}
                         </div>
                       </div>
-                      <div className="text-xs sm:text-sm font-medium text-gray-600 bg-gray-50 px-2 py-1 rounded whitespace-nowrap">
+                      <div className="whitespace-nowrap rounded-full bg-slate-800 px-2 py-1 text-xs font-medium text-slate-200 sm:text-sm">
                         {reservation.brandName}
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-gray-600">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 sm:text-sm">
                       <span>{reservation.numberOfMen}M</span>
                       <span>{reservation.numberOfWomen}W</span>
                       <span>{reservation.numberOfCouples}C</span>
                       {reservation.notes && (
                         <>
-                          <span className="text-gray-400">•</span>
-                          <span className="truncate max-w-[200px]" title={reservation.notes}>
+                          <span className="text-slate-600">•</span>
+                          <span className="max-w-[200px] truncate" title={reservation.notes}>
                             {reservation.notes}
                           </span>
                         </>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
+                  <div className="flex flex-shrink-0 items-center gap-2 sm:gap-2.5">
                     <button
                       onClick={() => handleAccept(reservation.id)}
-                      className={`p-2 rounded-lg transition-colors ${
+                      className={`rounded-lg p-2 transition-colors ${
                         reservation.status === "CONFIRMED"
-                          ? "bg-green-500 text-white"
-                          : "bg-green-100 text-green-600 hover:bg-green-200"
+                          ? "bg-emerald-500 text-slate-950"
+                          : "bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
                       }`}
                       title="Accept/Confirm"
                     >
@@ -382,10 +378,10 @@ Reservation made through bassik.in${coverLine}`;
                     </button>
                     <button
                       onClick={() => handleReject(reservation.id)}
-                      className={`p-2 rounded-lg transition-colors ${
+                      className={`rounded-lg p-2 transition-colors ${
                         reservation.status === "CANCELLED"
-                          ? "bg-red-500 text-white"
-                          : "bg-red-100 text-red-600 hover:bg-red-200"
+                          ? "bg-rose-500 text-slate-950"
+                          : "bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
                       }`}
                       title="Reject/Cancel"
                     >
@@ -395,7 +391,7 @@ Reservation made through bassik.in${coverLine}`;
                     </button>
                     <button
                       onClick={() => handleWhatsAppMessage(reservation)}
-                      className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                      className="rounded-lg bg-emerald-500 p-2 text-slate-950 transition-colors hover:bg-emerald-400"
                       title="WhatsApp"
                     >
                       <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -404,7 +400,7 @@ Reservation made through bassik.in${coverLine}`;
                     </button>
                     <button
                       onClick={() => handleDelete(reservation.id)}
-                      className="p-2 bg-gray-100 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                      className="rounded-lg bg-slate-900 p-2 text-rose-300 transition-colors hover:bg-rose-500/10"
                       title="Delete booking"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -418,6 +414,6 @@ Reservation made through bassik.in${coverLine}`;
           )}
         </div>
       </main>
-    </div>
+    </AdminShell>
   );
 }

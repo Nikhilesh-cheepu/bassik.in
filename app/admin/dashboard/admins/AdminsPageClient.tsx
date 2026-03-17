@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { BRANDS } from "@/lib/brands";
+import AdminShell from "@/components/admin/AdminShell";
 
 interface AdminUser {
   id: string;
@@ -14,7 +14,6 @@ interface AdminUser {
 }
 
 export default function AdminsPageClient() {
-  const router = useRouter();
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -37,104 +36,98 @@ export default function AdminsPageClient() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto" />
-          <p className="mt-4 text-gray-600">Loading...</p>
+      <AdminShell title="Admins">
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-fuchsia-500/60 border-t-transparent" />
+            <p className="mt-3 text-xs text-slate-400">Loading admins…</p>
+          </div>
         </div>
-      </div>
+      </AdminShell>
     );
   }
 
-  async function handleLogout() {
-    await fetch("/api/admin/logout", { method: "POST" });
-    router.push("/admin");
-    router.refresh();
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900">Manage Admins</h1>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => router.push("/admin/dashboard")}
-                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                ← Back
-              </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Logout
-              </button>
-            </div>
+    <AdminShell title="Manage Admins">
+      <main className="pb-8 pt-2">
+        <div className="mb-4 flex items-start gap-3 rounded-2xl border border-sky-700/60 bg-sky-950/40 px-4 py-3">
+          <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-sky-500/90 text-xs font-semibold text-white">
+            i
           </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4 mb-4">
-          <p className="text-xs sm:text-sm text-blue-800">
-            <strong>Note:</strong> Admin access uses a single login (bassikadmin). This page shows admin info when multiple admins are supported in the future.
+          <p className="text-xs text-slate-100 sm:text-sm">
+            <span className="font-semibold text-sky-100">Single admin mode.</span> Bassik
+            currently uses a single admin passcode for access. This screen will surface multiple
+            named admins and granular roles once we expand permissions.
           </p>
         </div>
         <div className="space-y-2 sm:space-y-3">
           {admins.length === 0 ? (
-            <div className="bg-white rounded-xl shadow-sm p-8 text-center border border-gray-100">
-              <p className="text-gray-500">No admins found</p>
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 px-6 py-10 text-center">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-slate-300">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 11c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-3.33 0-6 2.24-6 5v1h12v-1c0-2.76-2.67-5-6-5z"
+                  />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-slate-100">No admins yet</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Admin access is handled by the shared passcode. This view will list named admins
+                once role-based access is enabled.
+              </p>
             </div>
           ) : (
             admins.map((adminUser) => (
               <div
                 key={adminUser.id}
-                className={`bg-white rounded-xl shadow-sm p-3 sm:p-4 border transition-all ${
-                  adminUser.active ? "border-gray-100" : "border-gray-200 bg-gray-50 opacity-60"
+                className={`rounded-2xl border p-3 shadow-[0_18px_45px_rgba(15,23,42,0.9)] sm:p-4 transition-all ${
+                  adminUser.active
+                    ? "border-slate-800 bg-slate-900/80"
+                    : "border-slate-800 bg-slate-900/40 opacity-70"
                 }`}
               >
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="text-sm sm:text-base font-semibold text-gray-900">
+                        <div className="mb-1 flex items-center gap-2">
+                          <div className="text-sm font-semibold text-slate-50 sm:text-base">
                             {adminUser.username}
                           </div>
                           <span
-                            className={`px-2 py-0.5 inline-flex text-xs font-semibold rounded-full ${
+                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
                               adminUser.role === "MAIN_ADMIN"
-                                ? "bg-purple-100 text-purple-800"
-                                : "bg-blue-100 text-blue-800"
+                                ? "bg-fuchsia-500/15 text-fuchsia-200"
+                                : "bg-sky-500/15 text-sky-200"
                             }`}
                           >
                             {adminUser.role === "MAIN_ADMIN" ? "Main Admin" : "Admin"}
                           </span>
                           {!adminUser.active && (
-                            <span className="px-2 py-0.5 inline-flex text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                            <span className="inline-flex rounded-full bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-300">
                               Inactive
                             </span>
                           )}
                         </div>
-                        <div className="text-xs sm:text-sm text-gray-500">
+                        <div className="text-xs text-slate-400 sm:text-sm">
                           Created: {new Date(adminUser.createdAt).toLocaleDateString()}
                         </div>
                       </div>
                     </div>
-                    <div className="text-xs sm:text-sm text-gray-600">
+                    <div className="text-xs text-slate-400 sm:text-sm">
                       {adminUser.role === "MAIN_ADMIN" ? (
-                        <span className="text-gray-500">All venues</span>
+                        <span className="text-slate-400">All venues</span>
                       ) : adminUser.venuePermissions.length === 0 ? (
-                        <span className="text-red-500">No permissions</span>
+                        <span className="text-rose-300">No permissions</span>
                       ) : (
                         <div className="flex flex-wrap gap-1">
                           {adminUser.venuePermissions.map((perm) => (
                             <span
                               key={perm.venue.brandId}
-                              className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs"
+                              className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-200"
                             >
                               {BRANDS.find((b) => b.id === perm.venue.brandId)?.shortName || perm.venue.brandId}
                             </span>
@@ -143,9 +136,9 @@ export default function AdminsPageClient() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <div className="px-3 py-1.5 bg-green-100 text-green-800 rounded-lg text-xs sm:text-sm font-medium">
-                      Active
+                  <div className="flex flex-shrink-0 items-center gap-3">
+                    <div className="rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-medium text-emerald-200 sm:text-sm">
+                      Status: {adminUser.active ? "Active" : "Inactive"}
                     </div>
                   </div>
                 </div>
@@ -154,6 +147,6 @@ export default function AdminsPageClient() {
           )}
         </div>
       </main>
-    </div>
+    </AdminShell>
   );
 }
