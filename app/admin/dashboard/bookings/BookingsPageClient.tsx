@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { trackWhatsAppClick } from "@/lib/analytics";
 import { BRANDS } from "@/lib/brands";
 import AdminShell from "@/components/admin/AdminShell";
+import { getContactForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 
 interface Reservation {
   id: string;
@@ -135,10 +136,14 @@ Reservation made through bassik.in${coverLine}`;
   };
 
   const handleWhatsAppMessage = (reservation: Reservation) => {
-    const RESERVATION_PHONE_NUMBER = "917013884485";
-    trackWhatsAppClick({ number: RESERVATION_PHONE_NUMBER, source: "admin" });
+    const phone = getContactForBrand(reservation.brandId);
+    const waNumber = getFullPhoneNumber(phone);
+    trackWhatsAppClick({ number: waNumber, source: "admin" });
     const message = generateWhatsAppMessage(reservation);
-    window.open(`https://wa.me/${RESERVATION_PHONE_NUMBER}?text=${encodeURIComponent(message)}`, "_blank");
+    window.open(
+      `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`,
+      "_blank"
+    );
   };
 
   const handleAccept = (reservationId: string) => handleStatusUpdate(reservationId, "CONFIRMED");
