@@ -136,9 +136,13 @@ Reservation made through bassik.in${coverLine}`;
   };
 
   const handleWhatsAppMessage = (reservation: Reservation) => {
-    const phone = getContactForBrand(reservation.brandId);
-    const waNumber = getFullPhoneNumber(phone);
-    trackWhatsAppClick({ number: waNumber, source: "admin" });
+    const outletPhone = getContactForBrand(reservation.brandId);
+    const waNumber = getFullPhoneNumber(outletPhone);
+    trackWhatsAppClick({
+      number: waNumber,
+      outlet: reservation.brandId,
+      source: "admin",
+    });
     const message = generateWhatsAppMessage(reservation);
     window.open(
       `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`,
