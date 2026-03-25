@@ -1,7 +1,7 @@
 /* Landing — mix-up picks, small venue cards, explore-only (no book on home). */
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { BRANDS, Brand, HIDDEN_BRAND_IDS } from "@/lib/brands";
@@ -34,8 +34,52 @@ const TICKER_MESSAGES = [
   "Flat up to 15% Discounts",
   "Limited slots daily",
   "Website-only offers",
+  "Live DJs",
+  "Live music",
+  "Open rooftop",
+  "Tollywood",
+  "Bollywood",
+  "Day club",
+  "Club nights & brunches",
+  "Sports on big screens",
+  "Sunset sessions",
+  "Many more — pick a venue",
   "Explore a venue to book",
 ];
+
+/**
+ * Seamless marquee: two identical flex rows (no single flat row — that breaks -50% math with gap).
+ * memo() avoids restarting CSS animation when parent re-renders (e.g. “Pick for me” shuffle).
+ */
+const HomeOfferTicker = memo(function HomeOfferTicker() {
+  const strip = (keyPrefix: string, ariaHidden?: boolean) => (
+    <div
+      className="flex shrink-0 items-center gap-8 py-3.5 pl-4 pr-4 sm:gap-10 sm:pl-5 sm:pr-5"
+      aria-hidden={ariaHidden}
+    >
+      {TICKER_MESSAGES.map((msg, idx) => (
+        <span
+          key={`${keyPrefix}-${idx}`}
+          className="inline-flex shrink-0 items-center gap-2 text-[13px] font-medium text-stone-100 sm:text-sm sm:leading-tight"
+        >
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" />
+          {msg}
+        </span>
+      ))}
+      {/* Matches gap so loop joins like another item gap */}
+      <span className="w-8 shrink-0 sm:w-10" aria-hidden />
+    </div>
+  );
+
+  return (
+    <div className="relative w-full overflow-hidden [contain:layout_paint]">
+      <div className="inline-flex w-max max-w-none animate-ticker">
+        {strip("a")}
+        {strip("b", true)}
+      </div>
+    </div>
+  );
+});
 
 /** Featured count — 2×2 on mobile. */
 const FEATURED_COUNT = 4;
@@ -147,22 +191,27 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
           <p className="text-sm text-gray-500 max-w-sm mx-auto leading-relaxed">
             Open a venue to explore — book from there when you’re ready.
           </p>
+          <div className="mt-6 flex justify-center px-2">
+            <span
+              className="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-gradient-to-r from-amber-500/[0.18] via-orange-500/[0.12] to-pink-500/[0.15] px-3.5 py-2 sm:px-5 sm:py-2.5 text-[10px] sm:text-xs font-semibold tracking-wide text-amber-50 shadow-[0_0_28px_-6px_rgba(251,191,36,0.35),inset_0_1px_0_rgba(255,255,255,0.08)]"
+              role="status"
+            >
+              <span
+                className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)]"
+                aria-hidden
+              />
+              <span className="text-center leading-snug">
+                Better deals than <span className="text-amber-200">Swiggy</span> &amp;{" "}
+                <span className="text-amber-200">Zomato</span>
+                <span className="font-medium text-stone-300"> — direct on Bassik</span>
+              </span>
+            </span>
+          </div>
         </section>
 
         <section className="px-4 sm:px-6 mb-8 sm:mb-10" aria-label="Offers and deals">
-          <div className="max-w-4xl mx-auto rounded-full border border-white/[0.08] bg-white/[0.03] overflow-hidden">
-            <div className="relative w-full overflow-hidden">
-              <div className="flex gap-10 py-3 px-5 animate-ticker whitespace-nowrap">
-                {[0, 1].map((loop) =>
-                  TICKER_MESSAGES.map((msg, idx) => (
-                    <span key={`${loop}-${idx}`} className="text-xs sm:text-sm text-gray-100 flex items-center gap-2">
-                      <span className="w-1 h-1 rounded-full bg-emerald-400 inline-block" />
-                      {msg}
-                    </span>
-                  ))
-                )}
-              </div>
-            </div>
+          <div className="max-w-4xl mx-auto rounded-full border border-white/[0.12] bg-white/[0.06] overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <HomeOfferTicker />
           </div>
         </section>
 
