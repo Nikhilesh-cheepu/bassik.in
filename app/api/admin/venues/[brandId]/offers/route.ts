@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/db";
+import { guardBrandRoute } from "@/lib/admin-api-guard";
 
 export const runtime = "nodejs";
 
@@ -32,11 +33,13 @@ async function createOfferLegacy(
 
 // GET - List offers for a venue (by brandId), grouped into active and expired
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ brandId: string }> }
 ) {
   try {
     const { brandId } = await params;
+    const denied = await guardBrandRoute(request, brandId);
+    if (denied) return denied;
     const venue = await prisma.venue.findUnique({
       where: { brandId },
       include: { offers: { orderBy: { createdAt: "desc" } } },
@@ -79,6 +82,8 @@ export async function POST(
 ) {
   try {
     const { brandId } = await params;
+    const denied = await guardBrandRoute(request, brandId);
+    if (denied) return denied;
     let body: { id?: string; imageUrl?: string; endDate?: string | null } = {};
     try {
       body = await request.json();
@@ -186,6 +191,8 @@ export async function DELETE(
 ) {
   try {
     const { brandId } = await params;
+    const denied = await guardBrandRoute(request, brandId);
+    if (denied) return denied;
     const body = await request.json().catch(() => ({}));
     const id = body.id ?? new URL(request.url).searchParams.get("id");
 

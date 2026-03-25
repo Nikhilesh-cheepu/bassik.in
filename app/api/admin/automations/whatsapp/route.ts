@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ensureMainAdmin } from "@/lib/admin-api-guard";
 import { prisma } from "@/lib/db";
 import { normalizePhone } from "@/lib/automation/phone";
 import {
@@ -13,7 +14,10 @@ const DELAY_MS = 700;
 const MAX_PER_REQUEST = 100;
 
 /** Twilio connection check (no secrets returned). */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const authErr = await ensureMainAdmin(request);
+  if (authErr) return authErr;
+
   const accountSid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
   const fromRaw = process.env.TWILIO_WHATSAPP_FROM?.trim();
@@ -38,6 +42,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const authErr = await ensureMainAdmin(request);
+    if (authErr) return authErr;
+
     const body = (await request.json()) as {
       message?: string;
       contactIds?: string[];

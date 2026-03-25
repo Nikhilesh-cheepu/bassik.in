@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ensureMainAdmin } from "@/lib/admin-api-guard";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
+  const authErr = await ensureMainAdmin(request);
+  if (authErr) return authErr;
+
   const importId = request.nextUrl.searchParams.get("importId");
   if (!importId?.trim()) {
     return NextResponse.json({ error: "importId is required." }, { status: 400 });

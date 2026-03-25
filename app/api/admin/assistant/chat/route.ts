@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ensureMainAdmin } from "@/lib/admin-api-guard";
 import OpenAI from "openai";
 import { getSiteKnowledgeForAssistant } from "@/lib/admin/site-knowledge";
 import { BRANDS } from "@/lib/brands";
@@ -87,6 +88,9 @@ function sanitizeMessages(raw: unknown): { role: ChatRole; content: string }[] {
 }
 
 export async function POST(request: NextRequest) {
+  const authErr = await ensureMainAdmin(request);
+  if (authErr) return authErr;
+
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json(

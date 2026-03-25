@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { guardBrandRoute } from "@/lib/admin-api-guard";
 
 export const maxDuration = 30;
 export const runtime = "nodejs";
@@ -23,6 +24,8 @@ export async function POST(
 ) {
   try {
     const { brandId } = await params;
+    const denied = await guardBrandRoute(request, brandId);
+    if (denied) return denied;
     console.log(`[API] Image upload request for venue: ${brandId}`);
     
     const body = await request.json();
@@ -107,6 +110,8 @@ export async function DELETE(
 ) {
   try {
     const { brandId } = await params;
+    const denied = await guardBrandRoute(request, brandId);
+    if (denied) return denied;
     const { searchParams } = new URL(request.url);
     const imageIds = searchParams.get("ids")?.split(",");
 

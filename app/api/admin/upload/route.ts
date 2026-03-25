@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ensureMainAdmin } from "@/lib/admin-api-guard";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,9 @@ export const runtime = "nodejs";
  * Do NOT store base64 or raw bytes in PostgreSQL.
  */
 export async function POST(request: NextRequest) {
+  const authErr = await ensureMainAdmin(request);
+  if (authErr) return authErr;
+
   const body = await request.json().catch(() => ({}));
   const { image, video } = body;
 

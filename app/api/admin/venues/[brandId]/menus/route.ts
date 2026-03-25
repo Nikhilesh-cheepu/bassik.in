@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { guardBrandRoute, forbidden } from "@/lib/admin-api-guard";
 
 export const maxDuration = 30;
 export const runtime = "nodejs";
@@ -17,6 +18,8 @@ export async function POST(
 ) {
   try {
     const { brandId } = await params;
+    const denied = await guardBrandRoute(request, brandId);
+    if (denied) return denied;
     console.log(`[API] Menu save request for venue: ${brandId}`);
     
     const body = await request.json();
@@ -131,8 +134,9 @@ export async function DELETE(
   { params }: { params: Promise<{ brandId: string }> }
 ) {
   try {
-    // Auth for admin routes is enforced by middleware; this handler just deletes the menu.
-    await params; // ensure params are awaited so Next.js doesn't warn, even though we don't need brandId here
+    const { brandId } = await params;
+    const denied = await guardBrandRoute(request, brandId);
+    if (denied) return denied;
 
     const { searchParams } = new URL(request.url);
     const menuId = searchParams.get("menuId");
@@ -142,6 +146,14 @@ export async function DELETE(
         { error: "Menu ID required" },
         { status: 400 }
       );
+    }
+
+    const menu = await prisma.menu.findUnique({
+      where: { id: menuId },
+      include: { venue: { select: { brandId: true } } },
+    });
+    if (!menu || menu.venue.brandId !== brandId) {
+      return forbidden();
     }
 
     await prisma.menu.delete({

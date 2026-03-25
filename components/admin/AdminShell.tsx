@@ -1,8 +1,11 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
+
+type AdminMe = { scope: "main" | "outlet"; brandIds: string[] | null };
+type MeState = AdminMe | "pending";
 
 type AdminShellProps = {
   title: string;
@@ -21,8 +24,19 @@ export default function AdminShell({
 }: AdminShellProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const [me, setMe] = useState<MeState>("pending");
 
-  const tabs = [
+  useEffect(() => {
+    fetch("/api/admin/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: AdminMe | null) => {
+        if (d?.scope) setMe(d);
+        else setMe({ scope: "main", brandIds: null });
+      })
+      .catch(() => setMe({ scope: "main", brandIds: null }));
+  }, []);
+
+  const allTabs = [
     { label: "Dashboard", href: "/admin/dashboard" },
     { label: "Assistant", href: "/admin/dashboard/assistant" },
     { label: "Venues", href: "/admin/dashboard/venues" },
@@ -30,6 +44,19 @@ export default function AdminShell({
     { label: "Automations", href: "/admin/dashboard/automations" },
     { label: "Admins", href: "/admin/dashboard/admins" },
   ];
+
+  const outletTabs = [
+    { label: "Dashboard", href: "/admin/dashboard" },
+    { label: "Bookings", href: "/admin/dashboard/bookings" },
+    { label: "Venues", href: "/admin/dashboard/venues" },
+  ];
+
+  const tabs =
+    me === "pending"
+      ? []
+      : me.scope === "outlet"
+        ? outletTabs
+        : allTabs;
 
   const isActive = (href: string) =>
     pathname === href || (href !== "/admin/dashboard" && pathname?.startsWith(href));
@@ -66,7 +93,7 @@ export default function AdminShell({
                   {title}
                 </h1>
                 <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-orange-600">
-                  Admin
+                  {me !== "pending" && me.scope === "outlet" ? "Outlet admin" : "Admin"}
                 </span>
               </div>
               <p className="mt-0.5 text-[11px] text-slate-500">
@@ -83,21 +110,27 @@ export default function AdminShell({
           </button>
         </div>
 
-        <nav className="mx-auto flex max-w-6xl flex-nowrap gap-2 overflow-x-auto px-4 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {tabs.map((tab) => (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className={`flex-shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium transition-all sm:text-sm ${
-                isActive(tab.href)
-                  ? "bg-slate-900 text-white shadow-sm"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-              }`}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
+        {me === "pending" ? (
+          <div className="mx-auto max-w-6xl px-4 pb-1">
+            <div className="h-8 max-w-xs animate-pulse rounded-full bg-slate-100" />
+          </div>
+        ) : (
+          <nav className="mx-auto flex max-w-6xl flex-nowrap gap-2 overflow-x-auto px-4 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {tabs.map((tab) => (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={`flex-shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium transition-all sm:text-sm ${
+                  isActive(tab.href)
+                    ? "bg-slate-900 text-white shadow-sm"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                }`}
+              >
+                {tab.label}
+              </Link>
+            ))}
+          </nav>
+        )}
       </header>
 
       <main className="mx-auto max-w-6xl px-4 pb-10 pt-3 sm:pt-6">{children}</main>

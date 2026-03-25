@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { guardBrandRoute } from "@/lib/admin-api-guard";
 
 export const runtime = "nodejs";
 
 /** GET - List discounts for venue (by brandId) */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ brandId: string }> }
 ) {
   try {
     const { brandId } = await params;
+    const denied = await guardBrandRoute(req, brandId);
+    if (denied) return denied;
     const venue = await prisma.venue.findUnique({ where: { brandId } });
     if (!venue) {
       return NextResponse.json({ error: "Venue not found" }, { status: 404 });
@@ -40,6 +43,8 @@ export async function PATCH(
 ) {
   try {
     const { brandId } = await params;
+    const denied = await guardBrandRoute(req, brandId);
+    if (denied) return denied;
     const venue = await prisma.venue.findUnique({ where: { brandId } });
     if (!venue) {
       return NextResponse.json({ error: "Venue not found" }, { status: 404 });

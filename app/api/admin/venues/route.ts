@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import {
+  requireAdminScope,
+  assertBrandInScope,
+  forbidden,
+} from "@/lib/admin-api-guard";
 
 export const runtime = "nodejs";
 
@@ -19,8 +24,13 @@ enum ImageType {
 // GET - Get all venues with their data (filtered by permissions)
 export async function GET(request: NextRequest) {
   try {
-    let where: any = {};
-    
+    const scopeRes = await requireAdminScope(request);
+    if (scopeRes instanceof NextResponse) return scopeRes;
+    const scope = scopeRes;
+
+    const where: { brandId?: { in: string[] } } =
+      scope.kind === "outlet" ? { brandId: { in: scope.brandIds } } : {};
+
     const venues = await prisma.venue.findMany({
       where,
       include: {
@@ -56,6 +66,10 @@ export async function GET(request: NextRequest) {
 // POST - Create or update venue
 export async function POST(request: NextRequest) {
   try {
+    const scopeRes = await requireAdminScope(request);
+    if (scopeRes instanceof NextResponse) return scopeRes;
+    const scope = scopeRes;
+
     const body = await request.json();
     const { brandId, name, shortName, address, mapUrl, contactPhone, contactNumbers } = body;
 
@@ -64,6 +78,10 @@ export async function POST(request: NextRequest) {
         { error: "Missing required fields: brandId" },
         { status: 400 }
       );
+    }
+
+    if (!assertBrandInScope(scope, brandId)) {
+      return forbidden();
     }
 
     // Check if venue exists

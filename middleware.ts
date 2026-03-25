@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getAdminSession } from "@/lib/admin-auth";
+import { getAdminScopeFromRequest } from "@/lib/admin-auth";
 
 const isAdminRoute = (pathname: string) => pathname.startsWith("/admin");
+
+/** Sub-admins: dashboard, bookings, venues only (API enforces data scope). */
+function outletAdminAllowedPath(pathname: string): boolean {
+  if (pathname === "/admin/dashboard") return true;
+  if (pathname.startsWith("/admin/dashboard/bookings")) return true;
+  if (pathname === "/admin/dashboard/venues" || pathname.startsWith("/admin/dashboard/venues/")) {
+    return true;
+  }
+  return false;
+}
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
@@ -17,17 +27,12 @@ export async function middleware(request: NextRequest) {
 
   // Admin UI routes: require admin session (except /admin which is the login page)
   if (isAdminRoute(pathname) && pathname !== "/admin") {
-    const isAdmin = await getAdminSession(request);
-    if (!isAdmin) {
+    const scope = await getAdminScopeFromRequest(request);
+    if (!scope) {
       return NextResponse.redirect(new URL("/admin", request.url));
     }
-  }
-
-  // Admin API routes: require admin session
-  if (pathname.startsWith("/api/admin")) {
-    const isAdmin = await getAdminSession(request);
-    if (!isAdmin) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (scope.kind === "outlet" && !outletAdminAllowedPath(pathname)) {
+      return NextResponse.redirect(new URL("/admin/dashboard", request.url));
     }
   }
 

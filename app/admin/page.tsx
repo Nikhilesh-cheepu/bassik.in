@@ -24,7 +24,7 @@ export default function AdminLogin() {
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: "bassikadmin", password: value }),
+        body: JSON.stringify({ password: value }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -36,7 +36,11 @@ export default function AdminLogin() {
       }
       // Small delay for a smoother transition animation
       await new Promise((resolve) => setTimeout(resolve, 250));
-      router.push("/admin/dashboard");
+      const next =
+        typeof data.redirectTo === "string" && data.redirectTo.startsWith("/admin")
+          ? data.redirectTo
+          : "/admin/dashboard";
+      router.push(next);
       router.refresh();
     } catch {
       setError("Something went wrong. Please try again.");

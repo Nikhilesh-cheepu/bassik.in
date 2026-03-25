@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ensureMainAdmin } from "@/lib/admin-api-guard";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { extractTabularFromUpload } from "@/lib/automation/extract-upload";
@@ -11,6 +12,9 @@ export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
   try {
+    const authErr = await ensureMainAdmin(request);
+    if (authErr) return authErr;
+
     const form = await request.formData();
     const file = form.get("file");
     const mappingRaw = form.get("mapping");

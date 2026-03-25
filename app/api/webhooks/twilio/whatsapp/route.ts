@@ -4,6 +4,12 @@ import { BRANDS } from "@/lib/brands";
 import { prisma } from "@/lib/db";
 import { countMenuItemsForBrand } from "@/lib/admin/assistant/menu-stats";
 import { normalizePhone } from "@/lib/automation/phone";
+import {
+  wantsExplicitOutletListRequest,
+  formatOutletListRollcall,
+} from "@/lib/concierge-outlet-list";
+import { BASSIK_DEALS_FOR_AI } from "@/lib/bassik-deals-for-ai";
+import { formatVenueUniquenessForPrompt } from "@/lib/venue-uniqueness";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -41,54 +47,91 @@ function randomPick<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)]!;
 }
 
-/** Rotating closer: plans / upcoming nights, or soft vibe + outlet suggestion + events. */
+function shuffleInPlace<T>(items: T[]): T[] {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j]!, items[i]!];
+  }
+  return items;
+}
+
+/** Random “top picks” framing + list + “best for today” (no “across our line-up”). */
+function buildTopPicksSection(): string {
+  const brands = BRANDS.filter((b) => b.shortName);
+  if (!brands.length) return "";
+
+  const shuffled = shuffleInPlace([...brands]);
+  const count = randomPick([3, 4, Math.min(5, shuffled.length)]);
+  const picks = shuffled.slice(0, count);
+  const featured = randomPick(picks);
+
+  const intros = [
+    "Here are a few top random picks for you ✨👇",
+    "Quick mix — my random spotlight picks 🎉🔥",
+    "Rolling some faves your way 🎧✨",
+    "Top picks I’d throw at you right now ⭐🙌",
+    "Fresh shuffle — venues worth a look tonight 🌙💫",
+  ];
+
+  const listEmoji = randomPick(["✨", "🔥", "🎵", "💫", "⭐"]);
+  const listLines = picks.map((b) => `${listEmoji} ${b.shortName}`);
+
+  const bestForToday = [
+    `${featured.shortName} would be my strongest play for today 💯🔥`,
+    `If I had to pick one for today → ${featured.shortName} hits hardest 🙌✨`,
+    `For tonight’s energy, I’d start with ${featured.shortName} — that’s the one 🌙🔥`,
+    `${featured.shortName} is my #1 suggestion for you for today 💎🎉`,
+    `Honest take: ${featured.shortName} is the best fit for you today — try that first 🚀`,
+  ];
+
+  return [randomPick(intros), ...listLines, "", randomPick(bestForToday)].join("\n");
+}
+
+/** Rotating closer: plans / upcoming nights, or soft vibe + outlet suggestion (link lives above). */
 function pickOpeningCloser(): string {
   const brands = BRANDS.filter((b) => b.shortName);
   const b = brands.length ? randomPick(brands) : null;
   const vibe = b?.tag?.toLowerCase() ?? "big-night-out";
 
   const planClosers = [
-    "Planning tonight, or something coming up? Tell me what you’re thinking 🔥",
-    "What are your upcoming plans — this week, weekend, or a date you’re eyeing?",
-    "Are we talking tonight, or a night you’ve got lined up later? Share the vibe and group size if you can.",
-    "Got a night in mind? Chill, full send, sports, rooftop — say the mood and I’ll point you right.",
+    "Planning tonight, or something coming up? Tell me what you’re thinking 🔥🎉",
+    "What are your upcoming plans — this week, weekend, or a date you’re eyeing? 🌙✨",
+    "Tonight vs later? Drop the vibe + crew size 🙌🔥",
+    "Chill, full send, sports, rooftop — say the mood and I’ll point you right 🎧💫",
   ];
 
   const suggestClosers = b
     ? [
-        `If that ${vibe} energy is what you want, I’d nudge you toward ${b.shortName} — strong fit. Feel free to browse our other spots too; there’s always a lot on with events.`,
-        `My pick for that ${vibe} feel would be ${b.shortName} — but totally okay to explore the rest. We’ve got events and nights across the line-up.`,
-        `You’d love the vibe at ${b.shortName} for a ${vibe} kind of night — that’s what I’d suggest. Peek the others as well; plenty happening week to week.`,
+        `That ${vibe} energy? I’d nudge you toward ${b.shortName} — strong fit 💯✨\nFeel free to peek the others on the link above — lots of events going on 🎉🎵`,
+        `${b.shortName} for that ${vibe} feel — my pick 🙌🔥\nHappy to spin other options too; there’s always something on ✨`,
+        `You’d vibe ${b.shortName} for a ${vibe} night 🎉🌙\nBrowse the rest via the link — we’ve got plenty in the mix 🔥`,
       ]
-    : [
-        "Tell me the vibe you’re after and I’ll match you to an outlet — there’s always something on across our venues.",
-      ];
+    : ["Tell me your vibe and I’ll match a venue 🎵✨"];
 
-  const mixed = [...planClosers, ...suggestClosers];
-  return randomPick(mixed);
+  return randomPick([...planClosers, ...suggestClosers]);
 }
 
-/** First message: what Bassik is + what we have, then a varied closer (no numbered menu). */
-function buildOpeningGreeting(userName: string): string {
+/** First message: value prop + random top picks + link + varied closer (no numbered menu). */
+function buildOpeningGreeting(userName: string, siteBaseUrl: string): string {
   const name = userName?.trim() ? userName.trim() : "there";
-  const sample = BRANDS.map((b) => b.shortName)
-    .filter(Boolean)
-    .slice(0, 5)
-    .join(" · ");
+  const url = siteBaseUrl.replace(/\/$/, "");
 
   const lines = [
-    `Hi ${name} 👋`,
+    `Hi ${name} 👋✨`,
     "",
-    "This is Bassik — we’re about the best clubbing experience in Hyderabad.",
+    "This is Bassik 🎉 — we’re here for the best clubbing experience in Hyderabad 🔥",
     "",
-    "We have multiple venues under one roof: you name the vibe, we have the place. Tables, drinks, parties, and nights you can actually enjoy.",
+    "Multiple venues under one roof 🏙️🎵 — name the vibe, we’ve got the place. Tables, drinks, parties, nights that actually hit 💃🥂",
     "",
-    "Book direct with us and you unlock website-only deals — better than walking in cold.",
-  ];
-  if (sample) {
-    lines.push("", `Across our line-up: ${sample} and more.`);
-  }
-  lines.push("", pickOpeningCloser());
+    "Book direct with us and unlock website-only deals 💎 — better than walking in cold 🙌",
+    "",
+    buildTopPicksSection(),
+    "",
+    `Explore more — venues, menus & what’s on 🔗✨\n${url}`,
+    "",
+    pickOpeningCloser(),
+  ].filter((block) => block.trim().length > 0);
+
   return lines.join("\n");
 }
 
@@ -158,44 +201,44 @@ export async function POST(request: NextRequest) {
     const outletLines = BRANDS.map((b) => {
       const venue = venues.find((v) => v.brandId === b.id);
       const offersToday = venue ? offersCountByVenueId.get(venue.id) ?? 0 : 0;
-      return `- ${b.shortName} (${b.tag ?? "outlet"}) — offers today: ${offersToday}\n  Booking: ${baseUrl}/${b.id}/reservations`;
+      return `- ${b.shortName} (${b.tag ?? "venue"}) — offers today: ${offersToday}\n  Booking: ${baseUrl}/${b.id}/reservations`;
     });
+
+    if (wantsExplicitOutletListRequest(userText)) {
+      const list = formatOutletListRollcall(BRANDS, baseUrl, "book");
+      const dealsTail =
+        "\n\nDeals vary by venue — common: Eat & Drink @ ₹127/128, up to ~15% off at select venues, book direct for best slots 🔥";
+      return new NextResponse(twiml(list + dealsTail), {
+        headers: { "Content-Type": "text/xml" },
+      });
+    }
 
     // Greeting / help: lead with what we have, then ask what they need (conversational, not a phone tree).
     if (isShortGreeting(userText) || /\b(menu|options|help|start)\b/.test(t0)) {
-      return new NextResponse(twiml(buildOpeningGreeting(userName)), { headers: { "Content-Type": "text/xml" } });
+      return new NextResponse(twiml(buildOpeningGreeting(userName, baseUrl)), { headers: { "Content-Type": "text/xml" } });
     }
 
     const assistantSystem = [
-      "You are Bassik's WhatsApp AI assistant for staff-like customer conversations.",
-      "Brand voice: Always represent the business as `Bassik` (never say `Twilio`).",
-      "Goal: help the user choose an outlet and book a table for a great clubbing experience in Hyderabad.",
-      "Rules (be human, energetic, intelligent):",
-      `User name: ${userName}`,
-      "If user name is not available, treat it as 'there' for greeting.",
-      "Tone: act like a real manager. No robotic phrasing. Confident, friendly, energetic.",
-      "Do NOT use numbered menus (1/2/3) or 'press an option' style unless the user explicitly asks for a list.",
-      "When the user’s message is vague or early in the chat: first remind them what Bassik offers (Hyderabad clubbing, multiple venues, book direct + website-only deals, vibe-to-place), then sound human — e.g. tonight vs upcoming plans, or a soft suggestion (one outlet + feel free to browse others + events across venues). Avoid dry 'what do you need from us today' phrasing.",
-      "Formatting rules (WhatsApp style):",
-      "- Use short lines (1 sentence per line where possible).",
-      "- Use emojis lightly (0-2 per message).",
-      "- Use clear spacing and bullet-like separators (e.g. hyphens) instead of long paragraphs.",
-      "- Do NOT use markdown; plain text only.",
-      "Conversation rules:",
-      "1) Always use the outlet booking links provided.",
-      "2) For offers/FAQs: mention 'Book Direct. Unlock Website-Only Deals.' and that there are limited slots, but do not sound robotic—use natural wording.",
-      "3) If user mentions booking intent (book/reservation/table/slot), ask which outlet and then provide booking link for that outlet.",
-      "4) If user asks about a specific outlet, reply with 1 line offer info + 1 line booking link.",
-      "5) If user message is unclear or general: ask ONE specific question (vibe + date/time if possible). Then show up to 2-3 outlet options with booking links—never dump the full outlet list.",
-      "6) If you do mention an outlet, include its booking link immediately.",
-      "7) End with at most one clear question so the chat moves forward (avoid stacking multiple questions).",
-      "8) Keep replies short for WhatsApp (max ~900 characters).",
-      "If the user asks what you can do: describe Bassik in human language (what we have), then invite them naturally (tonight / upcoming plans, or a light outlet suggestion + browse others + events) — still no numbered menu.",
+      "You are Bassik's WhatsApp assistant — you text like a real venue host/manager, not a bot.",
+      "Brand: always `Bassik` (never `Twilio`). Hyderabad nightlife: clubs, lounges, sports bars.",
+      `You may use the guest name: ${userName} (if it’s literally “there”, skip using a name).`,
+      "CRITICAL — answer their actual question first in plain language. Do not dodge with generic marketing if they asked something specific.",
+      "Prefer the word venue(s) over outlet(s) for guests.",
+      "If they ask to name, list, or count ALL venues: the app may already handle it — but if you reply yourself, you MUST list every venue from the data below with booking link per line. Never say you cannot list them.",
+      "If they did NOT ask for a full list: you can suggest 2–3 venues with links — don’t wall-of-text unless they want the full roster.",
+      "When they ask about discounts, deals, or offers: summarize using this (say timing varies by venue):",
+      BASSIK_DEALS_FOR_AI,
+      "When they ask what makes a venue unique or which fits a mood, use this roster (do not contradict):",
+      formatVenueUniquenessForPrompt({ allBrands: true }),
+      "Tone: warm, confident, short lines — contractions ok, light emoji (0–2 per message). No markdown. No ‘As an AI’.",
+      "Do NOT use numbered phone-tree menus (1/2/3) unless they explicitly ask for options in that style.",
+      "When the message is vague: one quick take on what Bassik offers, then ONE natural follow-up (tonight vs later, vibe, group size).",
+      "Booking intent: confirm venue (or suggest), then give that venue’s booking link from the data.",
+      "Specific venue: 1 line vibe/offer + booking link.",
+      "Keep under ~900 characters when possible; if they asked for a long list, prioritize completeness over the cap.",
       "",
-      "Outlet list (for your reference only):",
+      "Venue list (authoritative — only these exist):",
       ...outletLines,
-      "",
-      "User message (for your reference only):",
     ].join("\n");
 
     const apiKey = process.env.OPENAI_API_KEY?.trim();
@@ -215,11 +258,11 @@ export async function POST(request: NextRequest) {
         { role: "system", content: assistantSystem },
         { role: "user", content: userText },
       ],
-      temperature: 0.4,
-      max_tokens: 400,
+      temperature: 0.65,
+      max_tokens: 450,
     });
 
-    const reply = completion.choices[0]?.message?.content?.trim() || "Thanks! Which outlet would you like to book?";
+    const reply = completion.choices[0]?.message?.content?.trim() || "Thanks! Which venue should we book?";
     return new NextResponse(twiml(reply), { headers: { "Content-Type": "text/xml" } });
   } catch (e) {
     console.error("[twilio-whatsapp-webhook]", e);

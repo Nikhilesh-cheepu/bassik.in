@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import {
+  requireAdminScope,
+  assertBrandInScope,
+  forbidden,
+} from "@/lib/admin-api-guard";
 
 export const runtime = "nodejs";
 
@@ -14,6 +19,10 @@ enum ReservationStatus {
 // GET - Get all bookings (filtered by admin permissions)
 export async function GET(request: NextRequest) {
   try {
+    const scopeRes = await requireAdminScope(request);
+    if (scopeRes instanceof NextResponse) return scopeRes;
+    const scope = scopeRes;
+
     const { searchParams } = new URL(request.url);
     const venueId = searchParams.get("venueId");
     const status = searchParams.get("status");
@@ -21,9 +30,18 @@ export async function GET(request: NextRequest) {
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
 
-    let where: any = {};
+    const where: Record<string, any> = {};
 
-    if (venueId) {
+    if (scope.kind === "outlet") {
+      if (venueId) {
+        if (!scope.brandIds.includes(venueId)) {
+          return forbidden();
+        }
+        where.brandId = venueId;
+      } else {
+        where.brandId = { in: scope.brandIds };
+      }
+    } else if (venueId) {
       where.brandId = venueId;
     }
 
@@ -126,9 +144,16 @@ export async function GET(request: NextRequest) {
         let paramIndex = 1;
         
         if (where.brandId) {
-          whereClause += ` AND "brandId" = $${paramIndex}`;
-          params.push(where.brandId);
-          paramIndex++;
+          const bid = where.brandId as string | { in: string[] };
+          if (typeof bid === "object" && bid !== null && Array.isArray(bid.in)) {
+            whereClause += ` AND "brandId" = ANY($${paramIndex}::text[])`;
+            params.push(bid.in);
+            paramIndex++;
+          } else {
+            whereClause += ` AND "brandId" = $${paramIndex}`;
+            params.push(bid);
+            paramIndex++;
+          }
         }
         
         if (where.status) {
@@ -215,6 +240,10 @@ export async function GET(request: NextRequest) {
 // PATCH - Update reservation status
 export async function PATCH(request: NextRequest) {
   try {
+    const scopeRes = await requireAdminScope(request);
+    if (scopeRes instanceof NextResponse) return scopeRes;
+    const scope = scopeRes;
+
     const body = await request.json();
     const { id, reservationId, status } = body;
     const reservationIdToUse = id || reservationId;
@@ -236,6 +265,10 @@ export async function PATCH(request: NextRequest) {
         { error: "Reservation not found" },
         { status: 404 }
       );
+    }
+
+    if (!assertBrandInScope(scope, reservation.brandId)) {
+      return forbidden();
     }
 
     const prevStatus = reservation.status;
@@ -286,6 +319,10 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Remove a booking from the database
 export async function DELETE(request: NextRequest) {
   try {
+    const scopeRes = await requireAdminScope(request);
+    if (scopeRes instanceof NextResponse) return scopeRes;
+    const scope = scopeRes;
+
     const body = await request.json().catch(() => ({}));
     const id = body.id ?? body.reservationId ?? request.nextUrl.searchParams.get("id");
     if (!id) {
@@ -297,6 +334,9 @@ export async function DELETE(request: NextRequest) {
     const reservation = await prisma.reservation.findUnique({ where: { id: String(id) } });
     if (!reservation) {
       return NextResponse.json({ error: "Reservation not found" }, { status: 404 });
+    }
+    if (!assertBrandInScope(scope, reservation.brandId)) {
+      return forbidden();
     }
     if (reservation.status !== "CANCELLED") {
       const discountIds: string[] = (() => {

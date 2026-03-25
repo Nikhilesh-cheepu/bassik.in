@@ -58,8 +58,7 @@ export const BRANDS: Brand[] = [
     exploreUrl: "#",
     instagramUrls: ["https://www.instagram.com/boilerroomhyd/"],
     websiteUrl: "https://example.com/boilerroom", // TODO: Replace with real website URL
-    description: "Underground club vibe • DJ nights",
-    tag: "Casual Bar",
+    description: "High-energy club & bar • DJ nights",
   },
   {
     id: "skyhy",

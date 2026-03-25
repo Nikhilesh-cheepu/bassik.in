@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
+import {
+  requireAdminScope,
+  assertBrandInScope,
+  forbidden,
+} from "@/lib/admin-api-guard";
 
 /** Menu image upload (thumbnail or page): Vercel Blob only. Save returned URL in Postgres (no image bytes in DB). */
 export const runtime = "nodejs";
@@ -8,6 +13,10 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 export async function POST(request: NextRequest) {
   try {
+    const scopeRes = await requireAdminScope(request);
+    if (scopeRes instanceof NextResponse) return scopeRes;
+    const scope = scopeRes;
+
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const venueSlug = (formData.get("venueSlug") as string) || (formData.get("brandId") as string);
@@ -16,6 +25,10 @@ export async function POST(request: NextRequest) {
     }
     if (!venueSlug || typeof venueSlug !== "string") {
       return NextResponse.json({ error: "venueSlug (or brandId) is required" }, { status: 400 });
+    }
+    const brandId = venueSlug.trim();
+    if (!assertBrandInScope(scope, brandId)) {
+      return forbidden();
     }
     const slug = venueSlug.replace(/[^a-z0-9-]/gi, "-").toLowerCase() || "venue";
     if (!ALLOWED_TYPES.includes(file.type)) {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ensureMainAdmin } from "@/lib/admin-api-guard";
 import { prisma } from "@/lib/db";
 import { sendTwilioWhatsAppMessage } from "@/lib/automation/twilio-whatsapp";
 import {
@@ -17,6 +18,9 @@ const BATCH_SIZE = 100;
 
 export async function POST(request: NextRequest) {
   try {
+    const authErr = await ensureMainAdmin(request);
+    if (authErr) return authErr;
+
     const body = (await request.json()) as {
       messageTemplate?: string;
       group?: GroupSpec;

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { trackWhatsAppClick } from "@/lib/analytics";
-import { BRANDS } from "@/lib/brands";
+import { BRANDS, type Brand } from "@/lib/brands";
 import AdminShell from "@/components/admin/AdminShell";
+
+type AdminMe = { scope: "main" | "outlet"; brandIds: string[] | null };
 import { getContactForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 
 interface Reservation {
@@ -31,6 +33,7 @@ interface Reservation {
 export default function BookingsPageClient() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [adminMe, setAdminMe] = useState<AdminMe | null>(null);
 
   const getToday = () => new Date().toISOString().split("T")[0];
   const getYesterday = () => {
@@ -64,6 +67,30 @@ export default function BookingsPageClient() {
     dateTo: undefined,
   });
   const [brandFilter, setBrandFilter] = useState<string>("all");
+
+  const brandsForFilter = useMemo((): Brand[] => {
+    if (!adminMe || adminMe.scope === "main" || !adminMe.brandIds?.length) {
+      return BRANDS;
+    }
+    const allowed = new Set(adminMe.brandIds);
+    return BRANDS.filter((b) => allowed.has(b.id));
+  }, [adminMe]);
+
+  useEffect(() => {
+    fetch("/api/admin/me", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: AdminMe | null) => {
+        if (d?.scope) setAdminMe(d);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (brandFilter === "all") return;
+    if (!brandsForFilter.some((b) => b.id === brandFilter)) {
+      setBrandFilter("all");
+    }
+  }, [brandsForFilter, brandFilter]);
 
   const isAllTime = filter.dateFrom == null && filter.dateTo == null;
 
@@ -275,8 +302,12 @@ Reservation made through bassik.in${coverLine}`;
               onChange={(e) => setBrandFilter(e.target.value)}
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
             >
-              <option value="all">All outlets</option>
-              {BRANDS.map((b) => (
+              <option value="all">
+                {adminMe?.scope === "outlet" && brandsForFilter.length > 1
+                  ? "All your outlets"
+                  : "All outlets"}
+              </option>
+              {brandsForFilter.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.shortName}
                 </option>

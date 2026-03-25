@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Image from "next/image";
 import { BRANDS } from "@/lib/brands";
 import VenueEditor from "@/components/admin/VenueEditor";
 import AdminShell from "@/components/admin/AdminShell";
+
+type AdminMe = { scope: "main" | "outlet"; brandIds: string[] | null };
 
 type VenueContact = { phone: string; label?: string };
 
@@ -33,6 +35,8 @@ export default function VenuesPageClient() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
   const [loading, setLoading] = useState(true);
+  const [me, setMe] = useState<AdminMe | null>(null);
+  const autoOpenedRef = useRef(false);
 
   const loadVenues = useCallback(async () => {
     try {
@@ -53,10 +57,71 @@ export default function VenuesPageClient() {
     }
   }, []);
 
+  const loadMe = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/me", { cache: "no-store" });
+      if (res.ok) {
+        const d = await res.json();
+        if (d?.scope === "main" || d?.scope === "outlet") {
+          setMe(d);
+          return d as AdminMe;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    const fallback: AdminMe = { scope: "main", brandIds: null };
+    setMe(fallback);
+    return fallback;
+  }, []);
+
   useEffect(() => {
-    setLoading(false);
-    loadVenues();
-  }, [loadVenues]);
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      await Promise.all([loadMe(), loadVenues()]);
+      if (!cancelled) setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadMe, loadVenues]);
+
+  const brandsForGrid = useMemo(() => {
+    if (!me || me.scope === "main" || !me.brandIds?.length) return BRANDS;
+    const allowed = new Set(me.brandIds);
+    return BRANDS.filter((b) => allowed.has(b.id));
+  }, [me]);
+
+  const allowedBrandIdsForEditor =
+    me?.scope === "outlet" && me.brandIds?.length ? me.brandIds : null;
+
+  useEffect(() => {
+    if (loading || selectedVenue) return;
+    if (!me || me.scope !== "outlet" || me.brandIds?.length !== 1) return;
+    if (autoOpenedRef.current) return;
+    autoOpenedRef.current = true;
+    const id = me.brandIds![0];
+    const venue = venues.find((v) => v.brandId === id);
+    const brand = BRANDS.find((b) => b.id === id);
+    if (venue) {
+      setSelectedVenue(venue);
+    } else if (brand) {
+      setSelectedVenue({
+        id: "",
+        brandId: brand.id,
+        name: brand.name,
+        shortName: brand.shortName,
+        address: "",
+        mapUrl: null,
+        contactPhone: null,
+        contactNumbers: null,
+        images: [],
+        menus: [],
+        offers: [],
+      });
+    }
+  }, [loading, me, venues, selectedVenue]);
 
   const handleVenueSelect = (venue: Venue) => {
     setSelectedVenue(venue);
@@ -95,7 +160,9 @@ export default function VenuesPageClient() {
         admin={null}
         onBack={handleBack}
         onSave={handleSave}
+        allowedBrandIds={allowedBrandIdsForEditor}
         onSwitchBrandId={(brandId) => {
+          if (allowedBrandIdsForEditor && !allowedBrandIdsForEditor.includes(brandId)) return;
           const brand = BRANDS.find((b) => b.id === brandId);
           if (!brand) return;
           const existing = venues.find((v) => v.brandId === brandId);
@@ -127,7 +194,7 @@ export default function VenuesPageClient() {
           Configure logos, galleries, offers, discounts and contact numbers for each outlet.
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5">
-          {BRANDS.map((brand) => {
+          {brandsForGrid.map((brand) => {
             const venue = venues.find((v) => v.brandId === brand.id);
             const offersCount = venue?.offers?.length ?? 0;
             const galleryCount = venue?.images?.filter((i) => i.type === "GALLERY").length ?? 0;

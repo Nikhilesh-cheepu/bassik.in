@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ensureMainAdmin } from "@/lib/admin-api-guard";
 import { suggestColumnMappingWithOpenAI } from "@/lib/automation/column-mapping-ai";
 import { extractTabularFromUpload } from "@/lib/automation/extract-upload";
 
@@ -7,6 +8,9 @@ export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
   try {
+    const authErr = await ensureMainAdmin(request);
+    if (authErr) return authErr;
+
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof Blob)) {

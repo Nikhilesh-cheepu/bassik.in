@@ -1,11 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { ensureMainAdmin } from "@/lib/admin-api-guard";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authErr = await ensureMainAdmin(request);
+    if (authErr) return authErr;
+
     const imports = await prisma.automationImport.findMany({
       orderBy: { createdAt: "desc" },
       take: 50,

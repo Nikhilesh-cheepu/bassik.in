@@ -1,29 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  verifyCredentials,
+  resolveAdminPasscode,
   createAdminToken,
+  loginRedirectForScope,
   COOKIE_NAME,
 } from "@/lib/admin-auth";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id, password } = body;
-    if (!password) {
+    const { password } = body;
+    if (!password || typeof password !== "string") {
       return NextResponse.json(
         { error: "Passcode required" },
         { status: 400 }
       );
     }
-    const effectiveId = id || "bassikadmin";
-    if (!verifyCredentials(effectiveId, password)) {
+    const scope = resolveAdminPasscode(password.trim());
+    if (!scope) {
       return NextResponse.json(
         { error: "Invalid passcode" },
         { status: 401 }
       );
     }
-    const token = await createAdminToken();
-    const res = NextResponse.json({ success: true });
+    const token = await createAdminToken(scope);
+    const redirectTo = loginRedirectForScope(scope);
+    const res = NextResponse.json({ success: true, redirectTo });
     res.cookies.set(COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

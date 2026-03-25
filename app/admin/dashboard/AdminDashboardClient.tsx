@@ -4,56 +4,73 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import AdminShell from "@/components/admin/AdminShell";
 
+type AdminMe = { scope: "main" | "outlet"; brandIds: string[] | null };
+
 export default function AdminDashboardClient() {
   const [loading, setLoading] = useState(true);
+  const [adminMe, setAdminMe] = useState<AdminMe | null>(null);
   const [stats, setStats] = useState({
     totalVenues: 0,
     pendingBookings: 0,
     todayBookings: 0,
   });
 
+  const isOutlet = adminMe?.scope === "outlet";
+
   useEffect(() => {
-    loadStats();
-    setLoading(false);
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const meRes = await fetch("/api/admin/me", { cache: "no-store" });
+        let me: AdminMe = { scope: "main", brandIds: null };
+        if (meRes.ok) {
+          const d = await meRes.json();
+          if (d?.scope === "main" || d?.scope === "outlet") me = d;
+        }
+        if (cancelled) return;
+        setAdminMe(me);
+
+        const [venuesRes, bookingsRes] = await Promise.all([
+          fetch("/api/admin/venues"),
+          fetch("/api/admin/bookings"),
+        ]);
+        if (cancelled) return;
+
+        let totalVenues = 0;
+        let pendingBookings = 0;
+        let todayBookings = 0;
+
+        if (venuesRes.ok) {
+          const venuesData = await venuesRes.json();
+          totalVenues = venuesData.venues?.length || 0;
+        }
+
+        if (bookingsRes.ok) {
+          const bookingsData = await bookingsRes.json();
+          const today = new Date();
+          const todayStr = today.toISOString().split("T")[0];
+          const localTodayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+          todayBookings =
+            bookingsData.reservations?.filter(
+              (b: { date: string }) => b.date === todayStr || b.date === localTodayStr
+            ).length || 0;
+          pendingBookings =
+            bookingsData.reservations?.filter((b: { status: string }) => b.status === "PENDING")
+              .length || 0;
+        }
+
+        setStats({ totalVenues, pendingBookings, todayBookings });
+      } catch (error) {
+        console.error("Error loading dashboard:", error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
-
-  const loadStats = async () => {
-    try {
-      const [venuesRes, bookingsRes] = await Promise.all([
-        fetch("/api/admin/venues"),
-        fetch("/api/admin/bookings"),
-      ]);
-
-      if (venuesRes.ok) {
-        const venuesData = await venuesRes.json();
-        setStats((prev) => ({
-          ...prev,
-          totalVenues: venuesData.venues?.length || 0,
-        }));
-      }
-
-      if (bookingsRes.ok) {
-        const bookingsData = await bookingsRes.json();
-        const today = new Date();
-        const todayStr = today.toISOString().split("T")[0];
-        const localTodayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-        const todayBookings = bookingsData.reservations?.filter(
-          (b: any) => b.date === todayStr || b.date === localTodayStr
-        ).length || 0;
-        const pending = bookingsData.reservations?.filter(
-          (b: any) => b.status === "PENDING"
-        ).length || 0;
-
-        setStats((prev) => ({
-          ...prev,
-          pendingBookings: pending,
-          todayBookings: todayBookings,
-        }));
-      }
-    } catch (error) {
-      console.error("Error loading stats:", error);
-    }
-  };
 
   return (
     <AdminShell title="Dashboard">
@@ -88,7 +105,9 @@ export default function AdminDashboardClient() {
                   </svg>
                 </div>
               </div>
-              <p className="mt-2 text-[11px] text-slate-500">Total outlets onboarded.</p>
+              <p className="mt-2 text-[11px] text-slate-500">
+                {isOutlet ? "Outlets you can manage." : "Total outlets onboarded."}
+              </p>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -113,7 +132,9 @@ export default function AdminDashboardClient() {
                 </div>
               </div>
               <p className="mt-2 text-[11px] text-slate-500">
-                Reservations waiting for confirmation.
+                {isOutlet
+                  ? "Waiting for confirmation at your outlets."
+                  : "Reservations waiting for confirmation."}
               </p>
             </div>
 
@@ -139,7 +160,9 @@ export default function AdminDashboardClient() {
                 </div>
               </div>
               <p className="mt-2 text-[11px] text-slate-500">
-                Bookings scheduled for today across outlets.
+                {isOutlet
+                  ? "Bookings today for your outlets."
+                  : "Bookings scheduled for today across outlets."}
               </p>
             </div>
           </div>
@@ -205,65 +228,69 @@ export default function AdminDashboardClient() {
               </svg>
             </Link>
 
-            <Link
-              href="/admin/dashboard/automations"
-              className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow group-hover:scale-105 transition-transform">
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-900">Automations</p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Excel, PDF, or photo import, AI mapping, WhatsApp.
-                </p>
-              </div>
-              <svg
-                className="h-5 w-5 flex-shrink-0 text-slate-400 group-hover:text-slate-700"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
+            {!isOutlet ? (
+              <>
+                <Link
+                  href="/admin/dashboard/automations"
+                  className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow group-hover:scale-105 transition-transform">
+                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 10V3L4 14h7v7l9-11h-7z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-900">Automations</p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Excel, PDF, or photo import, AI mapping, WhatsApp.
+                    </p>
+                  </div>
+                  <svg
+                    className="h-5 w-5 flex-shrink-0 text-slate-400 group-hover:text-slate-700"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
 
-            <Link
-              href="/admin/dashboard/admins"
-              className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-500 to-violet-500 text-white shadow group-hover:scale-105 transition-transform">
-                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-                  />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-900">Manage Admins</p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Future-proof roles and venue-level access.
-                </p>
-              </div>
-              <svg
-                className="h-5 w-5 flex-shrink-0 text-slate-400 group-hover:text-slate-700"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
+                <Link
+                  href="/admin/dashboard/admins"
+                  className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-500 to-violet-500 text-white shadow group-hover:scale-105 transition-transform">
+                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                      />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-900">Manage Admins</p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Future-proof roles and venue-level access.
+                    </p>
+                  </div>
+                  <svg
+                    className="h-5 w-5 flex-shrink-0 text-slate-400 group-hover:text-slate-700"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
+              </>
+            ) : null}
           </div>
         </>
       )}

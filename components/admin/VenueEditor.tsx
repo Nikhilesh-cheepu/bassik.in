@@ -44,9 +44,18 @@ interface VenueEditorProps {
   onBack: () => void;
   onSave: () => void;
   onSwitchBrandId?: (brandId: string) => void;
+  /** When set, outlet switcher only lists these brand ids (sub-admin). */
+  allowedBrandIds?: string[] | null;
 }
 
-export default function VenueEditor({ venue, admin, onBack, onSave, onSwitchBrandId }: VenueEditorProps) {
+export default function VenueEditor({
+  venue,
+  admin,
+  onBack,
+  onSave,
+  onSwitchBrandId,
+  allowedBrandIds,
+}: VenueEditorProps) {
   const [currentVenue, setCurrentVenue] = useState(venue);
   const [formData, setFormData] = useState({
     mapUrl: venue.mapUrl || "",
@@ -135,6 +144,12 @@ export default function VenueEditor({ venue, admin, onBack, onSave, onSwitchBran
 
   const galleryImages = currentVenue.images?.filter((i) => i.type === "GALLERY") || [];
 
+  const switchableBrands =
+    allowedBrandIds && allowedBrandIds.length > 0
+      ? BRANDS.filter((b) => allowedBrandIds.includes(b.id))
+      : BRANDS;
+  const showOutletSwitcher = switchableBrands.length > 1;
+
   return (
     <AdminShell
       title={currentVenue.shortName}
@@ -143,25 +158,27 @@ export default function VenueEditor({ venue, admin, onBack, onSave, onSwitchBran
       onBack={onBack}
     >
       {/* Tabs */}
-      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-medium text-slate-600">Switch outlet</p>
-            <p className="text-xs text-slate-500">Jump to another outlet without going back.</p>
+      {showOutletSwitcher ? (
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-medium text-slate-600">Switch outlet</p>
+              <p className="text-xs text-slate-500">Jump to another outlet without going back.</p>
+            </div>
+            <select
+              value={currentVenue.brandId}
+              onChange={(e) => onSwitchBrandId?.(e.target.value)}
+              className="max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            >
+              {switchableBrands.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.shortName}
+                </option>
+              ))}
+            </select>
           </div>
-          <select
-            value={currentVenue.brandId}
-            onChange={(e) => onSwitchBrandId?.(e.target.value)}
-            className="max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
-          >
-            {BRANDS.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.shortName}
-              </option>
-            ))}
-          </select>
         </div>
-      </div>
+      ) : null}
 
       <div className="mb-4 sm:sticky sm:top-[100px] z-20">
         <div className="flex justify-start">
