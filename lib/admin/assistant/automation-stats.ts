@@ -230,3 +230,245 @@ export async function countNameStats(): Promise<{
   };
 }
 
+async function detectDateExtraKey(): Promise<string | null> {
+  const keys = await getDistinctExtraKeys();
+  const candidates = keys.filter((k) => /date/i.test(k));
+  const ordered = candidates.length ? candidates : keys.slice(0, 10);
+
+  // Prefer ISO dates first, then loose dd/mm/yyyy.
+  let best: { key: string; isoMatches: number; looseMatches: number } | null = null;
+
+  const isoRe = "^\\\\d{4}-\\\\d{2}-\\\\d{2}$";
+  const looseRe = "^\\\\d{1,2}\\\\s*[/\\\\-]\\\\s*\\\\d{1,2}\\\\s*[/\\\\-]\\\\s*\\\\d{2,4}$";
+
+  for (const key of ordered.slice(0, 8)) {
+    const [isoRes, looseRes] = await Promise.all([
+      prisma.$queryRaw<{ c: number }[]>(
+        Prisma.sql`
+          SELECT COUNT(*)::int AS c
+          FROM "AutomationContact"
+          WHERE "extra" IS NOT NULL
+            AND trim("extra"->>${key}) ~ ${isoRe}
+        `
+      ),
+      prisma.$queryRaw<{ c: number }[]>(
+        Prisma.sql`
+          SELECT COUNT(*)::int AS c
+          FROM "AutomationContact"
+          WHERE "extra" IS NOT NULL
+            AND trim("extra"->>${key}) ~ ${looseRe}
+        `
+      ),
+    ]);
+
+    const isoMatches = isoRes[0]?.c ?? 0;
+    const looseMatches = looseRes[0]?.c ?? 0;
+    if (!best) best = { key, isoMatches, looseMatches };
+    else {
+      const bestScore = best.isoMatches * 10 + best.looseMatches;
+      const score = isoMatches * 10 + looseMatches;
+      if (score > bestScore) best = { key, isoMatches, looseMatches };
+    }
+  }
+
+  if (!best) return null;
+  if (best.isoMatches + best.looseMatches === 0) return null;
+  return best.key;
+}
+
+export async function countVisitFrequencySummary(): Promise<{
+  dateKeyUsed: string | null;
+  totalVisits: number;
+  uniqueCustomers: number;
+  customersWith2PlusVisits: number;
+  avgVisitsPerCustomer: number;
+  topDates: { date: string; visits: number; customers: number }[];
+}> {
+  const dateKey = await detectDateExtraKey();
+  if (!dateKey) {
+    return {
+      dateKeyUsed: null,
+      totalVisits: 0,
+      uniqueCustomers: 0,
+      customersWith2PlusVisits: 0,
+      avgVisitsPerCustomer: 0,
+      topDates: [],
+    };
+  }
+
+  const isoRe = "^\\\\d{4}-\\\\d{2}-\\\\d{2}$";
+  const looseRe = "^\\\\d{1,2}\\\\s*[/\\\\-]\\\\s*\\\\d{1,2}\\\\s*[/\\\\-]\\\\s*\\\\d{2,4}$";
+
+  const totals = await prisma.$queryRaw<{ totalVisits: number; uniqueCustomers: number }[]>(
+    Prisma.sql`
+      WITH visits AS (
+        SELECT
+          trim("phone") AS phone,
+          CASE
+            WHEN trim("extra"->>${dateKey}) ~ ${isoRe} THEN trim("extra"->>${dateKey})::date
+            WHEN trim("extra"->>${dateKey}) ~ ${looseRe} THEN
+              to_date(
+                regexp_replace(trim("extra"->>${dateKey}), '\\s*[-/]\\s*', '/', 'g'),
+                'DD/MM/YYYY'
+              )
+            ELSE NULL
+          END AS visit_date
+        FROM "AutomationContact"
+        WHERE "extra" IS NOT NULL
+          AND "phone" IS NOT NULL AND trim("phone") <> ''
+      )
+      SELECT
+        COUNT(*)::int AS "totalVisits",
+        COUNT(DISTINCT phone)::int AS "uniqueCustomers"
+      FROM visits
+      WHERE visit_date IS NOT NULL
+    `
+  );
+
+  const perCustomer = await prisma.$queryRaw<{ customers: number; customersWith2Plus: number; avg: number }[]>(
+    Prisma.sql`
+      WITH per_phone AS (
+        SELECT
+          phone,
+          COUNT(*)::int AS vcount
+        FROM (
+          WITH visits AS (
+            SELECT
+              trim("phone") AS phone,
+              CASE
+                WHEN trim("extra"->>${dateKey}) ~ ${isoRe} THEN trim("extra"->>${dateKey})::date
+                WHEN trim("extra"->>${dateKey}) ~ ${looseRe} THEN
+                  to_date(
+                    regexp_replace(trim("extra"->>${dateKey}), '\\s*[-/]\\s*', '/', 'g'),
+                    'DD/MM/YYYY'
+                  )
+                ELSE NULL
+              END AS visit_date
+            FROM "AutomationContact"
+            WHERE "extra" IS NOT NULL
+              AND "phone" IS NOT NULL AND trim("phone") <> ''
+          )
+          SELECT phone
+          FROM visits
+          WHERE visit_date IS NOT NULL
+        ) v
+        GROUP BY phone
+      )
+      SELECT
+        COUNT(*)::int AS customers,
+        COUNT(*) FILTER (WHERE vcount >= 2)::int AS "customersWith2Plus",
+        COALESCE(AVG(vcount)::float, 0)::float AS avg
+      FROM per_phone
+    `
+  );
+
+  const topDates = await prisma.$queryRaw<{ date: string; visits: number; customers: number }[]>(
+    Prisma.sql`
+      WITH visits AS (
+        SELECT
+          trim("phone") AS phone,
+          CASE
+            WHEN trim("extra"->>${dateKey}) ~ ${isoRe} THEN trim("extra"->>${dateKey})::date
+            WHEN trim("extra"->>${dateKey}) ~ ${looseRe} THEN
+              to_date(
+                regexp_replace(trim("extra"->>${dateKey}), '\\s*[-/]\\s*', '/', 'g'),
+                'DD/MM/YYYY'
+              )
+            ELSE NULL
+          END AS visit_date
+        FROM "AutomationContact"
+        WHERE "extra" IS NOT NULL
+          AND "phone" IS NOT NULL AND trim("phone") <> ''
+      )
+      SELECT
+        to_char(visit_date, 'YYYY-MM-DD') AS date,
+        COUNT(*)::int AS visits,
+        COUNT(DISTINCT phone)::int AS customers
+      FROM visits
+      WHERE visit_date IS NOT NULL
+      GROUP BY visit_date
+      ORDER BY visit_date DESC
+      LIMIT 10
+    `
+  );
+
+  return {
+    dateKeyUsed: dateKey,
+    totalVisits: totals[0]?.totalVisits ?? 0,
+    uniqueCustomers: totals[0]?.uniqueCustomers ?? 0,
+    customersWith2PlusVisits: perCustomer[0]?.customersWith2Plus ?? 0,
+    avgVisitsPerCustomer: perCustomer[0]?.avg ?? 0,
+    topDates: (topDates || []).map((r) => ({
+      date: r.date,
+      visits: r.visits,
+      customers: r.customers,
+    })),
+  };
+}
+
+export async function countCustomerOutletInteractionSummary(): Promise<{
+  customersVisitedAtLeast2Outlets: number;
+  topOutletPairs: { outletA: string; outletB: string; customers: number }[];
+}> {
+  const distinctPairs = await prisma.$queryRaw<
+    { customers: number; outletA: string; outletB: string }[]
+  >(
+    Prisma.sql`
+      WITH distinct_po AS (
+        SELECT DISTINCT
+          trim("phone") AS phone,
+          trim(outlet) AS outlet
+        FROM "AutomationContact"
+        CROSS JOIN LATERAL regexp_split_to_table("venue", '\\s*/\\s*') AS outlet
+        WHERE "phone" IS NOT NULL AND trim("phone") <> ''
+          AND "venue" IS NOT NULL AND trim("venue") <> ''
+          AND trim(outlet) <> ''
+      )
+      SELECT
+        a.outlet AS "outletA",
+        b.outlet AS "outletB",
+        COUNT(DISTINCT a.phone)::int AS customers
+      FROM distinct_po a
+      JOIN distinct_po b
+        ON a.phone = b.phone
+       AND a.outlet < b.outlet
+      GROUP BY a.outlet, b.outlet
+      ORDER BY customers DESC
+      LIMIT 10
+    `
+  );
+
+  const customersVisitedAtLeast2Outlets = await prisma.$queryRaw<{ c: number }[]>(
+    Prisma.sql`
+      WITH distinct_po AS (
+        SELECT DISTINCT
+          trim("phone") AS phone,
+          trim(outlet) AS outlet
+        FROM "AutomationContact"
+        CROSS JOIN LATERAL regexp_split_to_table("venue", '\\s*/\\s*') AS outlet
+        WHERE "phone" IS NOT NULL AND trim("phone") <> ''
+          AND "venue" IS NOT NULL AND trim("venue") <> ''
+          AND trim(outlet) <> ''
+      ),
+      per_phone AS (
+        SELECT phone, COUNT(DISTINCT outlet)::int AS outlet_count
+        FROM distinct_po
+        GROUP BY phone
+      )
+      SELECT COUNT(*)::int AS c
+      FROM per_phone
+      WHERE outlet_count >= 2
+    `
+  );
+
+  return {
+    customersVisitedAtLeast2Outlets: customersVisitedAtLeast2Outlets[0]?.c ?? 0,
+    topOutletPairs: (distinctPairs || []).map((r) => ({
+      outletA: r.outletA,
+      outletB: r.outletB,
+      customers: r.customers,
+    })),
+  };
+}
+
+

@@ -46,6 +46,13 @@ export function defaultMapping(headers: string[]): ColumnMapping[] {
     if (/venue|location|outlet|club|branch/.test(l)) {
       return { sourceColumn: h, target: "venue" as const };
     }
+    if (/date|day|visit|walkin|walking|booking|guest list/i.test(l)) {
+      return {
+        sourceColumn: h,
+        target: "extra" as const,
+        extraKey: l.replace(/\s+/g, "_").slice(0, 48),
+      };
+    }
     if (/age|gender|sex|note|remark|email|city/.test(l)) {
       return {
         sourceColumn: h,

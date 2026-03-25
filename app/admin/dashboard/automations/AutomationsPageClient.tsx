@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AdminShell from "@/components/admin/AdminShell";
 import type { ColumnMapping, AutomationColumnTarget } from "@/lib/automation/types";
 import { MAPPING_TARGETS } from "@/lib/automation/types";
+import AutomationImportChatClient from "./AutomationImportChatClient";
 
 type ParseResponse = {
   fileName: string;
@@ -619,6 +620,18 @@ export default function AutomationsPageClient() {
             </div>
           ) : null}
         </section>
+
+        {activeImportId && !contactsLoading && contacts.length > 0 && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <h3 className="text-base font-semibold text-slate-900">Automation chat</h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Ask here for visit frequency / outlet interaction, or ask to generate a WhatsApp bulk template and then click “Send now”.
+            </p>
+            <div className="mt-3">
+              <AutomationImportChatClient contactsCount={contacts.length} />
+            </div>
+          </section>
+        )}
 
         <section
           id="messaging"

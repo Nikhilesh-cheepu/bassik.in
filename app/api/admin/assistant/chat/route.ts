@@ -8,6 +8,8 @@ import {
   countNameStats,
   countRepeatedCustomersByPhone,
   countUniqueCustomerPhones,
+  countVisitFrequencySummary,
+  countCustomerOutletInteractionSummary,
 } from "@/lib/admin/assistant/automation-stats";
 import { countMenuItemsForBrand } from "@/lib/admin/assistant/menu-stats";
 import { countRecipientsForGroup, type GroupSpec } from "@/lib/admin/assistant/automation-group";
@@ -179,6 +181,10 @@ export async function POST(request: NextRequest) {
     /\b(send|whatsapp|bulk\s*message|message\s*them|dispatch)\b/.test(lastNt) ||
     (/\bmessage\b/.test(lastNt) && /\bto\b/.test(lastNt));
 
+  const wantsAll =
+    /\b(all|everyone|everybody|whole\s*list|entire\s*list|everyone\s+in\s+this\s+list)\b/.test(lastNt) ||
+    /\b(all\s+contacts|all\s+import)\b/.test(lastNt);
+
   const wantsMen = /\bmen\b/.test(groupNt) || /\bmale\b/.test(groupNt);
   const wantsWomen = /\bwomen\b/.test(groupNt) || /\bfemale\b/.test(groupNt);
   const wantsRepeated = /\brepeated\b/.test(groupNt) || /\brepeat(ed)?\b/.test(groupNt);
@@ -187,7 +193,7 @@ export async function POST(request: NextRequest) {
 
   const groupSpec: GroupSpec | null = (() => {
     const hasFilter = wantsMen || wantsWomen || wantsRepeated || ageRange != null;
-    if (!hasFilter) return null;
+    if (!hasFilter) return sendIntent && wantsAll ? { importScope: "all" } : null;
     const spec: GroupSpec = { importScope: "all" };
     if (wantsMen) spec.gender = "male";
     if (wantsWomen) spec.gender = "female";
@@ -278,27 +284,74 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // --- Intent 3: visit frequency + outlet interaction (from walking/booking guest list images) ---
+  const wantsVisitFrequency = /\b(frequency|visit(s)?|how many times|walkin|walking guest|booking guest|guest list|guestlist|walking guest list)\b/i.test(lastNt);
+  const wantsOutletInteraction = /\b(outlet|venue|branch).*(between|interaction|different|multiple)|multiple outlets|outlet pair|between outlets|visited.*outlet\b/i.test(lastNt);
+
+  if (wantsVisitFrequency || wantsOutletInteraction) {
+    const [freq, interaction] = await Promise.all([
+      wantsVisitFrequency ? countVisitFrequencySummary() : Promise.resolve(null),
+      wantsOutletInteraction ? countCustomerOutletInteractionSummary() : Promise.resolve(null),
+    ]);
+
+    const parts: string[] = [];
+
+    if (freq) {
+      if (!freq.dateKeyUsed) {
+        parts.push(
+          "I couldn’t detect a `visit_date` field in your imported `AutomationContact.extra`.\n" +
+            "When importing guest lists, map the detected date column to `Extra field` so it becomes something like `extra.visit_date` (ISO YYYY-MM-DD)."
+        );
+      } else {
+        parts.push(
+          "Visit frequency (from guest list imports):\n" +
+            `- Total visits rows: \`${freq.totalVisits}\`\n` +
+            `- Unique customers: \`${freq.uniqueCustomers}\`\n` +
+            `- Customers with 2+ visits: \`${freq.customersWith2PlusVisits}\`\n` +
+            `- Avg visits per customer: \`${freq.avgVisitsPerCustomer.toFixed(2)}\``
+        );
+        if (freq.topDates.length) {
+          const top = freq.topDates
+            .slice(0, 6)
+            .map((d) => `${d.date}: ${d.visits} visits (${d.customers} customers)`)
+            .join("\n");
+          parts.push(`Top visit dates:\n${top}`);
+        }
+      }
+    }
+
+    if (interaction) {
+      parts.push(
+        "Outlet interaction (co-visits by phone across imports):\n" +
+          `- Customers who visited 2+ outlets: \`${interaction.customersVisitedAtLeast2Outlets}\`\n` +
+          `- Top outlet pairs (phones that appear in both):`
+      );
+      if (interaction.topOutletPairs.length) {
+        const pairs = interaction.topOutletPairs
+          .map((p) => `  - ${p.outletA} + ${p.outletB}: ${p.customers} customers`)
+          .join("\n");
+        parts.push(pairs);
+      } else {
+        parts.push("  - Not enough venue/outlet data mapped yet (missing `AutomationContact.venue`).");
+      }
+    }
+
+    return NextResponse.json({ message: parts.join("\n\n") });
+  }
+
   // --- Intent 2: Automation customer counts (men/women/repeated/names/age) ---
-  const looksLikeAutomationStats =
-    /\bcustomer\b/.test(lastNt) ||
-    /\bmen\b/.test(lastNt) ||
-    /\bwomen\b/.test(lastNt) ||
-    /\bfemale\b/.test(lastNt) ||
-    /\bmale\b/.test(lastNt) ||
-    /\brepeated\b/.test(lastNt) ||
-    /\bname(s)?\b/.test(lastNt) ||
-    /\bage\b/.test(lastNt) ||
-    /\bimport\b/.test(lastNt);
+  const isCountRequest = /\b(how\s+many|count|give\s+me|total)\b/.test(lastNt);
 
-  const wantsUniqueCustomers = /\bhow many\b/.test(lastNt) && /\bcustomer\b/.test(lastNt);
-  const wantsNames = /\bname(s)?\b/.test(lastNt);
-  const wantsAgeOnly = /\bage\b/.test(lastNt);
-  const ageRangeOnly = wantsAgeOnly ? parseAgeRangeFromText(lastUserText) : null;
-  const wantsMenCounts = /\bmen\b/.test(lastNt) || /\bmale\b/.test(lastNt);
-  const wantsWomenCounts = /\bwomen\b/.test(lastNt) || /\bfemale\b/.test(lastNt);
-  const wantsRepeatedCounts = /\brepeated\b/.test(lastNt) || /\brepeat(ed)?\b/.test(lastNt);
+  // Use group context so follow-ups like "give me the count" still work.
+  const wantsUniqueCustomers = isCountRequest && /\bcustomers?\b/.test(groupNt);
+  const wantsNames = /\bname(s)?\b/.test(groupNt);
+  const wantsAgeOnly = /\bage\b/.test(groupNt) || /\bbetween\b/.test(groupNt);
+  const ageRangeOnly = wantsAgeOnly ? parseAgeRangeFromText(groupContextText) : null;
+  const wantsMenCounts = /\bmen\b/.test(groupNt) || /\bmale\b/.test(groupNt);
+  const wantsWomenCounts = /\bwomen\b/.test(groupNt) || /\bfemale\b/.test(groupNt);
+  const wantsRepeatedCounts = /\brepeated\b/.test(groupNt) || /\brepeat(ed)?\b/.test(groupNt);
 
-  if (looksLikeAutomationStats && (wantsUniqueCustomers || wantsMenCounts || wantsWomenCounts || wantsRepeatedCounts || wantsNames || wantsAgeOnly)) {
+  if (isCountRequest && (wantsUniqueCustomers || wantsMenCounts || wantsWomenCounts || wantsRepeatedCounts || wantsNames || wantsAgeOnly)) {
     const [uniqueCustomersRes, genderRes, repeatedRes, nameRes, ageRes] = await Promise.all([
       wantsUniqueCustomers ? countUniqueCustomerPhones() : Promise.resolve(0),
       wantsMenCounts || wantsWomenCounts ? countGenderDistribution() : Promise.resolve({ male: 0, female: 0, genderKeyUsed: null }),

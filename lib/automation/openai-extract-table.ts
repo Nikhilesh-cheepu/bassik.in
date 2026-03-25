@@ -9,6 +9,14 @@ const EXTRACT_BASE = `This file may be a spreadsheet, PDF, scan, photo, or scree
 
 Extract the main data table (names, phones, venues, ages, notes, etc.).
 
+Section metadata (IMPORTANT):
+- Many files contain multiple sections/tables like:
+  "WALKING GUEST LIST OF 12/02/2026" and "BOOKING GUEST LIST OF 12/02/2026".
+- For EVERY row, also output:
+  - "visit_date": the section header date converted to ISO format "YYYY-MM-DD"
+  - "visit_type": one of "walkin" or "booking" based on which section/table the row came from
+- If a date/type cannot be determined confidently for a row, use "" for that field.
+
 Return ONLY valid JSON (no markdown, no code fences):
 {"headers":["column1","column2",...],"rows":[{"column1":"value","column2":"value"},...],"truncated":false}
 
@@ -18,6 +26,7 @@ Rules:
 - One object in "rows" per person/row of data.
 - If there are multiple separate tables of the same kind, merge them into one "rows" list with shared headers.
 - If nothing usable exists: {"headers":[],"rows":[],"truncated":false}
+- Ensure headers include "visit_date" and "visit_type" whenever you can detect section headers (like walking/booking guest list dates).
 - CRITICAL: Your output MUST be parseable JSON. If you are running out of space, stop adding rows after the LAST COMPLETE row object, then close the "rows" array with ] and the root with }. Never end mid-string or mid-object.
 - If you had to omit rows because of size, set "truncated": true. Prefer fewer complete rows over broken JSON.`;
 
