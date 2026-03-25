@@ -49,8 +49,18 @@ export default function AutomationImportChatClient({
     requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
   }, []);
 
-  async function send() {
-    const text = input.trim();
+  const quickPrompts: { label: string; text: string; kind: "analytics" | "send" }[] = [
+    { kind: "analytics", label: "Count repeated", text: "Count repeated customers (same phone appears multiple times)." },
+    { kind: "analytics", label: "Visit frequency", text: "Show visit frequency summary (top dates, repeats, average visits)." },
+    { kind: "analytics", label: "Outlet interaction", text: "Show how customers interact between outlets (who visited multiple outlets + top outlet pairs)." },
+    { kind: "send", label: "Send to everyone", text: "Draft a WhatsApp bulk message to everyone in my imported list. Use {{fullName}} and keep it short + energetic." },
+    { kind: "send", label: "Send to repeated", text: "Draft a WhatsApp bulk message to repeated customers (same phone appears multiple times). Use {{fullName}} and keep it short + energetic." },
+    { kind: "send", label: "Send to men", text: "Draft a WhatsApp bulk message to men. Use {{fullName}} and keep it short + energetic." },
+    { kind: "send", label: "Send to women", text: "Draft a WhatsApp bulk message to women. Use {{fullName}} and keep it short + energetic." },
+  ];
+
+  async function sendText(textRaw: string) {
+    const text = textRaw.trim();
     if (!text || loading) return;
 
     setError(null);
@@ -95,6 +105,10 @@ export default function AutomationImportChatClient({
       setLoading(false);
       scrollToBottom();
     }
+  }
+
+  async function send() {
+    return sendText(input);
   }
 
   async function confirmSend() {
@@ -226,6 +240,37 @@ export default function AutomationImportChatClient({
             void send();
           }}
         >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-semibold text-slate-600">Quick actions</span>
+            <div className="flex flex-wrap gap-2">
+              {quickPrompts
+                .filter((p) => p.kind === "analytics")
+                .map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void sendText(p.text)}
+                    className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              {quickPrompts
+                .filter((p) => p.kind === "send")
+                .map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => void sendText(p.text)}
+                    className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-[11px] font-semibold text-orange-800 hover:bg-orange-100 disabled:opacity-50"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+            </div>
+          </div>
           <label className="sr-only" htmlFor="automation-chat-input">
             Message
           </label>
@@ -240,7 +285,7 @@ export default function AutomationImportChatClient({
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                void send();
+                void sendText(input);
               }
             }}
           />
