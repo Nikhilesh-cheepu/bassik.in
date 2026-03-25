@@ -37,18 +37,59 @@ function isShortGreeting(text: string): boolean {
   return /^(hi|hey|hello|hlo|yo|hola|sup|good\s*morning|good\s*evening|good\s*afternoon)\b/.test(t);
 }
 
-function buildMainMenu(userName: string): string {
+function randomPick<T>(items: T[]): T {
+  return items[Math.floor(Math.random() * items.length)]!;
+}
+
+/** Rotating closer: plans / upcoming nights, or soft vibe + outlet suggestion + events. */
+function pickOpeningCloser(): string {
+  const brands = BRANDS.filter((b) => b.shortName);
+  const b = brands.length ? randomPick(brands) : null;
+  const vibe = b?.tag?.toLowerCase() ?? "big-night-out";
+
+  const planClosers = [
+    "Planning tonight, or something coming up? Tell me what you’re thinking 🔥",
+    "What are your upcoming plans — this week, weekend, or a date you’re eyeing?",
+    "Are we talking tonight, or a night you’ve got lined up later? Share the vibe and group size if you can.",
+    "Got a night in mind? Chill, full send, sports, rooftop — say the mood and I’ll point you right.",
+  ];
+
+  const suggestClosers = b
+    ? [
+        `If that ${vibe} energy is what you want, I’d nudge you toward ${b.shortName} — strong fit. Feel free to browse our other spots too; there’s always a lot on with events.`,
+        `My pick for that ${vibe} feel would be ${b.shortName} — but totally okay to explore the rest. We’ve got events and nights across the line-up.`,
+        `You’d love the vibe at ${b.shortName} for a ${vibe} kind of night — that’s what I’d suggest. Peek the others as well; plenty happening week to week.`,
+      ]
+    : [
+        "Tell me the vibe you’re after and I’ll match you to an outlet — there’s always something on across our venues.",
+      ];
+
+  const mixed = [...planClosers, ...suggestClosers];
+  return randomPick(mixed);
+}
+
+/** First message: what Bassik is + what we have, then a varied closer (no numbered menu). */
+function buildOpeningGreeting(userName: string): string {
   const name = userName?.trim() ? userName.trim() : "there";
-  return [
-    `Hi ${name} 👋 — Bassik here!`,
-    `Best clubbing vibes in Hyderabad + multiple venues for every mood.`,
+  const sample = BRANDS.map((b) => b.shortName)
+    .filter(Boolean)
+    .slice(0, 5)
+    .join(" · ");
+
+  const lines = [
+    `Hi ${name} 👋`,
     "",
-    "Reply with a number 👇",
-    "1) Book a table",
-    "2) Today’s offers",
-    "3) Pick a vibe (I’ll suggest the outlet)",
-    "4) Talk to a manager",
-  ].join("\n");
+    "This is Bassik — we’re about the best clubbing experience in Hyderabad.",
+    "",
+    "We have multiple venues under one roof: you name the vibe, we have the place. Tables, drinks, parties, and nights you can actually enjoy.",
+    "",
+    "Book direct with us and you unlock website-only deals — better than walking in cold.",
+  ];
+  if (sample) {
+    lines.push("", `Across our line-up: ${sample} and more.`);
+  }
+  lines.push("", pickOpeningCloser());
+  return lines.join("\n");
 }
 
 export async function POST(request: NextRequest) {
@@ -75,9 +116,7 @@ export async function POST(request: NextRequest) {
       : null;
     const userName = contact?.fullName?.trim() ? contact.fullName.trim() : "there";
 
-    // Quick guided flow (numbered menu)
     const t0 = userText.trim().toLowerCase();
-    const choice = t0.match(/^([1-4])\b/)?.[1] ?? null;
 
     // Identify possible venue from message.
     const nt = userText.toLowerCase();
@@ -122,52 +161,9 @@ export async function POST(request: NextRequest) {
       return `- ${b.shortName} (${b.tag ?? "outlet"}) — offers today: ${offersToday}\n  Booking: ${baseUrl}/${b.id}/reservations`;
     });
 
-    // If greeting / empty / "menu", show the guided menu.
-    if (isShortGreeting(userText) || /\b(menu|options|help)\b/.test(t0)) {
-      return new NextResponse(twiml(buildMainMenu(userName)), { headers: { "Content-Type": "text/xml" } });
-    }
-
-    // Handle guided choices deterministically (no AI needed).
-    if (choice === "2") {
-      const top = outletLines.slice(0, 3).join("\n");
-      const msg = [
-        `Nice 😄 Here are today’s quick options:`,
-        top,
-        "",
-        "Which outlet should I book for you? (reply with the outlet name)",
-      ].join("\n");
-      return new NextResponse(twiml(msg), { headers: { "Content-Type": "text/xml" } });
-    }
-    if (choice === "1") {
-      const msg = [
-        `Perfect — let’s lock your table 🔥`,
-        "Tell me:",
-        "- Date + time",
-        "- People count",
-        "- Preferred outlet (or say “suggest”)",
-        "",
-        "What’s your plan?",
-      ].join("\n");
-      return new NextResponse(twiml(msg), { headers: { "Content-Type": "text/xml" } });
-    }
-    if (choice === "3") {
-      const msg = [
-        "Say your vibe and I’ll match the outlet 👇",
-        "- Bollywood / Commercial",
-        "- Techno / Underground",
-        "- Lounge / Chill",
-        "- Sports / Screening",
-        "",
-        "What vibe are you feeling?",
-      ].join("\n");
-      return new NextResponse(twiml(msg), { headers: { "Content-Type": "text/xml" } });
-    }
-    if (choice === "4") {
-      const msg = [
-        "Done ✅",
-        "Reply with your name + date/time + people count, and our manager will take it from here.",
-      ].join("\n");
-      return new NextResponse(twiml(msg), { headers: { "Content-Type": "text/xml" } });
+    // Greeting / help: lead with what we have, then ask what they need (conversational, not a phone tree).
+    if (isShortGreeting(userText) || /\b(menu|options|help|start)\b/.test(t0)) {
+      return new NextResponse(twiml(buildOpeningGreeting(userName)), { headers: { "Content-Type": "text/xml" } });
     }
 
     const assistantSystem = [
@@ -178,10 +174,8 @@ export async function POST(request: NextRequest) {
       `User name: ${userName}`,
       "If user name is not available, treat it as 'there' for greeting.",
       "Tone: act like a real manager. No robotic phrasing. Confident, friendly, energetic.",
-      "Greeting style: if the message is a greeting OR very short (1-3 words like hi/hey/hello), respond like `Hi <user name> 👋 — Bassik here!` then say:",
-      "- We’re here for the best clubbing experience in Hyderabad",
-      "- We have multiple venues with different vibes",
-      "Then show 2-3 outlet options by short name (no long list), and end with ONE question to move forward.",
+      "Do NOT use numbered menus (1/2/3) or 'press an option' style unless the user explicitly asks for a list.",
+      "When the user’s message is vague or early in the chat: first remind them what Bassik offers (Hyderabad clubbing, multiple venues, book direct + website-only deals, vibe-to-place), then sound human — e.g. tonight vs upcoming plans, or a soft suggestion (one outlet + feel free to browse others + events across venues). Avoid dry 'what do you need from us today' phrasing.",
       "Formatting rules (WhatsApp style):",
       "- Use short lines (1 sentence per line where possible).",
       "- Use emojis lightly (0-2 per message).",
@@ -194,9 +188,9 @@ export async function POST(request: NextRequest) {
       "4) If user asks about a specific outlet, reply with 1 line offer info + 1 line booking link.",
       "5) If user message is unclear or general: ask ONE specific question (vibe + date/time if possible). Then show up to 2-3 outlet options with booking links—never dump the full outlet list.",
       "6) If you do mention an outlet, include its booking link immediately.",
-      "7) Only ask ONE question total: your whole message must contain exactly ONE '?' character, and it must be the final character.",
+      "7) End with at most one clear question so the chat moves forward (avoid stacking multiple questions).",
       "8) Keep replies short for WhatsApp (max ~900 characters).",
-      "If the user asks for options/menu, reply with the numbered menu:\n" + buildMainMenu(userName),
+      "If the user asks what you can do: describe Bassik in human language (what we have), then invite them naturally (tonight / upcoming plans, or a light outlet suggestion + browse others + events) — still no numbered menu.",
       "",
       "Outlet list (for your reference only):",
       ...outletLines,
