@@ -717,43 +717,47 @@ export default function AutomationsPageClient() {
             </div>
           )}
 
-          <details className="mt-2 text-xs text-slate-500">
-            <summary className="cursor-pointer font-medium text-slate-600">Twilio setup (one time)</summary>
-            <ol className="mt-2 list-inside list-decimal space-y-2 pl-1 text-slate-700">
-              <li>
-                In{" "}
-                <a
-                  href="https://console.twilio.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-orange-700 underline"
-                >
-                  Twilio Console
-                </a>
-                , open <strong>Account</strong> → copy <strong>Account SID</strong> and <strong>Auth Token</strong>.
-              </li>
-              <li>
-                Under <strong>Messaging</strong> → <strong>Try it out</strong> → <strong>Send a WhatsApp message</strong>,
-                use the sandbox <strong>From</strong> number (e.g. <code className="rounded bg-slate-100 px-1">whatsapp:+14155238886</code>)
-                until your business number is approved.
-              </li>
-              <li>
-                For sandbox: each recipient must join with the code Twilio shows (send &quot;join …&quot; to the sandbox
-                number from WhatsApp).
-              </li>
-              <li>
-                Add to <code className="rounded bg-slate-100 px-1">.env.local</code> (then restart{" "}
-                <code className="rounded bg-slate-100 px-1">npm run dev</code>):
-                <pre className="mt-2 overflow-x-auto rounded-lg bg-slate-900 p-3 text-[11px] text-slate-100">
-                  {`TWILIO_ACCOUNT_SID=ACxxxxxxxx
+          {!twilioStatus?.configured && (
+            <details className="mt-2 text-xs text-slate-500">
+              <summary className="cursor-pointer font-medium text-slate-600">Twilio setup (one time)</summary>
+              <ol className="mt-2 list-inside list-decimal space-y-2 pl-1 text-slate-700">
+                <li>
+                  In{" "}
+                  <a
+                    href="https://console.twilio.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-orange-700 underline"
+                  >
+                    Twilio Console
+                  </a>
+                  , open <strong>Account</strong> → copy <strong>Account SID</strong> and <strong>Auth Token</strong>.
+                </li>
+                <li>
+                  Under <strong>Messaging</strong> → <strong>Try it out</strong> →{" "}
+                  <strong>Send a WhatsApp message</strong>, use the sandbox <strong>From</strong> number (e.g.{" "}
+                  <code className="rounded bg-slate-100 px-1">whatsapp:+14155238886</code>) until your business
+                  number is approved.
+                </li>
+                <li>
+                  For sandbox: each recipient must join with the code Twilio shows (send &quot;join …&quot; to the
+                  sandbox number from WhatsApp).
+                </li>
+                <li>
+                  Add to <code className="rounded bg-slate-100 px-1">.env.local</code> (then restart{" "}
+                  <code className="rounded bg-slate-100 px-1">npm run dev</code>):
+                  <pre className="mt-2 overflow-x-auto rounded-lg bg-slate-900 p-3 text-[11px] text-slate-100">
+                    {`TWILIO_ACCOUNT_SID=ACxxxxxxxx
 TWILIO_AUTH_TOKEN=your_auth_token
 TWILIO_WHATSAPP_FROM=whatsapp:+14155238886`}
-                </pre>
-                For production, replace <code className="rounded bg-slate-100 px-1">TWILIO_WHATSAPP_FROM</code> with your
-                Twilio WhatsApp sender (approved template rules apply).
-              </li>
-            </ol>
-          </details>
+                  </pre>
+                  For production, replace{" "}
+                  <code className="rounded bg-slate-100 px-1">TWILIO_WHATSAPP_FROM</code> with your Twilio WhatsApp
+                  sender (approved template rules apply).
+                </li>
+              </ol>
+            </details>
+          )}
 
           {canUseAutomationChat ? (
             <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/80 p-4">
