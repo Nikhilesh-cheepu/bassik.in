@@ -30,6 +30,27 @@ function inferSiteBaseUrl(req: NextRequest): string {
   return `${proto}://${host}`;
 }
 
+function isShortGreeting(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return true;
+  if (t.length <= 3) return true;
+  return /^(hi|hey|hello|hlo|yo|hola|sup|good\s*morning|good\s*evening|good\s*afternoon)\b/.test(t);
+}
+
+function buildMainMenu(userName: string): string {
+  const name = userName?.trim() ? userName.trim() : "there";
+  return [
+    `Hi ${name} 👋 — Bassik here!`,
+    `Best clubbing vibes in Hyderabad + multiple venues for every mood.`,
+    "",
+    "Reply with a number 👇",
+    "1) Book a table",
+    "2) Today’s offers",
+    "3) Pick a vibe (I’ll suggest the outlet)",
+    "4) Talk to a manager",
+  ].join("\n");
+}
+
 export async function POST(request: NextRequest) {
   try {
     const form = await request.formData();
@@ -53,6 +74,10 @@ export async function POST(request: NextRequest) {
         })
       : null;
     const userName = contact?.fullName?.trim() ? contact.fullName.trim() : "there";
+
+    // Quick guided flow (numbered menu)
+    const t0 = userText.trim().toLowerCase();
+    const choice = t0.match(/^([1-4])\b/)?.[1] ?? null;
 
     // Identify possible venue from message.
     const nt = userText.toLowerCase();
@@ -97,6 +122,54 @@ export async function POST(request: NextRequest) {
       return `- ${b.shortName} (${b.tag ?? "outlet"}) — offers today: ${offersToday}\n  Booking: ${baseUrl}/${b.id}/reservations`;
     });
 
+    // If greeting / empty / "menu", show the guided menu.
+    if (isShortGreeting(userText) || /\b(menu|options|help)\b/.test(t0)) {
+      return new NextResponse(twiml(buildMainMenu(userName)), { headers: { "Content-Type": "text/xml" } });
+    }
+
+    // Handle guided choices deterministically (no AI needed).
+    if (choice === "2") {
+      const top = outletLines.slice(0, 3).join("\n");
+      const msg = [
+        `Nice 😄 Here are today’s quick options:`,
+        top,
+        "",
+        "Which outlet should I book for you? (reply with the outlet name)",
+      ].join("\n");
+      return new NextResponse(twiml(msg), { headers: { "Content-Type": "text/xml" } });
+    }
+    if (choice === "1") {
+      const msg = [
+        `Perfect — let’s lock your table 🔥`,
+        "Tell me:",
+        "- Date + time",
+        "- People count",
+        "- Preferred outlet (or say “suggest”)",
+        "",
+        "What’s your plan?",
+      ].join("\n");
+      return new NextResponse(twiml(msg), { headers: { "Content-Type": "text/xml" } });
+    }
+    if (choice === "3") {
+      const msg = [
+        "Say your vibe and I’ll match the outlet 👇",
+        "- Bollywood / Commercial",
+        "- Techno / Underground",
+        "- Lounge / Chill",
+        "- Sports / Screening",
+        "",
+        "What vibe are you feeling?",
+      ].join("\n");
+      return new NextResponse(twiml(msg), { headers: { "Content-Type": "text/xml" } });
+    }
+    if (choice === "4") {
+      const msg = [
+        "Done ✅",
+        "Reply with your name + date/time + people count, and our manager will take it from here.",
+      ].join("\n");
+      return new NextResponse(twiml(msg), { headers: { "Content-Type": "text/xml" } });
+    }
+
     const assistantSystem = [
       "You are Bassik's WhatsApp AI assistant for staff-like customer conversations.",
       "Brand voice: Always represent the business as `Bassik` (never say `Twilio`).",
@@ -123,6 +196,7 @@ export async function POST(request: NextRequest) {
       "6) If you do mention an outlet, include its booking link immediately.",
       "7) Only ask ONE question total: your whole message must contain exactly ONE '?' character, and it must be the final character.",
       "8) Keep replies short for WhatsApp (max ~900 characters).",
+      "If the user asks for options/menu, reply with the numbered menu:\n" + buildMainMenu(userName),
       "",
       "Outlet list (for your reference only):",
       ...outletLines,
