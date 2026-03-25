@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { Pool } from "pg";
 import { getContactForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 import { getDiscountLabel } from "@/lib/reservation-discounts";
 
@@ -138,8 +137,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // We are currently running in "WhatsApp-only" mode: do NOT depend on the DB.
-    // Use static outlet contacts to build the WhatsApp URL and return success immediately.
+    // Build WhatsApp URL from the same contact number the outlet page uses.
+    // The outlet page prefers `Venue.contactNumbers[0]` (DB override) and falls back to static defaults.
     const effectiveBrandId =
       brandId === "the-hub" && hubSpotId && typeof hubSpotId === "string" ? hubSpotId : brandId;
 
@@ -198,8 +197,22 @@ export async function POST(request: NextRequest) {
 
     const message = messageLines.join("\n");
 
-    const phone = getContactForBrand(effectiveBrandId);
-    const waNumber = getFullPhoneNumber(phone);
+    // Prefer DB contactNumbers (matches outlet CTA). If missing, fall back to static mapping.
+    const venue = await prisma.venue.findUnique({
+      where: { brandId: effectiveBrandId },
+      select: { contactPhone: true, contactNumbers: true },
+    });
+
+    const rawContacts = venue?.contactNumbers as unknown;
+    const dbContacts: { phone?: unknown; label?: unknown }[] = Array.isArray(rawContacts) ? rawContacts as any : [];
+
+    const dbPhoneCandidate =
+      dbContacts
+        .map((c) => (c && typeof c === "object" ? (c as any).phone : null))
+        .find((p) => typeof p === "string" && p.trim()) || null;
+
+    const phone = (dbPhoneCandidate as string | null) ?? venue?.contactPhone ?? getContactForBrand(effectiveBrandId);
+    const waNumber = getFullPhoneNumber(phone || getContactForBrand(effectiveBrandId));
     const encodedMessage = encodeURIComponent(message);
     const whatsappUrl = `https://wa.me/${waNumber}?text=${encodedMessage}`;
 

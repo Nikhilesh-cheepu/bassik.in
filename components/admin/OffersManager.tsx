@@ -23,6 +23,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [form, setForm] = useState({
     imageUrl: "",
     endDate: "",
@@ -30,6 +31,23 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ACCEPT = "image/jpeg,image/png,image/webp";
+
+  const next10DateYmd = Array.from({ length: 10 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    // Keep chips stable by using UTC date portion.
+    return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  });
+
+  const activeEndDateYmd = form.endDate ? new Date(form.endDate).toISOString().slice(0, 10) : "";
+
+  const chipLabel = (ymd: string) => {
+    const d = new Date(`${ymd}T00:00:00.000Z`);
+    const weekday = d.toLocaleDateString("en-IN", { weekday: "short", timeZone: "UTC" });
+    const day = d.toLocaleDateString("en-IN", { day: "2-digit", timeZone: "UTC" });
+    const month = d.toLocaleDateString("en-IN", { month: "short", timeZone: "UTC" });
+    return `${weekday} ${day} ${month}`;
+  };
 
   const loadOffers = useCallback(async () => {
     setError(null);
@@ -57,6 +75,20 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
   useEffect(() => {
     loadOffers();
   }, [loadOffers]);
+
+  const selectedCount = selectedIds.size;
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = (ids: string[]) => setSelectedIds(new Set(ids));
+  const clearSelection = () => setSelectedIds(new Set());
 
   const saveOffer = async (id?: string) => {
     if (!form.imageUrl?.trim()) {
@@ -118,6 +150,40 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
     }
   };
 
+  const deleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} selected offers?`)) return;
+    const ids = Array.from(selectedIds);
+    setLoading(true);
+    try {
+      for (const id of ids) {
+        // eslint-disable-next-line no-await-in-loop
+        const res = await fetch(`/api/admin/venues/${brandId}/offers`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+        if (!res.ok) {
+          // Best-effort: stop if any delete fails.
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Failed deleting offer ${id}`);
+        }
+      }
+      setSelectedIds(new Set());
+      if (editingId && ids.includes(editingId)) {
+        setEditingId(null);
+        setForm({ imageUrl: "", endDate: "" });
+      }
+      await loadOffers();
+      onUpdate();
+    } catch (e) {
+      console.error("Bulk delete offers failed:", e);
+      setError(e instanceof Error ? e.message : "Bulk delete failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -157,26 +223,23 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
   };
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-slate-50 sm:text-xl">Events &amp; Offers</h2>
-      <p className="text-sm text-slate-400">
-        Posters show in the hero carousel on the outlet page. Leave end date empty for no expiry.
-      </p>
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold text-slate-900 sm:text-xl">Events &amp; Offers</h2>
 
       {error && (
-        <div className="rounded-lg border border-rose-500/40 bg-rose-950/40 p-3 text-sm text-rose-100">
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
           {error}
         </div>
       )}
 
       {/* Add / Edit form */}
-      <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-[0_18px_45px_rgba(15,23,42,0.9)] sm:p-6">
-        <h3 className="text-sm font-semibold text-slate-50">
+      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+        <h3 className="text-sm font-semibold text-slate-900">
           {editingId ? "Edit offer" : "Add offer"}
         </h3>
         <div className="grid gap-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-200">
+            <label className="mb-1 block text-xs font-medium text-slate-700">
               Poster *
             </label>
             <input
@@ -191,44 +254,53 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
                 type="button"
                 disabled={uploading}
                 onClick={() => fileInputRef.current?.click()}
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-slate-100 transition-colors hover:bg-slate-800 disabled:opacity-50"
+                className="rounded-lg bg-white border border-slate-200 px-3 py-2 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50 disabled:opacity-50"
               >
                 {uploading ? "Processing & uploading…" : "Upload poster (JPG/PNG/WebP → 9:16 WebP)"}
               </button>
               {form.imageUrl && (
-                <span className="text-xs text-emerald-300">Poster set</span>
+                <span className="text-xs text-emerald-700">Poster set</span>
               )}
             </div>
-            <p className="mt-1 text-xs text-slate-500">
-              Auto-crops to 9:16 and compresses to WebP. Stored on Vercel Blob storage.
-            </p>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-200">
+            <label className="mb-1 block text-xs font-medium text-slate-700">
               End date (optional)
             </label>
-            <input
-              type="datetime-local"
-              value={
-                form.endDate
-                  ? (() => {
-                      const d = new Date(form.endDate);
-                      const y = d.getFullYear();
-                      const m = String(d.getMonth() + 1).padStart(2, "0");
-                      const day = String(d.getDate()).padStart(2, "0");
-                      const h = String(d.getHours()).padStart(2, "0");
-                      const min = String(d.getMinutes()).padStart(2, "0");
-                      return `${y}-${m}-${day}T${h}:${min}`;
-                    })()
-                  : ""
-              }
-              onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value ? new Date(e.target.value).toISOString() : "" }))}
-              className="w-full max-w-xs rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              Leave empty for no expiry. Past end date hides the offer on site and shows it under
-              Expired here.
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, endDate: "" }))}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  !activeEndDateYmd
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                No expiry
+              </button>
+              {next10DateYmd.map((ymd) => {
+                const isActive = activeEndDateYmd === ymd;
+                return (
+                  <button
+                    key={ymd}
+                    type="button"
+                    onClick={() => {
+                      // Set end to 23:59 UTC of that date (simple + predictable).
+                      const iso = new Date(`${ymd}T23:59:00.000Z`).toISOString();
+                      setForm((f) => ({ ...f, endDate: iso }));
+                    }}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      isActive
+                        ? "bg-slate-900 text-white border-slate-900"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    {chipLabel(ymd)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
         <div className="flex gap-2">
@@ -236,7 +308,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
             type="button"
             onClick={() => saveOffer(editingId ?? undefined)}
             disabled={loading || !form.imageUrl?.trim()}
-            className="rounded-lg bg-fuchsia-500 px-4 py-2 text-sm font-medium text-slate-950 transition-colors hover:bg-fuchsia-400 disabled:opacity-50"
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
           >
             {loading ? "Saving..." : editingId ? "Update" : "Add offer"}
           </button>
@@ -247,7 +319,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
                 setEditingId(null);
                 setForm({ imageUrl: "", endDate: "" });
               }}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-800"
+              className="rounded-lg bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
             >
               Cancel
             </button>
@@ -255,112 +327,158 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
         </div>
       </div>
 
-      {/* Active */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-slate-100">
-          Active ({active.length})
-        </h3>
-        {listLoading ? (
-          <p className="text-sm text-slate-500">Loading offers…</p>
-        ) : active.length === 0 ? (
-          <p className="text-sm text-slate-500">No active offers. Add one above.</p>
-        ) : (
-          <ul className="space-y-2">
-            {active.map((o) => (
-              <li
-                key={o.id}
-                className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-3"
-              >
-                <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-slate-800">
-                  <Image
-                    src={o.imageUrl}
-                    alt="Offer"
-                    fill
-                    className="object-cover"
-                    sizes="56px"
-                    unoptimized
-                  />
-                </div>
-                <div className="flex-1 min-w-0 text-sm text-slate-300">
-                  {o.endDate ? `Ends ${new Date(o.endDate).toLocaleString()}` : "No end date"}
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => startEdit(o)}
-                    className="rounded-lg p-2 text-slate-300 transition-colors hover:bg-slate-800"
-                    title="Edit"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteOffer(o.id)}
-                    disabled={loading}
-                    className="rounded-lg p-2 text-rose-300 transition-colors hover:bg-rose-500/10"
-                    title="Delete"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {selectedCount > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+          <span className="text-sm font-medium text-slate-700">{selectedCount} selected</span>
+          <button
+            type="button"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            disabled={loading}
+            onClick={clearSelection}
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-500 disabled:opacity-50"
+            disabled={loading}
+            onClick={() => void deleteSelected()}
+          >
+            Delete selected
+          </button>
+        </div>
+      )}
 
-      {/* Expired */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-semibold text-slate-100">
-          Expired ({expired.length})
-        </h3>
-        {listLoading ? (
-          <p className="text-sm text-slate-500">Loading…</p>
-        ) : expired.length === 0 ? (
-          <p className="text-sm text-slate-500">No expired offers.</p>
-        ) : (
-          <ul className="space-y-2">
-            {expired.map((o) => (
-              <li
-                key={o.id}
-                className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 p-3 opacity-80"
-              >
-                <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-slate-800">
-                  <Image
-                    src={o.imageUrl}
-                    alt="Offer"
-                    fill
-                    className="object-cover"
-                    sizes="56px"
-                    unoptimized
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {/* Active */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-slate-900">Active ({active.length})</h3>
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              disabled={active.length === 0 || loading}
+              onClick={() => selectAll(active.map((o) => o.id))}
+            >
+              Select all active
+            </button>
+          </div>
+          {listLoading ? (
+            <p className="text-sm text-slate-600">Loading offers…</p>
+          ) : active.length === 0 ? (
+            <p className="text-sm text-slate-600">No active offers. Add one above.</p>
+          ) : (
+            <ul className="space-y-1">
+              {active.map((o) => (
+                <li
+                  key={o.id}
+                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(o.id)}
+                    onChange={() => toggleSelected(o.id)}
+                    className="h-4 w-4 rounded border-slate-300 accent-slate-900"
                   />
-                </div>
-                <div className="flex-1 min-w-0 text-sm text-slate-400">
-                  Ended {o.endDate ? new Date(o.endDate).toLocaleString() : ""}
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => startEdit(o)}
-                    className="rounded-lg p-2 text-slate-300 transition-colors hover:bg-slate-800"
-                    title="Edit"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteOffer(o.id)}
-                    disabled={loading}
-                    className="rounded-lg p-2 text-rose-300 transition-colors hover:bg-rose-500/10"
-                    title="Delete"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+                  <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-md bg-slate-100">
+                    <Image src={o.imageUrl} alt="Offer" fill className="object-cover" sizes="40px" unoptimized />
+                  </div>
+                  <div className="flex-1 min-w-0 text-sm text-slate-700">
+                    {o.endDate ? `Ends ${new Date(o.endDate).toLocaleString()}` : "No end date"}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(o)}
+                      className="rounded-lg p-1.5 text-slate-700 hover:bg-slate-100 border border-slate-200"
+                      title="Edit"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteOffer(o.id)}
+                      disabled={loading}
+                      className="rounded-lg p-1.5 text-rose-700 border border-rose-100 hover:bg-rose-50"
+                      title="Delete"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Expired */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-slate-900">Expired ({expired.length})</h3>
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              disabled={expired.length === 0 || loading}
+              onClick={() => selectAll(expired.map((o) => o.id))}
+            >
+              Select all expired
+            </button>
+          </div>
+          {listLoading ? (
+            <p className="text-sm text-slate-600">Loading…</p>
+          ) : expired.length === 0 ? (
+            <p className="text-sm text-slate-600">No expired offers.</p>
+          ) : (
+            <ul className="space-y-1">
+              {expired.map((o) => (
+                <li
+                  key={o.id}
+                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-2 opacity-90"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(o.id)}
+                    onChange={() => toggleSelected(o.id)}
+                    className="h-4 w-4 rounded border-slate-300 accent-slate-900"
+                  />
+                  <div className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-md bg-slate-100">
+                    <Image src={o.imageUrl} alt="Offer" fill className="object-cover" sizes="40px" unoptimized />
+                  </div>
+                  <div className="flex-1 min-w-0 text-sm text-slate-700">
+                    Ended {o.endDate ? new Date(o.endDate).toLocaleString() : ""}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(o)}
+                      className="rounded-lg p-1.5 text-slate-700 hover:bg-slate-100 border border-slate-200"
+                      title="Edit"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteOffer(o.id)}
+                      disabled={loading}
+                      className="rounded-lg p-1.5 text-rose-700 border border-rose-100 hover:bg-rose-50"
+                      title="Delete"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );

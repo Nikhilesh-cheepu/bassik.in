@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { BRANDS } from "@/lib/brands";
 import ImageUploader from "./ImageUploader";
 import MenuManager from "./MenuManager";
 import OffersManager from "./OffersManager";
@@ -42,9 +43,10 @@ interface VenueEditorProps {
   admin: Admin | null;
   onBack: () => void;
   onSave: () => void;
+  onSwitchBrandId?: (brandId: string) => void;
 }
 
-export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEditorProps) {
+export default function VenueEditor({ venue, admin, onBack, onSave, onSwitchBrandId }: VenueEditorProps) {
   const [currentVenue, setCurrentVenue] = useState(venue);
   const [formData, setFormData] = useState({
     mapUrl: venue.mapUrl || "",
@@ -134,11 +136,36 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
   const galleryImages = currentVenue.images?.filter((i) => i.type === "GALLERY") || [];
 
   return (
-    <AdminShell title={currentVenue.shortName} showBack onBackHref="/admin/dashboard/venues">
+    <AdminShell
+      title={currentVenue.shortName}
+      showBack
+      onBackHref="/admin/dashboard/venues"
+      onBack={onBack}
+    >
       {/* Tabs */}
-      <div className="sticky top-[100px] z-20 mb-4">
+      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-medium text-slate-600">Switch outlet</p>
+            <p className="text-xs text-slate-500">Jump to another outlet without going back.</p>
+          </div>
+          <select
+            value={currentVenue.brandId}
+            onChange={(e) => onSwitchBrandId?.(e.target.value)}
+            className="max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+          >
+            {BRANDS.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.shortName}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="mb-4 sm:sticky sm:top-[100px] z-20">
         <div className="flex justify-start">
-          <div className="inline-flex overflow-x-auto rounded-full border border-slate-800 bg-slate-900/90 p-1">
+          <div className="inline-flex overflow-x-auto rounded-full border border-slate-200 bg-white p-1 shadow-sm">
             {[
               { id: "offers", label: "Events & Offers" },
               { id: "gallery", label: "Gallery" },
@@ -153,7 +180,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
                 className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium sm:px-4 sm:text-sm ${
                   activeTab === tab.id
                     ? "bg-slate-100 text-slate-900 shadow"
-                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                    : "text-slate-600 hover:bg-slate-50"
                 }`}
               >
                 {tab.label}
@@ -168,8 +195,8 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
           <div
             className={`mb-4 p-4 rounded-lg ${
               message.type === "success"
-                ? "border border-emerald-500/40 bg-emerald-950/40 text-emerald-100"
-                : "border border-rose-500/40 bg-rose-950/40 text-rose-100"
+                ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                : "border border-rose-200 bg-rose-50 text-rose-700"
             }`}
           >
             {message.text}
@@ -205,11 +232,11 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
 
         {/* Location Tab */}
         {activeTab === "location" && (
-          <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-[0_18px_45px_rgba(15,23,42,0.9)] sm:p-6">
-            <h2 className="mb-2 text-lg font-semibold text-slate-50 sm:text-xl">Location</h2>
+          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <h2 className="mb-2 text-lg font-semibold text-slate-900 sm:text-xl">Location</h2>
             
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-200">
+              <label className="mb-1 block text-sm font-medium text-slate-700">
                 Google Maps URL
               </label>
               <input
@@ -217,9 +244,9 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
                 value={formData.mapUrl}
                 onChange={(e) => setFormData({ ...formData, mapUrl: e.target.value })}
                 placeholder="https://maps.app.goo.gl/..."
-                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300"
               />
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-slate-500">
                 Paste the Google Maps share link for this venue
               </p>
             </div>
@@ -227,7 +254,7 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
             <button
               onClick={() => handleSave({ mapUrl: formData.mapUrl })}
               disabled={saving}
-              className="rounded-lg bg-fuchsia-500 px-6 py-2 text-sm font-medium text-slate-950 transition-colors hover:bg-fuchsia-400 disabled:opacity-50"
+              className="rounded-lg bg-slate-900 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save Location"}
             </button>
@@ -236,25 +263,25 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
 
         {/* Contact Tab - Multiple contact numbers */}
         {activeTab === "contact" && (
-          <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/80 p-4 shadow-[0_18px_45px_rgba(15,23,42,0.9)] sm:p-6">
-            <h2 className="mb-2 text-lg font-semibold text-slate-50 sm:text-xl">
+          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <h2 className="mb-2 text-lg font-semibold text-slate-900 sm:text-xl">
               Contact numbers
             </h2>
-            <p className="mb-4 text-sm text-slate-400">
+            <p className="mb-4 text-sm text-slate-500">
               Add one or more numbers. On the outlet page, visitors see a dropdown to choose which number to call or WhatsApp. Use 10 digits (e.g. 7013884485). Label is optional (e.g. Main, Reservations).
             </p>
             <div className="space-y-3">
               {formData.contactNumbers.map((contact, index) => (
                 <div
                   key={index}
-                  className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3"
+                  className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3"
                 >
                   <input
                     type="text"
                     value={contact.label ?? ""}
                     onChange={(e) => updateContact(index, "label", e.target.value)}
                     placeholder="Label (optional)"
-                    className="w-28 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 sm:w-32"
+                    className="w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300 sm:w-32"
                   />
                   <input
                     type="tel"
@@ -263,12 +290,12 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
                     value={contact.phone}
                     onChange={(e) => updateContact(index, "phone", e.target.value)}
                     placeholder="10-digit number"
-                    className="flex-1 min-w-[120px] rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-fuchsia-500"
+                    className="flex-1 min-w-[120px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300"
                   />
                   <button
                     type="button"
                     onClick={() => removeContact(index)}
-                    className="rounded-lg p-2 text-rose-300 transition-colors hover:bg-rose-500/10"
+                    className="rounded-lg p-2 text-rose-700 transition-colors hover:bg-rose-50 border border-rose-100"
                     title="Remove"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -282,14 +309,14 @@ export default function VenueEditor({ venue, admin, onBack, onSave }: VenueEdito
               <button
                 type="button"
                 onClick={addContact}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-800"
+                className="rounded-lg bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 + Add number
               </button>
               <button
                 onClick={handleSaveContacts}
                 disabled={saving || formData.contactNumbers.every((c) => !c.phone.trim())}
-                className="rounded-lg bg-fuchsia-500 px-6 py-2 text-sm font-medium text-slate-950 transition-colors hover:bg-fuchsia-400 disabled:opacity-50"
+                className="rounded-lg bg-slate-900 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
               >
                 {saving ? "Saving..." : "Save contact numbers"}
               </button>

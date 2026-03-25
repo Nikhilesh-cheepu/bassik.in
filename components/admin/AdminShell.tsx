@@ -9,6 +9,7 @@ type AdminShellProps = {
   children: ReactNode;
   showBack?: boolean;
   onBackHref?: string;
+  onBack?: () => void;
 };
 
 export default function AdminShell({
@@ -16,14 +17,17 @@ export default function AdminShell({
   children,
   showBack = false,
   onBackHref = "/admin/dashboard",
+  onBack,
 }: AdminShellProps) {
   const router = useRouter();
   const pathname = usePathname();
 
   const tabs = [
     { label: "Dashboard", href: "/admin/dashboard" },
+    { label: "Assistant", href: "/admin/dashboard/assistant" },
     { label: "Venues", href: "/admin/dashboard/venues" },
     { label: "Bookings", href: "/admin/dashboard/bookings" },
+    { label: "Automations", href: "/admin/dashboard/automations" },
     { label: "Admins", href: "/admin/dashboard/admins" },
   ];
 
@@ -42,12 +46,15 @@ export default function AdminShell({
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 text-slate-900">
       <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2 sm:py-3">
           <div className="flex items-center gap-3">
             {showBack && (
               <button
                 type="button"
-                onClick={() => router.push(onBackHref)}
+                onClick={() => {
+                  if (onBack) onBack();
+                  else router.push(onBackHref);
+                }}
                 className="hidden rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 sm:inline-flex"
               >
                 ← Back
@@ -76,12 +83,12 @@ export default function AdminShell({
           </button>
         </div>
 
-        <nav className="mx-auto flex max-w-6xl gap-2 px-4 pb-2">
+        <nav className="mx-auto flex max-w-6xl flex-nowrap gap-2 overflow-x-auto px-4 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tabs.map((tab) => (
             <Link
               key={tab.href}
               href={tab.href}
-              className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition-all sm:text-sm ${
+              className={`flex-shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium transition-all sm:text-sm ${
                 isActive(tab.href)
                   ? "bg-slate-900 text-white shadow-sm"
                   : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
@@ -93,7 +100,7 @@ export default function AdminShell({
         </nav>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 pb-10 pt-4 sm:pt-6">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 pb-10 pt-3 sm:pt-6">{children}</main>
     </div>
   );
 }

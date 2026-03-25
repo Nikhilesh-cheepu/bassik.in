@@ -177,3 +177,49 @@ enum ReservationStatus {
   CANCELLED
   COMPLETED
 }
+
+// Admin automations: messy Excel → AI column map → contacts → optional WhatsApp (Twilio)
+model AutomationImport {
+  id        String   @id @default(cuid())
+  fileName  String
+  rowCount  Int
+  mapping   Json // ColumnMapping[] — confirmed field assignments
+  headers   Json // string[] snapshot of first row
+  createdAt DateTime @default(now())
+
+  contacts AutomationContact[]
+
+  @@index([createdAt])
+}
+
+model AutomationContact {
+  id        String   @id @default(cuid())
+  importId  String
+  fullName  String?
+  phone     String
+  venue     String?
+  extra     Json?
+  createdAt DateTime @default(now())
+
+  import   AutomationImport            @relation(fields: [importId], references: [id], onDelete: Cascade)
+  messages AutomationWhatsAppMessage[]
+
+  @@index([importId])
+  @@index([phone])
+}
+
+model AutomationWhatsAppMessage {
+  id          String   @id @default(cuid())
+  contactId   String?
+  toPhone     String
+  body        String
+  status      String // SENT | FAILED
+  providerSid String?
+  error       String?
+  createdAt   DateTime @default(now())
+
+  contact AutomationContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([contactId])
+  @@index([createdAt])
+}

@@ -44,6 +44,21 @@ export default function BookingsPageClient() {
     return d.toISOString().split("T")[0];
   };
 
+  const formatChipLabel = (iso: string) => {
+    const d = new Date(iso);
+    const weekday = d.toLocaleDateString("en-IN", { weekday: "short" });
+    const day = d.getDate();
+    const month = d.toLocaleDateString("en-IN", { month: "short" });
+    return `${weekday} ${day} ${month}`;
+  };
+
+  const next10Days = Array.from({ length: 10 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    const iso = d.toISOString().split("T")[0];
+    return { iso, label: formatChipLabel(iso) };
+  });
+
   const [filter, setFilter] = useState<{ dateFrom?: string; dateTo?: string }>({
     dateFrom: undefined,
     dateTo: undefined,
@@ -192,7 +207,7 @@ Reservation made through bassik.in${coverLine}`;
       <AdminShell title="Bookings">
         <div className="flex min-h-[50vh] items-center justify-center">
           <div className="text-center">
-            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-fuchsia-500/60 border-t-transparent" />
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-transparent" />
             <p className="mt-3 text-xs text-slate-400">Loading bookings…</p>
           </div>
         </div>
@@ -203,72 +218,62 @@ Reservation made through bassik.in${coverLine}`;
   return (
     <AdminShell title="Bookings">
       <main className="pb-8 pt-2">
-        <div className="mb-3 text-xs text-slate-400">
-          Filter, review and export reservations across all outlets.
-        </div>
-        <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4">
-          <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
-            <span className="text-xs font-medium text-slate-300 sm:text-sm">Quick range:</span>
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3 sm:p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Bookings</p>
+              <p className="text-xs text-slate-600">Pick a day and outlet</p>
+            </div>
+            <button
+              onClick={exportToPDF}
+              className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white shadow hover:bg-slate-800 sm:text-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+              Export
+            </button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               onClick={() => setFilter({ dateFrom: undefined, dateTo: undefined })}
-              className={`rounded-full px-3 py-1.5 text-xs sm:text-sm font-medium transition-colors ${
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                 isAllTime
-                  ? "bg-fuchsia-500 text-slate-950 hover:bg-fuchsia-400"
-                  : "bg-slate-800 text-slate-200 hover:bg-slate-700"
+                  ? "bg-slate-900 text-white hover:bg-slate-800"
+                  : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
               }`}
             >
               All time
             </button>
-            <button
-              onClick={() => setFilter({ dateFrom: getYesterday(), dateTo: getYesterday() })}
-              className="rounded-full bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 sm:text-sm"
-            >
-              Yesterday
-            </button>
-            <button
-              onClick={() => setFilter({ dateFrom: getToday(), dateTo: getToday() })}
-              className={`rounded-full px-3 py-1.5 text-xs sm:text-sm transition-colors ${
-                !isAllTime && filter.dateFrom === getToday() && filter.dateTo === getToday()
-                  ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400 font-medium"
-                  : "bg-slate-800 text-slate-200 hover:bg-slate-700"
-              }`}
-            >
-              Today
-            </button>
-            <button
-              onClick={() => setFilter({ dateFrom: getTomorrow(), dateTo: getTomorrow() })}
-              className="rounded-full bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 sm:text-sm"
-            >
-              Tomorrow
-            </button>
+
+            {next10Days.map((d) => {
+              const isActive = !isAllTime && filter.dateFrom === d.iso && filter.dateTo === d.iso;
+              return (
+                <button
+                  key={d.iso}
+                  onClick={() => setFilter({ dateFrom: d.iso, dateTo: d.iso })}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors border ${
+                    isActive ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  {d.label}
+                </button>
+              );
+            })}
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <label className="text-xs font-medium text-slate-300 sm:text-sm">From:</label>
-            <input
-              type="date"
-              value={filter.dateFrom ?? ""}
-              onChange={(e) => setFilter({ ...filter, dateFrom: e.target.value || undefined })}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 sm:text-sm"
-            />
-            <label className="text-xs font-medium text-slate-300 sm:text-sm">To:</label>
-            <input
-              type="date"
-              value={filter.dateTo ?? ""}
-              onChange={(e) => setFilter({ ...filter, dateTo: e.target.value || undefined })}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 sm:text-sm"
-            />
-            <button
-              onClick={() => setFilter({ dateFrom: undefined, dateTo: undefined })}
-              className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors"
-            >
-              Reset
-            </button>
-            <div className="hidden h-6 w-px bg-slate-800 sm:block" />
-            <label className="text-xs font-medium text-slate-300 sm:text-sm">Outlet:</label>
+
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+            <label className="text-xs font-medium text-slate-700 sm:text-sm">Outlet:</label>
             <select
               value={brandFilter}
               onChange={(e) => setBrandFilter(e.target.value)}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 sm:text-sm"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
             >
               <option value="all">All outlets</option>
               {BRANDS.map((b) => (
@@ -277,23 +282,45 @@ Reservation made through bassik.in${coverLine}`;
                 </option>
               ))}
             </select>
-            <div className="flex-1" />
-            <button
-              onClick={exportToPDF}
-              className="flex items-center gap-1.5 rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-medium text-slate-950 shadow hover:bg-sky-400 sm:text-sm"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Export
-            </button>
           </div>
+
+          <details className="mt-3">
+            <summary className="cursor-pointer text-xs font-medium text-slate-700 hover:text-slate-900">
+              Custom range
+            </summary>
+            <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:items-end">
+              <div>
+                <label className="text-xs font-medium text-slate-600">From</label>
+                <input
+                  type="date"
+                  value={filter.dateFrom ?? ""}
+                  onChange={(e) => setFilter({ ...filter, dateFrom: e.target.value || undefined })}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600">To</label>
+                <input
+                  type="date"
+                  value={filter.dateTo ?? ""}
+                  onChange={(e) => setFilter({ ...filter, dateTo: e.target.value || undefined })}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                />
+              </div>
+              <button
+                onClick={() => setFilter({ dateFrom: undefined, dateTo: undefined })}
+                className="rounded-lg bg-white border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Reset
+              </button>
+            </div>
+          </details>
         </div>
 
         <div className="space-y-2 sm:space-y-3">
           {reservations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 px-6 py-10 text-center">
-              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-slate-300">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
@@ -303,8 +330,8 @@ Reservation made through bassik.in${coverLine}`;
                   />
                 </svg>
               </div>
-              <p className="text-sm font-medium text-slate-100">No bookings found</p>
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="text-sm font-medium text-slate-900">No bookings found</p>
+              <p className="mt-1 text-xs text-slate-600">
                 Try adjusting the date range or selecting a different outlet.
               </p>
             </div>
@@ -312,14 +339,14 @@ Reservation made through bassik.in${coverLine}`;
             reservations.map((reservation) => (
               <div
                 key={reservation.id}
-                className="rounded-2xl border border-slate-800 bg-slate-900/80 p-3 shadow-[0_18px_45px_rgba(15,23,42,0.9)] transition-all hover:-translate-y-0.5 hover:border-slate-600/80"
+                className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition-all hover:shadow"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="mb-1 flex items-center gap-2">
-                          <div className="text-sm font-semibold text-slate-50 sm:text-base">
+                          <div className="text-sm font-semibold text-slate-900 sm:text-base">
                             {new Date(reservation.date).toLocaleDateString("en-IN", {
                               day: "numeric",
                               month: "short",
@@ -327,30 +354,30 @@ Reservation made through bassik.in${coverLine}`;
                             })}
                           </div>
                           <span className="text-xs text-slate-500 sm:text-sm">•</span>
-                          <div className="text-sm font-medium text-slate-100 sm:text-base">
+                          <div className="text-sm font-medium text-slate-700 sm:text-base">
                             {formatTime(reservation.timeSlot)}
                           </div>
                         </div>
-                        <div className="truncate text-sm font-semibold text-slate-50 sm:text-base">
+                        <div className="truncate text-sm font-semibold text-slate-900 sm:text-base">
                           {reservation.fullName}
                         </div>
-                        <div className="space-y-0.5 text-xs text-slate-400 sm:text-sm">
-                          <div className="font-mono text-slate-300">{reservation.contactNumber}</div>
+                        <div className="space-y-0.5 text-xs text-slate-600 sm:text-sm">
+                          <div className="font-mono text-slate-700">{reservation.contactNumber}</div>
                           {reservation.user?.email && (
-                            <div className="text-slate-500">{reservation.user.email}</div>
+                            <div className="text-slate-600">{reservation.user.email}</div>
                           )}
                           {(reservation.user?.firstName || reservation.user?.lastName) && (
-                            <div className="text-slate-500">
+                            <div className="text-slate-600">
                               {[reservation.user?.firstName, reservation.user?.lastName].filter(Boolean).join(" ")}
                             </div>
                           )}
                         </div>
                       </div>
-                      <div className="whitespace-nowrap rounded-full bg-slate-800 px-2 py-1 text-xs font-medium text-slate-200 sm:text-sm">
+                      <div className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 sm:text-sm border border-slate-200">
                         {reservation.brandName}
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 sm:text-sm">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 sm:text-sm">
                       <span>{reservation.numberOfMen}M</span>
                       <span>{reservation.numberOfWomen}W</span>
                       <span>{reservation.numberOfCouples}C</span>
@@ -369,8 +396,8 @@ Reservation made through bassik.in${coverLine}`;
                       onClick={() => handleAccept(reservation.id)}
                       className={`rounded-lg p-2 transition-colors ${
                         reservation.status === "CONFIRMED"
-                          ? "bg-emerald-500 text-slate-950"
-                          : "bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                          : "bg-white text-emerald-700 border border-emerald-100 hover:bg-emerald-50"
                       }`}
                       title="Accept/Confirm"
                     >
@@ -382,8 +409,8 @@ Reservation made through bassik.in${coverLine}`;
                       onClick={() => handleReject(reservation.id)}
                       className={`rounded-lg p-2 transition-colors ${
                         reservation.status === "CANCELLED"
-                          ? "bg-rose-500 text-slate-950"
-                          : "bg-rose-500/10 text-rose-300 hover:bg-rose-500/20"
+                          ? "bg-rose-50 text-rose-700 border border-rose-100"
+                          : "bg-white text-rose-700 border border-rose-100 hover:bg-rose-50"
                       }`}
                       title="Reject/Cancel"
                     >
@@ -393,7 +420,7 @@ Reservation made through bassik.in${coverLine}`;
                     </button>
                     <button
                       onClick={() => handleWhatsAppMessage(reservation)}
-                      className="rounded-lg bg-emerald-500 p-2 text-slate-950 transition-colors hover:bg-emerald-400"
+                      className="rounded-lg bg-emerald-50 border border-emerald-100 p-2 text-emerald-700 transition-colors hover:bg-emerald-100"
                       title="WhatsApp"
                     >
                       <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -402,7 +429,7 @@ Reservation made through bassik.in${coverLine}`;
                     </button>
                     <button
                       onClick={() => handleDelete(reservation.id)}
-                      className="rounded-lg bg-slate-900 p-2 text-rose-300 transition-colors hover:bg-rose-500/10"
+                      className="rounded-lg bg-white border border-rose-100 p-2 text-rose-700 transition-colors hover:bg-rose-50"
                       title="Delete booking"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

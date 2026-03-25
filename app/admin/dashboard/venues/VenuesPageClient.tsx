@@ -80,8 +80,8 @@ export default function VenuesPageClient() {
       <AdminShell title="Venues">
         <div className="flex min-h-[50vh] items-center justify-center">
           <div className="text-center">
-            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-fuchsia-500/60 border-t-transparent" />
-            <p className="mt-3 text-xs text-slate-400">Loading venues…</p>
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-transparent" />
+            <p className="mt-3 text-xs text-slate-600">Loading venues…</p>
           </div>
         </div>
       </AdminShell>
@@ -95,6 +95,27 @@ export default function VenuesPageClient() {
         admin={null}
         onBack={handleBack}
         onSave={handleSave}
+        onSwitchBrandId={(brandId) => {
+          const brand = BRANDS.find((b) => b.id === brandId);
+          if (!brand) return;
+          const existing = venues.find((v) => v.brandId === brandId);
+          if (existing) setSelectedVenue(existing);
+          else {
+            setSelectedVenue({
+              id: "",
+              brandId: brand.id,
+              name: brand.name,
+              shortName: brand.shortName,
+              address: "",
+              mapUrl: null,
+              contactPhone: null,
+              contactNumbers: null,
+              images: [],
+              menus: [],
+              offers: [],
+            });
+          }
+        }}
       />
     );
   }
@@ -134,10 +155,10 @@ export default function VenuesPageClient() {
                     });
                   }
                 }}
-                className="group text-left rounded-2xl border border-slate-800 bg-slate-900/70 p-3 shadow-[0_18px_45px_rgba(15,23,42,0.9)] transition-all hover:-translate-y-0.5 hover:border-slate-500/70 hover:bg-slate-900"
+                className="group text-left rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow"
               >
                 <div className="flex flex-col items-center space-y-2 text-center">
-                  <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl bg-slate-800/80 ring-1 ring-slate-700/80 sm:h-14 sm:w-14">
+                  <div className="relative h-12 w-12 flex-shrink-0 overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200 sm:h-14 sm:w-14">
                     <Image
                       src={brand.logoPath ?? (brand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${brand.id}.png`)}
                       alt={brand.shortName}
@@ -150,7 +171,7 @@ export default function VenuesPageClient() {
                     />
                   </div>
                   <div className="w-full flex-1 min-w-0">
-                    <h3 className="mb-0.5 truncate text-xs font-semibold text-slate-50 sm:text-sm">
+                    <h3 className="mb-0.5 truncate text-xs font-semibold text-slate-900 sm:text-sm">
                       {brand.shortName}
                     </h3>
                     <span
@@ -162,27 +183,27 @@ export default function VenuesPageClient() {
                     </span>
                   </div>
                   {venue && (
-                    <div className="mt-1 w-full space-y-0.5 text-[11px] text-slate-400">
-                      <div className="flex items-center justify-between rounded-xl bg-slate-900/80 px-2 py-1">
+                    <div className="mt-1 w-full space-y-0.5 text-[11px] text-slate-600">
+                      <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 px-2 py-1">
                         <span className="flex items-center gap-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-400" />
                           Offers
                         </span>
-                        <span className="font-semibold text-slate-100">{offersCount}</span>
+                        <span className="font-semibold text-slate-700">{offersCount}</span>
                       </div>
-                      <div className="flex items-center justify-between rounded-xl bg-slate-900/80 px-2 py-1">
+                      <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 px-2 py-1">
                         <span className="flex items-center gap-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
                           Gallery
                         </span>
-                        <span className="font-semibold text-slate-100">{galleryCount}</span>
+                        <span className="font-semibold text-slate-700">{galleryCount}</span>
                       </div>
-                      <div className="flex items-center justify-between rounded-xl bg-slate-900/80 px-2 py-1">
+                      <div className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 px-2 py-1">
                         <span className="flex items-center gap-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                           Menus
                         </span>
-                        <span className="font-semibold text-slate-100">{menuCount}</span>
+                        <span className="font-semibold text-slate-700">{menuCount}</span>
                       </div>
                     </div>
                   )}

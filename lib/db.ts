@@ -6,21 +6,48 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-// On Vercel, Railway's private URL (postgres.railway.internal) is not reachable; use public URL at runtime.
-const connectionString =
-  process.env.VERCEL && process.env.DATABASE_PUBLIC_URL
-    ? process.env.DATABASE_PUBLIC_URL
-    : process.env.DATABASE_URL;
+function resolveDatabaseUrl(): string {
+  const privateUrl = process.env.DATABASE_URL?.trim() ?? "";
+  const publicUrl = process.env.DATABASE_PUBLIC_URL?.trim() ?? "";
+  const onRailwayRuntime = Boolean(process.env.RAILWAY_ENVIRONMENT);
+
+  // Private *.railway.internal (and similar) only resolves inside Railway's network.
+  const looksLikeInternalOnly =
+    privateUrl.includes("railway.internal") || /\.internal(?::|\/)?/i.test(privateUrl);
+
+  if (process.env.VERCEL && publicUrl) {
+    return publicUrl;
+  }
+  if (looksLikeInternalOnly && publicUrl && !onRailwayRuntime) {
+    return publicUrl;
+  }
+  if (privateUrl) {
+    return privateUrl;
+  }
+  return publicUrl;
+}
+
+const connectionString = resolveDatabaseUrl();
 
 if (!connectionString?.trim()) {
   throw new Error(
-    "Database URL is missing. Set DATABASE_URL (local) or DATABASE_PUBLIC_URL (Vercel) in your environment."
+    "Database URL is missing. Set DATABASE_URL. If it uses postgres.railway.internal, also set DATABASE_PUBLIC_URL for local dev and Vercel."
   );
 }
-if (process.env.VERCEL && !process.env.DATABASE_PUBLIC_URL) {
+
+if (looksLikeInternalOnlyEnv() && !process.env.DATABASE_PUBLIC_URL?.trim() && !onRailwayRuntime()) {
   console.warn(
-    "[db] VERCEL is set but DATABASE_PUBLIC_URL is not. If DATABASE_URL is Railway private URL, DB calls will fail. Add DATABASE_PUBLIC_URL in Vercel project settings."
+    "[db] DATABASE_URL points to an internal host (.internal). Local dev and Vercel cannot reach it. Add DATABASE_PUBLIC_URL (Railway dashboard → Postgres → Connect → public URL)."
   );
+}
+
+function looksLikeInternalOnlyEnv(): boolean {
+  const u = process.env.DATABASE_URL ?? "";
+  return u.includes("railway.internal") || /\.internal(?::|\/)?/i.test(u);
+}
+
+function onRailwayRuntime(): boolean {
+  return Boolean(process.env.RAILWAY_ENVIRONMENT);
 }
 
 // Create PostgreSQL connection pool (limit connections per serverless instance)
