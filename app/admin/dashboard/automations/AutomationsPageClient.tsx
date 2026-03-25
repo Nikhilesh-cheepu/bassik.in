@@ -61,6 +61,13 @@ export default function AutomationsPageClient() {
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const activeImport = activeImportId ? imports.find((imp) => imp.id === activeImportId) ?? null : null;
+  const canUseAutomationChat = Boolean(activeImportId && contacts.length > 0);
+  const [analysisSnapshot, setAnalysisSnapshot] = useState<{
+    fileName: string;
+    rowCount: number;
+    headers: string[];
+  } | null>(null);
 
   const [message, setMessage] = useState("");
   const [testPhone, setTestPhone] = useState("");
@@ -146,12 +153,14 @@ export default function AutomationsPageClient() {
       setFile(null);
       setParsed(null);
       setMappings([]);
+      setAnalysisSnapshot(null);
       setError("Use Excel (.xlsx), PDF, or an image (JPEG, PNG, WebP).");
       return;
     }
     setFile(f);
     setParsed(null);
     setMappings([]);
+    setAnalysisSnapshot(null);
   }, []);
 
   const runParse = useCallback(async () => {
@@ -171,9 +180,23 @@ export default function AutomationsPageClient() {
       const p = data as ParseResponse;
       setParsed(p);
       setMappings(p.suggestedMapping || []);
+      setAnalysisSnapshot({
+        fileName: file.name,
+        rowCount: p.rowCount,
+        headers: p.headers || [],
+      });
+      const dateHint = p.headers?.some((h) => /visit[_\s-]*date/i.test(h))
+        ? "Detected `visit_date` ✅. "
+        : "No `visit_date` found. ";
+      const typeHint = p.headers?.some((h) => /visit[_\s-]*type/i.test(h))
+        ? "Detected `visit_type` ✅."
+        : "No `visit_type` found.";
+      const previewHeaders = (p.headers || []).slice(0, 10);
       let n =
-        (p.sourceKind === "xlsx" ? "Excel loaded. " : "File read with AI. ") +
-        "Check the column dropdowns, then click Save to database.";
+        `Uploaded ${file.name}. AI analyzed ${p.rowCount} rows. ` +
+        dateHint +
+        typeHint +
+        ` Headers: ${previewHeaders.join(", ")}.`;
       if (p.truncatedList) {
         n +=
           " Note: only part of a very long list could fit in one step — split the file or use Excel for huge lists.";
@@ -381,32 +404,6 @@ export default function AutomationsPageClient() {
           </div>
         )}
 
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 sm:px-5 sm:py-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Guest lists &amp; messages</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Turn a file into saved phone contacts, then send WhatsApp from here.
-          </p>
-          <details className="mt-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            <summary className="cursor-pointer font-medium text-slate-800">What does the AI do?</summary>
-            <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-slate-600 sm:text-sm">
-              <li>
-                <strong>Read file</strong> — Sends your PDF, photo, or Excel to OpenAI (like uploading to ChatGPT) and
-                pulls out rows: names, numbers, etc.
-              </li>
-              <li>
-                <strong>Match columns</strong> — Suggests which column is phone, name, venue. You can change the
-                dropdowns.
-              </li>
-              <li>
-                <strong>Save</strong> — Stores rows in your database so you can pick people and message them.
-              </li>
-            </ul>
-            <p className="mt-2 text-xs text-slate-500">
-              Very long PDFs may hit size limits — use Excel or split the file if you see an error.
-            </p>
-          </details>
-        </div>
-
         <section
           id="spreadsheet"
           className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6"
@@ -450,8 +447,8 @@ export default function AutomationsPageClient() {
               />
             </label>
             {file && (
-              <p className="mt-3 max-w-md truncate text-xs text-slate-600">
-                Selected: <span className="font-medium text-slate-800">{file.name}</span>
+              <p className="mt-3 max-w-md truncate text-xs text-emerald-800">
+                Uploaded: <span className="font-medium text-emerald-900">{file.name}</span>
               </p>
             )}
             <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
@@ -476,79 +473,109 @@ export default function AutomationsPageClient() {
             </div>
           </div>
 
-          {parsed && mappings.length > 0 && (
+          {parsed && (
             <div className="mt-6">
-              <p className="text-sm font-medium text-slate-800">
-                Step 2 — Match columns <span className="font-normal text-slate-500">({parsed.rowCount} rows found)</span>
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                For each column, pick what it is (phone is required for WhatsApp later).
-              </p>
-              <div className="mt-3 space-y-2">
-                {mappings.map((m) => (
-                  <div
-                    key={m.sourceColumn}
-                    className="flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2 sm:flex-row sm:items-center sm:gap-3"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-800" title={m.sourceColumn}>
-                      {m.sourceColumn}
-                    </span>
-                    <select
-                      className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800"
-                      value={m.target}
-                      onChange={(e) =>
-                        updateMapping(m.sourceColumn, {
-                          target: e.target.value as AutomationColumnTarget,
-                          extraKey: e.target.value === "extra" ? m.extraKey : undefined,
-                        })
-                      }
-                    >
-                      {MAPPING_TARGETS.map((t) => (
-                        <option key={t.value} value={t.value}>
-                          {t.label}
-                        </option>
-                      ))}
-                    </select>
-                    {m.target === "extra" && (
-                      <input
-                        type="text"
-                        placeholder="extra key (e.g. age)"
-                        className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs sm:w-40"
-                        value={m.extraKey || ""}
-                        onChange={(e) => updateMapping(m.sourceColumn, { extraKey: e.target.value })}
-                      />
-                    )}
-                  </div>
-                ))}
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+                <p className="text-sm font-semibold text-emerald-900">AI analysis complete</p>
+                <p className="mt-1 text-xs text-emerald-800/90">
+                  {parsed.rowCount} rows extracted ·{" "}
+                  {parsed.headers.some((h) => /visit[_\s-]*date/i.test(h)) ? "visit_date ✅" : "visit_date —"} ·{" "}
+                  {parsed.headers.some((h) => /visit[_\s-]*type/i.test(h)) ? "visit_type ✅" : "visit_type —"}
+                </p>
               </div>
-              {sampleTable}
+
+              <div className="mt-3">{sampleTable}</div>
+
+              <details className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-800">
+                  Edit column mapping (advanced)
+                </summary>
+                <p className="mt-2 text-xs text-slate-500">
+                  Only change this if the AI mapped columns incorrectly. Phone must be mapped for WhatsApp sends.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {mappings.map((m) => (
+                    <div
+                      key={m.sourceColumn}
+                      className="flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2 sm:flex-row sm:items-center sm:gap-3"
+                    >
+                      <span
+                        className="min-w-0 flex-1 truncate text-xs font-medium text-slate-800"
+                        title={m.sourceColumn}
+                      >
+                        {m.sourceColumn}
+                      </span>
+                      <select
+                        className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-800"
+                        value={m.target}
+                        onChange={(e) =>
+                          updateMapping(m.sourceColumn, {
+                            target: e.target.value as AutomationColumnTarget,
+                            extraKey: e.target.value === "extra" ? m.extraKey : undefined,
+                          })
+                        }
+                      >
+                        {MAPPING_TARGETS.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </select>
+                      {m.target === "extra" && (
+                        <input
+                          type="text"
+                          placeholder="extra key (e.g. age)"
+                          className="w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs sm:w-40"
+                          value={m.extraKey || ""}
+                          onChange={(e) => updateMapping(m.sourceColumn, { extraKey: e.target.value })}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </details>
             </div>
           )}
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-          <h3 className="text-base font-semibold text-slate-900">Step 3 — Your saved lists</h3>
+          <h3 className="text-base font-semibold text-slate-900">
+            Step 3 — {activeImportId ? "Contacts loaded" : "Your saved lists"}
+          </h3>
           <p className="mt-1 text-sm text-slate-500">
-            Pick a past upload to see people. Tick names to message them below.
+            {activeImportId
+              ? `Using ${activeImport?.fileName ?? "your latest upload"}`
+              : "Pick a past upload to see people. Tick names to message them below."}
           </p>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="flex-1">
-              <label className="text-xs font-medium text-slate-600">Which upload?</label>
-              <select
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                value={activeImportId || ""}
-                onChange={(e) => setActiveImportId(e.target.value || null)}
-              >
-                <option value="">— Select —</option>
-                {imports.map((imp) => (
-                  <option key={imp.id} value={imp.id}>
-                    {imp.fileName} · {imp.rowCount} rows ·{" "}
-                    {new Date(imp.createdAt).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {activeImportId ? (
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-slate-700">
+                  Using: {activeImport?.fileName ?? "—"}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Refresh to reload contacts ({contacts.length} loaded).
+                </p>
+              </div>
+            ) : (
+              <div className="flex-1">
+                <label className="text-xs font-medium text-slate-600">Which upload?</label>
+                <select
+                  className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                  value={activeImportId || ""}
+                  onChange={(e) => setActiveImportId(e.target.value || null)}
+                >
+                  <option value="">— Select —</option>
+                  {imports.map((imp) => (
+                    <option key={imp.id} value={imp.id}>
+                      {imp.fileName} · {imp.rowCount} rows ·{" "}
+                      {new Date(imp.createdAt).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => void loadImports()}
@@ -628,7 +655,19 @@ export default function AutomationsPageClient() {
               Ask here for visit frequency / outlet interaction, or ask to generate a WhatsApp bulk template and then click “Send now”.
             </p>
             <div className="mt-3">
-              <AutomationImportChatClient contactsCount={contacts.length} />
+              <AutomationImportChatClient
+                key={activeImportId}
+                contactsCount={contacts.length}
+                initialAssistantMessage={
+                  analysisSnapshot
+                    ? `AI summary for ${analysisSnapshot.fileName}\n` +
+                      `- Rows extracted: ${analysisSnapshot.rowCount}\n` +
+                      `- visit_date detected: ${analysisSnapshot.headers.some((h) => /visit[_\\s-]*date/i.test(h)) ? "yes" : "no"}\n` +
+                      `- visit_type detected: ${analysisSnapshot.headers.some((h) => /visit[_\\s-]*type/i.test(h)) ? "yes" : "no"}\n` +
+                      `- Detected headers: ${analysisSnapshot.headers.slice(0, 12).join(", ") || "—"}`
+                    : null
+                }
+              />
             </div>
           </section>
         )}
@@ -642,9 +681,17 @@ export default function AutomationsPageClient() {
             Step 4 — WhatsApp (Twilio)
           </h3>
           <p className="mt-1 text-sm text-slate-500">
-            Test first, then use <strong className="font-medium text-slate-700">WhatsApp everyone in this list</strong> for
-            true bulk (no checkboxes), or select a subset below. Sends run in batches of 100 with a short pause between
-            each message inside a batch.
+            {canUseAutomationChat ? (
+              <>
+                Use the <strong className="font-medium text-slate-700">Automation chat</strong> above to draft a template and
+                click <strong className="font-medium text-slate-700">Send now</strong>.
+              </>
+            ) : (
+              <>
+                Test first, then use the manual sending options below. Sends run in batches of 100 with a short pause
+                between each message inside a batch.
+              </>
+            )}
           </p>
 
           {twilioStatus && (
@@ -708,74 +755,65 @@ TWILIO_WHATSAPP_FROM=whatsapp:+14155238886`}
             </ol>
           </details>
 
-          <label className="mt-4 block text-xs font-medium text-slate-600">Message</label>
-          <textarea
-            className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400"
-            rows={4}
-            placeholder="Write the message people will receive…"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-          />
-
-          {activeImportId && contacts.length > 0 && (
-            <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50/80 p-4">
-              <p className="text-xs font-semibold text-orange-900">Bulk — entire saved list</p>
-              <p className="mt-1 text-xs text-orange-900/80">
-                Sends to every contact loaded for the import you chose in Step 3 ({contacts.length} people). Sandbox:
-                each number must have joined your Twilio sandbox.
+          {canUseAutomationChat ? (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/80 p-4">
+              <p className="text-sm font-semibold text-emerald-900">Send from chat (recommended)</p>
+              <p className="mt-1 text-xs text-emerald-800/90">
+                Use the “Automation chat” above to ask for counts/templates and click <strong>Send now</strong>.
               </p>
-              <button
-                type="button"
-                disabled={sendLoading || !message.trim()}
-                onClick={() => void sendWhatsApp("all")}
-                className="mt-3 w-full rounded-full bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {sendLoading
-                  ? "Sending…"
-                  : `WhatsApp everyone in this list (${contacts.length})`}
-              </button>
             </div>
-          )}
-
-          <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2">
-            <div>
-              <p className="text-xs font-semibold text-slate-700">Test to one number</p>
-              <input
-                type="tel"
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                placeholder="+91… or join sandbox first"
-                value={testPhone}
-                onChange={(e) => setTestPhone(e.target.value)}
+          ) : (
+            <>
+              <label className="mt-4 block text-xs font-medium text-slate-600">Message</label>
+              <textarea
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400"
+                rows={4}
+                placeholder="Write the message people will receive…"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
               />
-              <button
-                type="button"
-                disabled={sendLoading}
-                onClick={() => void sendWhatsApp("test")}
-                className="mt-2 w-full rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-xs font-semibold text-violet-900 hover:bg-violet-100 disabled:opacity-50"
-              >
-                {sendLoading ? "Sending…" : "Send test WhatsApp"}
-              </button>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-700">Bulk — selected rows only</p>
-              <p className="mt-1 text-xs text-slate-500">
-                Tick people in the table (or Select all). Same batching as above.
-              </p>
-              <button
-                type="button"
-                disabled={sendLoading || selectedIds.size === 0}
-                onClick={() => void sendWhatsApp("selected")}
-                className="mt-4 w-full rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-              >
-                {sendLoading ? "Sending…" : `WhatsApp ${selectedIds.size} selected`}
-              </button>
-            </div>
-          </div>
 
-          {sendProgress && (
-            <p className="mt-3 text-sm font-medium text-slate-700" aria-live="polite">
-              {sendProgress}
-            </p>
+              <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">Test to one number</p>
+                  <input
+                    type="tel"
+                    className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    placeholder="+91… or join sandbox first"
+                    value={testPhone}
+                    onChange={(e) => setTestPhone(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    disabled={sendLoading}
+                    onClick={() => void sendWhatsApp("test")}
+                    className="mt-2 w-full rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-xs font-semibold text-violet-900 hover:bg-violet-100 disabled:opacity-50"
+                  >
+                    {sendLoading ? "Sending…" : "Send test WhatsApp"}
+                  </button>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">Bulk — selected rows only</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Tick people in the table (or Select all). Same batching as above.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={sendLoading || selectedIds.size === 0}
+                    onClick={() => void sendWhatsApp("selected")}
+                    className="mt-4 w-full rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {sendLoading ? "Sending…" : `WhatsApp ${selectedIds.size} selected`}
+                  </button>
+                </div>
+              </div>
+
+              {sendProgress && (
+                <p className="mt-3 text-sm font-medium text-slate-700" aria-live="polite">
+                  {sendProgress}
+                </p>
+              )}
+            </>
           )}
 
         </section>

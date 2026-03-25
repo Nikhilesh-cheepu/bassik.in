@@ -18,16 +18,23 @@ type SendWhatsappGroupAction = {
   matchedCount: number;
 };
 
-export default function AutomationImportChatClient({ contactsCount }: { contactsCount: number }) {
+export default function AutomationImportChatClient({
+  contactsCount,
+  initialAssistantMessage,
+}: {
+  contactsCount: number;
+  initialAssistantMessage?: string | null;
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
       content:
+        initialAssistantMessage ??
         "Hi! This chat is connected to your uploaded automation guest lists in the database.\n\n" +
-        "Ask me for analytics like:\n" +
-        "- frequency / top dates\n" +
-        "- customers who visited multiple outlets\n" +
-        "Or ask me to draft a WhatsApp bulk message. When I detect a filter (men / women / repeated / age), I’ll show a template preview and a “Send now” button.",
+          "Ask me for analytics like:\n" +
+          "- frequency / top dates\n" +
+          "- customers who visited multiple outlets\n" +
+          "Or ask me to draft a WhatsApp bulk message. When I detect a filter (men / women / repeated / age), I’ll show a template preview and a “Send now” button.",
     },
   ]);
   const [input, setInput] = useState("");
