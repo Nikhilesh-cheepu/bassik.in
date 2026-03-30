@@ -228,11 +228,8 @@ export async function POST(request: NextRequest) {
       select: { id: true, createdAt: true },
     });
 
-    const reservation = existingReservation
-      ? await prisma.reservation.findUnique({
-          where: { id: existingReservation.id },
-          select: { id: true },
-        })
+    const createdReservation = existingReservation
+      ? null
       : await prisma.reservation.create({
           data: {
             venueId: venue.id,
@@ -252,6 +249,13 @@ export async function POST(request: NextRequest) {
           },
           select: { id: true },
         });
+    const reservationId = existingReservation?.id ?? createdReservation?.id;
+    if (!reservationId) {
+      return NextResponse.json(
+        { error: "Failed to create reservation. Please try again." },
+        { status: 500 }
+      );
+    }
 
     const shouldTriggerInterakt = !existingReservation;
 
@@ -275,7 +279,7 @@ export async function POST(request: NextRequest) {
         countryCode: "+91",
         phoneNumber: contactNumber,
         type: "Template",
-        callbackData: reservation.id,
+        callbackData: reservationId,
         template: {
           name: interaktTemplateName,
           languageCode: interaktLanguageCode,
@@ -319,7 +323,7 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         message: "Reservation submitted successfully",
-        reservationId: reservation.id,
+        reservationId,
       },
       { status: 200 }
     );
