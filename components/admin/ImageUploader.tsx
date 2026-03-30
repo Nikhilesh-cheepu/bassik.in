@@ -30,10 +30,12 @@ export default function ImageUploader({
   const [images, setImages] = useState(existingImages);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setImages(existingImages);
+    setSelectedIds([]);
   }, [existingImages]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -104,6 +106,7 @@ export default function ImageUploader({
       const res = await fetch(`/api/admin/venues/${venueId}/images?ids=${imageId}`, { method: "DELETE" });
       if (res.ok) {
         setImages((prev) => prev.filter((img) => img.id !== imageId));
+        setSelectedIds((prev) => prev.filter((id) => id !== imageId));
         setMessage({ type: "success", text: "Image deleted." });
         onUpdate();
       } else {
@@ -141,6 +144,62 @@ export default function ImageUploader({
     }
   };
 
+  const toggleSelected = (imageId: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(imageId) ? prev.filter((id) => id !== imageId) : [...prev, imageId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === images.length) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(images.map((img) => img.id));
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Delete ${selectedIds.length} selected image(s)?`)) return;
+    try {
+      const res = await fetch(
+        `/api/admin/venues/${venueId}/images?ids=${selectedIds.join(",")}`,
+        { method: "DELETE" }
+      );
+      if (res.ok) {
+        setImages((prev) => prev.filter((img) => !selectedIds.includes(img.id)));
+        setMessage({
+          type: "success",
+          text: `Deleted ${selectedIds.length} image(s).`,
+        });
+        setSelectedIds([]);
+        onUpdate();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setMessage({ type: "error", text: data.error || "Failed to delete selected images" });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Failed to delete selected images" });
+    }
+  };
+
+  const handleEditSelected = async () => {
+    if (selectedIds.length !== 1) return;
+    const selected = images.find((img) => img.id === selectedIds[0]);
+    if (!selected) return;
+    const nextUrl = prompt("Edit image URL", selected.url);
+    if (!nextUrl || nextUrl.trim() === selected.url) return;
+    if (!isBlobOrHttpUrl(nextUrl.trim())) {
+      setMessage({ type: "error", text: "Please enter a valid http(s) URL." });
+      return;
+    }
+    const newOrder = images.map((img) =>
+      img.id === selected.id ? { ...img, url: nextUrl.trim() } : img
+    );
+    await handleReorder(newOrder);
+    setMessage({ type: "success", text: "Image updated." });
+  };
+
   return (
     <div className="bg-white rounded-lg shadow p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
@@ -171,6 +230,37 @@ export default function ImageUploader({
           className="hidden"
         />
       </div>
+
+      {images.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+          <button
+            type="button"
+            onClick={handleSelectAll}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
+          >
+            {selectedIds.length === images.length ? "Clear selection" : "Select all"}
+          </button>
+          <span className="text-xs text-slate-600">
+            {selectedIds.length} selected
+          </span>
+          <button
+            type="button"
+            onClick={handleEditSelected}
+            disabled={selectedIds.length !== 1}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          >
+            Edit selected
+          </button>
+          <button
+            type="button"
+            onClick={handleDeleteSelected}
+            disabled={selectedIds.length === 0}
+            className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+          >
+            Delete selected
+          </button>
+        </div>
+      )}
 
       {message && (
         <div
@@ -205,6 +295,14 @@ export default function ImageUploader({
                   </div>
                 )}
               </div>
+              <label className="absolute top-2 left-2 z-10 rounded-md bg-black/70 px-1.5 py-1 text-white">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(image.id)}
+                  onChange={() => toggleSelected(image.id)}
+                  className="h-3.5 w-3.5 accent-orange-500"
+                />
+              </label>
               <button
                 type="button"
                 onClick={() => handleDelete(image.id)}
