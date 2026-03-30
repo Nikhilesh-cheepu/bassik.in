@@ -55,16 +55,16 @@ Use the following as a prompt for building the booking UI and flow. No backend o
 
   Reservation submitted via [your app name]
   ```
-- Build the WhatsApp link: `https://wa.me/91[10-digit-number]?text=[URL-encoded message]`. Use the **outlet’s WhatsApp number** (e.g. for Alehouse use 8096060606 → 918096060606). So the final URL is like: `https://wa.me/918096060606?text=...`
-- **Open that URL** in the same tab or a new tab (e.g. `window.location.href = whatsappUrl` or `window.open(whatsappUrl, '_blank')`). The user then sends the message from WhatsApp; no server submission required if you are doing a “client-only” flow.
+- Submit the booking by calling your backend `POST /api/reservations` with customer details.
+- Show an in-site confirmation screen; the backend will send the WhatsApp message silently via Interakt.
 
 **7. Summary of logic:**
 - **Dates:** 15-day strip from today; store YYYY-MM-DD; on date change → clear time and offers; for “today” hide past slots.
 - **Slots:** Lunch 12:00–18:00, Dinner 18:15–23:45, 15-min steps; only show slots for the active tab; for today, filter out past.
 - **Offers:** Shown only after a time is selected; only list offers whose time window contains the selected time; user can select multiple; SOLD OUT disabled.
-- **Submit:** Validate → build message string → build `wa.me` URL with 91 + 10-digit outlet number → redirect or open URL.
+- **Submit:** Validate → call `POST /api/reservations` → show confirmation inside the website (no WhatsApp redirect).
 
-No admin, no database, no API required for this UI-only flow — only the outlet’s WhatsApp number (e.g. 8096060606 for Alehouse) and the message format above.
+No client-side WhatsApp redirect. Booking is confirmed in-site and WhatsApp notification is triggered by the backend.
 
 ---
 

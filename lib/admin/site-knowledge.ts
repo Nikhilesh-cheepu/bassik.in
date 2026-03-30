@@ -78,9 +78,9 @@ export function getSiteKnowledgeForAssistant(): string {
     `- \`/{outletSlug}\` — Venue hub: offers, gallery, menus (from admin), location, WhatsApp / call CTAs. Slug matches venue \`id\` in config.`
   );
   sections.push(
-    `- \`/{outletSlug}/reservations\` — Booking form for that outlet.`
+    `- \`/{outletSlug}/book\` — Booking form for that outlet.`
   );
-  sections.push(`- \`/reservations?brand={id}\` — Redirects to \`/{id}/reservations\`.`);
+  sections.push(`- \`/reservations?brand={id}\` — Redirects to \`/{id}/book\`.`);
   sections.push(`- \`/my-bookings\` — Guests look up bookings (e.g. by reference).`);
   sections.push("");
 

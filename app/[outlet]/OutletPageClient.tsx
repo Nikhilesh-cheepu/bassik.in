@@ -107,7 +107,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
 
   // Prefetch booking page for snappier navigation
   useEffect(() => {
-    router.prefetch(`/${selectedBrandId}/reservations`);
+    router.prefetch(`/${selectedBrandId}/book`);
   }, [router, selectedBrandId]);
 
   // Rotate CTA line inside the Book button
@@ -162,7 +162,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
     if (!initialVenueData) loadVenueData();
   }, [initialVenueData, loadVenueData]);
 
-  const handleBookNow = () => router.push(`/${selectedBrandId}/reservations`);
+  const handleBookNow = () => router.push(`/${selectedBrandId}/book`);
   const handleBrandSelect = (brandId: string) => {
     setSelectedBrandId(brandId);
     setIsDropdownOpen(false);

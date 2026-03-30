@@ -87,13 +87,13 @@ function MyBookingsContent() {
       <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
         <div className="mb-6 sm:mb-8">
           <Link
-            href={`/${outletSlug}/reservations`}
+            href={`/${outletSlug}/book`}
             className="inline-flex items-center text-gray-300 hover:text-white mb-4 transition-colors"
           >
             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Back to Reservations
+            Back to Booking
           </Link>
           <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">My Bookings – {activeBrand.shortName}</h1>
           <p className="text-gray-400">Enter your phone number to view reservations for this outlet</p>
@@ -129,7 +129,7 @@ function MyBookingsContent() {
           <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-8 sm:p-12 text-center border border-white/10">
             <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">No Bookings Found</h2>
             <p className="text-gray-400 mb-6">No reservations found for this phone number at {activeBrand.shortName}.</p>
-            <Link href={`/${outletSlug}/reservations`} className="inline-block px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors">
+            <Link href={`/${outletSlug}/book`} className="inline-block px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors">
               Make a Reservation
             </Link>
           </div>

@@ -7,12 +7,12 @@ This document describes how the Alehouse-style booking flow works so you can imp
 ## 1. High-Level Flow
 
 1. **User lands on outlet page** (e.g. `/alehouse`) → sees CTA (WhatsApp/Call) and a **“Book a table”** button.
-2. **User taps “Book a table”** → navigates to **booking page** (e.g. `/alehouse/reservations`).
+2. **User taps “Book a table”** → navigates to **booking page** (e.g. `/alehouse/book`).
 3. **Booking page:** User selects **date** (15-day strip) → **Lunch or Dinner** tab → **time slot** (e.g. 12:30 PM).
 4. **After time is selected**, the app fetches **available offers** for that date + time. Only offers whose **time window** includes the selected slot are shown. User can select zero or more offers.
 5. User enters **name**, **10-digit mobile**, **guests**, optional notes → taps **Confirm Booking**.
-6. **Backend** creates a `Reservation` row, (optionally) consumes discount slots, then returns a **WhatsApp deep link** with a pre-filled message.
-7. **Frontend** redirects the user to WhatsApp; no payment or confirmation step in-app.
+6. **Backend** creates a `Reservation` row, (optionally) consumes discount slots, then triggers a **WhatsApp template message** in the background (via Interakt).
+7. **Frontend** immediately shows an in-app confirmation state; no redirect to WhatsApp.
 
 **No login required** for the customer; reservations are anonymous (optional `userId` for future use).
 
@@ -23,14 +23,14 @@ This document describes how the Alehouse-style booking flow works so you can imp
 | Step | Action | What happens |
 |------|--------|---------------|
 | 1 | Open outlet | Outlet page loads; venue data (contacts, gallery, menus) from `GET /api/venues/{brandId}`. |
-| 2 | Tap “Book a table” | Client navigates to `/{brandId}/reservations`. |
+| 2 | Tap “Book a table” | Client navigates to `/{brandId}/book`. |
 | 3 | Pick date | 15-day horizontal strip; date format `YYYY-MM-DD`. |
 | 4 | Pick Lunch or Dinner | **Lunch** = 12:00–18:00; **Dinner** = 18:15–24:00 (15-min steps). For “today”, past slots are hidden. |
 | 5 | Pick time slot | e.g. `12:30` → stored as 24h `HH:MM`. |
 | 6 | See offers | `GET /api/venues/{brandId}/discounts-available?date=YYYY-MM-DD&timeSlot=HH:MM` → list of offers valid for that time. User can select multiple; some show “Limited slots” / “Selling out fast” / “Few slots left” or “SOLD OUT”. |
 | 7 | Enter details | Full name, 10-digit Indian mobile, guest count (men/women/couples), optional notes. |
-| 8 | Confirm | `POST /api/reservations` with all fields; response includes `whatsappUrl`. |
-| 9 | Redirect | Client opens `whatsappUrl` (e.g. `https://wa.me/91XXXXXXXXXX?text=...`) so user can send the message to the outlet. |
+| 8 | Confirm | `POST /api/reservations` with all fields; backend returns success + `reservationId`. |
+| 9 | Confirmation | Booking is confirmed inside the website; WhatsApp is sent silently from the backend. |
 
 ---
 
@@ -43,10 +43,9 @@ Contacts are used in **two** places:
 - **Source:** Prefer **venue DB**: `Venue.contactPhone` or `Venue.contactNumbers` (JSON array `[{ phone, label }]`). If the admin has set contacts for that venue, those are shown.
 - **Fallback:** If DB has no contacts, use **static map** in `lib/outlet-contacts.ts` (see below).
 
-### 3.2 Post-booking WhatsApp link
-
-- **Default:** One central number is used for the “send to WhatsApp” link after booking: **`917013884485`** (10-digit: `7013884485`). This is hardcoded as `RESERVATION_PHONE_NUMBER` in `app/api/reservations/route.ts`.
-- **Exception (The Hub):** When `brandId === "the-hub"` and the user chose a sub-outlet (`hubSpotId` = `c53` | `boiler-room` | `firefly`), the WhatsApp number is taken from `getContactForBrand(hubSpotId)` (i.e. outlet-contacts for that sub-outlet).
+### 3.2 WhatsApp confirmation (backend)
+- After a reservation is saved, the backend sends the WhatsApp confirmation silently using Interakt template messaging.
+- The user is never redirected to WhatsApp; the message is delivered directly to the customer's `contactNumber`.
 
 ### 3.3 Static contact map (fallback / The Hub sub-outlets)
 
@@ -125,7 +124,7 @@ From **`lib/reservation-discounts.ts`** for `alehouse`:
 | Path | Purpose |
 |------|--------|
 | `app/[outlet]/OutletPageClient.tsx` | Outlet page: hero, contacts CTA, “Book a table” button. |
-| `app/[outlet]/reservations/page.tsx` | Booking page wrapper; header with back, outlet switcher. |
+| `app/[outlet]/book/page.tsx` | Fast booking-first page for that outlet. |
 | `components/ReservationForm.tsx` | Main booking form: date strip, Lunch/Dinner, time slots, offers, guest count, name/phone, submit. |
 
 ### 6.2 APIs
@@ -134,7 +133,7 @@ From **`lib/reservation-discounts.ts`** for `alehouse`:
 |---------------|--------|
 | `GET /api/venues/[brandId]` | Venue payload: name, address, mapUrl, contactPhone, contactNumbers, gallery, menus, offers (banners). |
 | `GET /api/venues/[brandId]/discounts-available?date=YYYY-MM-DD&timeSlot=HH:MM` | List of offers valid for that date+time; includes slots left / sold out; DB first, then static fallback. |
-| `POST /api/reservations` | Create reservation; optional discount slot consumption; return `{ success, whatsappUrl, reservationId }`. |
+| `POST /api/reservations` | Create reservation; optional discount slot consumption; return `{ success, reservationId }`. |
 
 ### 6.3 Lib (config / helpers)
 
@@ -196,7 +195,6 @@ From **`lib/reservation-discounts.ts`** for `alehouse`:
 {
   "success": true,
   "message": "Reservation submitted successfully",
-  "whatsappUrl": "https://wa.me/917013884485?text=...",
   "reservationId": "..."
 }
 ```
@@ -257,6 +255,6 @@ From **`lib/reservation-discounts.ts`** for `alehouse`:
   - Eat & Drink @ ₹127 → 12:00–19:00.  
   - 30% Flat Discount → 12:00–22:00; no slot count shown, only SOLD OUT when applicable.
 - **Slots:** Lunch 12:00–18:00, Dinner 18:15–24:00; 15-min steps; hide past slots for today.
-- **Flow:** Date → Lunch/Dinner → Time → Load offers for that time → User picks offers (optional) → Name, 10-digit mobile, guests → POST reservation → Redirect to WhatsApp with pre-filled message.
+- **Flow:** Date → Lunch/Dinner → Time → Load offers for that time → User picks offers (optional) → Name, 10-digit mobile, guests → POST reservation → In-site confirmation; WhatsApp is sent silently from the backend.
 
 Use this guide to replicate the same flow, contact rules, offer time windows, and slot behavior in your other application.

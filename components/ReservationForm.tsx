@@ -3,7 +3,7 @@
 import { useState, FormEvent, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Brand } from "@/lib/brands";
-import { trackWhatsAppClick } from "@/lib/analytics";
+import { useRouter } from "next/navigation";
 
 interface ReservationFormProps {
   brand: Brand;
@@ -21,6 +21,7 @@ type DiscountItem = {
 };
 
 export default function ReservationForm({ brand }: ReservationFormProps) {
+  const router = useRouter();
   const accentColor = brand.accentColor;
   const [formData, setFormData] = useState(() => ({
     fullName: "",
@@ -36,6 +37,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   const [discounts, setDiscounts] = useState<DiscountItem[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
+  const [reservationConfirmed, setReservationConfirmed] = useState(false);
+  const [reservationId, setReservationId] = useState<string | null>(null);
   const dateScrollRef = useRef<HTMLDivElement>(null);
 
   const formatTo12Hour = (time24: string): string => {
@@ -72,6 +75,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     setTimeSlotTab(now24 >= lunchEnd ? "dinner" : "lunch");
     setDiscounts([]);
     setSubmitStatus({ type: null, message: "" });
+    setReservationConfirmed(false);
+    setReservationId(null);
   }, [brand.id, todayStr]);
 
   useEffect(() => {
@@ -206,13 +211,9 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
         const data = await res.json();
         setFormData({ fullName: "", contactNumber: "", date: todayStr, timeSlot: "", selectedDiscounts: [], notes: "", hubSpotId: undefined });
         setGuests(2);
-        if (data.whatsappUrl) {
-          const m = String(data.whatsappUrl).match(/wa\.me\/(\d+)/);
-          if (m) trackWhatsAppClick({ number: m[1], source: "reservation", outlet: brand.id });
-          setTimeout(() => { window.location.href = data.whatsappUrl; }, 100);
-        } else {
-          setSubmitStatus({ type: "success", message: "Reservation submitted! We'll reach out shortly." });
-        }
+        setReservationConfirmed(true);
+        setReservationId(data?.reservationId ?? null);
+        setSubmitStatus({ type: null, message: "" });
       } else {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || err.details || "Failed to submit");
@@ -225,6 +226,49 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   };
 
   const currentDate = formData.date || todayStr;
+
+  if (reservationConfirmed) {
+    return (
+      <div className="flex flex-col gap-4 pb-24">
+        <div className="p-6 sm:p-8 rounded-2xl border border-white/10 bg-white/5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-12 h-12 rounded-2xl flex items-center justify-center"
+              style={{ backgroundColor: `${accentColor}30`, border: `1px solid ${accentColor}40` }}
+            >
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-lg sm:text-xl font-bold text-white">Booking Confirmed ✅</h2>
+              <p className="text-sm text-gray-300 mt-1">Your table has been reserved successfully.</p>
+            </div>
+          </div>
+
+          <div className="mt-4 text-sm text-gray-300">We&apos;ll notify you on WhatsApp 📲</div>
+
+          {reservationId && (
+            <div className="mt-3 text-xs text-gray-500 font-mono">Reference: {reservationId}</div>
+          )}
+        </div>
+
+        <div
+          className="fixed bottom-0 left-0 right-0 z-20 p-4 backdrop-blur-xl bg-black/80 border-t border-white/10"
+          style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+        >
+          <motion.button
+            type="button"
+            onClick={() => router.push(`/${brand.id}`)}
+            className="w-full py-3.5 text-sm font-bold text-black rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ backgroundColor: accentColor, boxShadow: `0 0 24px ${accentColor}50` }}
+          >
+            Back to Outlet
+          </motion.button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 pb-24">
@@ -420,8 +464,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
         </div>
       )}
 
-      {submitStatus.type && (
-        <div className={`p-3 rounded-xl text-sm ${submitStatus.type === "success" ? "bg-green-500/20 text-green-300 border border-green-500/30" : "bg-red-500/20 text-red-300 border border-red-500/30"}`}>
+      {submitStatus.type === "error" && (
+        <div className="p-3 rounded-xl text-sm bg-red-500/20 text-red-300 border border-red-500/30">
           {submitStatus.message}
         </div>
       )}

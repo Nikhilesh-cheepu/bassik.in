@@ -57,8 +57,8 @@ Use the following as a prompt for building the SkyHy booking UI and flow. No bac
 
   Reservation submitted via [your app name]
   ```
-- Build the WhatsApp link: `https://wa.me/91[10-digit-number]?text=[URL-encoded message]`. Use **SkyHy's WhatsApp number** (e.g. 7013884485 → 917013884485). Replace with SkyHy's actual 10-digit number when known. Final URL: `https://wa.me/917013884485?text=...` (or SkyHy's own number).
-- **Open that URL** in the same tab or a new tab (e.g. `window.location.href = whatsappUrl` or `window.open(whatsappUrl, '_blank')`). The user then sends the message from WhatsApp; no server submission required if you are doing a "client-only" flow.
+- Submit the booking by calling your backend `POST /api/reservations` with customer details.
+- Show an in-site confirmation screen; the backend will send the WhatsApp message silently via Interakt.
 
 **7. Summary of logic for SkyHy:**
 - **Outlet name:** SkyHy (SkyHy Live / rooftop lounge).
@@ -68,9 +68,9 @@ Use the following as a prompt for building the SkyHy booking UI and flow. No bac
   - Eat & Drink @ ₹128 → 12:00–20:00.
   - 30% Flat Discount → 12:00–22:00; no slot count shown, only SOLD OUT when applicable.
 - **Offer IDs (if needed):** `skyhy-128`, `skyhy-flat-30`.
-- **Submit:** Validate → build message string → build `wa.me` URL with 91 + 10-digit SkyHy number → redirect or open URL.
+- **Submit:** Validate → call `POST /api/reservations` → show confirmation inside the website (no WhatsApp redirect).
 
-No admin, no database, no API required for this UI-only flow — only SkyHy's WhatsApp number (replace 7013884485 with SkyHy's number when you have it) and the message format above.
+No client-side WhatsApp redirect. Booking is confirmed in-site and WhatsApp notification is triggered by the backend.
 
 ---
 

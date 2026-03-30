@@ -42,7 +42,7 @@ lib/
 
 ## API
 
-POST `/api/reservations` - Handles reservation submissions via WhatsApp
+POST `/api/reservations` - Saves reservations and triggers WhatsApp confirmations in the backend (Interakt)
 
 ## License
 

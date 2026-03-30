@@ -31,7 +31,7 @@ export function formatOutletListRollcall(
 ): string {
   const u = baseUrl.replace(/\/$/, "");
   const path = (id: string) =>
-    linkStyle === "book" ? `${u}/${id}/reservations` : `${u}/${id}`;
+    linkStyle === "book" ? `${u}/${id}/book` : `${u}/${id}`;
   const intros = [
     "Yeah — here’s every venue we run under Bassik right now 👇",
     "Sure thing — full venue list 🔥",

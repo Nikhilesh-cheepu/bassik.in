@@ -12,7 +12,7 @@ function ReservationsContent() {
     const requestedBrandId = searchParams.get("brand");
     const brand = BRANDS.find((b) => b.id === requestedBrandId) ?? BRANDS[0];
     // Redirect to new path-based route
-    router.replace(`/${brand.id}/reservations`);
+    router.replace(`/${brand.id}/book`);
   }, [searchParams, router]);
 
   return null;

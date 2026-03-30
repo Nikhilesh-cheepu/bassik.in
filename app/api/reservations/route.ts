@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getContactForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 import { getDiscountLabel } from "@/lib/reservation-discounts";
 
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
-  // Fallback WhatsApp URL that we can still return even if DB calls fail.
-  let fallbackWhatsappUrl: string | null = null;
   try {
     console.log("[RESERVATION API] Starting reservation request");
 
     // Reservations no longer depend on server-side auth; middleware + frontend protect the flow.
     const userId: string | null = null;
-    const user: any = null;
 
     let body;
     try {
@@ -54,8 +52,10 @@ export async function POST(request: NextRequest) {
 
     const valid10Digit = /^\d{10}$/.test(contactNumber);
 
+    const normalizedFullName = String(fullName || "").trim();
+
     if (
-      !fullName ||
+      !normalizedFullName ||
       !contactNumber ||
       numberOfMen === undefined ||
       numberOfWomen === undefined ||
@@ -109,20 +109,10 @@ export async function POST(request: NextRequest) {
     };
 
     const timeToFormat = timeSlot || time;
-    const formattedTime = timeSlot ? formatTime(timeSlot) : time;
 
-    // Format the message for WhatsApp
     const totalGuests =
       parseInt(numberOfMen) + parseInt(numberOfWomen) + parseInt(numberOfCouples) * 2;
 
-    // Build guest count string
-    const guestParts: string[] = [];
-    if (parseInt(numberOfMen) > 0) guestParts.push(`${numberOfMen}M`);
-    if (parseInt(numberOfWomen) > 0) guestParts.push(`${numberOfWomen}W`);
-    if (parseInt(numberOfCouples) > 0) guestParts.push(`${numberOfCouples} Couple${parseInt(numberOfCouples) > 1 ? "s" : ""}`);
-    const guestCountStr = `${totalGuests} Guests (${guestParts.join(" / ")})`;
-
-    // Build notes section (plain text, no emojis)
     let notesSection = "";
     if (notes && notes.trim()) {
       const notesLower = notes.toLowerCase();
@@ -137,14 +127,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build WhatsApp URL from the same contact number the outlet page uses.
-    // The outlet page prefers `Venue.contactNumbers[0]` (DB override) and falls back to static defaults.
-    const effectiveBrandId =
-      brandId === "the-hub" && hubSpotId && typeof hubSpotId === "string" ? hubSpotId : brandId;
-
     const dateShort = formatDateShort(date);
     const timeLabel = timeToFormat ? formatTime(timeToFormat) : "";
-    const brandLabel = brandName || (brandId === "skyhy" ? "SkyHy" : brandId);
+
+    // Store reservation under `the-hub` when that outlet is selected.
+    // (Booking destination/outlet name for messaging can still be the selected hub sub-outlet.)
+    const effectiveBrandIdForBooking = brandId;
+
+    // Use the selected hub sub-outlet for offer labels (if any were provided).
+    const effectiveBrandIdForOffers =
+      brandId === "the-hub" && hubSpotId && typeof hubSpotId === "string" ? hubSpotId : brandId;
+
+    const outletNameForTemplate =
+      brandId === "the-hub" && hubSpotId && typeof hubSpotId === "string"
+        ? hubSpotId === "c53"
+          ? "C53"
+          : hubSpotId === "boiler-room"
+            ? "Boiler Room"
+            : hubSpotId === "firefly"
+              ? "Firefly"
+              : brandName || "The Hub"
+        : brandName || (brandId === "skyhy" ? "SkyHy" : brandId);
+
+    const brandLabelForBooking = brandName || (brandId === "skyhy" ? "SkyHy" : brandId);
 
     // Resolve discount labels (prefer static mapping so text is consistent)
     const discountLabels: string[] = [];
@@ -154,10 +159,10 @@ export async function POST(request: NextRequest) {
 
         if (typeof d === "string") {
           // Treat as discount id first
-          label = getDiscountLabel(effectiveBrandId, d) || d;
+          label = getDiscountLabel(effectiveBrandIdForOffers, d) || d;
         } else if (d && typeof d === "object") {
           if (d.id && typeof d.id === "string") {
-            label = getDiscountLabel(effectiveBrandId, d.id) || null;
+            label = getDiscountLabel(effectiveBrandIdForOffers, d.id) || null;
           }
           if (!label) {
             label =
@@ -176,53 +181,145 @@ export async function POST(request: NextRequest) {
     const offerText =
       discountLabels.length > 0 ? discountLabels.join(" / ") : "NA";
 
-    // Build WhatsApp message text in required format
-    const messageLines: string[] = [];
-    messageLines.push(`🌃 ${brandLabel}`);
-    messageLines.push("");
-    messageLines.push(`👤 Name: ${fullName}`);
-    messageLines.push(`📱 Mobile number: ${contactNumber}`);
-    messageLines.push(`📅 Date: ${dateShort}`);
-    messageLines.push(`⏰ Time: ${timeLabel}`);
-    messageLines.push(`👥 Total pax: ${totalGuests}`);
-    messageLines.push(`🎁 Offer / Discount: ${offerText}`);
-    if (notesSection) {
-      messageLines.push(`📝 Notes: ${notesSection}`);
-    }
-    messageLines.push("");
-    messageLines.push("Booking status:");
-    messageLines.push("✅ CONFIRMED");
-    messageLines.push("");
-    messageLines.push("Bassik.in");
-
-    const message = messageLines.join("\n");
-
-    // Prefer DB contactNumbers (matches outlet CTA). If missing, fall back to static mapping.
+    // 1) Save booking first
     const venue = await prisma.venue.findUnique({
-      where: { brandId: effectiveBrandId },
-      select: { contactPhone: true, contactNumbers: true },
+      where: { brandId: effectiveBrandIdForBooking },
+      select: { id: true },
     });
 
-    const rawContacts = venue?.contactNumbers as unknown;
-    const dbContacts: { phone?: unknown; label?: unknown }[] = Array.isArray(rawContacts) ? rawContacts as any : [];
+    if (!venue) {
+      return NextResponse.json({ error: "Unknown outlet" }, { status: 400 });
+    }
 
-    const dbPhoneCandidate =
-      dbContacts
-        .map((c) => (c && typeof c === "object" ? (c as any).phone : null))
-        .find((p) => typeof p === "string" && p.trim()) || null;
+    const timeSlotNormalized = String(timeToFormat);
+    const menNormalized = String(numberOfMen);
+    const womenNormalized = String(numberOfWomen);
+    const couplesNormalized = String(numberOfCouples);
+    const notesNormalized = notes && String(notes).trim() ? String(notes).trim() : null;
+    const selectedDiscountsNormalized =
+      Array.isArray(selectedDiscounts) && selectedDiscounts.length > 0
+        ? JSON.stringify(
+            [...selectedDiscounts]
+              .map((x) => (typeof x === "string" ? x : ""))
+              .filter(Boolean)
+              .sort()
+          )
+        : null;
 
-    const phone = (dbPhoneCandidate as string | null) ?? venue?.contactPhone ?? getContactForBrand(effectiveBrandId);
-    const waNumber = getFullPhoneNumber(phone || getContactForBrand(effectiveBrandId));
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${waNumber}?text=${encodedMessage}`;
+    // Avoid duplicate Interakt sends on quick retries:
+    // If the same booking (same outlet+time+customer+phone+guest counts) exists very recently, treat as idempotent.
+    const recently = new Date(Date.now() - 30 * 1000); // 30s window to avoid duplicate sends on quick retries
+    const existingReservation = await prisma.reservation.findFirst({
+      where: {
+        brandId: effectiveBrandIdForBooking,
+        date,
+        timeSlot: timeSlotNormalized,
+        contactNumber,
+        fullName: normalizedFullName,
+        numberOfMen: menNormalized,
+        numberOfWomen: womenNormalized,
+        numberOfCouples: couplesNormalized,
+        notes: notesNormalized,
+        selectedDiscounts: selectedDiscountsNormalized,
+        status: "CONFIRMED",
+        createdAt: { gte: recently },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, createdAt: true },
+    });
 
-    console.log("[RESERVATION API] WhatsApp-only mode, returning URL:", whatsappUrl);
+    const reservation = existingReservation
+      ? await prisma.reservation.findUnique({
+          where: { id: existingReservation.id },
+          select: { id: true },
+        })
+      : await prisma.reservation.create({
+          data: {
+            venueId: venue.id,
+            brandId: effectiveBrandIdForBooking,
+            brandName: brandLabelForBooking,
+            fullName: normalizedFullName,
+            contactNumber,
+            numberOfMen: menNormalized,
+            numberOfWomen: womenNormalized,
+            numberOfCouples: couplesNormalized,
+            date,
+            timeSlot: timeSlotNormalized,
+            notes: notesNormalized,
+            selectedDiscounts: selectedDiscountsNormalized,
+            status: "CONFIRMED",
+            userId,
+          },
+          select: { id: true },
+        });
+
+    const shouldTriggerInterakt = !existingReservation;
+
+    // 2) Trigger WhatsApp silently in background (do not block UI)
+    const interaktApiKey = process.env.INTERAKT_API_KEY?.trim();
+    const interaktTemplateName = process.env.INTERAKT_BOOKING_TEMPLATE_NAME?.trim() || "bassik_website";
+    const interaktLanguageCode = process.env.INTERAKT_BOOKING_TEMPLATE_LANGUAGE_CODE?.trim() || "en";
+
+    const noteValue = notesSection || (notes && String(notes).trim() ? String(notes).trim() : "-");
+
+    if (!shouldTriggerInterakt) {
+      console.log("[RESERVATION API] Duplicate booking detected; skipping WhatsApp trigger.");
+    } else if (!interaktApiKey) {
+      // Caller explicitly wants confirmation only after WhatsApp API is sent.
+      return NextResponse.json(
+        { error: "WhatsApp service is not configured. Please try again shortly." },
+        { status: 503 }
+      );
+    } else {
+      const payload = {
+        countryCode: "+91",
+        phoneNumber: contactNumber,
+        type: "Template",
+        callbackData: reservation.id,
+        template: {
+          name: interaktTemplateName,
+          languageCode: interaktLanguageCode,
+          bodyValues: [
+            outletNameForTemplate, // {{1}}
+            normalizedFullName, // {{2}}
+            contactNumber, // {{3}}
+            dateShort, // {{4}}
+            timeLabel, // {{5}}
+            noteValue, // {{6}}
+            offerText, // {{7}}
+            String(totalGuests), // {{8}}
+            "CONFIRMED", // {{9}}
+          ],
+        },
+      };
+
+      const resp = await fetch("https://api.interakt.ai/v1/public/message/", {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${interaktApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        console.error("[INTERAKT booking] Non-2xx response:", resp.status, text.slice(0, 500));
+        return NextResponse.json(
+          { error: "Unable to send WhatsApp confirmation. Please try again." },
+          { status: 502 }
+        );
+      }
+
+      // Ensure provider accepted payload before confirming UI.
+      await resp.json().catch(() => null);
+    }
+
     return NextResponse.json(
       {
         success: true,
         message: "Reservation submitted successfully",
-        whatsappUrl,
-        reservationId: null,
+        reservationId: reservation.id,
       },
       { status: 200 }
     );
@@ -244,7 +341,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       {
-        error: "Failed to process reservation. Please try again or use the WhatsApp button on the outlet page.",
+        error: "Failed to process reservation. Please try again.",
         details: errorMessage,
         code: errorCode,
       },
