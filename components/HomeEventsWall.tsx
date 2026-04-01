@@ -1,24 +1,13 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useLayoutEffect, useState, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
+import type { HomeFeedEvent } from "@/lib/home-feed-types";
+import { shuffleCopy } from "@/lib/shuffle-array";
 
-export type HomeAggregatedEvent = {
-  id: string;
-  imageUrl: string;
-  title: string | null;
-  description: string | null;
-  eventDate: string | null;
-  entryLabel: string | null;
-  capacityText: string | null;
-  brandId: string;
-  venueShortName: string;
-  brandShortName: string;
-  accentColor: string;
-  logoPath: string;
-};
+export type HomeAggregatedEvent = HomeFeedEvent;
 
 function formatEventWhen(iso: string | null): string | null {
   if (!iso) return null;
@@ -33,16 +22,30 @@ function formatEventWhen(iso: string | null): string | null {
   });
 }
 
-export default function HomeEventsWall() {
-  const [events, setEvents] = useState<HomeAggregatedEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+type HomeEventsWallProps = {
+  /** From server on `/` — skips a client round-trip to `/api/home/events`. */
+  initialEvents?: HomeFeedEvent[];
+};
+
+export default function HomeEventsWall({ initialEvents }: HomeEventsWallProps) {
+  const [events, setEvents] = useState<HomeAggregatedEvent[]>(() => initialEvents ?? []);
+  const [loading, setLoading] = useState(() => initialEvents === undefined);
+
+  // Random order on every full page load (each browser refresh), independent of server cache / ISR.
+  useLayoutEffect(() => {
+    if (initialEvents === undefined || initialEvents.length <= 1) return;
+    setEvents(shuffleCopy(initialEvents));
+  }, [initialEvents]);
 
   useEffect(() => {
+    if (initialEvents !== undefined) return;
     let cancelled = false;
     fetch("/api/home/events")
       .then((r) => (r.ok ? r.json() : { events: [] }))
       .then((data: { events?: HomeAggregatedEvent[] }) => {
-        if (!cancelled) setEvents(Array.isArray(data.events) ? data.events : []);
+        if (cancelled) return;
+        const list = Array.isArray(data.events) ? data.events : [];
+        setEvents(list.length > 1 ? shuffleCopy(list) : list);
       })
       .catch(() => {
         if (!cancelled) setEvents([]);
@@ -53,13 +56,42 @@ export default function HomeEventsWall() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialEvents]);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [carouselDotIndex, setCarouselDotIndex] = useState(0);
+
+  const updateCarouselDots = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || events.length <= 1) return;
+    const numDots = Math.min(events.length, 5);
+    if (numDots <= 1) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const p = max > 0 ? Math.min(1, Math.max(0, el.scrollLeft / max)) : 0;
+    const idx = Math.round(p * (numDots - 1));
+    setCarouselDotIndex(Math.min(numDots - 1, Math.max(0, idx)));
+  }, [events.length]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || events.length <= 1) return;
+    updateCarouselDots();
+    el.addEventListener("scroll", updateCarouselDots, { passive: true });
+    const ro = new ResizeObserver(updateCarouselDots);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateCarouselDots);
+      ro.disconnect();
+    };
+  }, [events.length, updateCarouselDots, events]);
+
+  const carouselDotCount = events.length > 1 ? Math.min(events.length, 5) : 0;
 
   const hasEvents = events.length > 0;
   const subtitle = useMemo(
     () =>
       hasEvents
-        ? "Posters from every Bassik venue — tap through for menus, slots, and website-only pricing."
+        ? "Tap through for menus, slots, and website-only pricing."
         : "Venues add new posters often. Explore each spot for the latest.",
     [hasEvents]
   );
@@ -79,7 +111,7 @@ export default function HomeEventsWall() {
             className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-stone-50"
           >
             <span className="bg-gradient-to-r from-amber-200 via-orange-300 to-pink-300 bg-clip-text text-transparent">
-              Events &amp; offers from every outlet
+              Events &amp; offers
             </span>
           </motion.h2>
           <p className="mt-2 text-xs sm:text-sm text-stone-500 max-w-md mx-auto leading-relaxed">{subtitle}</p>
@@ -107,6 +139,7 @@ export default function HomeEventsWall() {
         ) : (
           <div className="relative">
             <div
+              ref={scrollRef}
               className="flex gap-4 overflow-x-auto pb-3 pt-1 scrollbar-hide snap-x snap-mandatory px-1 scroll-pl-4"
               style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
             >
@@ -174,7 +207,22 @@ export default function HomeEventsWall() {
                 );
               })}
             </div>
-            <p className="text-center text-[10px] text-stone-600 mt-2 sm:hidden">Swipe for more →</p>
+            {carouselDotCount > 0 ? (
+              <div className="mt-2 sm:hidden flex items-center justify-center gap-2.5 text-stone-600">
+                <div className="flex items-center gap-[5px]" aria-hidden>
+                  {Array.from({ length: carouselDotCount }).map((_, i) => (
+                    <span
+                      key={i}
+                      className={`rounded-full bg-current transition-opacity duration-200 shrink-0 ${
+                        i === carouselDotIndex ? "opacity-100" : "opacity-[0.35]"
+                      }`}
+                      style={{ width: 5, height: 5 }}
+                    />
+                  ))}
+                </div>
+                <p className="text-center text-[10px] leading-none m-0">Swipe for more →</p>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

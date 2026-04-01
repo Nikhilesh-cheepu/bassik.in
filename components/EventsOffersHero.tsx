@@ -105,7 +105,7 @@ export default function EventsOffersHero({ offers, brand, isLoading = false, onA
           box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06);
         }
       `}} />
-      <div className="relative z-10 flex flex-col items-center pt-2 pb-1" style={{ paddingInline: PADDING_INLINE_PX }}>
+      <div className="relative z-10 flex flex-col items-center pt-2 pb-2" style={{ paddingInline: PADDING_INLINE_PX }}>
         <div className="w-full" style={{ touchAction: "pan-x", WebkitOverflowScrolling: "touch" }}>
           <Swiper
             onSwiper={(s) => {
@@ -185,6 +185,9 @@ export default function EventsOffersHero({ offers, brand, isLoading = false, onA
             ))}
           </div>
         )}
+        <p className="mt-2 text-center text-[10px] sm:text-[11px] text-white/45 leading-snug tracking-wide max-w-[18rem] mx-auto px-2">
+          Tap a poster to book or reserve your spot.
+        </p>
       </div>
     </div>
   );
