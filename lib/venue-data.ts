@@ -4,17 +4,34 @@ import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-con
 import { Prisma } from "@prisma/client";
 
 export type VenuePayload = {
-  offers: { id: string; imageUrl: string }[];
+  offers: {
+    id: string;
+    imageUrl: string;
+    title: string | null;
+    description: string | null;
+    eventDate: string | null;
+    entryLabel: string | null;
+    capacityText: string | null;
+  }[];
   galleryImages: string[];
   menus: { id: string; name: string; thumbnail: string; images: string[] }[];
   location: { address: string; mapUrl: string | null };
   contactPhone: string;
   contactNumbers: { phone: string; label?: string }[];
   whatsappMessage: string;
+  amenities: string[];
+  sectionVisibility: {
+    menu: boolean;
+    photos: boolean;
+    amenities: boolean;
+    spots: boolean;
+  };
 };
 
 const DEFAULT_MAP_URL = "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6";
 const defaultLocation = { address: "", mapUrl: DEFAULT_MAP_URL };
+const defaultSectionVisibility = { menu: true, photos: true, amenities: true, spots: true };
+
 
 export async function getVenueDataByBrandId(brandId: string): Promise<VenuePayload | null> {
   try {
@@ -58,10 +75,43 @@ export async function getVenueDataByBrandId(brandId: string): Promise<VenuePaylo
           })();
     const contactPhone = contactNumbers[0]?.phone ?? getContactForBrand(brandId);
     const whatsappMessage = getWhatsAppMessageForBrand(brandId, venue.shortName);
-    const offers = (venue as any).offers.map((o: { id: string; imageUrl: string }) => ({
+    const offers = (venue as any).offers.map((o: {
+      id: string;
+      imageUrl: string;
+      title?: string | null;
+      description?: string | null;
+      eventDate?: string | null;
+      entryLabel?: string | null;
+      capacityText?: string | null;
+    }) => ({
       id: o.id,
       imageUrl: o.imageUrl,
+      title: o.title ?? null,
+      description: o.description ?? null,
+      eventDate: o.eventDate ?? null,
+      entryLabel: o.entryLabel ?? null,
+      capacityText: o.capacityText ?? null,
     }));
+
+    const rawAmenities = (venue as { amenities?: unknown }).amenities;
+    const amenities = Array.isArray(rawAmenities)
+      ? rawAmenities.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      : [];
+    const rawSectionVisibility = (venue as { sectionVisibility?: unknown }).sectionVisibility;
+    const sectionVisibility = {
+      menu: rawSectionVisibility && typeof rawSectionVisibility === "object" && "menu" in (rawSectionVisibility as Record<string, unknown>)
+        ? Boolean((rawSectionVisibility as Record<string, unknown>).menu)
+        : true,
+      photos: rawSectionVisibility && typeof rawSectionVisibility === "object" && "photos" in (rawSectionVisibility as Record<string, unknown>)
+        ? Boolean((rawSectionVisibility as Record<string, unknown>).photos)
+        : true,
+      amenities: rawSectionVisibility && typeof rawSectionVisibility === "object" && "amenities" in (rawSectionVisibility as Record<string, unknown>)
+        ? Boolean((rawSectionVisibility as Record<string, unknown>).amenities)
+        : true,
+      spots: rawSectionVisibility && typeof rawSectionVisibility === "object" && "spots" in (rawSectionVisibility as Record<string, unknown>)
+        ? Boolean((rawSectionVisibility as Record<string, unknown>).spots)
+        : true,
+    };
 
     return {
       offers,
@@ -71,6 +121,8 @@ export async function getVenueDataByBrandId(brandId: string): Promise<VenuePaylo
       contactPhone,
       contactNumbers,
       whatsappMessage,
+      amenities,
+      sectionVisibility,
     };
   } catch (error) {
     const code = error instanceof Prisma.PrismaClientKnownRequestError ? error.code : null;
@@ -87,6 +139,8 @@ export async function getVenueDataByBrandId(brandId: string): Promise<VenuePaylo
           contactPhone,
           contactNumbers: [{ phone: contactPhone, label: "Contact" }],
           whatsappMessage,
+          amenities: [],
+          sectionVisibility: defaultSectionVisibility,
         };
       }
     }
