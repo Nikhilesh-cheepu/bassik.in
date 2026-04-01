@@ -71,10 +71,42 @@ export async function GET(
     const contactPhone = contactNumbers[0]?.phone ?? getContactForBrand(brandId);
     const whatsappMessage = getWhatsAppMessageForBrand(brandId, venue.shortName);
 
-    const offers = (venue as any).offers.map((o: { id: string; imageUrl: string }) => ({
+    const offers = (venue as any).offers.map((o: {
+      id: string;
+      imageUrl: string;
+      title?: string | null;
+      description?: string | null;
+      eventDate?: string | null;
+      entryLabel?: string | null;
+      capacityText?: string | null;
+    }) => ({
       id: o.id,
       imageUrl: o.imageUrl,
+      title: o.title ?? null,
+      description: o.description ?? null,
+      eventDate: o.eventDate ?? null,
+      entryLabel: o.entryLabel ?? null,
+      capacityText: o.capacityText ?? null,
     }));
+    const rawAmenities = (venue as { amenities?: unknown }).amenities;
+    const amenities = Array.isArray(rawAmenities)
+      ? rawAmenities.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+      : [];
+    const rawSectionVisibility = (venue as { sectionVisibility?: unknown }).sectionVisibility;
+    const sectionVisibility = {
+      menu: rawSectionVisibility && typeof rawSectionVisibility === "object" && "menu" in (rawSectionVisibility as Record<string, unknown>)
+        ? Boolean((rawSectionVisibility as Record<string, unknown>).menu)
+        : true,
+      photos: rawSectionVisibility && typeof rawSectionVisibility === "object" && "photos" in (rawSectionVisibility as Record<string, unknown>)
+        ? Boolean((rawSectionVisibility as Record<string, unknown>).photos)
+        : true,
+      amenities: rawSectionVisibility && typeof rawSectionVisibility === "object" && "amenities" in (rawSectionVisibility as Record<string, unknown>)
+        ? Boolean((rawSectionVisibility as Record<string, unknown>).amenities)
+        : true,
+      spots: rawSectionVisibility && typeof rawSectionVisibility === "object" && "spots" in (rawSectionVisibility as Record<string, unknown>)
+        ? Boolean((rawSectionVisibility as Record<string, unknown>).spots)
+        : true,
+    };
 
     return NextResponse.json(
       {
@@ -91,6 +123,8 @@ export async function GET(
           galleryImages,
           menus,
           offers,
+          amenities,
+          sectionVisibility,
         },
       },
       { headers }
@@ -135,6 +169,8 @@ export async function GET(
               galleryImages: [],
               menus: [],
               offers: [],
+              amenities: [],
+              sectionVisibility: { menu: true, photos: true, amenities: true, spots: true },
             },
           },
           { headers }
