@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 
 interface ReservationFormProps {
   brand: Brand;
+  initialEventId?: string | null;
 }
 
 type DiscountItem = {
@@ -20,7 +21,7 @@ type DiscountItem = {
   hideSlotsLeft?: boolean;
 };
 
-export default function ReservationForm({ brand }: ReservationFormProps) {
+export default function ReservationForm({ brand, initialEventId = null }: ReservationFormProps) {
   const router = useRouter();
   const accentColor = brand.accentColor;
   const [formData, setFormData] = useState(() => ({
@@ -30,6 +31,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     timeSlot: "",
     selectedDiscounts: [] as string[],
     notes: "",
+    eventId: initialEventId,
     hubSpotId: undefined as string | undefined,
   }));
   const [guests, setGuests] = useState(2);
@@ -39,7 +41,9 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   const [submitStatus, setSubmitStatus] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
   const [reservationConfirmed, setReservationConfirmed] = useState(false);
   const [reservationId, setReservationId] = useState<string | null>(null);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
   const dateScrollRef = useRef<HTMLDivElement>(null);
+  const successToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const formatTo12Hour = (time24: string): string => {
     if (!time24) return "";
@@ -70,14 +74,21 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     const t = new Date();
     const now24 = `${t.getHours().toString().padStart(2, "0")}:${t.getMinutes().toString().padStart(2, "0")}`;
     const lunchEnd = "18:00"; // Global lunch window end
-    setFormData((prev) => ({ ...prev, date: todayStr, timeSlot: "", selectedDiscounts: [] }));
+    setFormData((prev) => ({ ...prev, date: todayStr, timeSlot: "", selectedDiscounts: [], eventId: initialEventId }));
     setGuests(2);
     setTimeSlotTab(now24 >= lunchEnd ? "dinner" : "lunch");
     setDiscounts([]);
     setSubmitStatus({ type: null, message: "" });
     setReservationConfirmed(false);
     setReservationId(null);
-  }, [brand.id, todayStr]);
+    setShowSuccessToast(false);
+  }, [brand.id, todayStr, initialEventId]);
+
+  useEffect(() => {
+    return () => {
+      if (successToastTimeoutRef.current) clearTimeout(successToastTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!formData.date || !formData.timeSlot || !/^\d{4}-\d{2}-\d{2}$/.test(formData.date)) {
@@ -201,6 +212,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
           date: formData.date,
           timeSlot: formData.timeSlot,
           notes: formData.notes || null,
+          eventId: formData.eventId || null,
           selectedDiscounts: formData.selectedDiscounts,
           brandId: brand.id,
           brandName: brand.name,
@@ -209,8 +221,11 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
       });
       if (res.ok) {
         const data = await res.json();
-        setFormData({ fullName: "", contactNumber: "", date: todayStr, timeSlot: "", selectedDiscounts: [], notes: "", hubSpotId: undefined });
+        setFormData({ fullName: "", contactNumber: "", date: todayStr, timeSlot: "", selectedDiscounts: [], notes: "", eventId: initialEventId, hubSpotId: undefined });
         setGuests(2);
+        setShowSuccessToast(true);
+        if (successToastTimeoutRef.current) clearTimeout(successToastTimeoutRef.current);
+        successToastTimeoutRef.current = setTimeout(() => setShowSuccessToast(false), 3000);
         setReservationConfirmed(true);
         setReservationId(data?.reservationId ?? null);
         setSubmitStatus({ type: null, message: "" });
@@ -229,7 +244,41 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
 
   if (reservationConfirmed) {
     return (
-      <div className="flex flex-col gap-4 pb-24">
+      <div className="relative flex flex-col gap-4 pb-24">
+        <AnimatePresence>
+          {showSuccessToast && (
+            <motion.div
+              initial={{ opacity: 0, y: -16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.98 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="fixed left-1/2 top-4 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2"
+            >
+              <motion.div
+                animate={{ boxShadow: [`0 0 0 ${accentColor}00`, `0 0 22px ${accentColor}66`, `0 0 0 ${accentColor}00`] }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+                className="rounded-2xl border px-4 py-3 backdrop-blur-xl"
+                style={{ backgroundColor: "rgba(9, 14, 20, 0.92)", borderColor: `${accentColor}70` }}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-xl"
+                    style={{ backgroundColor: `${accentColor}2A`, border: `1px solid ${accentColor}50` }}
+                  >
+                    <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.6} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white">Event booked successfully</p>
+                    <p className="text-xs text-gray-300">WhatsApp confirmation sent successfully.</p>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <div className="p-6 sm:p-8 rounded-2xl border border-white/10 bg-white/5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
           <div className="flex items-center gap-3">
             <div
@@ -272,6 +321,11 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 pb-24">
+      {formData.eventId && (
+        <div className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/75">
+          Booking for selected event
+        </div>
+      )}
       {/* A. Horizontal Date Picker */}
       <div>
         <div

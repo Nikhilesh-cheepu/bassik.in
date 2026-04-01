@@ -15,16 +15,9 @@ import type { VenuePayload } from "@/lib/venue-data";
 const MenuModal = dynamic(() => import("@/components/MenuModal"));
 const GalleryModal = dynamic(() => import("@/components/GalleryModal"));
 const VenuePhotosSection = dynamic(() => import("@/components/VenuePhotosSection"));
-const VenueLocationSection = dynamic(() => import("@/components/VenueLocationSection"));
+const VenueAmenitiesSection = dynamic(() => import("@/components/VenueAmenitiesSection"));
 
 const DEFAULT_MAP = "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6";
-
-const CTA_LINES = [
-  "Website-only offers • Limited slots",
-  "More savings than Swiggy/Zomato",
-  "Unlock extra discounts when you book direct",
-  "Selling fast • Book now",
-];
 
 function toClientVenueState(p: VenuePayload) {
   return {
@@ -35,6 +28,8 @@ function toClientVenueState(p: VenuePayload) {
     contactPhone: p.contactPhone,
     contactNumbers: p.contactNumbers,
     whatsappMessage: p.whatsappMessage,
+    amenities: p.amenities,
+    sectionVisibility: p.sectionVisibility,
   };
 }
 
@@ -46,6 +41,8 @@ const emptyVenueState = toClientVenueState({
   contactPhone: "",
   contactNumbers: [],
   whatsappMessage: "",
+  amenities: [],
+  sectionVisibility: { menu: true, photos: true, amenities: true, spots: true },
 });
 
 interface OutletPageClientProps {
@@ -68,14 +65,23 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
   );
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedContactIndex, setSelectedContactIndex] = useState(0);
-  const [whatsappDropdownOpen, setWhatsappDropdownOpen] = useState(false);
-  const [contactDropdownOpen, setContactDropdownOpen] = useState(false);
+  const [isQuickContactOpen, setIsQuickContactOpen] = useState(false);
+  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
+  const [isEventQuickBookOpen, setIsEventQuickBookOpen] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [eventBookName, setEventBookName] = useState("");
+  const [eventBookPhone, setEventBookPhone] = useState("");
+  const [eventBookPeople, setEventBookPeople] = useState(2);
+  const [eventBookDate, setEventBookDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [eventBookTime, setEventBookTime] = useState("20:00");
+  const [eventBookSubmitting, setEventBookSubmitting] = useState(false);
+  const [eventBookError, setEventBookError] = useState<string | null>(null);
+  const [showEventBookedToast, setShowEventBookedToast] = useState(false);
   const [loading, setLoading] = useState(!initialVenueData);
   const [loadedGalleryImages, setLoadedGalleryImages] = useState<Set<number>>(new Set());
   const [failedGalleryImages, setFailedGalleryImages] = useState<Set<number>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const contactDropdownRef = useRef<HTMLDivElement>(null);
-  const [ctaIndex, setCtaIndex] = useState(0);
+  const eventBookedToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
   const venueOffers = venueData.offers;
@@ -83,6 +89,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
   const logoPath =
     selectedBrand.logoPath ??
     (selectedBrand.id.startsWith("club-rogue") ? "/logos/club-rogue.png" : `/logos/${selectedBrand.id}.png`);
+  const selectedEvent = venueOffers.find((o) => o.id === selectedEventId) ?? null;
 
   useEffect(() => {
     if (outletSlug) {
@@ -94,13 +101,15 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setIsDropdownOpen(false);
-      if (contactDropdownRef.current && !contactDropdownRef.current.contains(e.target as Node)) {
-        setWhatsappDropdownOpen(false);
-        setContactDropdownOpen(false);
-      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (eventBookedToastTimeoutRef.current) clearTimeout(eventBookedToastTimeoutRef.current);
+    };
   }, []);
 
   useEffect(() => setSelectedContactIndex(0), [selectedBrandId]);
@@ -109,14 +118,6 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
   useEffect(() => {
     router.prefetch(`/${selectedBrandId}/book`);
   }, [router, selectedBrandId]);
-
-  // Rotate CTA line inside the Book button
-  useEffect(() => {
-    const id = setInterval(() => {
-      setCtaIndex((i) => (i + 1) % CTA_LINES.length);
-    }, 4500);
-    return () => clearInterval(id);
-  }, []);
 
   const loadVenueData = useCallback(async () => {
     setFetchError(null);
@@ -147,6 +148,13 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
         contactPhone: v.contactPhone ?? "",
         contactNumbers: Array.isArray(v.contactNumbers) ? v.contactNumbers : [],
         whatsappMessage: v.whatsappMessage ?? "",
+        amenities: Array.isArray(v.amenities) ? v.amenities : [],
+        sectionVisibility: {
+          menu: v.sectionVisibility?.menu !== false,
+          photos: v.sectionVisibility?.photos !== false,
+          amenities: v.sectionVisibility?.amenities !== false,
+          spots: v.sectionVisibility?.spots !== false,
+        },
       });
       setFetchError(null);
     } catch (err: unknown) {
@@ -162,18 +170,106 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
     if (!initialVenueData) loadVenueData();
   }, [initialVenueData, loadVenueData]);
 
-  const handleBookNow = () => router.push(`/${selectedBrandId}/book`);
+  useEffect(() => {
+    if (!venueOffers.length) {
+      setSelectedEventId(null);
+      return;
+    }
+    setSelectedEventId((prev) => (prev && venueOffers.some((o) => o.id === prev) ? prev : venueOffers[0].id));
+  }, [venueOffers]);
+
   const handleBrandSelect = (brandId: string) => {
     setSelectedBrandId(brandId);
     setIsDropdownOpen(false);
     router.push(`/${brandId}`);
   };
 
+  const openEventQuickBook = (offerId: string) => {
+    const selected = venueOffers.find((o) => o.id === offerId) ?? null;
+    setSelectedEventId(offerId);
+    if (selected?.eventDate) {
+      const d = new Date(selected.eventDate);
+      if (!Number.isNaN(d.getTime())) {
+        setEventBookDate(d.toISOString().slice(0, 10));
+        setEventBookTime(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+      }
+    }
+    setEventBookError(null);
+    setIsEventQuickBookOpen(true);
+  };
+
+  const submitEventQuickBook = async () => {
+    const normalizedPhone = eventBookPhone.replace(/\D/g, "").slice(0, 10);
+    if (!selectedEventId) {
+      setEventBookError("Please select an event.");
+      return;
+    }
+    if (!eventBookName.trim()) {
+      setEventBookError("Please enter your name.");
+      return;
+    }
+    if (!/^\d{10}$/.test(normalizedPhone)) {
+      setEventBookError("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+    if (!eventBookDate || !eventBookTime) {
+      setEventBookError("Please select date and time.");
+      return;
+    }
+
+    setEventBookSubmitting(true);
+    setEventBookError(null);
+    try {
+      const res = await fetch("/api/reservations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: eventBookName.trim(),
+          contactNumber: normalizedPhone,
+          numberOfMen: String(eventBookPeople),
+          numberOfWomen: "0",
+          numberOfCouples: "0",
+          date: eventBookDate,
+          timeSlot: eventBookTime,
+          notes: `Quick event booking${selectedEventId ? ` [event:${selectedEventId}]` : ""}`,
+          eventId: selectedEventId,
+          eventName: selectedEvent?.title?.trim() || "Event",
+          selectedDiscounts: [],
+          brandId: selectedBrand.id,
+          brandName: selectedBrand.name,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Booking failed. Please try again.");
+      }
+      setIsEventQuickBookOpen(false);
+      setEventBookName("");
+      setEventBookPhone("");
+      setEventBookPeople(2);
+      setShowEventBookedToast(true);
+      if (eventBookedToastTimeoutRef.current) clearTimeout(eventBookedToastTimeoutRef.current);
+      eventBookedToastTimeoutRef.current = setTimeout(() => setShowEventBookedToast(false), 3000);
+    } catch (error) {
+      setEventBookError(error instanceof Error ? error.message : "Booking failed. Please try again.");
+    } finally {
+      setEventBookSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black w-full max-w-full overflow-x-hidden">
-      <div className="relative w-full max-w-full z-0 max-h-[100vh] min-h-0 min-w-0 flex flex-col overflow-x-hidden">
-        <div className="relative flex-shrink-0 min-w-0 overflow-x-hidden">
-          <EventsOffersHero offers={venueOffers} brand={selectedBrand} isLoading={loading} />
+      <div className="relative w-full max-w-full z-0 min-h-0 min-w-0 flex flex-col overflow-x-hidden">
+        <div className="relative mt-1">
+          <div className="relative flex-shrink-0 min-w-0 overflow-x-hidden">
+            <EventsOffersHero
+              offers={venueOffers}
+              brand={selectedBrand}
+              isLoading={loading}
+              onActiveOfferChange={(offerId) => setSelectedEventId((prev) => prev ?? offerId)}
+              onOfferClick={openEventQuickBook}
+            />
+          </div>
           <div ref={dropdownRef} className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
             <motion.button
               type="button"
@@ -269,205 +365,15 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
             </AnimatePresence>
           </div>
         </div>
-
-        <div className="flex-shrink-0 mt-3 px-4 z-20 pointer-events-auto flex justify-center">
-          <div className="flex items-center gap-2 w-full max-w-[280px] justify-center">
-            {(() => {
-              const contacts =
-                venueData.contactNumbers.length > 0
-                  ? venueData.contactNumbers
-                  : [{ phone: venueData.contactPhone || getContactForBrand(selectedBrandId), label: "Contact" }];
-              const phone = contacts[selectedContactIndex]?.phone || contacts[0]?.phone || getContactForBrand(selectedBrandId);
-              const full = getFullPhoneNumber(phone);
-              const msg =
-                venueData.whatsappMessage ||
-                getWhatsAppMessageForBrand(selectedBrandId, selectedBrand.shortName);
-              const waUrl = `https://wa.me/${full}?text=${encodeURIComponent(msg)}`;
-              const telUrl = `tel:+${full}`;
-              const hasMultiple = contacts.length > 1;
-              return (
-                <>
-                  <div className="flex items-center gap-2 flex-wrap justify-center">
-                    {hasMultiple ? (
-                      <div ref={contactDropdownRef} className="relative">
-                        <button
-                          type="button"
-                          onClick={() => setWhatsappDropdownOpen((o) => !o)}
-                          className="inline-flex items-center justify-center gap-1.5 flex-1 min-w-0 px-3 py-2 rounded-full text-xs font-medium text-emerald-100 bg-emerald-500/20 backdrop-blur-sm border border-emerald-400/30 hover:bg-emerald-500/30 transition-colors"
-                        >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884" />
-                          </svg>
-                          <span>WhatsApp</span>
-                          <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ transform: whatsappDropdownOpen ? "rotate(180deg)" : undefined }}>
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-                        <AnimatePresence>
-                          {whatsappDropdownOpen && (
-                            <motion.div
-                              initial={{ opacity: 0, y: -4 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -4 }}
-                              className="absolute top-full left-0 mt-1 min-w-[140px] rounded-lg bg-black/90 border border-white/20 shadow-xl overflow-hidden z-50"
-                            >
-                              {contacts.map((c, i) => {
-                                const targetFull = getFullPhoneNumber(c.phone || phone);
-                                const targetWaUrl = `https://wa.me/${targetFull}?text=${encodeURIComponent(msg)}`;
-                                return (
-                                  <a
-                                    key={i}
-                                    href={targetWaUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={() => {
-                                      trackWhatsAppClick({ number: targetFull, outlet: selectedBrandId });
-                                      setSelectedContactIndex(i);
-                                      setWhatsappDropdownOpen(false);
-                                    }}
-                                    className={`block w-full px-3 py-2 text-xs font-medium transition-colors ${i === selectedContactIndex ? "bg-white/15 text-white" : "text-gray-300 hover:bg-white/10"}`}
-                                  >
-                                    {c.label?.trim() || c.phone || "Contact"}
-                                  </a>
-                                );
-                              })}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    ) : (
-                      <a
-                        href={waUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => trackWhatsAppClick({ number: full, outlet: selectedBrandId })}
-                        className="inline-flex items-center justify-center gap-1.5 flex-1 min-w-0 px-3 py-2 rounded-full text-xs font-medium text-emerald-100 bg-emerald-500/20 backdrop-blur-sm border border-emerald-400/30 hover:bg-emerald-500/30 transition-colors"
-                      >
-                        <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884" />
-                        </svg>
-                        <span>WhatsApp</span>
-                      </a>
-                    )}
-                    {hasMultiple ? (
-                      <div ref={contactDropdownRef} className="relative">
-                        <button
-                          type="button"
-                          onClick={() => setContactDropdownOpen((o) => !o)}
-                          className="inline-flex items-center justify-center gap-1.5 flex-1 min-w-0 px-3 py-2 rounded-full text-xs font-medium text-sky-100 bg-sky-500/20 backdrop-blur-sm border border-sky-400/30 hover:bg-sky-500/30 transition-colors"
-                        >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                          </svg>
-                          <span>Call</span>
-                          <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ transform: contactDropdownOpen ? "rotate(180deg)" : undefined }}>
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-                        <AnimatePresence>
-                          {contactDropdownOpen && (
-                            <motion.div
-                              initial={{ opacity: 0, y: -4 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -4 }}
-                              className="absolute top-full left-0 mt-1 min-w-[140px] rounded-lg bg-black/90 border border-white/20 shadow-xl overflow-hidden z-50"
-                            >
-                              {contacts.map((c, i) => {
-                                const targetFull = getFullPhoneNumber(c.phone || phone);
-                                const targetTelUrl = `tel:+${targetFull}`;
-                                return (
-                                  <a
-                                    key={i}
-                                    href={targetTelUrl}
-                                    onClick={() => {
-                                      trackCallClick({ number: targetFull, outlet: selectedBrandId });
-                                      setSelectedContactIndex(i);
-                                      setContactDropdownOpen(false);
-                                    }}
-                                    className={`block w-full px-3 py-2 text-xs font-medium transition-colors ${i === selectedContactIndex ? "bg-white/15 text-white" : "text-gray-300 hover:bg-white/10"}`}
-                                  >
-                                    {c.label?.trim() || c.phone || "Contact"}
-                                  </a>
-                                );
-                              })}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    ) : (
-                      <a
-                        href={telUrl}
-                        onClick={() => trackCallClick({ number: full, outlet: selectedBrandId })}
-                        className="inline-flex items-center justify-center gap-1.5 flex-1 min-w-0 px-3 py-2 rounded-full text-xs font-medium text-sky-100 bg-sky-500/20 backdrop-blur-sm border border-sky-400/30 hover:bg-sky-500/30 transition-colors"
-                      >
-                        <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                        </svg>
-                        <span>Call</span>
-                      </a>
-                    )}
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        </div>
-
-        <div className="flex-shrink-0 mt-2 px-4 pb-2 z-10">
-          <p className="text-[12px] font-medium uppercase tracking-wider text-white/50 mb-1.5">Menu</p>
-          {loading ? (
-            <div className="flex gap-2">
-              <div className="flex-1 h-14 rounded-xl bg-white/5 animate-pulse" />
-              <div className="flex-1 h-14 rounded-xl bg-white/5 animate-pulse" />
-            </div>
-          ) : venueData.menus.length === 0 ? (
-            <div className="py-2 text-center text-white/40 text-xs">No menu</div>
-          ) : venueData.menus.length === 1 ? (
-            <motion.button
-              onClick={() => { setSelectedMenuId(venueData.menus[0].id); setIsMenuModalOpen(true); }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 p-2.5 hover:bg-white/10 transition-all text-left"
-            >
-              <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
-                <Image src={venueData.menus[0].thumbnail} alt={venueData.menus[0].name} fill sizes="40px" className="object-cover" unoptimized loading="lazy" quality={80} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-white font-medium text-sm truncate">{venueData.menus[0].name}</h3>
-                <p className="text-white/40 text-[10px]">{venueData.menus[0].images.length} pages</p>
-              </div>
-              <svg className="w-4 h-4 text-white/40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            </motion.button>
-          ) : (
-            <div className="flex gap-2">
-              {venueData.menus.map((menu) => (
-                <motion.button
-                  key={menu.id}
-                  onClick={() => { setSelectedMenuId(menu.id); setIsMenuModalOpen(true); }}
-                  whileTap={{ scale: 0.96 }}
-                  className="flex-1 flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 p-2 hover:bg-white/10 transition-all text-left min-w-0"
-                >
-                  <div className="relative w-9 h-9 rounded-lg overflow-hidden flex-shrink-0">
-                    <Image src={menu.thumbnail} alt={menu.name} fill sizes="36px" className="object-cover" unoptimized loading="lazy" quality={80} priority={venueData.menus.indexOf(menu) === 0} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-white font-medium text-xs truncate">{menu.name}</h3>
-                    <p className="text-white/40 text-[10px]">{menu.images.length} p</p>
-                  </div>
-                  <svg className="w-3.5 h-3.5 text-white/40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                </motion.button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 pt-3 relative z-10 space-y-3 pb-32 w-full min-w-0 overflow-x-hidden">
+      <div className="max-w-4xl mx-auto px-4 pt-3 relative z-10 space-y-3 pb-44 w-full min-w-0 overflow-x-hidden">
         {fetchError && (
           <button type="button" onClick={loadVenueData} className="w-full py-4 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-sm font-medium touch-manipulation" style={{ touchAction: "manipulation" }}>
             {fetchError}
           </button>
         )}
-        {selectedBrand.showSpotsSection && (
+        {selectedBrand.showSpotsSection && venueData.sectionVisibility.spots && (
           <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-4">
             <p className="text-sm text-white/90 text-center mb-4">Book a table at any of these spots to enjoy the live screening on the biggest screen in Hyderabad</p>
             <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8">
@@ -492,44 +398,45 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
             </div>
           </motion.section>
         )}
-        <VenuePhotosSection loading={loading} images={validGalleryImages} accentColor={selectedBrand.accentColor} onOpenGallery={validGalleryImages.length > 0 ? () => { setGalleryStartIndex(0); setIsGalleryModalOpen(true); } : undefined} />
-        <VenueLocationSection loading={loading} address={venueData.location.address} mapUrl={venueData.location.mapUrl} accentColor={selectedBrand.accentColor} />
+        {venueData.sectionVisibility.photos && (
+          <VenuePhotosSection
+            loading={loading}
+            images={validGalleryImages}
+            onOpenGallery={validGalleryImages.length > 0 ? () => { setGalleryStartIndex(0); setIsGalleryModalOpen(true); } : undefined}
+          />
+        )}
+        {venueData.sectionVisibility.amenities && <VenueAmenitiesSection amenities={venueData.amenities} />}
       </div>
 
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[calc(100%-2rem)] flex flex-col items-center gap-1.5">
-        <motion.button
-          onClick={handleBookNow}
-          whileTap={{ scale: 0.96 }}
-          whileHover={{ scale: 1.01 }}
-          className="w-full py-2 px-5 rounded-full font-semibold text-white text-sm transition-all duration-300 relative overflow-hidden group backdrop-blur-xl border border-white/20 shadow-xl touch-manipulation"
-          style={{ backgroundColor: selectedBrand.accentColor, boxShadow: `0 6px 20px ${selectedBrand.accentColor}40`, WebkitTapHighlightColor: "transparent" }}
-        >
-          <motion.span
-            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-            initial={{ x: "-100%" }}
-            whileHover={{ x: "100%" }}
-            transition={{ duration: 0.6 }}
-          />
-          <span className="relative z-10 flex items-center justify-center gap-2">
-            <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-            Book a table
-          </span>
-        </motion.button>
-        <div className="h-4">
-          <AnimatePresence mode="wait">
-            <motion.span
-              key={ctaIndex}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 0.9, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.35 }}
-              className="text-[11px] font-medium text-white/80"
-            >
-              {CTA_LINES[ctaIndex]}
-            </motion.span>
-          </AnimatePresence>
+      <div className="fixed bottom-4 left-1/2 z-40 w-[calc(100%-1.25rem)] max-w-md -translate-x-1/2 rounded-3xl border border-white/20 bg-black/60 p-2.5 backdrop-blur-xl shadow-[0_0_24px_rgba(255,255,255,0.08)]">
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => setIsQuickContactOpen(true)}
+            className="rounded-full border px-3 py-2.5 text-sm font-medium text-white/90 shadow-[0_0_14px_rgba(20,184,166,0.22)]"
+            style={{ borderColor: "rgba(20,184,166,0.55)", backgroundColor: "rgba(20,184,166,0.10)" }}
+          >
+            Contact Us
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsQuickMenuOpen(true)}
+            className="rounded-full border px-3 py-2.5 text-sm font-medium text-white/90 shadow-[0_0_14px_rgba(217,70,239,0.22)]"
+            style={{ borderColor: "rgba(217,70,239,0.55)", backgroundColor: "rgba(217,70,239,0.10)" }}
+          >
+            Menu
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const query = selectedEventId ? `?eventId=${encodeURIComponent(selectedEventId)}` : "";
+              router.push(`/${selectedBrandId}/book${query}`);
+            }}
+            className="relative rounded-full border px-3 py-2.5 text-sm font-semibold text-white shadow-[0_0_22px_rgba(59,130,246,0.45)]"
+            style={{ borderColor: "rgba(96,165,250,0.75)", backgroundColor: "rgba(37,99,235,0.40)" }}
+          >
+            Book Table
+          </button>
         </div>
       </div>
 
@@ -539,6 +446,253 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
       {isGalleryModalOpen && (
         <GalleryModal images={validGalleryImages} brandName={selectedBrand.shortName} initialIndex={galleryStartIndex} onClose={() => setIsGalleryModalOpen(false)} />
       )}
+      <AnimatePresence>
+        {isQuickContactOpen && (
+          <>
+            <motion.button
+              type="button"
+              className="fixed inset-0 z-50 bg-black/60"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsQuickContactOpen(false)}
+            />
+            <motion.div
+              initial={{ y: 30, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 30, opacity: 0 }}
+              className="fixed inset-x-0 bottom-0 z-[60] mx-auto w-full max-w-md rounded-t-3xl border-t border-white/15 bg-[#0a0d14]/95 p-4"
+            >
+              <h3 className="text-sm font-semibold text-white">Contact Us</h3>
+              <div className="mt-3 space-y-2">
+                {(() => {
+                  const contacts =
+                    venueData.contactNumbers.length > 0
+                      ? venueData.contactNumbers
+                      : [{ phone: venueData.contactPhone || getContactForBrand(selectedBrandId), label: "Contact" }];
+                  const phone = contacts[selectedContactIndex]?.phone || contacts[0]?.phone || getContactForBrand(selectedBrandId);
+                  const full = getFullPhoneNumber(phone);
+                  const msg =
+                    venueData.whatsappMessage ||
+                    getWhatsAppMessageForBrand(selectedBrandId, selectedBrand.shortName);
+                  const instagramUrl = selectedBrand.instagramUrls[0] || "#";
+                  const mapsUrl = venueData.location.mapUrl || DEFAULT_MAP;
+                  const waUrl = `https://wa.me/${full}?text=${encodeURIComponent(msg)}`;
+                  const telUrl = `tel:+${full}`;
+                  return (
+                    <>
+                      <a
+                        href={waUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => trackWhatsAppClick({ number: full, outlet: selectedBrandId })}
+                        className="inline-flex w-full items-center justify-center rounded-full border border-white/20 bg-white/[0.05] px-3 py-2.5 text-sm font-medium text-white/90"
+                      >
+                        WhatsApp
+                      </a>
+                      <a
+                        href={telUrl}
+                        onClick={() => trackCallClick({ number: full, outlet: selectedBrandId })}
+                        className="inline-flex w-full items-center justify-center rounded-full border border-white/20 bg-white/[0.05] px-3 py-2.5 text-sm font-medium text-white/90"
+                      >
+                        Call
+                      </a>
+                      <a
+                        href={mapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex w-full items-center justify-center rounded-full border border-white/20 bg-white/[0.05] px-3 py-2.5 text-sm font-medium text-white/90"
+                      >
+                        Location
+                      </a>
+                      <a
+                        href={instagramUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex w-full items-center justify-center rounded-full border border-white/20 bg-white/[0.05] px-3 py-2.5 text-sm font-medium text-white/90"
+                      >
+                        Instagram
+                      </a>
+                    </>
+                  );
+                })()}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {isQuickMenuOpen && (
+          <>
+            <motion.button
+              type="button"
+              className="fixed inset-0 z-50 bg-black/60"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsQuickMenuOpen(false)}
+            />
+            <motion.div
+              initial={{ y: 30, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 30, opacity: 0 }}
+              className="fixed inset-x-0 bottom-0 z-[60] mx-auto w-full max-w-md rounded-t-3xl border-t border-white/15 bg-[#0a0d14]/95 p-4"
+            >
+              <h3 className="text-sm font-semibold text-white">Menus</h3>
+              <div className="mt-3 space-y-2">
+                {!venueData.sectionVisibility.menu ? (
+                  <p className="text-sm text-white/60">Menu section is hidden for this outlet.</p>
+                ) : venueData.menus.length === 0 ? (
+                  <p className="text-sm text-white/60">No menu available.</p>
+                ) : (
+                  venueData.menus.map((menu) => (
+                    <button
+                      key={menu.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedMenuId(menu.id);
+                        setIsMenuModalOpen(true);
+                        setIsQuickMenuOpen(false);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/5 p-2 text-left"
+                    >
+                      <div className="relative h-10 w-10 overflow-hidden rounded-lg">
+                        <Image src={menu.thumbnail} alt={menu.name} fill sizes="40px" className="object-cover" unoptimized />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-white">{menu.name}</p>
+                        <p className="text-xs text-white/60">{menu.images.length} pages</p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {isEventQuickBookOpen && selectedEvent && (
+          <>
+            <motion.button
+              type="button"
+              className="fixed inset-0 z-50 bg-black/60"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsEventQuickBookOpen(false)}
+            />
+            <motion.div
+              initial={{ y: -24, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -24, opacity: 0 }}
+              className="fixed inset-x-0 top-0 z-[65] mx-auto w-full max-w-md rounded-b-3xl border-b border-white/15 bg-[#0b0f17]/95 p-4"
+            >
+              <h3 className="text-sm font-semibold text-white">Event Booking</h3>
+              <div className="mt-3 flex items-center gap-3 rounded-xl border border-white/12 bg-white/[0.04] p-2">
+                <div className="relative h-14 w-14 overflow-hidden rounded-lg">
+                  <Image src={selectedEvent.imageUrl} alt={selectedEvent.title || "Event"} fill sizes="56px" className="object-cover" unoptimized />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white">{selectedEvent.title?.trim() || "Selected event"}</p>
+                  <p className="truncate text-xs text-white/70">{selectedEvent.eventDate ? new Date(selectedEvent.eventDate).toLocaleString("en-IN") : "Date to be announced"}</p>
+                  {selectedEvent.description?.trim() && (
+                    <p className="truncate text-xs text-white/60">{selectedEvent.description}</p>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 space-y-2">
+                <input
+                  type="text"
+                  value={eventBookName}
+                  onChange={(e) => setEventBookName(e.target.value)}
+                  placeholder="Name"
+                  className="w-full rounded-xl border border-white/15 bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none"
+                />
+                <input
+                  type="tel"
+                  value={eventBookPhone}
+                  onChange={(e) => setEventBookPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  placeholder="Mobile number"
+                  className="w-full rounded-xl border border-white/15 bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none"
+                />
+                <div className="flex items-center justify-between rounded-xl border border-white/15 bg-white/[0.04] px-3 py-2.5">
+                  <span className="text-sm text-white/80">No. of people</span>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => setEventBookPeople((p) => Math.max(1, p - 1))} className="h-7 w-7 rounded-md border border-white/20 text-white">-</button>
+                    <span className="w-6 text-center text-sm font-semibold text-white">{eventBookPeople}</span>
+                    <button type="button" onClick={() => setEventBookPeople((p) => Math.min(20, p + 1))} className="h-7 w-7 rounded-md border border-white/20 text-white">+</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["20:00", "21:00", "22:00", "23:00"] as const).map((slot) => {
+                    const selected = eventBookTime === slot;
+                    const label = slot === "20:00" ? "8 PM" : slot === "21:00" ? "9 PM" : slot === "22:00" ? "10 PM" : "11 PM";
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        onClick={() => setEventBookTime(slot)}
+                        className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+                          selected
+                            ? "border-white/60 bg-white/15 text-white"
+                            : "border-white/20 bg-white/[0.04] text-white/80"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {eventBookError && <p className="mt-2 text-xs text-red-300">{eventBookError}</p>}
+              <button
+                type="button"
+                onClick={submitEventQuickBook}
+                disabled={eventBookSubmitting}
+                className="mt-3 w-full rounded-full border border-white/25 bg-white/[0.08] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {eventBookSubmitting ? "Booking..." : "Book Event"}
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showEventBookedToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 14, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+            transition={{ duration: 0.26, ease: "easeOut" }}
+            className="fixed inset-0 z-[80] flex items-center justify-center px-4"
+          >
+            <motion.div
+              animate={{
+                boxShadow: [
+                  "0 0 0 rgba(34,197,94,0)",
+                  "0 0 28px rgba(34,197,94,0.55)",
+                  "0 0 0 rgba(34,197,94,0)",
+                ],
+              }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+              className="w-full max-w-sm rounded-2xl border border-emerald-400/50 bg-emerald-500/20 px-5 py-4 backdrop-blur-xl"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full border border-emerald-300 bg-emerald-500/35">
+                  <svg className="h-6 w-6 text-emerald-100" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.6} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-base font-bold text-emerald-50">Event booked successfully</p>
+                  <p className="text-sm text-emerald-100/90">WhatsApp confirmation sent.</p>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
