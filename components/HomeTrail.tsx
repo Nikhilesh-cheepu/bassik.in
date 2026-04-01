@@ -8,6 +8,7 @@ import { BRANDS, Brand, HIDDEN_BRAND_IDS } from "@/lib/brands";
 import HomeConcierge from "@/components/HomeConcierge";
 import { shuffleVenues } from "@/lib/home-intents";
 import { getVenueSpecialtySnippet } from "@/lib/venue-uniqueness";
+import HomeEventsWall from "@/components/HomeEventsWall";
 
 interface HomeTrailProps {
   venues?: Brand[];
@@ -188,8 +189,9 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
               Book direct. Website-only deals.
             </span>
           </h1>
-          <p className="text-sm text-gray-500 max-w-sm mx-auto leading-relaxed">
-            Open a venue to explore — book from there when you’re ready.
+          <p className="text-sm text-gray-500 max-w-md mx-auto leading-relaxed">
+            Scroll live events from every outlet, then open a venue to book —{" "}
+            <span className="text-stone-400">better deals</span> than apps that clip margins.
           </p>
           <div className="mt-6 flex justify-center px-2">
             <span
@@ -214,6 +216,8 @@ export default function HomeTrail({ venues = BRANDS }: HomeTrailProps) {
             <HomeOfferTicker />
           </div>
         </section>
+
+        <HomeEventsWall />
 
         <HomeConcierge onShuffle={handleShuffle} />
 

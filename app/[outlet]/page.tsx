@@ -5,14 +5,17 @@ import OutletPageClient from "./OutletPageClient";
 
 interface PageProps {
   params: Promise<{ outlet: string }>;
+  searchParams: Promise<{ eventId?: string }>;
 }
 
 export const revalidate = 30;
 
-export default async function OutletPage({ params }: PageProps) {
+export default async function OutletPage({ params, searchParams }: PageProps) {
   const { outlet: outletSlug } = await params;
+  const { eventId } = await searchParams;
   const brandId = BRANDS.some((b) => b.id === outletSlug) ? outletSlug : BRANDS[0].id;
   const initialVenueData = await getVenueDataByBrandId(brandId);
+  const initialEventId = typeof eventId === "string" && eventId.trim() ? eventId.trim() : null;
 
   return (
     <Suspense
@@ -25,7 +28,12 @@ export default async function OutletPage({ params }: PageProps) {
         </div>
       }
     >
-      <OutletPageClient key={outletSlug} outletSlug={outletSlug} initialVenueData={initialVenueData} />
+      <OutletPageClient
+        key={outletSlug}
+        outletSlug={outletSlug}
+        initialVenueData={initialVenueData}
+        initialEventId={initialEventId}
+      />
     </Suspense>
   );
 }

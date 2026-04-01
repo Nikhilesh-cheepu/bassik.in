@@ -48,9 +48,10 @@ const emptyVenueState = toClientVenueState({
 interface OutletPageClientProps {
   outletSlug: string;
   initialVenueData: VenuePayload | null;
+  initialEventId?: string | null;
 }
 
-export default function OutletPageClient({ outletSlug, initialVenueData }: OutletPageClientProps) {
+export default function OutletPageClient({ outletSlug, initialVenueData, initialEventId = null }: OutletPageClientProps) {
   const router = useRouter();
   const findBrandBySlug = (slug: string) => BRANDS.find((b) => b.id === slug) || BRANDS[0];
 
@@ -177,6 +178,13 @@ export default function OutletPageClient({ outletSlug, initialVenueData }: Outle
     }
     setSelectedEventId((prev) => (prev && venueOffers.some((o) => o.id === prev) ? prev : venueOffers[0].id));
   }, [venueOffers]);
+
+  useEffect(() => {
+    if (!initialEventId || !venueOffers.length) return;
+    if (venueOffers.some((o) => o.id === initialEventId)) {
+      setSelectedEventId(initialEventId);
+    }
+  }, [initialEventId, venueOffers]);
 
   const handleBrandSelect = (brandId: string) => {
     setSelectedBrandId(brandId);
