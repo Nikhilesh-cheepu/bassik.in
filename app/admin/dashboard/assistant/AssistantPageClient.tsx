@@ -12,13 +12,6 @@ type GroupSpec = {
   repeated?: boolean;
 };
 
-type SendWhatsappGroupAction = {
-  type: "send_whatsapp_group";
-  group: GroupSpec;
-  messageTemplate: string;
-  matchedCount: number;
-};
-
 export default function AssistantPageClient() {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -30,9 +23,6 @@ export default function AssistantPageClient() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<SendWhatsappGroupAction | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [sendingAction, setSendingAction] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -44,8 +34,6 @@ export default function AssistantPageClient() {
     if (!text || loading) return;
 
     setError(null);
-    setActionError(null);
-    setPendingAction(null);
     const nextHistory: ChatMessage[] = [...messages, { role: "user", content: text }];
     setMessages(nextHistory);
     setInput("");
@@ -72,10 +60,6 @@ export default function AssistantPageClient() {
         throw new Error("No reply from assistant.");
       }
       setMessages((prev) => [...prev, { role: "assistant", content: data.message! }]);
-      if (data.action && typeof data.action === "object" && (data.action as any).type === "send_whatsapp_group") {
-        const a = data.action as SendWhatsappGroupAction;
-        setPendingAction(a);
-      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Request failed.";
       setError(msg);
@@ -84,43 +68,6 @@ export default function AssistantPageClient() {
     } finally {
       setLoading(false);
       scrollToBottom();
-    }
-  }
-
-  async function confirmSend() {
-    if (!pendingAction) return;
-    setSendingAction(true);
-    setActionError(null);
-    try {
-      const res = await fetch("/api/admin/assistant/whatsapp/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messageTemplate: pendingAction.messageTemplate,
-          group: pendingAction.group,
-        }),
-      });
-      const data = (await res.json()) as { error?: string; ok?: boolean; sent?: number; failed?: number; matched?: number };
-      if (!res.ok) {
-        throw new Error(data.error || res.statusText);
-      }
-      const sent = data.sent ?? 0;
-      const failed = data.failed ?? 0;
-      const matched = data.matched ?? pendingAction.matchedCount;
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content:
-            `WhatsApp send completed.\nMatched: ${matched}\nSent: ${sent}\nFailed: ${failed}`,
-        },
-      ]);
-      setPendingAction(null);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Send failed.";
-      setActionError(msg);
-    } finally {
-      setSendingAction(false);
     }
   }
 
@@ -166,43 +113,6 @@ export default function AssistantPageClient() {
           {error && (
             <div className="border-t border-red-100 bg-red-50 px-4 py-2 text-xs text-red-700">
               {error}
-            </div>
-          )}
-
-          {pendingAction && pendingAction.type === "send_whatsapp_group" && (
-            <div className="mx-3 my-0 rounded-2xl border border-orange-200 bg-orange-50/60 p-4">
-              <p className="text-xs font-semibold text-orange-900">
-                Bulk draft ready for {pendingAction.matchedCount} recipients
-              </p>
-              <p className="mt-2 text-xs text-orange-900/80">
-                Template preview (personalized with <code className="rounded bg-slate-200 px-1">{"{{fullName}}"}</code>):
-              </p>
-              <pre className="mt-2 whitespace-pre-wrap break-words rounded-xl bg-slate-900 p-3 text-[11px] text-slate-100">
-{pendingAction.messageTemplate}
-              </pre>
-              {actionError && (
-                <div className="mt-2 border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
-                  {actionError}
-                </div>
-              )}
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  className="rounded-xl bg-orange-600 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
-                  disabled={sendingAction}
-                  onClick={() => void confirmSend()}
-                >
-                  {sendingAction ? "Sending…" : "Send now"}
-                </button>
-                <button
-                  type="button"
-                  className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50"
-                  disabled={sendingAction}
-                  onClick={() => setPendingAction(null)}
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
           )}
 

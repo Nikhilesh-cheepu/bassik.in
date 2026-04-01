@@ -278,13 +278,7 @@ export async function POST(request: NextRequest) {
       message:
         `I’m ready to send this WhatsApp template to ${countRes.count} matching recipients.\n\n` +
         `Template preview:\n${template}\n\n` +
-        "Click the Send button shown in the chat UI to dispatch.",
-      action: {
-        type: "send_whatsapp_group",
-        group: groupSpec,
-        messageTemplate: template,
-        matchedCount: countRes.count,
-      },
+        "Assistant will show the draft template; WhatsApp dispatch is disabled in this build.",
     });
   }
 

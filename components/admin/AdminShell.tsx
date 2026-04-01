@@ -41,7 +41,6 @@ export default function AdminShell({
     { label: "Assistant", href: "/admin/dashboard/assistant" },
     { label: "Venues", href: "/admin/dashboard/venues" },
     { label: "Bookings", href: "/admin/dashboard/bookings" },
-    { label: "Automations", href: "/admin/dashboard/automations" },
     { label: "Admins", href: "/admin/dashboard/admins" },
   ];
 

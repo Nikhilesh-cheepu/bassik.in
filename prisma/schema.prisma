@@ -32,6 +32,8 @@ model Venue {
   mapUrl         String?
   contactPhone   String?  // Legacy single number; use contactNumbers when set
   contactNumbers Json?   // [{ "phone": "123", "label": "Main" }]
+  amenities      Json?   // ["Alcohol served", "Free wifi"]
+  sectionVisibility Json? // { "menu": true, "photos": true, "amenities": true, "spots": true }
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -86,6 +88,11 @@ model VenueOffer {
   id        String    @id @default(cuid())
   venueId   String
   imageUrl  String
+  title     String?
+  description String?
+  eventDate String?
+  entryLabel String?
+  capacityText String?
   endDate   String?   // ISO date string; null = runs indefinitely
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt

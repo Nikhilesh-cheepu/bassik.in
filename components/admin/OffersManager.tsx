@@ -7,6 +7,11 @@ import { cropTo9x16AndCompress } from "@/lib/image-compression";
 type Offer = {
   id: string;
   imageUrl: string;
+  title: string | null;
+  description: string | null;
+  eventDate: string | null;
+  entryLabel: string | null;
+  capacityText: string | null;
   endDate: string | null;
   createdAt?: string;
 };
@@ -26,9 +31,20 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [form, setForm] = useState({
     imageUrl: "",
+    title: "",
+    description: "",
+    eventDate: "",
+    entryLabel: "",
+    capacityText: "",
     endDate: "",
   });
   const [uploading, setUploading] = useState(false);
+  const [aiSuggested, setAiSuggested] = useState({
+    title: false,
+    description: false,
+    entryLabel: false,
+    capacityText: false,
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ACCEPT = "image/jpeg,image/png,image/webp";
 
@@ -40,6 +56,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
   });
 
   const activeEndDateYmd = form.endDate ? new Date(form.endDate).toISOString().slice(0, 10) : "";
+  const activeEventDateYmd = form.eventDate ? new Date(form.eventDate).toISOString().slice(0, 10) : "";
 
   const chipLabel = (ymd: string) => {
     const d = new Date(`${ymd}T00:00:00.000Z`);
@@ -95,8 +112,13 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
       setError("Image is required.");
       return;
     }
+    if (!form.eventDate.trim()) {
+      setError("Start date is required.");
+      return;
+    }
     setError(null);
     setLoading(true);
+    const normalizedEventDate = new Date(form.eventDate).toISOString();
     try {
       const res = await fetch(`/api/admin/venues/${brandId}/offers`, {
         method: "POST",
@@ -104,6 +126,11 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
         body: JSON.stringify({
           ...(id && { id }),
           imageUrl: form.imageUrl.trim(),
+          title: form.title.trim() || null,
+          description: form.description.trim() || null,
+          eventDate: normalizedEventDate,
+          entryLabel: form.entryLabel.trim() || null,
+          capacityText: form.capacityText.trim() || null,
           endDate: form.endDate.trim() || null,
         }),
       });
@@ -115,7 +142,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
         } else {
           loadOffers();
         }
-        setForm({ imageUrl: "", endDate: "" });
+        setForm({ imageUrl: "", title: "", description: "", eventDate: "", entryLabel: "", capacityText: "", endDate: "" });
         onUpdate();
         setEditingId(null);
       } else {
@@ -172,7 +199,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
       setSelectedIds(new Set());
       if (editingId && ids.includes(editingId)) {
         setEditingId(null);
-        setForm({ imageUrl: "", endDate: "" });
+        setForm({ imageUrl: "", title: "", description: "", eventDate: "", entryLabel: "", capacityText: "", endDate: "" });
       }
       await loadOffers();
       onUpdate();
@@ -203,6 +230,36 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.url) {
         setForm((f) => ({ ...f, imageUrl: data.url }));
+        setAiSuggested({ title: false, description: false, entryLabel: false, capacityText: false });
+        const aiRes = await fetch(`/api/admin/venues/${brandId}/offers/analyze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl: data.url }),
+        });
+        if (aiRes.ok) {
+          const ai = await aiRes.json().catch(() => ({}));
+          const nextSuggested = { title: false, description: false, entryLabel: false, capacityText: false };
+          setForm((f) => ({
+            ...f,
+            title: (() => {
+              if (!f.title && ai.title) nextSuggested.title = true;
+              return f.title || ai.title || "";
+            })(),
+            description: (() => {
+              if (!f.description && ai.description) nextSuggested.description = true;
+              return f.description || ai.description || "";
+            })(),
+            entryLabel: (() => {
+              if (!f.entryLabel && ai.entryLabel) nextSuggested.entryLabel = true;
+              return f.entryLabel || ai.entryLabel || "";
+            })(),
+            capacityText: (() => {
+              if (!f.capacityText && ai.capacityText) nextSuggested.capacityText = true;
+              return f.capacityText || ai.capacityText || "";
+            })(),
+          }));
+          setAiSuggested(nextSuggested);
+        }
       } else {
         setError(data.error || "Upload failed.");
       }
@@ -218,8 +275,14 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
     setEditingId(o.id);
     setForm({
       imageUrl: o.imageUrl,
+      title: o.title ?? "",
+      description: o.description ?? "",
+      eventDate: o.eventDate ? new Date(o.eventDate).toISOString().slice(0, 16) : "",
+      entryLabel: o.entryLabel ?? "",
+      capacityText: o.capacityText ?? "",
       endDate: o.endDate ?? "",
     });
+    setAiSuggested({ title: false, description: false, entryLabel: false, capacityText: false });
   };
 
   return (
@@ -265,6 +328,87 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-700">
+              Event name
+              {aiSuggested.title && <span className="ml-2 rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">AI suggested</span>}
+            </label>
+            <input
+              type="text"
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="Ladies Night"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-700">
+              Description
+              {aiSuggested.description && <span className="ml-2 rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">AI suggested</span>}
+            </label>
+            <input
+              type="text"
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              placeholder="Unlimited drinks for ladies till closing"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400"
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-700">
+                Event start date *
+              </label>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {next10DateYmd.map((ymd) => {
+                  const isActive = activeEventDateYmd === ymd;
+                  return (
+                    <button
+                      key={`event-${ymd}`}
+                      type="button"
+                      onClick={() => {
+                        const iso = new Date(`${ymd}T20:00:00.000Z`).toISOString();
+                        setForm((f) => ({ ...f, eventDate: iso }));
+                      }}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        isActive
+                          ? "bg-slate-900 text-white border-slate-900"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      {chipLabel(ymd)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-700">
+                Entry / slot label
+                {aiSuggested.entryLabel && <span className="ml-2 rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">AI suggested</span>}
+              </label>
+              <input
+                type="text"
+                value={form.entryLabel}
+                onChange={(e) => setForm((f) => ({ ...f, entryLabel: e.target.value }))}
+                placeholder="Entry #12"
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-700">
+              People info
+              {aiSuggested.capacityText && <span className="ml-2 rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">AI suggested</span>}
+            </label>
+            <input
+              type="text"
+              value={form.capacityText}
+              onChange={(e) => setForm((f) => ({ ...f, capacityText: e.target.value }))}
+              placeholder="2-6 people"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-700">
               End date (optional)
             </label>
             <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -307,7 +451,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
           <button
             type="button"
             onClick={() => saveOffer(editingId ?? undefined)}
-            disabled={loading || !form.imageUrl?.trim()}
+            disabled={loading || !form.imageUrl?.trim() || !form.eventDate.trim()}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
           >
             {loading ? "Saving..." : editingId ? "Update" : "Add offer"}
@@ -317,7 +461,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
               type="button"
               onClick={() => {
                 setEditingId(null);
-                setForm({ imageUrl: "", endDate: "" });
+                setForm({ imageUrl: "", title: "", description: "", eventDate: "", entryLabel: "", capacityText: "", endDate: "" });
               }}
               className="rounded-lg bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
             >
@@ -384,7 +528,14 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
                     <Image src={o.imageUrl} alt="Offer" fill className="object-cover" sizes="40px" unoptimized />
                   </div>
                   <div className="flex-1 min-w-0 text-sm text-slate-700">
-                    {o.endDate ? `Ends ${new Date(o.endDate).toLocaleString()}` : "No end date"}
+                    <div className="truncate font-medium text-slate-900">{o.title?.trim() || "Untitled event"}</div>
+                    <div className="truncate text-xs text-slate-600">
+                      {o.eventDate ? `Event: ${new Date(o.eventDate).toLocaleString()}` : "No event date"}
+                    </div>
+                    {o.description?.trim() && <div className="truncate text-xs text-slate-500">{o.description}</div>}
+                    <div className="truncate text-xs text-slate-500">
+                      {o.endDate ? `Ends ${new Date(o.endDate).toLocaleString()}` : "No end date"}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1">
                     <button
@@ -449,7 +600,8 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
                     <Image src={o.imageUrl} alt="Offer" fill className="object-cover" sizes="40px" unoptimized />
                   </div>
                   <div className="flex-1 min-w-0 text-sm text-slate-700">
-                    Ended {o.endDate ? new Date(o.endDate).toLocaleString() : ""}
+                    <div className="truncate font-medium text-slate-900">{o.title?.trim() || "Untitled event"}</div>
+                    <div className="truncate text-xs text-slate-500">Ended {o.endDate ? new Date(o.endDate).toLocaleString() : ""}</div>
                   </div>
                   <div className="flex items-center gap-1">
                     <button

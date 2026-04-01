@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
       timeSlot,
       notes,
       selectedDiscounts,
+      eventId,
+      eventName,
       brandId,
       brandName,
       hubSpotId,
@@ -195,7 +197,21 @@ export async function POST(request: NextRequest) {
     const menNormalized = String(numberOfMen);
     const womenNormalized = String(numberOfWomen);
     const couplesNormalized = String(numberOfCouples);
-    const notesNormalized = notes && String(notes).trim() ? String(notes).trim() : null;
+    const baseNotes = notes && String(notes).trim() ? String(notes).trim() : "";
+    const eventIdNormalized = typeof eventId === "string" && eventId.trim() ? eventId.trim() : null;
+    const isEventBooking = Boolean(eventIdNormalized);
+    const notesNormalized = [baseNotes, eventIdNormalized ? `[event:${eventIdNormalized}]` : ""]
+      .filter(Boolean)
+      .join("\n")
+      .trim() || null;
+    let eventNameForTemplate = "Event";
+    let eventDateForTemplate = dateShort;
+    if (typeof eventName === "string" && eventName.trim()) {
+      eventNameForTemplate = eventName.trim();
+    }
+    if (eventIdNormalized && date) {
+      eventDateForTemplate = formatDateShort(String(date));
+    }
     const selectedDiscountsNormalized =
       Array.isArray(selectedDiscounts) && selectedDiscounts.length > 0
         ? JSON.stringify(
@@ -261,8 +277,12 @@ export async function POST(request: NextRequest) {
 
     // 2) Trigger WhatsApp silently in background (do not block UI)
     const interaktApiKey = process.env.INTERAKT_API_KEY?.trim();
-    const interaktTemplateName = process.env.INTERAKT_BOOKING_TEMPLATE_NAME?.trim() || "bassik_website";
-    const interaktLanguageCode = process.env.INTERAKT_BOOKING_TEMPLATE_LANGUAGE_CODE?.trim() || "en";
+    const defaultTemplateName = process.env.INTERAKT_BOOKING_TEMPLATE_NAME?.trim() || "bassik_website";
+    const defaultLanguageCode = process.env.INTERAKT_BOOKING_TEMPLATE_LANGUAGE_CODE?.trim() || "en";
+    const eventTemplateName = process.env.INTERAKT_EVENT_TEMPLATE_NAME?.trim() || "bassik_website_events";
+    const eventLanguageCode = process.env.INTERAKT_EVENT_TEMPLATE_LANGUAGE_CODE?.trim() || "en";
+    const interaktTemplateName = isEventBooking ? eventTemplateName : defaultTemplateName;
+    const interaktLanguageCode = isEventBooking ? eventLanguageCode : defaultLanguageCode;
 
     const noteValue = notesSection || (notes && String(notes).trim() ? String(notes).trim() : "-");
 
@@ -275,15 +295,18 @@ export async function POST(request: NextRequest) {
         { status: 503 }
       );
     } else {
-      const payload = {
-        countryCode: "+91",
-        phoneNumber: contactNumber,
-        type: "Template",
-        callbackData: reservationId,
-        template: {
-          name: interaktTemplateName,
-          languageCode: interaktLanguageCode,
-          bodyValues: [
+      const bodyValues = isEventBooking
+        ? [
+            outletNameForTemplate, // {{1}}
+            normalizedFullName, // {{2}}
+            contactNumber, // {{3}}
+            eventNameForTemplate, // {{4}}
+            eventDateForTemplate, // {{5}}
+            timeLabel, // {{6}}
+            String(totalGuests), // {{7}}
+            "CONFIRMED", // {{8}}
+          ]
+        : [
             outletNameForTemplate, // {{1}}
             normalizedFullName, // {{2}}
             contactNumber, // {{3}}
@@ -293,7 +316,16 @@ export async function POST(request: NextRequest) {
             offerText, // {{7}}
             String(totalGuests), // {{8}}
             "CONFIRMED", // {{9}}
-          ],
+          ];
+      const payload = {
+        countryCode: "+91",
+        phoneNumber: contactNumber,
+        type: "Template",
+        callbackData: reservationId,
+        template: {
+          name: interaktTemplateName,
+          languageCode: interaktLanguageCode,
+          bodyValues,
         },
       };
 

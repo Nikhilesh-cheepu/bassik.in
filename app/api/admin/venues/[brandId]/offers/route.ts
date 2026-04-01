@@ -11,17 +11,26 @@ const now = () => new Date().toISOString();
 async function createOfferLegacy(
   venueId: string,
   imageUrl: string,
+  title: string | null,
+  description: string | null,
+  eventDate: string | null,
+  entryLabel: string | null,
+  capacityText: string | null,
   endDate: string | null
 ): Promise<void> {
   const id = randomUUID();
   const ts = new Date().toISOString();
   await prisma.$executeRawUnsafe(
-    `INSERT INTO "VenueOffer" ("id", "venueId", "imageUrl", "title", "active", "startDate", "endDate", "order", "createdAt", "updatedAt")
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10::timestamptz)`,
+    `INSERT INTO "VenueOffer" ("id", "venueId", "imageUrl", "title", "description", "eventDate", "entryLabel", "capacityText", "active", "startDate", "endDate", "order", "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::timestamptz, $14::timestamptz)`,
     id,
     venueId,
     imageUrl,
-    "", // title
+    title ?? "",
+    description,
+    eventDate,
+    entryLabel,
+    capacityText,
     true, // active
     null, // startDate
     endDate,
@@ -84,7 +93,16 @@ export async function POST(
     const { brandId } = await params;
     const denied = await guardBrandRoute(request, brandId);
     if (denied) return denied;
-    let body: { id?: string; imageUrl?: string; endDate?: string | null } = {};
+    let body: {
+      id?: string;
+      imageUrl?: string;
+      title?: string | null;
+      description?: string | null;
+      eventDate?: string | null;
+      entryLabel?: string | null;
+      capacityText?: string | null;
+      endDate?: string | null;
+    } = {};
     try {
       body = await request.json();
     } catch {
@@ -93,7 +111,7 @@ export async function POST(
         { status: 400 }
       );
     }
-    const { id, imageUrl, endDate } = body;
+    const { id, imageUrl, title, description, eventDate, entryLabel, capacityText, endDate } = body;
 
     const venue = await prisma.venue.findUnique({ where: { brandId } });
     if (!venue) {
@@ -106,9 +124,20 @@ export async function POST(
         { status: 400 }
       );
     }
+    if (!eventDate || typeof eventDate !== "string" || !eventDate.trim()) {
+      return NextResponse.json(
+        { error: "eventDate is required" },
+        { status: 400 }
+      );
+    }
 
     const data = {
       imageUrl: String(imageUrl).trim(),
+      title: typeof title === "string" && title.trim() ? String(title).trim() : null,
+      description: typeof description === "string" && description.trim() ? description.trim() : null,
+      eventDate: String(eventDate).trim(),
+      entryLabel: typeof entryLabel === "string" && entryLabel.trim() ? entryLabel.trim() : null,
+      capacityText: typeof capacityText === "string" && capacityText.trim() ? capacityText.trim() : null,
       endDate: endDate != null && String(endDate).trim() ? String(endDate).trim() : null,
     };
 
@@ -133,7 +162,16 @@ export async function POST(
         const code = (createErr as { code?: string })?.code;
         // P2011 = null constraint violation = DB still has old schema (title NOT NULL etc.)
         if (code === "P2011") {
-          await createOfferLegacy(venue.id, data.imageUrl, data.endDate);
+          await createOfferLegacy(
+            venue.id,
+            data.imageUrl,
+            data.title,
+            data.description,
+            data.eventDate,
+            data.entryLabel,
+            data.capacityText,
+            data.endDate
+          );
         } else {
           throw createErr;
         }

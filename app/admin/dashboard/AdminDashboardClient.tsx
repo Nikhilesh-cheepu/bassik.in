@@ -231,36 +231,6 @@ export default function AdminDashboardClient() {
             {!isOutlet ? (
               <>
                 <Link
-                  href="/admin/dashboard/automations"
-                  className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-                >
-                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow group-hover:scale-105 transition-transform">
-                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M13 10V3L4 14h7v7l9-11h-7z"
-                      />
-                    </svg>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-slate-900">Automations</p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      Excel, PDF, or photo import, AI mapping, WhatsApp.
-                    </p>
-                  </div>
-                  <svg
-                    className="h-5 w-5 flex-shrink-0 text-slate-400 group-hover:text-slate-700"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </Link>
-
-                <Link
                   href="/admin/dashboard/admins"
                   className="group flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
                 >

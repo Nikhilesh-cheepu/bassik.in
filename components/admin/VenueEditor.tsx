@@ -16,6 +16,7 @@ interface Admin {
 }
 
 type VenueContact = { phone: string; label?: string };
+type SectionVisibility = { menu: boolean; photos: boolean; amenities: boolean; spots: boolean };
 
 type VenueOffer = {
   id: string;
@@ -33,6 +34,8 @@ interface Venue {
   mapUrl: string | null;
   contactPhone?: string | null;
   contactNumbers?: VenueContact[] | null;
+  amenities?: string[] | null;
+  sectionVisibility?: SectionVisibility | null;
   images: any[];
   menus: any[];
   offers?: VenueOffer[];
@@ -65,8 +68,17 @@ export default function VenueEditor({
       : venue.contactPhone
         ? [{ phone: String(venue.contactPhone), label: "Contact" }]
         : []) as VenueContact[],
+    amenities: (venue.amenities && Array.isArray(venue.amenities)
+      ? venue.amenities.filter((x) => typeof x === "string")
+      : []) as string[],
+    sectionVisibility: {
+      menu: venue.sectionVisibility?.menu !== false,
+      photos: venue.sectionVisibility?.photos !== false,
+      amenities: venue.sectionVisibility?.amenities !== false,
+      spots: venue.sectionVisibility?.spots !== false,
+    } as SectionVisibility,
   });
-  const [activeTab, setActiveTab] = useState<"offers" | "gallery" | "menus" | "discounts" | "location" | "contact">("offers");
+  const [activeTab, setActiveTab] = useState<"offers" | "gallery" | "menus" | "discounts" | "location" | "contact" | "amenities" | "sections">("offers");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -81,16 +93,27 @@ export default function VenueEditor({
         : venue.contactPhone
           ? [{ phone: String(venue.contactPhone), label: "Contact" }]
           : []) as VenueContact[],
+      amenities: (venue.amenities && Array.isArray(venue.amenities)
+        ? venue.amenities.filter((x) => typeof x === "string")
+        : []) as string[],
+      sectionVisibility: {
+        menu: venue.sectionVisibility?.menu !== false,
+        photos: venue.sectionVisibility?.photos !== false,
+        amenities: venue.sectionVisibility?.amenities !== false,
+        spots: venue.sectionVisibility?.spots !== false,
+      } as SectionVisibility,
     });
   }, [venue]);
 
-  const handleSave = async (payload?: { mapUrl?: string; contactPhone?: string; contactNumbers?: VenueContact[] }) => {
+  const handleSave = async (payload?: { mapUrl?: string; contactPhone?: string; contactNumbers?: VenueContact[]; amenities?: string[]; sectionVisibility?: SectionVisibility }) => {
     setSaving(true);
     setMessage(null);
     const dataToSend = payload ?? {
       mapUrl: formData.mapUrl,
       contactPhone: formData.contactPhone || null,
       contactNumbers: formData.contactNumbers,
+      amenities: formData.amenities,
+      sectionVisibility: formData.sectionVisibility,
     };
 
     try {
@@ -103,6 +126,8 @@ export default function VenueEditor({
           ...(dataToSend.mapUrl !== undefined && { mapUrl: dataToSend.mapUrl }),
           ...(dataToSend.contactPhone !== undefined && { contactPhone: dataToSend.contactPhone || "" }),
           ...(dataToSend.contactNumbers !== undefined && { contactNumbers: dataToSend.contactNumbers }),
+          ...(dataToSend.amenities !== undefined && { amenities: dataToSend.amenities }),
+          ...(dataToSend.sectionVisibility !== undefined && { sectionVisibility: dataToSend.sectionVisibility }),
         }),
       });
 
@@ -122,6 +147,8 @@ export default function VenueEditor({
   };
 
   const handleSaveContacts = () => handleSave({ contactNumbers: formData.contactNumbers });
+  const handleSaveAmenities = () => handleSave({ amenities: formData.amenities });
+  const handleSaveSections = () => handleSave({ sectionVisibility: formData.sectionVisibility });
 
   const addContact = () => {
     setFormData((prev) => ({ ...prev, contactNumbers: [...prev.contactNumbers, { phone: "", label: "" }] }));
@@ -190,6 +217,8 @@ export default function VenueEditor({
               { id: "discounts", label: "Discounts" },
               { id: "location", label: "Location" },
               { id: "contact", label: "Contact" },
+              { id: "amenities", label: "Amenities" },
+              { id: "sections", label: "Sections" },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -338,6 +367,114 @@ export default function VenueEditor({
                 {saving ? "Saving..." : "Save contact numbers"}
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Amenities Tab */}
+        {activeTab === "amenities" && (
+          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <h2 className="mb-2 text-lg font-semibold text-slate-900 sm:text-xl">Amenities</h2>
+            <p className="mb-4 text-sm text-slate-500">
+              Add visitor-facing amenities shown below the gallery.
+            </p>
+            <div className="space-y-3">
+              {formData.amenities.map((amenity, index) => (
+                <div key={index} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-3">
+                  <input
+                    type="text"
+                    value={amenity}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFormData((prev) => {
+                        const next = [...prev.amenities];
+                        next[index] = value;
+                        return { ...prev, amenities: next };
+                      });
+                    }}
+                    placeholder={`Amenity ${index + 1}`}
+                    className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        amenities: prev.amenities.filter((_, i) => i !== index),
+                      }))
+                    }
+                    className="rounded-lg p-2 text-rose-700 transition-colors hover:bg-rose-50 border border-rose-100"
+                    title="Remove"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    amenities: [...prev.amenities, `Amenity ${prev.amenities.length + 1}`],
+                  }))
+                }
+                className="rounded-lg bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                + Add amenity
+              </button>
+              <button
+                onClick={handleSaveAmenities}
+                disabled={saving}
+                className="rounded-lg bg-slate-900 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Save amenities"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "sections" && (
+          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+            <h2 className="mb-2 text-lg font-semibold text-slate-900 sm:text-xl">Section visibility</h2>
+            <p className="text-sm text-slate-500">
+              Control optional sections. Events and bottom sticky buttons always stay visible.
+            </p>
+            <div className="space-y-2">
+              {[
+                { key: "menu", label: "Menu section" },
+                { key: "photos", label: "Photos section" },
+                { key: "amenities", label: "Amenities section" },
+                { key: "spots", label: "Spots section (The Hub)" },
+              ].map((item) => (
+                <label key={item.key} className="flex items-center justify-between rounded-xl border border-slate-200 p-3">
+                  <span className="text-sm text-slate-800">{item.label}</span>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(formData.sectionVisibility[item.key as keyof SectionVisibility])}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        sectionVisibility: {
+                          ...prev.sectionVisibility,
+                          [item.key]: e.target.checked,
+                        },
+                      }))
+                    }
+                    className="h-4 w-4 accent-slate-900"
+                  />
+                </label>
+              ))}
+            </div>
+            <button
+              onClick={handleSaveSections}
+              disabled={saving}
+              className="rounded-lg bg-slate-900 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save section visibility"}
+            </button>
           </div>
         )}
       </main>
