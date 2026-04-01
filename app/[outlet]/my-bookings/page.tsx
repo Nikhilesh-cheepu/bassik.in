@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { BRANDS } from "@/lib/brands";
 import Navbar from "@/components/Navbar";
+import AppBackLink from "@/components/AppBackLink";
 
 interface Reservation {
   id: string;
@@ -86,15 +87,15 @@ function MyBookingsContent() {
       <Navbar />
       <div className="max-w-4xl mx-auto px-4 py-8 sm:py-12">
         <div className="mb-6 sm:mb-8">
-          <Link
-            href={`/${outletSlug}/book`}
-            className="inline-flex items-center text-gray-300 hover:text-white mb-4 transition-colors"
-          >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to Booking
-          </Link>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4">
+            <AppBackLink href={`/${outletSlug}`} label="Back to venue" />
+            <Link
+              href={`/${outletSlug}/book`}
+              className="text-sm font-medium text-amber-400/90 hover:text-amber-300 transition-colors"
+            >
+              Book a table
+            </Link>
+          </div>
           <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">My Bookings – {activeBrand.shortName}</h1>
           <p className="text-gray-400">Enter your phone number to view reservations for this outlet</p>
         </div>

@@ -10,6 +10,7 @@ import { BRANDS, HIDDEN_BRAND_IDS } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 import { trackWhatsAppClick, trackCallClick } from "@/lib/analytics";
 import EventsOffersHero from "@/components/EventsOffersHero";
+import BackToHomeButton from "@/components/BackToHomeButton";
 import type { VenuePayload } from "@/lib/venue-data";
 
 const MenuModal = dynamic(() => import("@/components/MenuModal"));
@@ -269,6 +270,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
     <div className="min-h-screen bg-black w-full max-w-full overflow-x-hidden">
       <div className="relative w-full max-w-full z-0 min-h-0 min-w-0 flex flex-col overflow-x-hidden">
         <div className="relative mt-1">
+          <BackToHomeButton />
           <div className="relative flex-shrink-0 min-w-0 overflow-x-hidden">
             <EventsOffersHero
               offers={venueOffers}
@@ -437,8 +439,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
           <button
             type="button"
             onClick={() => {
-              const query = selectedEventId ? `?eventId=${encodeURIComponent(selectedEventId)}` : "";
-              router.push(`/${selectedBrandId}/book${query}`);
+              router.push(`/${selectedBrandId}/book`);
             }}
             className="relative rounded-full border px-3 py-2.5 text-sm font-semibold text-white shadow-[0_0_22px_rgba(59,130,246,0.45)]"
             style={{ borderColor: "rgba(96,165,250,0.75)", backgroundColor: "rgba(37,99,235,0.40)" }}

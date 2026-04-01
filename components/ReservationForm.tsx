@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 
 interface ReservationFormProps {
   brand: Brand;
-  initialEventId?: string | null;
 }
 
 type DiscountItem = {
@@ -21,7 +20,7 @@ type DiscountItem = {
   hideSlotsLeft?: boolean;
 };
 
-export default function ReservationForm({ brand, initialEventId = null }: ReservationFormProps) {
+export default function ReservationForm({ brand }: ReservationFormProps) {
   const router = useRouter();
   const accentColor = brand.accentColor;
   const [formData, setFormData] = useState(() => ({
@@ -31,7 +30,6 @@ export default function ReservationForm({ brand, initialEventId = null }: Reserv
     timeSlot: "",
     selectedDiscounts: [] as string[],
     notes: "",
-    eventId: initialEventId,
     hubSpotId: undefined as string | undefined,
   }));
   const [guests, setGuests] = useState(2);
@@ -74,7 +72,7 @@ export default function ReservationForm({ brand, initialEventId = null }: Reserv
     const t = new Date();
     const now24 = `${t.getHours().toString().padStart(2, "0")}:${t.getMinutes().toString().padStart(2, "0")}`;
     const lunchEnd = "18:00"; // Global lunch window end
-    setFormData((prev) => ({ ...prev, date: todayStr, timeSlot: "", selectedDiscounts: [], eventId: initialEventId }));
+    setFormData((prev) => ({ ...prev, date: todayStr, timeSlot: "", selectedDiscounts: [] }));
     setGuests(2);
     setTimeSlotTab(now24 >= lunchEnd ? "dinner" : "lunch");
     setDiscounts([]);
@@ -82,7 +80,7 @@ export default function ReservationForm({ brand, initialEventId = null }: Reserv
     setReservationConfirmed(false);
     setReservationId(null);
     setShowSuccessToast(false);
-  }, [brand.id, todayStr, initialEventId]);
+  }, [brand.id, todayStr]);
 
   useEffect(() => {
     return () => {
@@ -212,7 +210,6 @@ export default function ReservationForm({ brand, initialEventId = null }: Reserv
           date: formData.date,
           timeSlot: formData.timeSlot,
           notes: formData.notes || null,
-          eventId: formData.eventId || null,
           selectedDiscounts: formData.selectedDiscounts,
           brandId: brand.id,
           brandName: brand.name,
@@ -221,7 +218,7 @@ export default function ReservationForm({ brand, initialEventId = null }: Reserv
       });
       if (res.ok) {
         const data = await res.json();
-        setFormData({ fullName: "", contactNumber: "", date: todayStr, timeSlot: "", selectedDiscounts: [], notes: "", eventId: initialEventId, hubSpotId: undefined });
+        setFormData({ fullName: "", contactNumber: "", date: todayStr, timeSlot: "", selectedDiscounts: [], notes: "", hubSpotId: undefined });
         setGuests(2);
         setShowSuccessToast(true);
         if (successToastTimeoutRef.current) clearTimeout(successToastTimeoutRef.current);
@@ -270,7 +267,7 @@ export default function ReservationForm({ brand, initialEventId = null }: Reserv
                     </svg>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white">Event booked successfully</p>
+                    <p className="text-sm font-semibold text-white">Table booking confirmed</p>
                     <p className="text-xs text-gray-300">WhatsApp confirmation sent successfully.</p>
                   </div>
                 </div>
@@ -321,11 +318,6 @@ export default function ReservationForm({ brand, initialEventId = null }: Reserv
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 pb-24">
-      {formData.eventId && (
-        <div className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/75">
-          Booking for selected event
-        </div>
-      )}
       {/* A. Horizontal Date Picker */}
       <div>
         <div
