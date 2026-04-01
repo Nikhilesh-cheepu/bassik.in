@@ -4,13 +4,16 @@ import { useState, useRef, useCallback } from "react";
 import Image from "next/image";
 import { Swiper, SwiperSlide } from "swiper/react";
 import type { Swiper as SwiperType } from "swiper";
-import { Autoplay } from "swiper/modules";
 import type { Brand } from "@/lib/brands";
 import "swiper/css";
 
 export type HeroOffer = {
   id: string;
   imageUrl: string;
+  title: string | null;
+  eventDate: string | null;
+  entryLabel: string | null;
+  capacityText: string | null;
 };
 
 interface EventsOffersHeroProps {
@@ -18,13 +21,13 @@ interface EventsOffersHeroProps {
   brand: Brand;
   /** When true, show shimmer skeleton instead of "No offers" or carousel */
   isLoading?: boolean;
+  onActiveOfferChange?: (offerId: string) => void;
+  onOfferClick?: (offerId: string) => void;
 }
 
 const PLACEHOLDER = "No active offers right now";
 const BORDER_RADIUS = 20;
 const CARD_MAX_HEIGHT_VH = 54;
-const AUTOPLAY_DELAY_MS = 1000;
-const AUTOPLAY_RESUME_AFTER_MS = 2500;
 const GAP_PX = 12;
 const PADDING_INLINE_PX = 16;
 
@@ -42,28 +45,16 @@ function ShimmerCard() {
   );
 }
 
-export default function EventsOffersHero({ offers, brand, isLoading = false }: EventsOffersHeroProps) {
+export default function EventsOffersHero({ offers, brand, isLoading = false, onActiveOfferChange, onOfferClick }: EventsOffersHeroProps) {
   const swiperRef = useRef<SwiperType | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [imageLoaded, setImageLoaded] = useState<Record<string, boolean>>({});
-  const autoplayResumeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasOffers = offers.length > 0;
   const total = offers.length;
 
   const handleImageLoad = useCallback((offerId: string) => {
     setImageLoaded((prev) => ({ ...prev, [offerId]: true }));
-  }, []);
-
-  const stopAutoplayAndResumeLater = useCallback(() => {
-    const swiper = swiperRef.current;
-    if (!swiper?.autoplay) return;
-    swiper.autoplay.stop();
-    if (autoplayResumeRef.current) clearTimeout(autoplayResumeRef.current);
-    autoplayResumeRef.current = setTimeout(() => {
-      swiper.autoplay.start();
-      autoplayResumeRef.current = null;
-    }, AUTOPLAY_RESUME_AFTER_MS);
   }, []);
 
   if (isLoading) {
@@ -121,11 +112,10 @@ export default function EventsOffersHero({ offers, brand, isLoading = false }: E
               swiperRef.current = s;
               if (s) setActiveIndex(s.realIndex);
             }}
-            onSlideChange={(sw) => setActiveIndex(sw.realIndex)}
-            onTouchEnd={stopAutoplayAndResumeLater}
-            onSlideChangeTransitionEnd={() => {
-              if (autoplayResumeRef.current) return;
-              swiperRef.current?.autoplay?.start();
+            onSlideChange={(sw) => {
+              setActiveIndex(sw.realIndex);
+              const activeOffer = offers[sw.realIndex];
+              if (activeOffer) onActiveOfferChange?.(activeOffer.id);
             }}
             className="offers-swiper w-full"
             loop
@@ -137,16 +127,13 @@ export default function EventsOffersHero({ offers, brand, isLoading = false }: E
             grabCursor
             touchEventsTarget="container"
             resistanceRatio={0.7}
-            autoplay={{
-              delay: AUTOPLAY_DELAY_MS,
-              disableOnInteraction: true,
-            }}
-            modules={[Autoplay]}
           >
             {offers.map((offer, i) => (
               <SwiperSlide key={offer.id}>
                 <div className="flex justify-center w-full h-full">
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => onOfferClick?.(offer.id)}
                     className="offer-card-inner overflow-hidden relative flex flex-col items-center justify-center w-full rounded-[20px]"
                     style={{
                       maxHeight: `${CARD_MAX_HEIGHT_VH}vh`,
@@ -175,7 +162,7 @@ export default function EventsOffersHero({ offers, brand, isLoading = false }: E
                         />
                       )}
                     </div>
-                  </div>
+                  </button>
                 </div>
               </SwiperSlide>
             ))}
