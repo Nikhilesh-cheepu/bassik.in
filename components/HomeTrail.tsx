@@ -8,11 +8,14 @@ import { BRANDS, Brand, HIDDEN_BRAND_IDS } from "@/lib/brands";
 import { getVenueSpecialtySnippet } from "@/lib/venue-uniqueness";
 import { shuffleCopy } from "@/lib/shuffle-array";
 import HomeEventsWall from "@/components/HomeEventsWall";
+import HomeReviewsSection from "@/components/HomeReviewsSection";
 import type { HomeFeedEvent } from "@/lib/home-feed-types";
+import type { HomeReview } from "@/lib/home-reviews";
 
 interface HomeTrailProps {
   venues?: Brand[];
   initialHomeEvents?: HomeFeedEvent[];
+  initialHomeReviews?: HomeReview[];
 }
 
 const VENUE_ORDER = [
@@ -137,7 +140,7 @@ function VenueMiniCard({ brand }: { brand: Brand }) {
   );
 }
 
-export default function HomeTrail({ venues = BRANDS, initialHomeEvents }: HomeTrailProps) {
+export default function HomeTrail({ venues = BRANDS, initialHomeEvents, initialHomeReviews }: HomeTrailProps) {
   const visibleVenues = useMemo(
     () => (venues || BRANDS).filter((b) => !HIDDEN_BRAND_IDS.has(b.id)),
     [venues]
@@ -195,6 +198,7 @@ export default function HomeTrail({ venues = BRANDS, initialHomeEvents }: HomeTr
         </section>
 
         <HomeEventsWall initialEvents={initialHomeEvents} />
+        <HomeReviewsSection initialReviews={initialHomeReviews} />
 
         <section className="px-3 sm:px-6 mb-12 sm:mb-16" aria-label="Venues">
           <div className="max-w-4xl mx-auto mb-5 sm:mb-6">

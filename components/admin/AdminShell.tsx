@@ -41,12 +41,14 @@ export default function AdminShell({
     { label: "Assistant", href: "/admin/dashboard/assistant" },
     { label: "Venues", href: "/admin/dashboard/venues" },
     { label: "Bookings", href: "/admin/dashboard/bookings" },
+    { label: "Reviews", href: "/admin/dashboard/reviews" },
     { label: "Admins", href: "/admin/dashboard/admins" },
   ];
 
   const outletTabs = [
     { label: "Dashboard", href: "/admin/dashboard" },
     { label: "Bookings", href: "/admin/dashboard/bookings" },
+    { label: "Reviews", href: "/admin/dashboard/reviews" },
     { label: "Venues", href: "/admin/dashboard/venues" },
   ];
 

@@ -8,6 +8,7 @@ const isAdminRoute = (pathname: string) => pathname.startsWith("/admin");
 function outletAdminAllowedPath(pathname: string): boolean {
   if (pathname === "/admin/dashboard") return true;
   if (pathname.startsWith("/admin/dashboard/bookings")) return true;
+  if (pathname.startsWith("/admin/dashboard/reviews")) return true;
   if (pathname === "/admin/dashboard/venues" || pathname.startsWith("/admin/dashboard/venues/")) {
     return true;
   }

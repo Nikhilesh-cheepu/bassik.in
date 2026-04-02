@@ -78,6 +78,13 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
   const [eventBookSubmitting, setEventBookSubmitting] = useState(false);
   const [eventBookError, setEventBookError] = useState<string | null>(null);
   const [showEventBookedToast, setShowEventBookedToast] = useState(false);
+  const [isReviewSheetOpen, setIsReviewSheetOpen] = useState(false);
+  const [reviewAuthor, setReviewAuthor] = useState("");
+  const [reviewRating, setReviewRating] = useState("5.0");
+  const [reviewText, setReviewText] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewStatus, setReviewStatus] = useState<string | null>(null);
+  const [reviewReply, setReviewReply] = useState<string | null>(null);
   const [loading, setLoading] = useState(!initialVenueData);
   const [loadedGalleryImages, setLoadedGalleryImages] = useState<Set<number>>(new Set());
   const [failedGalleryImages, setFailedGalleryImages] = useState<Set<number>>(new Set());
@@ -265,6 +272,45 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
     }
   };
 
+  const submitReview = async () => {
+    if (reviewSubmitting) return;
+    setReviewStatus(null);
+    setReviewReply(null);
+    setReviewSubmitting(true);
+    try {
+      const res = await fetch("/api/home/reviews", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brandId: selectedBrandId,
+          author: reviewAuthor.trim(),
+          reviewText: reviewText.trim(),
+          rating: Number(reviewRating),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setReviewStatus(typeof data.error === "string" ? data.error : "Could not submit review.");
+        return;
+      }
+      setReviewAuthor("");
+      setReviewText("");
+      setReviewRating("5.0");
+      setReviewStatus(
+        typeof data.moderationMessage === "string" && data.moderationMessage.trim()
+          ? data.moderationMessage
+          : "Thanks for sharing your review."
+      );
+      if (typeof data.assistantReply === "string" && data.assistantReply.trim()) {
+        setReviewReply(data.assistantReply.trim());
+      }
+    } catch {
+      setReviewStatus("Could not submit review right now.");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black w-full max-w-full overflow-x-hidden">
       <div className="relative w-full max-w-full z-0 min-h-0 min-w-0 flex flex-col overflow-x-hidden">
@@ -414,6 +460,19 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
           />
         )}
         {venueData.sectionVisibility.amenities && <VenueAmenitiesSection amenities={venueData.amenities} />}
+        <div className="px-1 pt-1">
+          <button
+            type="button"
+            onClick={() => {
+              setReviewStatus(null);
+              setReviewReply(null);
+              setIsReviewSheetOpen(true);
+            }}
+            className="text-xs text-stone-500 hover:text-stone-300 transition-colors underline underline-offset-4"
+          >
+            Write a review
+          </button>
+        </div>
       </div>
 
       <div className="fixed bottom-4 left-1/2 z-40 w-[calc(100%-1.25rem)] max-w-md -translate-x-1/2 rounded-3xl border border-white/20 bg-black/60 p-2.5 backdrop-blur-xl shadow-[0_0_24px_rgba(255,255,255,0.08)]">
@@ -574,6 +633,70 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
                   ))
                 )}
               </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {isReviewSheetOpen && (
+          <>
+            <motion.button
+              type="button"
+              className="fixed inset-0 z-50 bg-black/60"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsReviewSheetOpen(false)}
+            />
+            <motion.div
+              initial={{ y: 30, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 30, opacity: 0 }}
+              className="fixed inset-x-0 bottom-0 z-[60] mx-auto w-full max-w-md rounded-t-3xl border-t border-white/15 bg-[#0a0d14]/95 p-4"
+            >
+              <h3 className="text-sm font-semibold text-white">Share your review</h3>
+              <div className="mt-3 space-y-2">
+                <input
+                  type="text"
+                  value={reviewAuthor}
+                  onChange={(e) => setReviewAuthor(e.target.value)}
+                  placeholder="Your name"
+                  maxLength={28}
+                  className="w-full rounded-xl border border-white/15 bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none"
+                />
+                <select
+                  value={reviewRating}
+                  onChange={(e) => setReviewRating(e.target.value)}
+                  className="w-full rounded-xl border border-white/15 bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none"
+                >
+                  <option value="5.0">Very satisfied</option>
+                  <option value="4.8">Satisfied</option>
+                  <option value="4.6">Okay, not bad</option>
+                  <option value="4.3">Could be better</option>
+                </select>
+                <textarea
+                  value={reviewText}
+                  onChange={(e) => setReviewText(e.target.value)}
+                  placeholder="How was the website and venue experience?"
+                  maxLength={220}
+                  rows={3}
+                  className="w-full rounded-xl border border-white/15 bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none resize-none"
+                />
+              </div>
+              {reviewStatus ? <p className="mt-2 text-xs text-white/70">{reviewStatus}</p> : null}
+              {reviewReply ? (
+                <div className="mt-2 rounded-xl border border-white/15 bg-white/[0.03] px-3 py-2">
+                  <p className="text-[11px] leading-relaxed text-white/80 whitespace-pre-line">{reviewReply}</p>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={submitReview}
+                disabled={reviewSubmitting}
+                className="mt-3 w-full rounded-full border border-white/25 bg-white/[0.08] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {reviewSubmitting ? "Posting..." : "Post review"}
+              </button>
             </motion.div>
           </>
         )}
