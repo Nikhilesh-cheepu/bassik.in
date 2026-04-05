@@ -64,7 +64,7 @@ export const HOME_CHIPS: HomeChip[] = [
   { id: "live_music", label: "Live music", emoji: "🎵", hint: "SkyHy, C53" },
   { id: "sports", label: "Sports", emoji: "📺", hint: "KIIK 69" },
   { id: "bollywood", label: "Bollywood", emoji: "💃", hint: "KIIK, Boiler, Rogue GB" },
-  { id: "tollywood", label: "Tollywood", emoji: "🎞️", hint: "Rogues + Firely" },
+  { id: "tollywood", label: "Tollywood", emoji: "🎞️", hint: "Rogues + Firefly" },
   { id: "outdoor", label: "Outdoor", emoji: "🌿", hint: "SkyHy, C53" },
   { id: "not_sure", label: "Surprise me", emoji: "🤔", hint: "New mix" },
 ];
