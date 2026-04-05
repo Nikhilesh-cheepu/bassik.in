@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { BRANDS } from "@/lib/brands";
+import { BRANDS, getVenueLabelsFromCatalog } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-contacts";
 
 export const runtime = "nodejs";
@@ -69,7 +69,12 @@ export async function GET(
           return single ? [{ phone: single, label: "Contact" }] : [];
         })();
     const contactPhone = contactNumbers[0]?.phone ?? getContactForBrand(brandId);
-    const whatsappMessage = getWhatsAppMessageForBrand(brandId, venue.shortName);
+    const { name: displayName, shortName: displayShortName } = getVenueLabelsFromCatalog(
+      brandId,
+      venue.name,
+      venue.shortName
+    );
+    const whatsappMessage = getWhatsAppMessageForBrand(brandId, displayShortName);
 
     const offers = (venue as any).offers.map((o: {
       id: string;
@@ -113,8 +118,8 @@ export async function GET(
         venue: {
           id: venue.id,
           brandId: venue.brandId,
-          name: venue.name,
-          shortName: venue.shortName,
+          name: displayName,
+          shortName: displayShortName,
           address: venue.address,
           mapUrl: venue.mapUrl,
           contactPhone,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getVenueLabelsFromCatalog } from "@/lib/brands";
 import {
   requireAdminScope,
   assertBrandInScope,
@@ -229,7 +230,13 @@ export async function GET(request: NextRequest) {
     past.sort((a, b) => sortByDateTime(a, b, false));
     const sortedReservations = [...upcoming, ...past];
 
-    return NextResponse.json({ reservations: sortedReservations });
+    const reservationsLabeled = sortedReservations.map((r: any) => {
+      if (!r.venue || typeof r.venue.brandId !== "string") return r;
+      const L = getVenueLabelsFromCatalog(r.venue.brandId, r.venue.name, r.venue.shortName);
+      return { ...r, venue: { ...r.venue, name: L.name, shortName: L.shortName } };
+    });
+
+    return NextResponse.json({ reservations: reservationsLabeled });
   } catch (error) {
     console.error("Error fetching bookings:", error);
     // Return empty list so admin bookings page still loads

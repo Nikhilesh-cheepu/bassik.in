@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { getVenueLabelsFromCatalog, fixFireflyTypoInText } from "@/lib/brands";
 import {
   requireAdminScope,
   assertBrandInScope,
@@ -50,7 +51,12 @@ export async function GET(request: NextRequest) {
       orderBy: { name: "asc" },
     });
 
-    return NextResponse.json({ venues }, { headers: noCacheHeaders });
+    const venuesLabeled = venues.map((v) => {
+      const L = getVenueLabelsFromCatalog(v.brandId, v.name, v.shortName);
+      return { ...v, name: L.name, shortName: L.shortName };
+    });
+
+    return NextResponse.json({ venues: venuesLabeled }, { headers: noCacheHeaders });
   } catch (error) {
     const code = error instanceof Prisma.PrismaClientKnownRequestError ? error.code : null;
     console.error("Error fetching venues:", error);
@@ -91,8 +97,8 @@ export async function POST(request: NextRequest) {
 
     // Build update data - only include fields that are provided
     const updateData: any = {};
-    if (name !== undefined) updateData.name = name;
-    if (shortName !== undefined) updateData.shortName = shortName;
+    if (name !== undefined) updateData.name = fixFireflyTypoInText(String(name).trim());
+    if (shortName !== undefined) updateData.shortName = fixFireflyTypoInText(String(shortName).trim());
     if (address !== undefined) updateData.address = address;
     if (mapUrl !== undefined) updateData.mapUrl = mapUrl || null;
     if (contactPhone !== undefined) updateData.contactPhone = contactPhone === "" ? null : contactPhone || null;
@@ -143,8 +149,8 @@ export async function POST(request: NextRequest) {
       }
       const createData: any = {
         brandId,
-        name,
-        shortName,
+        name: fixFireflyTypoInText(String(name).trim()),
+        shortName: fixFireflyTypoInText(String(shortName).trim()),
         address: address || "Address to be updated",
         mapUrl: mapUrl || null,
       };
@@ -178,7 +184,8 @@ export async function POST(request: NextRequest) {
       venue = await prisma.venue.create({ data: createData });
     }
 
-    return NextResponse.json({ venue });
+    const L = getVenueLabelsFromCatalog(venue.brandId, venue.name, venue.shortName);
+    return NextResponse.json({ venue: { ...venue, name: L.name, shortName: L.shortName } });
   } catch (error) {
     console.error("Error creating/updating venue:", error);
     return NextResponse.json(

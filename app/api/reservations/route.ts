@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getDiscountLabel } from "@/lib/reservation-discounts";
+import { getOutletLabelForReservation } from "@/lib/brands";
 
 export const runtime = "nodejs";
 
@@ -140,18 +141,24 @@ export async function POST(request: NextRequest) {
     const effectiveBrandIdForOffers =
       brandId === "the-hub" && hubSpotId && typeof hubSpotId === "string" ? hubSpotId : brandId;
 
-    const outletNameForTemplate =
-      brandId === "the-hub" && hubSpotId && typeof hubSpotId === "string"
-        ? hubSpotId === "c53"
-          ? "C53"
-          : hubSpotId === "boiler-room"
-            ? "Boiler Room"
-            : hubSpotId === "firefly"
-              ? "Firefly"
-              : brandName || "The Hub"
-        : brandName || (brandId === "skyhy" ? "SkyHy" : brandId);
+    const venue = await prisma.venue.findUnique({
+      where: { brandId: effectiveBrandIdForBooking },
+      select: { id: true, name: true, shortName: true },
+    });
 
-    const brandLabelForBooking = brandName || (brandId === "skyhy" ? "SkyHy" : brandId);
+    if (!venue) {
+      return NextResponse.json({ error: "Unknown outlet" }, { status: 400 });
+    }
+
+    const outletDisplayName = getOutletLabelForReservation(
+      brandId,
+      hubSpotId,
+      brandName,
+      venue.name,
+      venue.shortName
+    );
+    const outletNameForTemplate = outletDisplayName;
+    const brandLabelForBooking = outletDisplayName;
 
     // Resolve discount labels (prefer static mapping so text is consistent)
     const discountLabels: string[] = [];
@@ -183,16 +190,7 @@ export async function POST(request: NextRequest) {
     const offerText =
       discountLabels.length > 0 ? discountLabels.join(" / ") : "NA";
 
-    // 1) Save booking first
-    const venue = await prisma.venue.findUnique({
-      where: { brandId: effectiveBrandIdForBooking },
-      select: { id: true },
-    });
-
-    if (!venue) {
-      return NextResponse.json({ error: "Unknown outlet" }, { status: 400 });
-    }
-
+    // 1) Save booking (venue row loaded above)
     const timeSlotNormalized = String(timeToFormat);
     const menNormalized = String(numberOfMen);
     const womenNormalized = String(numberOfWomen);

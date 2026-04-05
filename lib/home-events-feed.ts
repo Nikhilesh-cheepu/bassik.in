@@ -18,7 +18,7 @@ async function loadHomeFeedEvents(): Promise<HomeFeedEvent[]> {
       OR: [{ endDate: null }, { endDate: { gt: new Date().toISOString() } }],
     },
     include: {
-      venue: { select: { brandId: true, shortName: true } },
+      venue: { select: { brandId: true } },
     },
     orderBy: { createdAt: "desc" },
     take: MAX_EVENTS * 2,
@@ -40,7 +40,7 @@ async function loadHomeFeedEvents(): Promise<HomeFeedEvent[]> {
         entryLabel: o.entryLabel ?? null,
         capacityText: o.capacityText ?? null,
         brandId: o.venue.brandId,
-        venueShortName: o.venue.shortName,
+        venueShortName: brand.shortName,
         brandShortName: brand.shortName,
         accentColor: brand.accentColor,
         logoPath,
@@ -57,7 +57,7 @@ async function loadHomeFeedEvents(): Promise<HomeFeedEvent[]> {
  */
 export async function getHomeFeedEvents(): Promise<HomeFeedEvent[]> {
   try {
-    return await unstable_cache(loadHomeFeedEvents, ["home-feed-events-v1"], {
+    return await unstable_cache(loadHomeFeedEvents, ["home-feed-events-v2"], {
       revalidate: 30,
     })();
   } catch (e) {

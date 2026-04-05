@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { BRANDS } from "@/lib/brands";
+import { BRANDS, getVenueLabelsFromCatalog } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-contacts";
 import { Prisma } from "@prisma/client";
 
@@ -74,7 +74,12 @@ export async function getVenueDataByBrandId(brandId: string): Promise<VenuePaylo
             return single ? [{ phone: single, label: "Contact" }] : [];
           })();
     const contactPhone = contactNumbers[0]?.phone ?? getContactForBrand(brandId);
-    const whatsappMessage = getWhatsAppMessageForBrand(brandId, venue.shortName);
+    const { shortName: displayShortName } = getVenueLabelsFromCatalog(
+      brandId,
+      venue.name,
+      venue.shortName
+    );
+    const whatsappMessage = getWhatsAppMessageForBrand(brandId, displayShortName);
     const offers = (venue as any).offers.map((o: {
       id: string;
       imageUrl: string;

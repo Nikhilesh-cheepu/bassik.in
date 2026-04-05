@@ -154,6 +154,65 @@ export const BRANDS: Brand[] = [
   },
 ];
 
+/** Normalize misspelling "firely" / "Firely" → "Firefly" in stored or client-supplied text. */
+export function fixFireflyTypoInText(s: string): string {
+  if (typeof s !== "string" || !s) return s;
+  return s.replace(/\bfirely\b/gi, "Firefly");
+}
+
+/**
+ * Prefer catalog name/shortName over Postgres for API/UI when brandId exists in BRANDS.
+ * Venue rows can lag (typos, stale data); brandId remains canonical.
+ */
+export function getVenueLabelsFromCatalog(
+  brandId: string,
+  dbName: string,
+  dbShortName: string
+): { name: string; shortName: string } {
+  const brand = BRANDS.find((b) => b.id === brandId);
+  if (!brand) {
+    return {
+      name: fixFireflyTypoInText(dbName),
+      shortName: fixFireflyTypoInText(dbShortName),
+    };
+  }
+  return { name: brand.name, shortName: brand.shortName };
+}
+
+/**
+ * Canonical outlet short name for Interakt templates and Reservation.brandName.
+ * Prefers `BRANDS` + venue row over client body (avoids stale DB / typos).
+ */
+export function getOutletLabelForReservation(
+  brandId: string,
+  hubSpotId: unknown,
+  brandNameFromClient: unknown,
+  venueName: string,
+  venueShortName: string
+): string {
+  if (brandId === "the-hub" && hubSpotId && typeof hubSpotId === "string") {
+    if (hubSpotId === "c53") return "C53";
+    if (hubSpotId === "boiler-room") return "Boiler Room";
+    if (hubSpotId === "firefly") return "Firefly";
+    const bn =
+      typeof brandNameFromClient === "string" && brandNameFromClient.trim()
+        ? fixFireflyTypoInText(brandNameFromClient.trim())
+        : "";
+    return bn || "The Hub";
+  }
+  const cat = getVenueLabelsFromCatalog(brandId, venueName, venueShortName);
+  if (BRANDS.some((b) => b.id === brandId)) {
+    return cat.shortName;
+  }
+  const bn =
+    typeof brandNameFromClient === "string" && brandNameFromClient.trim()
+      ? fixFireflyTypoInText(brandNameFromClient.trim())
+      : "";
+  if (bn) return bn;
+  if (brandId === "skyhy") return "SkyHy";
+  return fixFireflyTypoInText(cat.shortName) || brandId;
+}
+
 export const HIDDEN_BRAND_IDS = new Set<string>(["the-hub", "thezenzspot"]);
 
 export const getPublicBrands = () => BRANDS.filter((b) => !HIDDEN_BRAND_IDS.has(b.id));

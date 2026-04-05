@@ -33,6 +33,10 @@ export const OUTLET_CONTACTS: Record<
     phone: "7013884485",
     whatsappMessage: `Hi! I'd like to know more about The Hub — live screening, table booking, or events.`,
   },
+  firefly: {
+    phone: DEFAULT_NUMBER,
+    whatsappMessage: `Hi! I'd like to know more about Firefly — reservations, events, or menu.`,
+  },
 };
 
 export function getContactForBrand(brandId: string): string {

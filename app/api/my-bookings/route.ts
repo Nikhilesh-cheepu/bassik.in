@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { fixFireflyTypoInText } from "@/lib/brands";
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,7 +26,11 @@ export async function GET(request: NextRequest) {
     });
     const bookings = all
       .filter((r) => r.contactNumber.replace(/\D/g, "").slice(-10) === last10)
-      .slice(0, 50);
+      .slice(0, 50)
+      .map((r) => ({
+        ...r,
+        brandName: fixFireflyTypoInText(r.brandName),
+      }));
 
     return NextResponse.json({ bookings });
   } catch (error: any) {
