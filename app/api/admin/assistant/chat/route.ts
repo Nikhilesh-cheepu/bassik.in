@@ -433,8 +433,17 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ message: text });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Chat request failed.";
     console.error("[admin-assistant-chat]", e);
+    if (e instanceof OpenAI.APIError && e.status === 429) {
+      return NextResponse.json(
+        {
+          error:
+            "OpenAI quota or rate limit: add payment method and credits at https://platform.openai.com/account/billing , then check Settings → Limits. This is not a Bassik code bug.",
+        },
+        { status: 429 }
+      );
+    }
+    const msg = e instanceof Error ? e.message : "Chat request failed.";
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 }
