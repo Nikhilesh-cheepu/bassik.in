@@ -106,7 +106,7 @@ export default function HomeEventsWall({ initialEvents }: HomeEventsWallProps) {
           <p className="mt-3 text-[11px] sm:text-xs text-stone-600 max-w-lg mx-auto leading-relaxed">
             <span className="text-emerald-400/90 font-medium">Better value</span> than typical{" "}
             <span className="text-stone-400">Swiggy</span> &amp; <span className="text-stone-400">Zomato</span>{" "}
-            listings — you&apos;re booking <span className="text-amber-200/90">direct with the venue</span> on Bassik.
+            listings — you&apos;re booking <span className="text-amber-200/90">direct with the venue</span>.
           </p>
         </div>
 

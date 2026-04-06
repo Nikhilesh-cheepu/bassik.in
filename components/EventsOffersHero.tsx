@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import Image from "next/image";
 import { Swiper, SwiperSlide } from "swiper/react";
 import type { Swiper as SwiperType } from "swiper";
@@ -62,6 +62,19 @@ export default function EventsOffersHero({
 
   const hasOffers = offers.length > 0;
   const total = offers.length;
+
+  /** Eagerly load the active slide and its neighbors so swipes feel instant. */
+  const offerIndexIsHot = useMemo(() => {
+    const n = offers.length;
+    return (i: number) => {
+      if (n <= 0) return false;
+      if (n === 1) return true;
+      const a = ((activeIndex % n) + n) % n;
+      const prev = (a - 1 + n) % n;
+      const next = (a + 1) % n;
+      return i === a || i === prev || i === next;
+    };
+  }, [activeIndex, offers.length]);
 
   const handleImageLoad = useCallback((offerId: string) => {
     setImageLoaded((prev) => ({ ...prev, [offerId]: true }));
@@ -127,7 +140,7 @@ export default function EventsOffersHero({
             maxHeight: `${CARD_MAX_HEIGHT_VH}vh`,
           }}
         >
-          <HeroAmbientVideo src={videoSrc} className="opacity-60" />
+          <HeroAmbientVideo src={videoSrc} className="opacity-60" preload="auto" />
           <div className="pointer-events-none absolute inset-0 bg-black/35" aria-hidden />
         </div>
       ) : null}
@@ -148,13 +161,16 @@ export default function EventsOffersHero({
             centeredSlides
             slidesPerView={1.75}
             spaceBetween={GAP_PX}
-            speed={380}
+            speed={200}
             allowTouchMove
             grabCursor
             touchEventsTarget="container"
-            resistanceRatio={0.7}
+            resistanceRatio={0.55}
+            watchSlidesProgress
           >
-            {offers.map((offer, i) => (
+            {offers.map((offer, i) => {
+              const hot = offerIndexIsHot(i);
+              return (
               <SwiperSlide key={offer.id}>
                 <div className="flex justify-center w-full h-full">
                   <button
@@ -176,8 +192,9 @@ export default function EventsOffersHero({
                         sizes="(max-width: 768px) 78vw, 400px"
                         className="object-contain"
                         style={{ borderRadius: BORDER_RADIUS }}
-                        priority={i <= 1}
-                        loading={i <= 1 ? "eager" : "lazy"}
+                        priority={hot}
+                        loading={hot ? "eager" : "lazy"}
+                        fetchPriority={hot ? "high" : "low"}
                         quality={85}
                         onLoad={() => handleImageLoad(offer.id)}
                       />
@@ -191,7 +208,8 @@ export default function EventsOffersHero({
                   </button>
                 </div>
               </SwiperSlide>
-            ))}
+            );
+            })}
           </Swiper>
         </div>
         {total > 1 && (

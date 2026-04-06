@@ -6,13 +6,19 @@ import { usePauseVideoOnDocumentHidden } from "@/lib/use-pause-video-on-document
 type HeroAmbientVideoProps = {
   src: string;
   className?: string;
+  /** Hero uses auto so the first frames buffer immediately; optional backgrounds can use metadata. */
+  preload?: "none" | "metadata" | "auto";
 };
 
 /**
  * Full-bleed looping background video with mute toggle.
  * Tab/window blur pauses audio; returning resumes prior play + mute state.
  */
-export default function HeroAmbientVideo({ src, className = "" }: HeroAmbientVideoProps) {
+export default function HeroAmbientVideo({
+  src,
+  className = "",
+  preload = "auto",
+}: HeroAmbientVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(true);
 
@@ -41,7 +47,9 @@ export default function HeroAmbientVideo({ src, className = "" }: HeroAmbientVid
         loop
         playsInline
         muted={muted}
-        preload="metadata"
+        preload={preload}
+        // @ts-expect-error React DOM typings omit fetchPriority on video; browsers support it.
+        fetchPriority="high"
       />
       <button
         type="button"

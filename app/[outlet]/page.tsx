@@ -20,10 +20,16 @@ export default async function OutletPage({ params, searchParams }: PageProps) {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-black flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto" />
-            <p className="mt-4 text-gray-400">Loading...</p>
+        <div className="min-h-screen bg-black w-full">
+          <div className="w-full max-w-full border-b border-white/10 bg-black/50 pt-2 pb-3">
+            <div
+              className="mx-auto max-w-[400px] w-[78vw] animate-pulse rounded-[20px] bg-white/10"
+              style={{ aspectRatio: "9 / 16", maxHeight: "54vh" }}
+            />
+          </div>
+          <div className="mx-auto max-w-md px-4 pt-6 space-y-3">
+            <div className="h-4 w-3/4 rounded bg-white/10 animate-pulse" />
+            <div className="h-4 w-1/2 rounded bg-white/10 animate-pulse" />
           </div>
         </div>
       }

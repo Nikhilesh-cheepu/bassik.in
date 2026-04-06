@@ -2,15 +2,32 @@
 "use client";
 
 import { useMemo, memo, useState, useLayoutEffect } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import Image from "next/image";
 import { BRANDS, Brand, HIDDEN_BRAND_IDS } from "@/lib/brands";
 import { getVenueSpecialtySnippet } from "@/lib/venue-uniqueness";
 import { shuffleCopy } from "@/lib/shuffle-array";
-import HomeEventsWall from "@/components/HomeEventsWall";
-import HomeReviewsSection from "@/components/HomeReviewsSection";
 import type { HomeFeedEvent } from "@/lib/home-feed-types";
 import type { HomeReview } from "@/lib/home-reviews";
+
+const HomeEventsWall = dynamic(() => import("@/components/HomeEventsWall"), {
+  loading: () => (
+    <section className="px-4 sm:px-6 mb-10 sm:mb-14" aria-hidden>
+      <div className="max-w-5xl mx-auto h-64 rounded-2xl bg-white/[0.04] animate-pulse border border-white/[0.06]" />
+    </section>
+  ),
+  ssr: true,
+});
+
+const HomeReviewsSection = dynamic(() => import("@/components/HomeReviewsSection"), {
+  loading: () => (
+    <section className="px-4 sm:px-6 mb-10" aria-hidden>
+      <div className="max-w-5xl mx-auto h-40 rounded-2xl bg-white/[0.03] animate-pulse" />
+    </section>
+  ),
+  ssr: true,
+});
 
 interface HomeTrailProps {
   venues?: Brand[];
@@ -185,7 +202,7 @@ export default function HomeTrail({ venues = BRANDS, initialHomeEvents, initialH
               <span className="text-center leading-snug">
                 Better deals than <span className="text-amber-200">Swiggy</span> &amp;{" "}
                 <span className="text-amber-200">Zomato</span>
-                <span className="font-medium text-stone-300"> — direct on Bassik</span>
+                <span className="font-medium text-stone-300"> — direct with the venue</span>
               </span>
             </span>
           </div>
@@ -218,7 +235,7 @@ export default function HomeTrail({ venues = BRANDS, initialHomeEvents, initialH
           <div className="max-w-4xl mx-auto">
             <details className="rounded-2xl border border-white/[0.08] bg-white/[0.025] group">
               <summary className="px-5 py-4 cursor-pointer text-sm font-medium text-gray-300 list-none flex items-center justify-between gap-2 [&::-webkit-details-marker]:hidden">
-                <span>Why book on bassik.in?</span>
+                <span>Why book direct here?</span>
                 <span className="text-gray-500 text-xs group-open:rotate-180 transition-transform">▼</span>
               </summary>
               <div className="px-4 pb-4 pt-1 grid grid-cols-2 sm:grid-cols-4 gap-3 border-t border-white/10">

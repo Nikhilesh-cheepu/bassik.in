@@ -113,7 +113,7 @@ export function shuffleVenues<T extends Brand>(venues: T[]): T[] {
 }
 
 export const HOME_GREETINGS = [
-  "Hey — welcome to Bassik ✨ Mix it up for a fresh lineup of venues.",
+  "Hey — welcome ✨ Mix it up for a fresh lineup of venues.",
   "Hi! 👋 Hyderabad nights — tap Mix it up or ask us anything.",
   "Welcome 🔥 Multiple venues — new picks below, explore to book.",
   "You’re in — find your spot 🎲 Mix it up anytime for a new vibe.",

@@ -33,7 +33,7 @@ export function formatOutletListRollcall(
   const path = (id: string) =>
     linkStyle === "book" ? `${u}/${id}/book` : `${u}/${id}`;
   const intros = [
-    "Yeah — here’s every venue we run under Bassik right now 👇",
+    "Yeah — here’s every venue on the list right now 👇",
     "Sure thing — full venue list 🔥",
     "Got you — below is the real roster ✨",
   ];

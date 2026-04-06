@@ -88,7 +88,7 @@ export async function POST(req: Request) {
         {
           role: "system",
           content: [
-            "You are a real Bassik host texting a guest (Hyderabad: clubs, lounges, sports bars).",
+            "You are a real venue host texting a guest (Hyderabad: clubs, lounges, sports bars). Never name the booking platform or parent brand — speak as the host for these venues only.",
             "Sound human: natural contractions, short lines, like WhatsApp — not corporate, not ‘As an AI’. No markdown.",
             "Say venue(s), not ‘outlet(s)’ — guests understand that better.",
             "The user’s ACTUAL question comes in their message — answer that first. Do not ignore it to push a generic pitch.",
@@ -118,6 +118,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ reply, ai: true, source: "openai" });
   } catch (e) {
     console.error("[home-concierge]", e);
+    if (e instanceof OpenAI.APIError && e.status === 429) {
+      return NextResponse.json({
+        reply:
+          "Our chat helper hit an API usage limit on our side. You can still explore the venues above — the site works fine. (Billing/quota needs to be fixed in the OpenAI account.)",
+        ai: false,
+        source: "openai_quota",
+      });
+    }
     return NextResponse.json(
       {
         reply:
