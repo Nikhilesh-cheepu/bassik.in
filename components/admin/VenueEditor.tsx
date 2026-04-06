@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import Link from "next/link";
 import { BRANDS } from "@/lib/brands";
 import ImageUploader from "./ImageUploader";
 import MenuManager from "./MenuManager";
@@ -49,6 +50,8 @@ interface VenueEditorProps {
   onSwitchBrandId?: (brandId: string) => void;
   /** When set, outlet switcher only lists these brand ids (sub-admin). */
   allowedBrandIds?: string[] | null;
+  /** Card grid of all outlets (Back + “All venues”). */
+  venuesOverviewHref?: string;
 }
 
 export default function VenueEditor({
@@ -58,7 +61,9 @@ export default function VenueEditor({
   onSave,
   onSwitchBrandId,
   allowedBrandIds,
+  venuesOverviewHref = "/admin/dashboard/venues/overview",
 }: VenueEditorProps) {
+  const activeChipRef = useRef<HTMLButtonElement | null>(null);
   const [currentVenue, setCurrentVenue] = useState(venue);
   const [formData, setFormData] = useState({
     mapUrl: venue.mapUrl || "",
@@ -104,6 +109,14 @@ export default function VenueEditor({
       } as SectionVisibility,
     });
   }, [venue]);
+
+  useLayoutEffect(() => {
+    activeChipRef.current?.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  }, [currentVenue.brandId]);
 
   const handleSave = async (payload?: { mapUrl?: string; contactPhone?: string; contactNumbers?: VenueContact[]; amenities?: string[]; sectionVisibility?: SectionVisibility }) => {
     setSaving(true);
@@ -181,31 +194,65 @@ export default function VenueEditor({
     <AdminShell
       title={currentVenue.shortName}
       showBack
-      onBackHref="/admin/dashboard/venues"
+      onBackHref={venuesOverviewHref}
       onBack={onBack}
     >
-      {/* Tabs */}
       {showOutletSwitcher ? (
         <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
             <div>
-              <p className="text-xs font-medium text-slate-600">Switch outlet</p>
-              <p className="text-xs text-slate-500">Jump to another outlet without going back.</p>
+              <p className="text-xs font-medium text-slate-600">Outlets</p>
+              <p className="text-xs text-slate-500">Swipe chips to switch — page URL updates so refresh stays here.</p>
             </div>
-            <select
-              value={currentVenue.brandId}
-              onChange={(e) => onSwitchBrandId?.(e.target.value)}
-              className="max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
+            <Link
+              href={venuesOverviewHref}
+              className="shrink-0 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
             >
-              {switchableBrands.map((b) => (
-                <option key={b.id} value={b.id}>
+              All venues
+            </Link>
+          </div>
+          <div
+            className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 pt-0.5 scrollbar-hide snap-x snap-mandatory scroll-pl-1"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
+            {switchableBrands.map((b) => {
+              const active = b.id === currentVenue.brandId;
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  ref={active ? activeChipRef : undefined}
+                  onClick={() => onSwitchBrandId?.(b.id)}
+                  className={`snap-start shrink-0 rounded-full border-2 px-3 py-2 text-left text-xs font-semibold transition-all ${
+                    active ? "shadow-md" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                  style={
+                    active
+                      ? {
+                          borderColor: b.accentColor,
+                          backgroundColor: `${b.accentColor}33`,
+                          color: "#0f172a",
+                          boxShadow: `0 0 0 2px #fff, 0 0 0 3px ${b.accentColor}`,
+                        }
+                      : undefined
+                  }
+                >
                   {b.shortName}
-                </option>
-              ))}
-            </select>
+                </button>
+              );
+            })}
           </div>
         </div>
-      ) : null}
+      ) : (
+        <div className="mb-4 flex justify-end">
+          <Link
+            href={venuesOverviewHref}
+            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            All venues
+          </Link>
+        </div>
+      )}
 
       <div className="mb-4 sm:sticky sm:top-[100px] z-20">
         <div className="flex justify-start">

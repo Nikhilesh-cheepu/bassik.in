@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { BRANDS } from "@/lib/brands";
 import VenueEditor from "@/components/admin/VenueEditor";
 import AdminShell from "@/components/admin/AdminShell";
@@ -31,12 +32,19 @@ interface Venue {
   offers?: VenueOffer[];
 }
 
-export default function VenuesPageClient() {
+type VenuesPageClientProps = {
+  /** When set (URL /venues/[brandId]), editor opens this outlet and reload keeps it. */
+  initialBrandId?: string | null;
+  /** Card grid only — use /admin/dashboard/venues/overview */
+  mode?: "overview";
+};
+
+export default function VenuesPageClient({ initialBrandId = null, mode }: VenuesPageClientProps) {
+  const router = useRouter();
+  const isOverviewMode = mode === "overview";
   const [venues, setVenues] = useState<Venue[]>([]);
-  const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState<AdminMe | null>(null);
-  const autoOpenedRef = useRef(false);
 
   const loadVenues = useCallback(async () => {
     try {
@@ -96,18 +104,26 @@ export default function VenuesPageClient() {
   const allowedBrandIdsForEditor =
     me?.scope === "outlet" && me.brandIds?.length ? me.brandIds : null;
 
+  const blockedOutletUrl =
+    Boolean(
+      initialBrandId &&
+        allowedBrandIdsForEditor &&
+        !allowedBrandIdsForEditor.includes(initialBrandId)
+    );
+
   useEffect(() => {
-    if (loading || selectedVenue) return;
-    if (!me || me.scope !== "outlet" || me.brandIds?.length !== 1) return;
-    if (autoOpenedRef.current) return;
-    autoOpenedRef.current = true;
-    const id = me.brandIds![0];
-    const venue = venues.find((v) => v.brandId === id);
-    const brand = BRANDS.find((b) => b.id === id);
-    if (venue) {
-      setSelectedVenue(venue);
-    } else if (brand) {
-      setSelectedVenue({
+    if (!blockedOutletUrl || !allowedBrandIdsForEditor?.length) return;
+    router.replace(`/admin/dashboard/venues/${allowedBrandIdsForEditor[0]}`);
+  }, [blockedOutletUrl, allowedBrandIdsForEditor, router]);
+
+  /** Editor venue derived from URL + list — no flash, refresh keeps the same outlet. */
+  const venueFromUrl = useMemo((): Venue | null => {
+    if (isOverviewMode || !initialBrandId || !me || blockedOutletUrl) return null;
+    const brand = BRANDS.find((b) => b.id === initialBrandId);
+    if (!brand) return null;
+    const v = venues.find((x) => x.brandId === initialBrandId);
+    return (
+      v ?? {
         id: "",
         brandId: brand.id,
         name: brand.name,
@@ -119,26 +135,22 @@ export default function VenuesPageClient() {
         images: [],
         menus: [],
         offers: [],
-      });
-    }
-  }, [loading, me, venues, selectedVenue]);
+      }
+    );
+  }, [isOverviewMode, initialBrandId, me, venues, blockedOutletUrl]);
 
   const handleVenueSelect = (venue: Venue) => {
-    setSelectedVenue(venue);
+    router.push(`/admin/dashboard/venues/${venue.brandId}`);
   };
 
   const handleBack = async () => {
-    setSelectedVenue(null);
     await loadVenues();
+    router.push("/admin/dashboard/venues/overview");
   };
 
   const handleSave = useCallback(async () => {
-    const list = await loadVenues();
-    if (selectedVenue && list.length > 0) {
-      const updatedVenue = list.find((v: Venue) => v.brandId === selectedVenue.brandId);
-      if (updatedVenue) setSelectedVenue(updatedVenue);
-    }
-  }, [loadVenues, selectedVenue]);
+    await loadVenues();
+  }, [loadVenues]);
 
   if (loading) {
     return (
@@ -153,35 +165,31 @@ export default function VenuesPageClient() {
     );
   }
 
-  if (selectedVenue) {
+  if (blockedOutletUrl) {
+    return (
+      <AdminShell title="Venues">
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <div className="text-center">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-transparent" />
+            <p className="mt-3 text-xs text-slate-600">Switching to your outlet…</p>
+          </div>
+        </div>
+      </AdminShell>
+    );
+  }
+
+  if (venueFromUrl && !isOverviewMode) {
     return (
       <VenueEditor
-        venue={selectedVenue}
+        venue={venueFromUrl}
         admin={null}
         onBack={handleBack}
         onSave={handleSave}
         allowedBrandIds={allowedBrandIdsForEditor}
+        venuesOverviewHref="/admin/dashboard/venues/overview"
         onSwitchBrandId={(brandId) => {
           if (allowedBrandIdsForEditor && !allowedBrandIdsForEditor.includes(brandId)) return;
-          const brand = BRANDS.find((b) => b.id === brandId);
-          if (!brand) return;
-          const existing = venues.find((v) => v.brandId === brandId);
-          if (existing) setSelectedVenue(existing);
-          else {
-            setSelectedVenue({
-              id: "",
-              brandId: brand.id,
-              name: brand.name,
-              shortName: brand.shortName,
-              address: "",
-              mapUrl: null,
-              contactPhone: null,
-              contactNumbers: null,
-              images: [],
-              menus: [],
-              offers: [],
-            });
-          }
+          router.push(`/admin/dashboard/venues/${brandId}`);
         }}
       />
     );
@@ -190,8 +198,12 @@ export default function VenuesPageClient() {
   return (
     <AdminShell title="Manage Venues">
       <main className="pb-8 pt-2">
-        <div className="mb-4 text-xs text-slate-400">
-          Configure logos, galleries, offers, discounts and contact numbers for each outlet.
+        <div className="mb-4 flex flex-col gap-1 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+          <span>Configure logos, galleries, offers, discounts and contact numbers for each outlet.</span>
+          <span className="text-slate-500">
+            Tip: opening <span className="font-mono text-[11px]">/admin/dashboard/venues</span> jumps straight into an
+            outlet; use chips there to swipe between venues.
+          </span>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5">
           {brandsForGrid.map((brand) => {
