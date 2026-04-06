@@ -65,35 +65,43 @@ export default function VenuesPageClient({ initialBrandId = null, mode }: Venues
     }
   }, []);
 
-  const loadMe = useCallback(async () => {
+  /** One request: scope + full venue list (avoids /me + /venues waterfall from local dev). */
+  const bootstrapSession = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/me", { cache: "no-store" });
+      const res = await fetch("/api/admin/venue-session", {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       if (res.ok) {
-        const d = await res.json();
-        if (d?.scope === "main" || d?.scope === "outlet") {
-          setMe(d);
-          return d as AdminMe;
+        const data = await res.json();
+        const list = (data.venues || []) as Venue[];
+        setVenues(list);
+        const m = data.me;
+        if (m?.scope === "main" || m?.scope === "outlet") {
+          setMe(m as AdminMe);
+        } else {
+          setMe({ scope: "main", brandIds: null });
         }
+        return;
       }
-    } catch {
-      /* ignore */
+    } catch (error) {
+      console.error("Error loading venue session:", error);
     }
-    const fallback: AdminMe = { scope: "main", brandIds: null };
-    setMe(fallback);
-    return fallback;
+    setVenues([]);
+    setMe({ scope: "main", brandIds: null });
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      await Promise.all([loadMe(), loadVenues()]);
+      await bootstrapSession();
       if (!cancelled) setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [loadMe, loadVenues]);
+  }, [bootstrapSession]);
 
   const brandsForGrid = useMemo(() => {
     if (!me || me.scope === "main" || !me.brandIds?.length) return BRANDS;

@@ -17,8 +17,9 @@ export default function VenuesIndexRedirect() {
     let cancelled = false;
     (async () => {
       try {
-        const meRes = await fetch("/api/admin/me", { cache: "no-store" });
-        const me = meRes.ok ? await meRes.json() : { scope: "main", brandIds: null };
+        const sessionRes = await fetch("/api/admin/venue-session", { cache: "no-store" });
+        const session = sessionRes.ok ? await sessionRes.json() : {};
+        const me = session.me ?? { scope: "main", brandIds: null };
         if (cancelled) return;
 
         let target: string | null = null;

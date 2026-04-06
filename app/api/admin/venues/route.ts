@@ -7,6 +7,7 @@ import {
   assertBrandInScope,
   forbidden,
 } from "@/lib/admin-api-guard";
+import { getVenuesForAdminScope } from "@/lib/admin-venues-list";
 
 export const runtime = "nodejs";
 
@@ -29,32 +30,7 @@ export async function GET(request: NextRequest) {
     if (scopeRes instanceof NextResponse) return scopeRes;
     const scope = scopeRes;
 
-    const where: { brandId?: { in: string[] } } =
-      scope.kind === "outlet" ? { brandId: { in: scope.brandIds } } : {};
-
-    const venues = await prisma.venue.findMany({
-      where,
-      include: {
-        images: {
-          orderBy: [{ type: "asc" }, { order: "asc" }],
-        },
-        offers: { orderBy: { createdAt: "desc" } },
-        menus: {
-          include: {
-            images: {
-              orderBy: { order: "asc" },
-            },
-          },
-          orderBy: { name: "asc" }, // Add ordering for menus
-        },
-      },
-      orderBy: { name: "asc" },
-    });
-
-    const venuesLabeled = venues.map((v) => {
-      const L = getVenueLabelsFromCatalog(v.brandId, v.name, v.shortName);
-      return { ...v, name: L.name, shortName: L.shortName };
-    });
+    const venuesLabeled = await getVenuesForAdminScope(scope);
 
     return NextResponse.json({ venues: venuesLabeled }, { headers: noCacheHeaders });
   } catch (error) {
