@@ -474,33 +474,39 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
       </div>
 
       <div
-        className="fixed left-1/2 z-40 w-[calc(100%-1.25rem)] max-w-md -translate-x-1/2 rounded-3xl border border-white/20 bg-black/70 p-2.5 backdrop-blur-xl shadow-[0_0_24px_rgba(255,255,255,0.08)]"
-        style={{ bottom: "max(1rem, env(safe-area-inset-bottom))" }}
+        className="fixed left-1/2 z-[100] w-[calc(100%-1.25rem)] max-w-md -translate-x-1/2 rounded-3xl border border-white/25 bg-black/85 p-2.5 shadow-[0_8px_40px_rgba(0,0,0,0.65)] backdrop-blur-xl"
+        style={{
+          bottom: "max(1rem, env(safe-area-inset-bottom))",
+          boxShadow: `0 8px 40px rgba(0,0,0,0.65), 0 0 0 1px ${selectedBrand.accentColor}22`,
+        }}
       >
-        <div className="grid grid-cols-2 gap-2">
+        <div className="flex w-full flex-row gap-2">
           <button
             type="button"
             onClick={() => router.push(`/${selectedBrandId}/book`)}
-            className="rounded-2xl border px-3 py-3 text-sm font-semibold text-white shadow-[0_0_22px_rgba(59,130,246,0.4)] transition-transform active:scale-[0.98]"
-            style={{ borderColor: "rgba(96,165,250,0.75)", backgroundColor: "rgba(37,99,235,0.42)" }}
+            className="flex min-h-[48px] min-w-0 flex-1 basis-0 items-center justify-center rounded-2xl border px-2 py-3 text-center text-sm font-semibold leading-tight text-white shadow-[0_0_20px_rgba(59,130,246,0.35)] transition-transform active:scale-[0.98] sm:px-3"
+            style={{ borderColor: "rgba(96,165,250,0.8)", backgroundColor: "rgba(37,99,235,0.5)" }}
           >
             Book table
           </button>
           <button
             type="button"
             onClick={() => setIsQuickContactOpen(true)}
-            className="rounded-2xl border px-3 py-3 text-sm font-semibold text-white/95 shadow-[0_0_14px_rgba(20,184,166,0.25)] transition-transform active:scale-[0.98]"
-            style={{ borderColor: "rgba(20,184,166,0.55)", backgroundColor: "rgba(20,184,166,0.14)" }}
+            className="flex min-h-[48px] min-w-0 flex-1 basis-0 items-center justify-center rounded-2xl border px-2 py-3 text-center text-sm font-semibold leading-tight text-white transition-transform active:scale-[0.98] sm:px-3"
+            style={{
+              borderColor: `${selectedBrand.accentColor}cc`,
+              backgroundColor: `${selectedBrand.accentColor}33`,
+              boxShadow: `0 0 24px ${selectedBrand.accentColor}44`,
+            }}
           >
-            Contact
+            Contact us
           </button>
         </div>
         {venueData.sectionVisibility.menu && (
           <button
             type="button"
             onClick={() => setIsQuickMenuOpen(true)}
-            className="mt-2 w-full rounded-2xl border border-white/15 bg-white/[0.06] py-2.5 text-sm font-medium text-white/85 transition-colors hover:bg-white/[0.1]"
-            style={{ boxShadow: `0 0 20px ${selectedBrand.accentColor}12` }}
+            className="mt-2 w-full rounded-2xl border border-white/15 bg-white/[0.08] py-2.5 text-sm font-medium text-white/90 transition-colors hover:bg-white/[0.12]"
           >
             Menu
           </button>
@@ -533,7 +539,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
           <>
             <motion.button
               type="button"
-              className="fixed inset-0 z-50 bg-black/60"
+              className="fixed inset-0 z-[110] bg-black/60"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -543,7 +549,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
               initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 30, opacity: 0 }}
-              className="fixed inset-x-0 bottom-0 z-[60] mx-auto w-full max-w-md rounded-t-3xl border-t border-white/15 bg-[#0a0d14]/95 p-4"
+              className="fixed inset-x-0 bottom-0 z-[120] mx-auto w-full max-w-md rounded-t-3xl border-t border-white/15 bg-[#0a0d14]/95 p-4"
             >
               <h3 className="text-sm font-semibold text-white">Menus</h3>
               <div className="mt-3 space-y-2">
@@ -583,7 +589,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
           <>
             <motion.button
               type="button"
-              className="fixed inset-0 z-50 bg-black/60"
+              className="fixed inset-0 z-[110] bg-black/60"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -593,7 +599,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
               initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 30, opacity: 0 }}
-              className="fixed inset-x-0 bottom-0 z-[60] mx-auto w-full max-w-md rounded-t-3xl border-t border-white/15 bg-[#0a0d14]/95 p-4"
+              className="fixed inset-x-0 bottom-0 z-[120] mx-auto w-full max-w-md rounded-t-3xl border-t border-white/15 bg-[#0a0d14]/95 p-4"
             >
               <h3 className="text-sm font-semibold text-white">Share your review</h3>
               <div className="mt-3 space-y-2">
@@ -647,7 +653,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
           <>
             <motion.button
               type="button"
-              className="fixed inset-0 z-50 bg-black/60"
+              className="fixed inset-0 z-[110] bg-black/60"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -657,7 +663,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
               initial={{ y: -24, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: -24, opacity: 0 }}
-              className="fixed inset-x-0 top-0 z-[65] mx-auto w-full max-w-md rounded-b-3xl border-b border-white/15 bg-[#0b0f17]/95 p-4"
+              className="fixed inset-x-0 top-0 z-[120] mx-auto w-full max-w-md rounded-b-3xl border-b border-white/15 bg-[#0b0f17]/95 p-4"
             >
               <h3 className="text-sm font-semibold text-white">Event Booking</h3>
               <div className="mt-3 flex items-center gap-3 rounded-xl border border-white/12 bg-white/[0.04] p-2">
@@ -736,7 +742,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.98 }}
             transition={{ duration: 0.26, ease: "easeOut" }}
-            className="fixed inset-0 z-[80] flex items-center justify-center px-4"
+            className="fixed inset-0 z-[130] flex items-center justify-center px-4"
           >
             <motion.div
               animate={{

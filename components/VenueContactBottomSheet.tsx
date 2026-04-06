@@ -60,7 +60,7 @@ export default function VenueContactBottomSheet({
             key="venue-contact-backdrop"
             type="button"
             aria-label="Close contact sheet"
-            className="fixed inset-0 z-[55] bg-black/70 backdrop-blur-[2px]"
+            className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-[2px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -72,7 +72,7 @@ export default function VenueContactBottomSheet({
             role="dialog"
             aria-modal="true"
             aria-labelledby="venue-contact-sheet-title"
-            className="fixed inset-x-0 bottom-0 z-[60] mx-auto flex max-h-[min(88vh,640px)] w-full max-w-md flex-col rounded-t-[28px] border border-white/15 border-b-0 bg-gradient-to-b from-[#0f1419] to-[#06080c] shadow-[0_-20px_60px_rgba(0,0,0,0.55)]"
+            className="fixed inset-x-0 bottom-0 z-[120] mx-auto flex max-h-[min(88vh,640px)] w-full max-w-md flex-col rounded-t-[28px] border border-white/15 border-b-0 bg-gradient-to-b from-[#0f1419] to-[#06080c] shadow-[0_-20px_60px_rgba(0,0,0,0.55)]"
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}

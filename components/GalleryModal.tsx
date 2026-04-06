@@ -69,7 +69,7 @@ export default function GalleryModal({ images, brandName, initialIndex = 0, onCl
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+    <div className="fixed inset-0 z-[125] bg-black flex items-center justify-center">
       <div
         className="relative w-full h-full flex flex-col"
         onTouchStart={handleTouchStart}
