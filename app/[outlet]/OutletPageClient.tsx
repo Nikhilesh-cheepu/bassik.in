@@ -7,10 +7,10 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { BRANDS, HIDDEN_BRAND_IDS } from "@/lib/brands";
-import { getContactForBrand, getWhatsAppMessageForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
-import { trackWhatsAppClick, trackCallClick } from "@/lib/analytics";
+import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-contacts";
 import { guestEventDateLine } from "@/lib/event-date-display";
 import EventsOffersHero from "@/components/EventsOffersHero";
+import VenueContactBottomSheet from "@/components/VenueContactBottomSheet";
 import type { VenuePayload } from "@/lib/venue-data";
 
 const MenuModal = dynamic(() => import("@/components/MenuModal"));
@@ -66,7 +66,6 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
     initialVenueData ? toClientVenueState(initialVenueData) : emptyVenueState
   );
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [selectedContactIndex, setSelectedContactIndex] = useState(0);
   const [isQuickContactOpen, setIsQuickContactOpen] = useState(false);
   const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
   const [isEventQuickBookOpen, setIsEventQuickBookOpen] = useState(false);
@@ -120,8 +119,6 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
       if (eventBookedToastTimeoutRef.current) clearTimeout(eventBookedToastTimeoutRef.current);
     };
   }, []);
-
-  useEffect(() => setSelectedContactIndex(0), [selectedBrandId]);
 
   // Prefetch booking page for snappier navigation
   useEffect(() => {
@@ -422,7 +419,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 pt-3 relative z-10 space-y-3 pb-44 w-full min-w-0 overflow-x-hidden">
+      <div className="max-w-4xl mx-auto px-4 pt-3 relative z-10 space-y-3 pb-[calc(8.5rem+env(safe-area-inset-bottom))] sm:pb-[calc(9rem+env(safe-area-inset-bottom))] w-full min-w-0 overflow-x-hidden">
         {fetchError && (
           <button type="button" onClick={loadVenueData} className="w-full py-4 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-sm font-medium touch-manipulation" style={{ touchAction: "manipulation" }}>
             {fetchError}
@@ -476,35 +473,38 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
         </div>
       </div>
 
-      <div className="fixed bottom-4 left-1/2 z-40 w-[calc(100%-1.25rem)] max-w-md -translate-x-1/2 rounded-3xl border border-white/20 bg-black/60 p-2.5 backdrop-blur-xl shadow-[0_0_24px_rgba(255,255,255,0.08)]">
-        <div className="grid grid-cols-3 gap-2">
+      <div
+        className="fixed left-1/2 z-40 w-[calc(100%-1.25rem)] max-w-md -translate-x-1/2 rounded-3xl border border-white/20 bg-black/70 p-2.5 backdrop-blur-xl shadow-[0_0_24px_rgba(255,255,255,0.08)]"
+        style={{ bottom: "max(1rem, env(safe-area-inset-bottom))" }}
+      >
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => router.push(`/${selectedBrandId}/book`)}
+            className="rounded-2xl border px-3 py-3 text-sm font-semibold text-white shadow-[0_0_22px_rgba(59,130,246,0.4)] transition-transform active:scale-[0.98]"
+            style={{ borderColor: "rgba(96,165,250,0.75)", backgroundColor: "rgba(37,99,235,0.42)" }}
+          >
+            Book table
+          </button>
           <button
             type="button"
             onClick={() => setIsQuickContactOpen(true)}
-            className="rounded-full border px-3 py-2.5 text-sm font-medium text-white/90 shadow-[0_0_14px_rgba(20,184,166,0.22)]"
-            style={{ borderColor: "rgba(20,184,166,0.55)", backgroundColor: "rgba(20,184,166,0.10)" }}
+            className="rounded-2xl border px-3 py-3 text-sm font-semibold text-white/95 shadow-[0_0_14px_rgba(20,184,166,0.25)] transition-transform active:scale-[0.98]"
+            style={{ borderColor: "rgba(20,184,166,0.55)", backgroundColor: "rgba(20,184,166,0.14)" }}
           >
-            Contact Us
+            Contact
           </button>
+        </div>
+        {venueData.sectionVisibility.menu && (
           <button
             type="button"
             onClick={() => setIsQuickMenuOpen(true)}
-            className="rounded-full border px-3 py-2.5 text-sm font-medium text-white/90 shadow-[0_0_14px_rgba(217,70,239,0.22)]"
-            style={{ borderColor: "rgba(217,70,239,0.55)", backgroundColor: "rgba(217,70,239,0.10)" }}
+            className="mt-2 w-full rounded-2xl border border-white/15 bg-white/[0.06] py-2.5 text-sm font-medium text-white/85 transition-colors hover:bg-white/[0.1]"
+            style={{ boxShadow: `0 0 20px ${selectedBrand.accentColor}12` }}
           >
             Menu
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              router.push(`/${selectedBrandId}/book`);
-            }}
-            className="relative rounded-full border px-3 py-2.5 text-sm font-semibold text-white shadow-[0_0_22px_rgba(59,130,246,0.45)]"
-            style={{ borderColor: "rgba(96,165,250,0.75)", backgroundColor: "rgba(37,99,235,0.40)" }}
-          >
-            Book Table
-          </button>
-        </div>
+        )}
       </div>
 
       {isMenuModalOpen && selectedMenuId && (
@@ -513,81 +513,21 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
       {isGalleryModalOpen && (
         <GalleryModal images={validGalleryImages} brandName={selectedBrand.shortName} initialIndex={galleryStartIndex} onClose={() => setIsGalleryModalOpen(false)} />
       )}
-      <AnimatePresence>
-        {isQuickContactOpen && (
-          <>
-            <motion.button
-              type="button"
-              className="fixed inset-0 z-50 bg-black/60"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsQuickContactOpen(false)}
-            />
-            <motion.div
-              initial={{ y: 30, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 30, opacity: 0 }}
-              className="fixed inset-x-0 bottom-0 z-[60] mx-auto w-full max-w-md rounded-t-3xl border-t border-white/15 bg-[#0a0d14]/95 p-4"
-            >
-              <h3 className="text-sm font-semibold text-white">Contact Us</h3>
-              <div className="mt-3 space-y-2">
-                {(() => {
-                  const contacts =
-                    venueData.contactNumbers.length > 0
-                      ? venueData.contactNumbers
-                      : [{ phone: venueData.contactPhone || getContactForBrand(selectedBrandId), label: "Contact" }];
-                  const phone = contacts[selectedContactIndex]?.phone || contacts[0]?.phone || getContactForBrand(selectedBrandId);
-                  const full = getFullPhoneNumber(phone);
-                  const msg =
-                    venueData.whatsappMessage ||
-                    getWhatsAppMessageForBrand(selectedBrandId, selectedBrand.shortName);
-                  const instagramUrl = selectedBrand.instagramUrls[0] || "#";
-                  const mapsUrl = venueData.location.mapUrl || DEFAULT_MAP;
-                  const waUrl = `https://wa.me/${full}?text=${encodeURIComponent(msg)}`;
-                  const telUrl = `tel:+${full}`;
-                  return (
-                    <>
-                      <a
-                        href={waUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => trackWhatsAppClick({ number: full, outlet: selectedBrandId })}
-                        className="inline-flex w-full items-center justify-center rounded-full border border-white/20 bg-white/[0.05] px-3 py-2.5 text-sm font-medium text-white/90"
-                      >
-                        WhatsApp
-                      </a>
-                      <a
-                        href={telUrl}
-                        onClick={() => trackCallClick({ number: full, outlet: selectedBrandId })}
-                        className="inline-flex w-full items-center justify-center rounded-full border border-white/20 bg-white/[0.05] px-3 py-2.5 text-sm font-medium text-white/90"
-                      >
-                        Call
-                      </a>
-                      <a
-                        href={mapsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex w-full items-center justify-center rounded-full border border-white/20 bg-white/[0.05] px-3 py-2.5 text-sm font-medium text-white/90"
-                      >
-                        Location
-                      </a>
-                      <a
-                        href={instagramUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex w-full items-center justify-center rounded-full border border-white/20 bg-white/[0.05] px-3 py-2.5 text-sm font-medium text-white/90"
-                      >
-                        Instagram
-                      </a>
-                    </>
-                  );
-                })()}
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      <VenueContactBottomSheet
+        open={isQuickContactOpen}
+        onClose={() => setIsQuickContactOpen(false)}
+        brandId={selectedBrandId}
+        venueShortName={selectedBrand.shortName}
+        accentColor={selectedBrand.accentColor}
+        contactRows={venueData.contactNumbers}
+        fallbackPhone={venueData.contactPhone || getContactForBrand(selectedBrandId)}
+        whatsappMessage={
+          venueData.whatsappMessage || getWhatsAppMessageForBrand(selectedBrandId, selectedBrand.shortName)
+        }
+        instagramUrl={selectedBrand.instagramUrls[0] || "#"}
+        address={venueData.location.address}
+        mapUrl={venueData.location.mapUrl || DEFAULT_MAP}
+      />
       <AnimatePresence>
         {isQuickMenuOpen && (
           <>
