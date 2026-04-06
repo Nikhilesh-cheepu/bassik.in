@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
+import { guestEventDateLine } from "@/lib/event-date-display";
 
 export type EventOption = {
   id: string;
@@ -22,19 +23,6 @@ interface EventSelectorPopdownProps {
 
 function getEventTitle(event: EventOption, index: number) {
   return event.title?.trim() || `Event ${index + 1}`;
-}
-
-function getEventDateLabel(eventDate: string | null) {
-  if (!eventDate) return "Date to be announced";
-  const d = new Date(eventDate);
-  if (Number.isNaN(d.getTime())) return "Date to be announced";
-  return d.toLocaleString("en-IN", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 export default function EventSelectorPopdown({
@@ -103,7 +91,7 @@ export default function EventSelectorPopdown({
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-white">{getEventTitle(event, index)}</p>
-                      <p className="truncate text-[11px] text-white/70">{getEventDateLabel(event.eventDate)}</p>
+                      <p className="truncate text-[11px] text-white/70">{guestEventDateLine(event.eventDate)}</p>
                       <p className="truncate text-[11px] text-white/55">
                         {[event.entryLabel, event.capacityText].filter(Boolean).join(" • ") || "General entry"}
                       </p>

@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { BRANDS, HIDDEN_BRAND_IDS } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand, getFullPhoneNumber } from "@/lib/outlet-contacts";
 import { trackWhatsAppClick, trackCallClick } from "@/lib/analytics";
+import { guestEventDateLine } from "@/lib/event-date-display";
 import EventsOffersHero from "@/components/EventsOffersHero";
 import type { VenuePayload } from "@/lib/venue-data";
 
@@ -725,7 +726,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-white">{selectedEvent.title?.trim() || "Selected event"}</p>
-                  <p className="truncate text-xs text-white/70">{selectedEvent.eventDate ? new Date(selectedEvent.eventDate).toLocaleString("en-IN") : "Date to be announced"}</p>
+                  <p className="truncate text-xs text-white/70">{guestEventDateLine(selectedEvent.eventDate)}</p>
                   {selectedEvent.description?.trim() && (
                     <p className="truncate text-xs text-white/60">{selectedEvent.description}</p>
                   )}

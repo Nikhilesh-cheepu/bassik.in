@@ -6,21 +6,9 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import type { HomeFeedEvent } from "@/lib/home-feed-types";
 import { shuffleCopy } from "@/lib/shuffle-array";
+import { formatGuestEventDateLabel } from "@/lib/event-date-display";
 
 export type HomeAggregatedEvent = HomeFeedEvent;
-
-function formatEventWhen(iso: string | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleString("en-IN", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 type HomeEventsWallProps = {
   /** From server on `/` — skips a client round-trip to `/api/home/events`. */
@@ -144,7 +132,7 @@ export default function HomeEventsWall({ initialEvents }: HomeEventsWallProps) {
               style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
             >
               {events.map((ev, idx) => {
-                const when = formatEventWhen(ev.eventDate);
+                const when = formatGuestEventDateLabel(ev.eventDate);
                 return (
                   <motion.div
                     key={`${ev.brandId}-${ev.id}`}

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import { cropTo9x16AndCompress } from "@/lib/image-compression";
+import { formatGuestEventDateLabel } from "@/lib/event-date-display";
 
 type Offer = {
   id: string;
@@ -44,6 +45,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
     description: false,
     entryLabel: false,
     capacityText: false,
+    eventDate: false,
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ACCEPT = "image/jpeg,image/png,image/webp";
@@ -113,7 +115,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
       return;
     }
     if (!form.eventDate.trim()) {
-      setError("Start date is required.");
+      setError("Event night date is required.");
       return;
     }
     setError(null);
@@ -143,6 +145,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
           loadOffers();
         }
         setForm({ imageUrl: "", title: "", description: "", eventDate: "", entryLabel: "", capacityText: "", endDate: "" });
+        setAiSuggested({ title: false, description: false, entryLabel: false, capacityText: false, eventDate: false });
         onUpdate();
         setEditingId(null);
       } else {
@@ -230,7 +233,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.url) {
         setForm((f) => ({ ...f, imageUrl: data.url }));
-        setAiSuggested({ title: false, description: false, entryLabel: false, capacityText: false });
+        setAiSuggested({ title: false, description: false, entryLabel: false, capacityText: false, eventDate: false });
         const aiRes = await fetch(`/api/admin/venues/${brandId}/offers/analyze`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -238,7 +241,13 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
         });
         if (aiRes.ok) {
           const ai = await aiRes.json().catch(() => ({}));
-          const nextSuggested = { title: false, description: false, entryLabel: false, capacityText: false };
+          const nextSuggested = {
+            title: false,
+            description: false,
+            entryLabel: false,
+            capacityText: false,
+            eventDate: false,
+          };
           setForm((f) => ({
             ...f,
             title: (() => {
@@ -256,6 +265,17 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
             capacityText: (() => {
               if (!f.capacityText && ai.capacityText) nextSuggested.capacityText = true;
               return f.capacityText || ai.capacityText || "";
+            })(),
+            eventDate: (() => {
+              const ymd =
+                typeof ai.eventDateISO === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ai.eventDateISO.trim())
+                  ? ai.eventDateISO.trim()
+                  : "";
+              if (!f.eventDate.trim() && ymd) {
+                nextSuggested.eventDate = true;
+                return new Date(`${ymd}T20:00:00.000Z`).toISOString();
+              }
+              return f.eventDate;
             })(),
           }));
           setAiSuggested(nextSuggested);
@@ -282,7 +302,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
       capacityText: o.capacityText ?? "",
       endDate: o.endDate ?? "",
     });
-    setAiSuggested({ title: false, description: false, entryLabel: false, capacityText: false });
+    setAiSuggested({ title: false, description: false, entryLabel: false, capacityText: false, eventDate: false });
   };
 
   return (
@@ -355,8 +375,16 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-700">
-                Event start date *
+                Event night (shown on site) *
+                {aiSuggested.eventDate && (
+                  <span className="ml-2 rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
+                    AI suggested
+                  </span>
+                )}
               </label>
+              <p className="mb-1.5 text-[11px] text-slate-500">
+                The date guests see for this poster — not listing expiry (expiry is below).
+              </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {next10DateYmd.map((ymd) => {
                   const isActive = activeEventDateYmd === ymd;
@@ -409,8 +437,11 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-700">
-              End date (optional)
+              Listing expiry (optional, admin only)
             </label>
+            <p className="mb-1.5 text-[11px] text-slate-500">
+              Hides this offer after this date. Not shown on the homepage or venue flyers.
+            </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -530,11 +561,15 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
                   <div className="flex-1 min-w-0 text-sm text-slate-700">
                     <div className="truncate font-medium text-slate-900">{o.title?.trim() || "Untitled event"}</div>
                     <div className="truncate text-xs text-slate-600">
-                      {o.eventDate ? `Event: ${new Date(o.eventDate).toLocaleString()}` : "No event date"}
+                      {o.eventDate
+                        ? `Event night: ${formatGuestEventDateLabel(o.eventDate) ?? "—"}`
+                        : "No event date"}
                     </div>
                     {o.description?.trim() && <div className="truncate text-xs text-slate-500">{o.description}</div>}
                     <div className="truncate text-xs text-slate-500">
-                      {o.endDate ? `Ends ${new Date(o.endDate).toLocaleString()}` : "No end date"}
+                      {o.endDate
+                        ? `Listing expires: ${formatGuestEventDateLabel(o.endDate) ?? "—"}`
+                        : "No listing expiry"}
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
@@ -601,7 +636,9 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
                   </div>
                   <div className="flex-1 min-w-0 text-sm text-slate-700">
                     <div className="truncate font-medium text-slate-900">{o.title?.trim() || "Untitled event"}</div>
-                    <div className="truncate text-xs text-slate-500">Ended {o.endDate ? new Date(o.endDate).toLocaleString() : ""}</div>
+                    <div className="truncate text-xs text-slate-500">
+                      Listing expired {o.endDate ? formatGuestEventDateLabel(o.endDate) ?? "—" : "—"}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1">
                     <button
