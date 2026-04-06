@@ -12,6 +12,8 @@ export type Brand = {
   logoPath?: string;
   /** Show "book a table at these spots" section with partner logos (e.g. The Hub) */
   showSpotsSection?: boolean;
+  /** Optional looping video behind outlet hero carousel (set via NEXT_PUBLIC_* in env) */
+  heroAmbientVideoUrl?: string;
 };
 
 export const BRANDS: Brand[] = [
@@ -151,6 +153,7 @@ export const BRANDS: Brand[] = [
     websiteUrl: "https://example.com/firefly", // TODO: Replace with real website URL
     description: "Club nights • Social vibes",
     tag: "Club",
+    heroAmbientVideoUrl: process.env.NEXT_PUBLIC_FIREFLY_HERO_AMBIENT_VIDEO?.trim() || undefined,
   },
 ];
 

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Swiper, SwiperSlide } from "swiper/react";
 import type { Swiper as SwiperType } from "swiper";
 import type { Brand } from "@/lib/brands";
+import HeroAmbientVideo from "@/components/HeroAmbientVideo";
 import "swiper/css";
 
 export type HeroOffer = {
@@ -21,6 +22,8 @@ interface EventsOffersHeroProps {
   brand: Brand;
   /** When true, show shimmer skeleton instead of "No offers" or carousel */
   isLoading?: boolean;
+  /** Looping MP4/WebM behind the carousel; tab blur pauses audio (see HeroAmbientVideo) */
+  ambientVideoSrc?: string | null;
   onActiveOfferChange?: (offerId: string) => void;
   onOfferClick?: (offerId: string) => void;
 }
@@ -45,7 +48,14 @@ function ShimmerCard() {
   );
 }
 
-export default function EventsOffersHero({ offers, brand, isLoading = false, onActiveOfferChange, onOfferClick }: EventsOffersHeroProps) {
+export default function EventsOffersHero({
+  offers,
+  brand: _brand,
+  isLoading = false,
+  ambientVideoSrc,
+  onActiveOfferChange,
+  onOfferClick,
+}: EventsOffersHeroProps) {
   const swiperRef = useRef<SwiperType | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [imageLoaded, setImageLoaded] = useState<Record<string, boolean>>({});
@@ -89,6 +99,8 @@ export default function EventsOffersHero({ offers, brand, isLoading = false, onA
     );
   }
 
+  const videoSrc = ambientVideoSrc?.trim() || "";
+
   return (
     <div className="offers-hero-carousel w-full max-w-full overflow-x-hidden bg-black/40 backdrop-blur-sm border-b border-white/10 relative flex-shrink-0">
       <style dangerouslySetInnerHTML={{ __html: `
@@ -105,6 +117,20 @@ export default function EventsOffersHero({ offers, brand, isLoading = false, onA
           box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.06);
         }
       `}} />
+      {videoSrc ? (
+        <div
+          className="pointer-events-none absolute left-1/2 top-2 z-0 -translate-x-1/2 overflow-hidden rounded-[20px]"
+          style={{
+            width: "78vw",
+            maxWidth: 400,
+            aspectRatio: "9 / 16",
+            maxHeight: `${CARD_MAX_HEIGHT_VH}vh`,
+          }}
+        >
+          <HeroAmbientVideo src={videoSrc} className="opacity-60" />
+          <div className="pointer-events-none absolute inset-0 bg-black/35" aria-hidden />
+        </div>
+      ) : null}
       <div className="relative z-10 flex flex-col items-center pt-2 pb-2" style={{ paddingInline: PADDING_INLINE_PX }}>
         <div className="w-full" style={{ touchAction: "pan-x", WebkitOverflowScrolling: "touch" }}>
           <Swiper
