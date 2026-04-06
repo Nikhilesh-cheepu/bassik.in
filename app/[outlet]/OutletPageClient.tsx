@@ -147,7 +147,12 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
       }
       const v = data.venue || {};
       setVenueData({
-        offers: Array.isArray(v.offers) ? v.offers : [],
+        offers: Array.isArray(v.offers)
+          ? v.offers.map((o: Record<string, unknown>) => ({
+              ...o,
+              eventContinuous: Boolean(o.eventContinuous),
+            }))
+          : [],
         galleryImages: Array.isArray(v.galleryImages) ? v.galleryImages : [],
         menus: Array.isArray(v.menus) ? v.menus : [],
         location: { address: v.address ?? "", mapUrl: v.mapUrl ?? DEFAULT_MAP },
@@ -318,6 +323,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
               offers={venueOffers}
               brand={selectedBrand}
               isLoading={loading}
+              ambientVideoSrc={selectedBrand.heroAmbientVideoUrl}
               onActiveOfferChange={(offerId) => setSelectedEventId((prev) => prev ?? offerId)}
               onOfferClick={openEventQuickBook}
             />
@@ -672,7 +678,11 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-white">{selectedEvent.title?.trim() || "Selected event"}</p>
-                  <p className="truncate text-xs text-white/70">{guestEventDateLine(selectedEvent.eventDate)}</p>
+                  <p className="truncate text-xs text-white/70">
+                    {guestEventDateLine(selectedEvent.eventDate, {
+                      eventContinuous: selectedEvent.eventContinuous,
+                    })}
+                  </p>
                   {selectedEvent.description?.trim() && (
                     <p className="truncate text-xs text-white/60">{selectedEvent.description}</p>
                   )}

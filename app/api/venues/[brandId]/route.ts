@@ -82,6 +82,7 @@ export async function GET(
       title?: string | null;
       description?: string | null;
       eventDate?: string | null;
+      eventContinuous?: boolean;
       entryLabel?: string | null;
       capacityText?: string | null;
     }) => ({
@@ -90,6 +91,7 @@ export async function GET(
       title: o.title ?? null,
       description: o.description ?? null,
       eventDate: o.eventDate ?? null,
+      eventContinuous: Boolean(o.eventContinuous),
       entryLabel: o.entryLabel ?? null,
       capacityText: o.capacityText ?? null,
     }));

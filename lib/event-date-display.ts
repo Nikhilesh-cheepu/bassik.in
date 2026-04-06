@@ -28,6 +28,10 @@ export function formatGuestEventDateLabel(iso: string | null | undefined): strin
   });
 }
 
-export function guestEventDateLine(iso: string | null | undefined): string {
+export function guestEventDateLine(
+  iso: string | null | undefined,
+  options?: { eventContinuous?: boolean }
+): string {
+  if (options?.eventContinuous) return "Ongoing";
   return formatGuestEventDateLabel(iso) ?? "Date to be announced";
 }

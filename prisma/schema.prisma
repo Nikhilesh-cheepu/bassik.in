@@ -91,6 +91,8 @@ model VenueOffer {
   title     String?
   description String?
   eventDate String?
+  /// When true, no fixed event night; guests see "Ongoing". eventDate should be null.
+  eventContinuous Boolean @default(false)
   entryLabel String?
   capacityText String?
   endDate   String?   // ISO date string; null = runs indefinitely

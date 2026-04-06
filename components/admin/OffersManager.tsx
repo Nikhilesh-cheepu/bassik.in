@@ -11,6 +11,7 @@ type Offer = {
   title: string | null;
   description: string | null;
   eventDate: string | null;
+  eventContinuous?: boolean;
   entryLabel: string | null;
   capacityText: string | null;
   endDate: string | null;
@@ -35,6 +36,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
     title: "",
     description: "",
     eventDate: "",
+    eventContinuous: false,
     entryLabel: "",
     capacityText: "",
     endDate: "",
@@ -114,13 +116,13 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
       setError("Image is required.");
       return;
     }
-    if (!form.eventDate.trim()) {
-      setError("Event night date is required.");
+    if (!form.eventContinuous && !form.eventDate.trim()) {
+      setError("Pick an event night date, or turn on “Ongoing / no fixed date”.");
       return;
     }
     setError(null);
     setLoading(true);
-    const normalizedEventDate = new Date(form.eventDate).toISOString();
+    const normalizedEventDate = form.eventContinuous ? null : new Date(form.eventDate).toISOString();
     try {
       const res = await fetch(`/api/admin/venues/${brandId}/offers`, {
         method: "POST",
@@ -130,6 +132,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
           imageUrl: form.imageUrl.trim(),
           title: form.title.trim() || null,
           description: form.description.trim() || null,
+          eventContinuous: form.eventContinuous,
           eventDate: normalizedEventDate,
           entryLabel: form.entryLabel.trim() || null,
           capacityText: form.capacityText.trim() || null,
@@ -144,7 +147,16 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
         } else {
           loadOffers();
         }
-        setForm({ imageUrl: "", title: "", description: "", eventDate: "", entryLabel: "", capacityText: "", endDate: "" });
+        setForm({
+          imageUrl: "",
+          title: "",
+          description: "",
+          eventDate: "",
+          eventContinuous: false,
+          entryLabel: "",
+          capacityText: "",
+          endDate: "",
+        });
         setAiSuggested({ title: false, description: false, entryLabel: false, capacityText: false, eventDate: false });
         onUpdate();
         setEditingId(null);
@@ -171,7 +183,19 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
       if (res.ok) {
         loadOffers();
         onUpdate();
-        if (editingId === id) setEditingId(null);
+        if (editingId === id) {
+          setEditingId(null);
+          setForm({
+            imageUrl: "",
+            title: "",
+            description: "",
+            eventDate: "",
+            eventContinuous: false,
+            entryLabel: "",
+            capacityText: "",
+            endDate: "",
+          });
+        }
       }
     } catch (err) {
       console.error("Failed to delete offer", err);
@@ -202,7 +226,16 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
       setSelectedIds(new Set());
       if (editingId && ids.includes(editingId)) {
         setEditingId(null);
-        setForm({ imageUrl: "", title: "", description: "", eventDate: "", entryLabel: "", capacityText: "", endDate: "" });
+        setForm({
+          imageUrl: "",
+          title: "",
+          description: "",
+          eventDate: "",
+          eventContinuous: false,
+          entryLabel: "",
+          capacityText: "",
+          endDate: "",
+        });
       }
       await loadOffers();
       onUpdate();
@@ -236,6 +269,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
         setAiSuggested({ title: false, description: false, entryLabel: false, capacityText: false, eventDate: false });
         const aiRes = await fetch(`/api/admin/venues/${brandId}/offers/analyze`, {
           method: "POST",
+          credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ imageUrl: data.url }),
         });
@@ -248,37 +282,43 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
             capacityText: false,
             eventDate: false,
           };
-          setForm((f) => ({
-            ...f,
-            title: (() => {
-              if (!f.title && ai.title) nextSuggested.title = true;
-              return f.title || ai.title || "";
-            })(),
-            description: (() => {
-              if (!f.description && ai.description) nextSuggested.description = true;
-              return f.description || ai.description || "";
-            })(),
-            entryLabel: (() => {
-              if (!f.entryLabel && ai.entryLabel) nextSuggested.entryLabel = true;
-              return f.entryLabel || ai.entryLabel || "";
-            })(),
-            capacityText: (() => {
-              if (!f.capacityText && ai.capacityText) nextSuggested.capacityText = true;
-              return f.capacityText || ai.capacityText || "";
-            })(),
-            eventDate: (() => {
-              const ymd =
-                typeof ai.eventDateISO === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ai.eventDateISO.trim())
-                  ? ai.eventDateISO.trim()
-                  : "";
-              if (!f.eventDate.trim() && ymd) {
-                nextSuggested.eventDate = true;
-                return new Date(`${ymd}T20:00:00.000Z`).toISOString();
-              }
-              return f.eventDate;
-            })(),
-          }));
+          setForm((f) => {
+            const ymd =
+              typeof ai.eventDateISO === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ai.eventDateISO.trim())
+                ? ai.eventDateISO.trim()
+                : "";
+            const aiSetsDate = !f.eventDate.trim() && Boolean(ymd);
+            if (aiSetsDate) nextSuggested.eventDate = true;
+            return {
+              ...f,
+              title: (() => {
+                if (!f.title && ai.title) nextSuggested.title = true;
+                return f.title || ai.title || "";
+              })(),
+              description: (() => {
+                if (!f.description && ai.description) nextSuggested.description = true;
+                return f.description || ai.description || "";
+              })(),
+              entryLabel: (() => {
+                if (!f.entryLabel && ai.entryLabel) nextSuggested.entryLabel = true;
+                return f.entryLabel || ai.entryLabel || "";
+              })(),
+              capacityText: (() => {
+                if (!f.capacityText && ai.capacityText) nextSuggested.capacityText = true;
+                return f.capacityText || ai.capacityText || "";
+              })(),
+              eventDate: aiSetsDate ? new Date(`${ymd}T20:00:00.000Z`).toISOString() : f.eventDate,
+              eventContinuous: aiSetsDate ? false : f.eventContinuous,
+            };
+          });
           setAiSuggested(nextSuggested);
+        } else {
+          const errBody = await aiRes.json().catch(() => ({}));
+          const detail =
+            typeof errBody.error === "string" && errBody.error.trim()
+              ? errBody.error.trim()
+              : `Poster analysis failed (${aiRes.status}).`;
+          setError(detail);
         }
       } else {
         setError(data.error || "Upload failed.");
@@ -293,11 +333,13 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
 
   const startEdit = (o: Offer) => {
     setEditingId(o.id);
+    const ongoing = Boolean(o.eventContinuous);
     setForm({
       imageUrl: o.imageUrl,
       title: o.title ?? "",
       description: o.description ?? "",
-      eventDate: o.eventDate ? new Date(o.eventDate).toISOString().slice(0, 16) : "",
+      eventDate: ongoing ? "" : o.eventDate ? new Date(o.eventDate).toISOString().slice(0, 16) : "",
+      eventContinuous: ongoing,
       entryLabel: o.entryLabel ?? "",
       capacityText: o.capacityText ?? "",
       endDate: o.endDate ?? "",
@@ -375,7 +417,10 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-700">
-                Event night (shown on site) *
+                Event night (shown on site)
+                {!form.eventContinuous ? (
+                  <span className="text-rose-600"> *</span>
+                ) : null}
                 {aiSuggested.eventDate && (
                   <span className="ml-2 rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">
                     AI suggested
@@ -383,18 +428,41 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
                 )}
               </label>
               <p className="mb-1.5 text-[11px] text-slate-500">
-                The date guests see for this poster — not listing expiry (expiry is below).
+                The date guests see for this poster — not listing expiry (expiry is below). Use ongoing when there
+                is no fixed night.
               </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label className="mb-2 flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300"
+                  checked={form.eventContinuous}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      eventContinuous: e.target.checked,
+                      eventDate: e.target.checked ? "" : f.eventDate,
+                    }))
+                  }
+                />
+                <span className="text-xs text-slate-800">
+                  <span className="font-medium">Ongoing / no fixed date</span>
+                  <span className="block text-slate-500">Guests see “Ongoing”. You can still set listing expiry below.</span>
+                </span>
+              </label>
+              <div
+                className={`mt-2 flex flex-wrap items-center gap-2 ${form.eventContinuous ? "pointer-events-none opacity-40" : ""}`}
+                aria-hidden={form.eventContinuous}
+              >
                 {next10DateYmd.map((ymd) => {
                   const isActive = activeEventDateYmd === ymd;
                   return (
                     <button
                       key={`event-${ymd}`}
                       type="button"
+                      disabled={form.eventContinuous}
                       onClick={() => {
                         const iso = new Date(`${ymd}T20:00:00.000Z`).toISOString();
-                        setForm((f) => ({ ...f, eventDate: iso }));
+                        setForm((f) => ({ ...f, eventDate: iso, eventContinuous: false }));
                       }}
                       className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
                         isActive
@@ -482,7 +550,7 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
           <button
             type="button"
             onClick={() => saveOffer(editingId ?? undefined)}
-            disabled={loading || !form.imageUrl?.trim() || !form.eventDate.trim()}
+            disabled={loading || !form.imageUrl?.trim() || (!form.eventContinuous && !form.eventDate.trim())}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:opacity-50"
           >
             {loading ? "Saving..." : editingId ? "Update" : "Add offer"}
@@ -492,7 +560,16 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
               type="button"
               onClick={() => {
                 setEditingId(null);
-                setForm({ imageUrl: "", title: "", description: "", eventDate: "", entryLabel: "", capacityText: "", endDate: "" });
+                setForm({
+                  imageUrl: "",
+                  title: "",
+                  description: "",
+                  eventDate: "",
+                  eventContinuous: false,
+                  entryLabel: "",
+                  capacityText: "",
+                  endDate: "",
+                });
               }}
               className="rounded-lg bg-white border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
             >
@@ -561,9 +638,11 @@ export default function OffersManager({ brandId, onUpdate }: OffersManagerProps)
                   <div className="flex-1 min-w-0 text-sm text-slate-700">
                     <div className="truncate font-medium text-slate-900">{o.title?.trim() || "Untitled event"}</div>
                     <div className="truncate text-xs text-slate-600">
-                      {o.eventDate
-                        ? `Event night: ${formatGuestEventDateLabel(o.eventDate) ?? "—"}`
-                        : "No event date"}
+                      {o.eventContinuous
+                        ? "Event night: Ongoing (no fixed date)"
+                        : o.eventDate
+                          ? `Event night: ${formatGuestEventDateLabel(o.eventDate) ?? "—"}`
+                          : "No event date"}
                     </div>
                     {o.description?.trim() && <div className="truncate text-xs text-slate-500">{o.description}</div>}
                     <div className="truncate text-xs text-slate-500">

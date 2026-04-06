@@ -99,6 +99,7 @@ export async function POST(
       title?: string | null;
       description?: string | null;
       eventDate?: string | null;
+      eventContinuous?: boolean;
       entryLabel?: string | null;
       capacityText?: string | null;
       endDate?: string | null;
@@ -111,7 +112,8 @@ export async function POST(
         { status: 400 }
       );
     }
-    const { id, imageUrl, title, description, eventDate, entryLabel, capacityText, endDate } = body;
+    const { id, imageUrl, title, description, eventDate, eventContinuous, entryLabel, capacityText, endDate } =
+      body;
 
     const venue = await prisma.venue.findUnique({ where: { brandId } });
     if (!venue) {
@@ -124,18 +126,22 @@ export async function POST(
         { status: 400 }
       );
     }
-    if (!eventDate || typeof eventDate !== "string" || !eventDate.trim()) {
-      return NextResponse.json(
-        { error: "eventDate is required" },
-        { status: 400 }
-      );
+    const continuous = eventContinuous === true;
+    if (!continuous) {
+      if (!eventDate || typeof eventDate !== "string" || !eventDate.trim()) {
+        return NextResponse.json(
+          { error: "Event night date is required unless “Ongoing / no fixed date” is selected." },
+          { status: 400 }
+        );
+      }
     }
 
     const data = {
       imageUrl: String(imageUrl).trim(),
       title: typeof title === "string" && title.trim() ? String(title).trim() : null,
       description: typeof description === "string" && description.trim() ? description.trim() : null,
-      eventDate: String(eventDate).trim(),
+      eventDate: continuous ? null : String(eventDate).trim(),
+      eventContinuous: continuous,
       entryLabel: typeof entryLabel === "string" && entryLabel.trim() ? entryLabel.trim() : null,
       capacityText: typeof capacityText === "string" && capacityText.trim() ? capacityText.trim() : null,
       endDate: endDate != null && String(endDate).trim() ? String(endDate).trim() : null,

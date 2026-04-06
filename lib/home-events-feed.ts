@@ -37,6 +37,7 @@ async function loadHomeFeedEvents(): Promise<HomeFeedEvent[]> {
         title: o.title ?? null,
         description: o.description ?? null,
         eventDate: o.eventDate ?? null,
+        eventContinuous: Boolean(o.eventContinuous),
         entryLabel: o.entryLabel ?? null,
         capacityText: o.capacityText ?? null,
         brandId: o.venue.brandId,
@@ -57,7 +58,7 @@ async function loadHomeFeedEvents(): Promise<HomeFeedEvent[]> {
  */
 export async function getHomeFeedEvents(): Promise<HomeFeedEvent[]> {
   try {
-    return await unstable_cache(loadHomeFeedEvents, ["home-feed-events-v2"], {
+    return await unstable_cache(loadHomeFeedEvents, ["home-feed-events-v3"], {
       revalidate: 30,
     })();
   } catch (e) {

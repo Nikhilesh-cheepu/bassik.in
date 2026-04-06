@@ -132,7 +132,7 @@ export default function HomeEventsWall({ initialEvents }: HomeEventsWallProps) {
               style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
             >
               {events.map((ev, idx) => {
-                const when = formatGuestEventDateLabel(ev.eventDate);
+                const when = ev.eventContinuous ? "Ongoing" : formatGuestEventDateLabel(ev.eventDate);
                 return (
                   <motion.div
                     key={`${ev.brandId}-${ev.id}`}

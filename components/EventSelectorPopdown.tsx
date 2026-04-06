@@ -9,6 +9,7 @@ export type EventOption = {
   imageUrl: string;
   title: string | null;
   eventDate: string | null;
+  eventContinuous?: boolean;
   entryLabel: string | null;
   capacityText: string | null;
 };
@@ -91,7 +92,9 @@ export default function EventSelectorPopdown({
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-white">{getEventTitle(event, index)}</p>
-                      <p className="truncate text-[11px] text-white/70">{guestEventDateLine(event.eventDate)}</p>
+                      <p className="truncate text-[11px] text-white/70">
+                        {guestEventDateLine(event.eventDate, { eventContinuous: event.eventContinuous })}
+                      </p>
                       <p className="truncate text-[11px] text-white/55">
                         {[event.entryLabel, event.capacityText].filter(Boolean).join(" • ") || "General entry"}
                       </p>

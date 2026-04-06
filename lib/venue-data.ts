@@ -10,6 +10,7 @@ export type VenuePayload = {
     title: string | null;
     description: string | null;
     eventDate: string | null;
+    eventContinuous: boolean;
     entryLabel: string | null;
     capacityText: string | null;
   }[];
@@ -86,6 +87,7 @@ export async function getVenueDataByBrandId(brandId: string): Promise<VenuePaylo
       title?: string | null;
       description?: string | null;
       eventDate?: string | null;
+      eventContinuous?: boolean;
       entryLabel?: string | null;
       capacityText?: string | null;
     }) => ({
@@ -94,6 +96,7 @@ export async function getVenueDataByBrandId(brandId: string): Promise<VenuePaylo
       title: o.title ?? null,
       description: o.description ?? null,
       eventDate: o.eventDate ?? null,
+      eventContinuous: Boolean(o.eventContinuous),
       entryLabel: o.entryLabel ?? null,
       capacityText: o.capacityText ?? null,
     }));
