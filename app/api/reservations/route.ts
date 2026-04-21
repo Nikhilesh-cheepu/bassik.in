@@ -330,12 +330,12 @@ export async function POST(request: NextRequest) {
     const interaktTemplateName = isEventBooking ? eventTemplateName : defaultTemplateName;
     const interaktLanguageCode = isEventBooking ? eventLanguageCode : defaultLanguageCode;
 
-    const defaultStaffNotifyPhone = "7013884485";
-    const staffNotifyPhone10 = normalizeIndianMobile10(
-      process.env.INTERAKT_STAFF_NOTIFY_PHONE?.trim() || defaultStaffNotifyPhone
-    );
+    const staffNotifyRaw = process.env.INTERAKT_STAFF_NOTIFY_PHONE?.trim() ?? "";
+    const staffNotifyPhone10 = normalizeIndianMobile10(staffNotifyRaw);
     const staffNotifyEnabled =
-      /^\d{10}$/.test(staffNotifyPhone10) && staffNotifyPhone10 !== contactNumber;
+      Boolean(staffNotifyRaw) &&
+      /^\d{10}$/.test(staffNotifyPhone10) &&
+      staffNotifyPhone10 !== contactNumber;
     const defaultStaffBookingTemplateName = "bassik_website_outlet";
     const staffBookingTemplateName =
       process.env.INTERAKT_STAFF_BOOKING_TEMPLATE_NAME?.trim() || defaultStaffBookingTemplateName;
@@ -411,9 +411,11 @@ export async function POST(request: NextRequest) {
         });
 
         if (!staffSend.ok) {
-          return NextResponse.json(
-            { error: "Unable to send WhatsApp confirmation. Please try again." },
-            { status: 502 }
+          // Customer message already succeeded; staff is secondary — log and continue.
+          console.error(
+            "[INTERAKT booking-staff] Staff notify failed after customer OK:",
+            staffSend.status,
+            staffSend.text?.slice?.(0, 500)
           );
         }
       }
