@@ -5,6 +5,59 @@ import { getOutletLabelForReservation } from "@/lib/brands";
 
 export const runtime = "nodejs";
 
+function normalizeIndianMobile10(raw: string): string {
+  const digitsOnly = String(raw || "").replace(/\D/g, "");
+  const normalized =
+    digitsOnly.length > 10 && (digitsOnly.startsWith("91") || digitsOnly.startsWith("0"))
+      ? digitsOnly.replace(/^(91|0)+/, "").slice(0, 10)
+      : digitsOnly.slice(0, 10);
+  return normalized;
+}
+
+async function sendInteraktTemplateMessage(params: {
+  apiKey: string;
+  phoneNumber10: string;
+  callbackData: string;
+  templateName: string;
+  languageCode: string;
+  bodyValues: string[];
+  logLabel: string;
+}): Promise<{ ok: true } | { ok: false; status: number; text: string }> {
+  const payload = {
+    countryCode: "+91",
+    phoneNumber: params.phoneNumber10,
+    type: "Template",
+    callbackData: params.callbackData,
+    template: {
+      name: params.templateName,
+      languageCode: params.languageCode,
+      bodyValues: params.bodyValues,
+    },
+  };
+
+  const resp = await fetch("https://api.interakt.ai/v1/public/message/", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${params.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    console.error(
+      `[INTERAKT ${params.logLabel}] Non-2xx response:`,
+      resp.status,
+      text.slice(0, 500)
+    );
+    return { ok: false, status: resp.status, text };
+  }
+
+  await resp.json().catch(() => null);
+  return { ok: true };
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log("[RESERVATION API] Starting reservation request");
@@ -46,12 +99,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Normalize to 10-digit Indian number (strip +91, 91, 0 prefix)
-    const digitsOnly = String(contactNumber || "").replace(/\D/g, "");
-    const normalized =
-      digitsOnly.length > 10 && (digitsOnly.startsWith("91") || digitsOnly.startsWith("0"))
-        ? digitsOnly.replace(/^(91|0)+/, "").slice(0, 10)
-        : digitsOnly.slice(0, 10);
-    contactNumber = normalized;
+    contactNumber = normalizeIndianMobile10(String(contactNumber || ""));
 
     const valid10Digit = /^\d{10}$/.test(contactNumber);
 
@@ -282,6 +330,25 @@ export async function POST(request: NextRequest) {
     const interaktTemplateName = isEventBooking ? eventTemplateName : defaultTemplateName;
     const interaktLanguageCode = isEventBooking ? eventLanguageCode : defaultLanguageCode;
 
+    const defaultStaffNotifyPhone = "7013884485";
+    const staffNotifyPhone10 = normalizeIndianMobile10(
+      process.env.INTERAKT_STAFF_NOTIFY_PHONE?.trim() || defaultStaffNotifyPhone
+    );
+    const staffNotifyEnabled =
+      /^\d{10}$/.test(staffNotifyPhone10) && staffNotifyPhone10 !== contactNumber;
+    const defaultStaffBookingTemplateName = "bassik_website_outlet";
+    const staffBookingTemplateName =
+      process.env.INTERAKT_STAFF_BOOKING_TEMPLATE_NAME?.trim() || defaultStaffBookingTemplateName;
+    const staffBookingLanguageCode =
+      process.env.INTERAKT_STAFF_BOOKING_TEMPLATE_LANGUAGE_CODE?.trim() || defaultLanguageCode;
+    const defaultStaffEventTemplateName = "bassik_events_outlet";
+    const staffEventTemplateName =
+      process.env.INTERAKT_STAFF_EVENT_TEMPLATE_NAME?.trim() || defaultStaffEventTemplateName;
+    const staffEventLanguageCode =
+      process.env.INTERAKT_STAFF_EVENT_TEMPLATE_LANGUAGE_CODE?.trim() || eventLanguageCode;
+    const staffTemplateName = isEventBooking ? staffEventTemplateName : staffBookingTemplateName;
+    const staffLanguageCode = isEventBooking ? staffEventLanguageCode : staffBookingLanguageCode;
+
     const noteValue = notesSection || (notes && String(notes).trim() ? String(notes).trim() : "-");
 
     if (!shouldTriggerInterakt) {
@@ -315,38 +382,41 @@ export async function POST(request: NextRequest) {
             String(totalGuests), // {{8}}
             "CONFIRMED", // {{9}}
           ];
-      const payload = {
-        countryCode: "+91",
-        phoneNumber: contactNumber,
-        type: "Template",
+      const customerSend = await sendInteraktTemplateMessage({
+        apiKey: interaktApiKey,
+        phoneNumber10: contactNumber,
         callbackData: reservationId,
-        template: {
-          name: interaktTemplateName,
-          languageCode: interaktLanguageCode,
-          bodyValues,
-        },
-      };
-
-      const resp = await fetch("https://api.interakt.ai/v1/public/message/", {
-        method: "POST",
-        headers: {
-          Authorization: `Basic ${interaktApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
+        templateName: interaktTemplateName,
+        languageCode: interaktLanguageCode,
+        bodyValues,
+        logLabel: "booking-customer",
       });
 
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => "");
-        console.error("[INTERAKT booking] Non-2xx response:", resp.status, text.slice(0, 500));
+      if (!customerSend.ok) {
         return NextResponse.json(
           { error: "Unable to send WhatsApp confirmation. Please try again." },
           { status: 502 }
         );
       }
 
-      // Ensure provider accepted payload before confirming UI.
-      await resp.json().catch(() => null);
+      if (staffNotifyEnabled) {
+        const staffSend = await sendInteraktTemplateMessage({
+          apiKey: interaktApiKey,
+          phoneNumber10: staffNotifyPhone10,
+          callbackData: `${reservationId}-staff`,
+          templateName: staffTemplateName,
+          languageCode: staffLanguageCode,
+          bodyValues,
+          logLabel: "booking-staff",
+        });
+
+        if (!staffSend.ok) {
+          return NextResponse.json(
+            { error: "Unable to send WhatsApp confirmation. Please try again." },
+            { status: 502 }
+          );
+        }
+      }
     }
 
     return NextResponse.json(
