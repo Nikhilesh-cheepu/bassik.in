@@ -136,15 +136,15 @@ export default function HomeEventsWall({ initialEvents }: HomeEventsWallProps) {
                 return (
                   <motion.div
                     key={`${ev.brandId}-${ev.id}`}
-                    initial={{ opacity: 0, y: 16 }}
+                    initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: Math.min(idx * 0.03, 0.45) }}
+                    transition={{ duration: 0.18, delay: Math.min(idx * 0.02, 0.12) }}
                     className="snap-start shrink-0 w-[42vw] max-w-[220px]"
                   >
                     <Link
                       href={`/${ev.brandId}?eventId=${encodeURIComponent(ev.id)}`}
-                      prefetch={false}
-                      className="group block rounded-2xl overflow-hidden border border-white/[0.1] bg-black/40 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.9)] transition-all duration-300 hover:border-white/[0.2] hover:shadow-[0_24px_60px_-20px_rgba(251,191,36,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                      prefetch
+                      className="group block rounded-2xl overflow-hidden border border-white/[0.1] bg-black/40 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.9)] transition-[border-color,box-shadow] duration-200 hover:border-white/[0.2] hover:shadow-[0_24px_60px_-20px_rgba(251,191,36,0.15)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                       style={{
                         boxShadow: `0 0 0 1px ${ev.accentColor}18, 0 20px 50px -24px rgba(0,0,0,0.85)`,
                       }}

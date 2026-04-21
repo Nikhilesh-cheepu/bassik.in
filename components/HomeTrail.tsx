@@ -2,7 +2,6 @@
 "use client";
 
 import { useMemo, memo, useState, useLayoutEffect } from "react";
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import Image from "next/image";
 import { BRANDS, Brand, HIDDEN_BRAND_IDS } from "@/lib/brands";
@@ -10,24 +9,8 @@ import { getVenueSpecialtySnippet } from "@/lib/venue-uniqueness";
 import { shuffleCopy } from "@/lib/shuffle-array";
 import type { HomeFeedEvent } from "@/lib/home-feed-types";
 import type { HomeReview } from "@/lib/home-reviews";
-
-const HomeEventsWall = dynamic(() => import("@/components/HomeEventsWall"), {
-  loading: () => (
-    <section className="px-4 sm:px-6 mb-10 sm:mb-14" aria-hidden>
-      <div className="max-w-5xl mx-auto h-64 rounded-2xl bg-white/[0.04] animate-pulse border border-white/[0.06]" />
-    </section>
-  ),
-  ssr: true,
-});
-
-const HomeReviewsSection = dynamic(() => import("@/components/HomeReviewsSection"), {
-  loading: () => (
-    <section className="px-4 sm:px-6 mb-10" aria-hidden>
-      <div className="max-w-5xl mx-auto h-40 rounded-2xl bg-white/[0.03] animate-pulse" />
-    </section>
-  ),
-  ssr: true,
-});
+import HomeEventsWall from "@/components/HomeEventsWall";
+import HomeReviewsSection from "@/components/HomeReviewsSection";
 
 interface HomeTrailProps {
   venues?: Brand[];
@@ -124,7 +107,7 @@ function VenueMiniCard({ brand }: { brand: Brand }) {
   return (
     <Link
       href={`/${brand.id}`}
-      prefetch={false}
+      prefetch
       className="group flex flex-col items-center text-center gap-1.5 p-2 sm:p-2.5 min-h-[7.5rem] sm:min-h-[8.25rem] rounded-xl sm:rounded-2xl
         bg-stone-950/85 backdrop-blur-sm border border-white/[0.07]
         shadow-[0_8px_28px_-14px_rgba(0,0,0,0.9)]

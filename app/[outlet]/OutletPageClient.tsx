@@ -425,7 +425,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 pt-3 relative z-10 space-y-3 pb-[calc(8.5rem+env(safe-area-inset-bottom))] sm:pb-[calc(9rem+env(safe-area-inset-bottom))] w-full min-w-0 overflow-x-hidden">
+      <div className="max-w-4xl mx-auto px-4 pt-3 relative z-10 space-y-3 pb-[calc(5.85rem+env(safe-area-inset-bottom))] sm:pb-[calc(6rem+env(safe-area-inset-bottom))] w-full min-w-0 overflow-x-hidden">
         {fetchError && (
           <button type="button" onClick={loadVenueData} className="w-full py-4 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-sm font-medium touch-manipulation" style={{ touchAction: "manipulation" }}>
             {fetchError}
@@ -435,19 +435,19 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
           <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="backdrop-blur-md bg-white/5 rounded-xl border border-white/10 p-4">
             <p className="text-sm text-white/90 text-center mb-4">Book a table at any of these spots to enjoy the live screening on the biggest screen in Hyderabad</p>
             <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8">
-              <Link href="/c53" prefetch={false} className="flex flex-col items-center gap-2 group">
+              <Link href="/c53" prefetch className="flex flex-col items-center gap-2 group">
                 <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-white/5 border border-white/10 group-hover:border-white/20 transition-colors">
                   <Image src="/logos/c53.png" alt="C53" fill sizes="80px" className="object-contain p-1" />
                 </div>
                 <span className="text-xs font-medium text-white/80">C53</span>
               </Link>
-              <Link href="/boiler-room" prefetch={false} className="flex flex-col items-center gap-2 group">
+              <Link href="/boiler-room" prefetch className="flex flex-col items-center gap-2 group">
                 <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-white/5 border border-white/10 group-hover:border-white/20 transition-colors">
                   <Image src="/logos/boiler-room.png" alt="Boiler Room" fill sizes="80px" className="object-contain p-1" />
                 </div>
                 <span className="text-xs font-medium text-white/80">Boiler Room</span>
               </Link>
-              <Link href="/firefly" prefetch={false} className="flex flex-col items-center gap-2 group">
+              <Link href="/firefly" prefetch className="flex flex-col items-center gap-2 group">
                 <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-white/5 border border-white/10 group-hover:border-white/20 transition-colors">
                   <Image src="/logos/firefly.png" alt="Firefly" fill sizes="80px" className="object-contain p-1" />
                 </div>
@@ -486,19 +486,11 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
           boxShadow: `0 8px 40px rgba(0,0,0,0.65), 0 0 0 1px ${selectedBrand.accentColor}22`,
         }}
       >
-        <div className="flex w-full flex-row gap-2">
-          <button
-            type="button"
-            onClick={() => router.push(`/${selectedBrandId}/book`)}
-            className="flex min-h-[48px] min-w-0 flex-1 basis-0 items-center justify-center rounded-2xl border px-2 py-3 text-center text-sm font-semibold leading-tight text-white shadow-[0_0_20px_rgba(59,130,246,0.35)] transition-transform active:scale-[0.98] sm:px-3"
-            style={{ borderColor: "rgba(96,165,250,0.8)", backgroundColor: "rgba(37,99,235,0.5)" }}
-          >
-            Book table
-          </button>
+        <div className="flex w-full flex-row items-stretch gap-2">
           <button
             type="button"
             onClick={() => setIsQuickContactOpen(true)}
-            className="flex min-h-[48px] min-w-0 flex-1 basis-0 items-center justify-center rounded-2xl border px-2 py-3 text-center text-sm font-semibold leading-tight text-white transition-transform active:scale-[0.98] sm:px-3"
+            className="flex min-h-[48px] min-w-0 flex-[0.95] items-center justify-center rounded-2xl border px-1.5 py-2.5 text-center text-xs font-semibold leading-tight text-white transition-transform active:scale-[0.98] sm:px-2 sm:text-sm"
             style={{
               borderColor: `${selectedBrand.accentColor}cc`,
               backgroundColor: `${selectedBrand.accentColor}33`,
@@ -507,16 +499,24 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
           >
             Contact us
           </button>
-        </div>
-        {venueData.sectionVisibility.menu && (
-          <button
-            type="button"
-            onClick={() => setIsQuickMenuOpen(true)}
-            className="mt-2 w-full rounded-2xl border border-white/15 bg-white/[0.08] py-2.5 text-sm font-medium text-white/90 transition-colors hover:bg-white/[0.12]"
+          {venueData.sectionVisibility.menu ? (
+            <button
+              type="button"
+              onClick={() => setIsQuickMenuOpen(true)}
+              className="flex min-h-[48px] min-w-0 flex-[0.95] items-center justify-center rounded-2xl border border-white/15 bg-white/[0.08] px-1.5 py-2.5 text-center text-xs font-semibold text-white/90 transition-colors hover:bg-white/[0.12] active:scale-[0.98] sm:px-2 sm:text-sm"
+            >
+              Menu
+            </button>
+          ) : null}
+          <Link
+            href={`/${selectedBrandId}/book`}
+            prefetch
+            className="flex min-h-[48px] min-w-0 flex-[1.45] items-center justify-center rounded-2xl border px-2 py-2.5 text-center text-sm font-semibold leading-tight text-white shadow-[0_0_20px_rgba(59,130,246,0.35)] transition-transform active:scale-[0.98] sm:px-3 sm:text-[15px]"
+            style={{ borderColor: "rgba(96,165,250,0.8)", backgroundColor: "rgba(37,99,235,0.5)" }}
           >
-            Menu
-          </button>
-        )}
+            Book table
+          </Link>
+        </div>
       </div>
 
       {isMenuModalOpen && selectedMenuId && (
