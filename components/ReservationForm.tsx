@@ -3,6 +3,7 @@
 import { useState, FormEvent, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Brand } from "@/lib/brands";
+import { addLocalDays, localYmdTimeMs, toLocalDateString } from "@/lib/local-date";
 import { useRouter } from "next/navigation";
 
 interface ReservationFormProps {
@@ -26,7 +27,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   const [formData, setFormData] = useState(() => ({
     fullName: "",
     contactNumber: "",
-    date: new Date().toISOString().split("T")[0],
+    date: toLocalDateString(new Date()),
     timeSlot: "",
     selectedDiscounts: [] as string[],
     notes: "",
@@ -51,16 +52,13 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     return `${h12}:${m.toString().padStart(2, "0")}${period}`;
   };
 
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
-
   const datePickerDays = useMemo(() => {
     const days: { dateStr: string; dayName: string; dayNum: string }[] = [];
     const today = new Date();
     for (let i = 0; i < 15; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
+      const d = addLocalDays(today, i);
       days.push({
-        dateStr: d.toISOString().split("T")[0],
+        dateStr: toLocalDateString(d),
         dayName: i === 0 ? "Today" : d.toLocaleDateString("en-IN", { weekday: "short" }),
         dayNum: d.getDate().toString(),
       });
@@ -72,7 +70,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     const t = new Date();
     const now24 = `${t.getHours().toString().padStart(2, "0")}:${t.getMinutes().toString().padStart(2, "0")}`;
     const lunchEnd = "18:00"; // Global lunch window end
-    setFormData((prev) => ({ ...prev, date: todayStr, timeSlot: "", selectedDiscounts: [] }));
+    const todayLocal = toLocalDateString(t);
+    setFormData((prev) => ({ ...prev, date: todayLocal, timeSlot: "", selectedDiscounts: [] }));
     setGuests(2);
     setTimeSlotTab(now24 >= lunchEnd ? "dinner" : "lunch");
     setDiscounts([]);
@@ -80,7 +79,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     setReservationConfirmed(false);
     setReservationId(null);
     setShowSuccessToast(false);
-  }, [brand.id, todayStr]);
+  }, [brand.id]);
 
   useEffect(() => {
     return () => {
@@ -134,21 +133,22 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
 
   const timeSlots = useMemo(() => {
     const filtered = allTimeSlots.filter((s) => s.category === timeSlotTab);
-    if (formData.date === todayStr) {
+    const todayLocalStr = toLocalDateString(new Date());
+    if (formData.date === todayLocalStr) {
       const now = Date.now();
-      return filtered.filter((s) => new Date(`${formData.date}T${s.value24}`).getTime() > now);
+      return filtered.filter((s) => localYmdTimeMs(formData.date, s.value24) > now);
     }
     return filtered;
-  }, [allTimeSlots, timeSlotTab, formData.date, todayStr]);
+  }, [allTimeSlots, timeSlotTab, formData.date]);
 
   const isSlotInPast = (date: string, slot: string) => {
     if (!date || !slot) return false;
-    return new Date(`${date}T${slot}`).getTime() < Date.now();
+    return localYmdTimeMs(date, slot) < Date.now();
   };
 
   const handleDateSelect = (dateStr: string) => {
     setFormData((prev) => ({ ...prev, date: dateStr, timeSlot: "", selectedDiscounts: [] }));
-    if (dateStr === todayStr) {
+    if (dateStr === toLocalDateString(new Date())) {
       const t = new Date();
       const now24 = `${t.getHours().toString().padStart(2, "0")}:${t.getMinutes().toString().padStart(2, "0")}`;
       const lunchEnd = "18:00";
@@ -218,7 +218,15 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
       });
       if (res.ok) {
         const data = await res.json();
-        setFormData({ fullName: "", contactNumber: "", date: todayStr, timeSlot: "", selectedDiscounts: [], notes: "", hubSpotId: undefined });
+        setFormData({
+          fullName: "",
+          contactNumber: "",
+          date: toLocalDateString(new Date()),
+          timeSlot: "",
+          selectedDiscounts: [],
+          notes: "",
+          hubSpotId: undefined,
+        });
         setGuests(2);
         setShowSuccessToast(true);
         if (successToastTimeoutRef.current) clearTimeout(successToastTimeoutRef.current);
@@ -237,7 +245,7 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     }
   };
 
-  const currentDate = formData.date || todayStr;
+  const currentDate = formData.date || toLocalDateString(new Date());
 
   if (reservationConfirmed) {
     return (
