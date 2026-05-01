@@ -1,17 +1,12 @@
 import { SignJWT, jwtVerify } from "jose";
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
+import { CLUB_ROGUE_BRAND_IDS } from "@/lib/club-rogue";
 
 const COOKIE_NAME = "admin_session";
 const JWT_SECRET = new TextEncoder().encode(
   process.env.ADMIN_SESSION_SECRET || "dev-secret-change-in-production"
 );
-
-const CLUB_ROGUE_BRAND_IDS = [
-  "club-rogue-gachibowli",
-  "club-rogue-kondapur",
-  "club-rogue-jubilee-hills",
-] as const;
 
 /** 4-digit passcode → scope (server-side only). */
 const PASSCODE_TO_SCOPE: Record<

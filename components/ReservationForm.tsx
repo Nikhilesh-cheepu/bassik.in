@@ -3,6 +3,11 @@
 import { useState, FormEvent, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Brand } from "@/lib/brands";
+import {
+  CLUB_ROGUE_COVER_CHARGE_SUMMARY,
+  CLUB_ROGUE_GACHIBOWLI_ID,
+  isClubRogueBrand,
+} from "@/lib/club-rogue";
 import { addLocalDays, localYmdTimeMs, toLocalDateString } from "@/lib/local-date";
 import { useRouter } from "next/navigation";
 
@@ -32,6 +37,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     selectedDiscounts: [] as string[],
     notes: "",
     hubSpotId: undefined as string | undefined,
+    clubRogueCoverAcknowledged: false,
+    bookingNightGenre: "" as "" | "tollywood" | "bollywood",
   }));
   const [guests, setGuests] = useState(2);
   const [timeSlotTab, setTimeSlotTab] = useState<"lunch" | "dinner">("lunch");
@@ -71,7 +78,14 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     const now24 = `${t.getHours().toString().padStart(2, "0")}:${t.getMinutes().toString().padStart(2, "0")}`;
     const lunchEnd = "18:00"; // Global lunch window end
     const todayLocal = toLocalDateString(t);
-    setFormData((prev) => ({ ...prev, date: todayLocal, timeSlot: "", selectedDiscounts: [] }));
+    setFormData((prev) => ({
+      ...prev,
+      date: todayLocal,
+      timeSlot: "",
+      selectedDiscounts: [],
+      clubRogueCoverAcknowledged: false,
+      bookingNightGenre: "",
+    }));
     setGuests(2);
     setTimeSlotTab(now24 >= lunchEnd ? "dinner" : "lunch");
     setDiscounts([]);
@@ -183,10 +197,14 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
   };
 
   const isValidPhone = (p: string) => /^\d{10}$/.test(p.replace(/\D/g, ""));
+  const isClubRogue = isClubRogueBrand(brand.id);
+  const isGachibowliClubRogue = brand.id === CLUB_ROGUE_GACHIBOWLI_ID;
 
   const canSubmit = () =>
     formData.date && formData.timeSlot && guests >= 1 && formData.fullName.trim() && isValidPhone(formData.contactNumber) &&
-    (brand.id !== "the-hub" || formData.hubSpotId);
+    (brand.id !== "the-hub" || formData.hubSpotId) &&
+    (!isClubRogue || formData.clubRogueCoverAcknowledged) &&
+    (!isGachibowliClubRogue || (formData.bookingNightGenre === "tollywood" || formData.bookingNightGenre === "bollywood"));
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -214,6 +232,12 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
           brandId: brand.id,
           brandName: brand.name,
           hubSpotId: brand.id === "the-hub" ? formData.hubSpotId || null : null,
+          ...(isClubRogue
+            ? { coverChargeAcknowledged: formData.clubRogueCoverAcknowledged }
+            : {}),
+          ...(isGachibowliClubRogue
+            ? { bookingNightGenre: formData.bookingNightGenre || null }
+            : {}),
         }),
       });
       if (res.ok) {
@@ -226,6 +250,8 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
           selectedDiscounts: [],
           notes: "",
           hubSpotId: undefined,
+          clubRogueCoverAcknowledged: false,
+          bookingNightGenre: "",
         });
         setGuests(2);
         setShowSuccessToast(true);
@@ -326,6 +352,67 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 pb-24">
+      {isClubRogue && (
+        <div
+          className="rounded-xl border border-amber-500/35 bg-amber-500/[0.08] px-3 py-2.5 text-xs leading-relaxed text-amber-100/95"
+          role="status"
+        >
+          <p className="font-semibold text-amber-50">{CLUB_ROGUE_COVER_CHARGE_SUMMARY}</p>
+          <label className="mt-2 flex cursor-pointer items-start gap-2.5 border-t border-amber-500/25 pt-2">
+            <input
+              type="checkbox"
+              checked={formData.clubRogueCoverAcknowledged}
+              onChange={(e) =>
+                setFormData((p) => ({ ...p, clubRogueCoverAcknowledged: e.target.checked }))
+              }
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/30 bg-black/40 text-amber-500 focus:ring-amber-400/60"
+            />
+            <span>
+              I understand and acknowledge the ₹2,000 mandatory cover (fully redeemable at the venue). *
+            </span>
+          </label>
+        </div>
+      )}
+      {isGachibowliClubRogue && (
+        <div>
+          <p className="text-xs font-semibold text-gray-300 mb-2">Which night are you booking? *</p>
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                { id: "tollywood" as const, label: "Tollywood night" },
+                { id: "bollywood" as const, label: "Bollywood night" },
+              ] as const
+            ).map((opt) => {
+              const sel = formData.bookingNightGenre === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() =>
+                    setFormData((p) => ({ ...p, bookingNightGenre: opt.id }))
+                  }
+                  className={`rounded-xl border px-3 py-2.5 text-left text-xs font-semibold transition-all ${
+                    sel
+                      ? "border-white text-white"
+                      : "border-white/15 bg-white/5 text-gray-300 hover:border-white/25"
+                  }`}
+                  style={
+                    sel
+                      ? {
+                          backgroundColor: `${accentColor}35`,
+                          borderColor: accentColor,
+                          boxShadow: `0 0 14px ${accentColor}33`,
+                        }
+                      : undefined
+                  }
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {/* A. Horizontal Date Picker */}
       <div>
         <div

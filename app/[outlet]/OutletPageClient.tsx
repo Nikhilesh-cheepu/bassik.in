@@ -7,6 +7,11 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { BRANDS, HIDDEN_BRAND_IDS } from "@/lib/brands";
+import {
+  CLUB_ROGUE_COVER_CHARGE_SUMMARY,
+  CLUB_ROGUE_GACHIBOWLI_ID,
+  isClubRogueBrand,
+} from "@/lib/club-rogue";
 import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-contacts";
 import { guestEventDateLine } from "@/lib/event-date-display";
 import EventsOffersHero from "@/components/EventsOffersHero";
@@ -77,6 +82,10 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
   const [eventBookTime, setEventBookTime] = useState("20:00");
   const [eventBookSubmitting, setEventBookSubmitting] = useState(false);
   const [eventBookError, setEventBookError] = useState<string | null>(null);
+  const [eventClubRogueCoverAcknowledged, setEventClubRogueCoverAcknowledged] = useState(false);
+  const [eventBookingNightGenre, setEventBookingNightGenre] = useState<
+    "" | "tollywood" | "bollywood"
+  >("");
   const [showEventBookedToast, setShowEventBookedToast] = useState(false);
   const [isReviewSheetOpen, setIsReviewSheetOpen] = useState(false);
   const [reviewAuthor, setReviewAuthor] = useState("");
@@ -213,6 +222,8 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
       }
     }
     setEventBookError(null);
+    setEventClubRogueCoverAcknowledged(false);
+    setEventBookingNightGenre("");
     setIsEventQuickBookOpen(true);
   };
 
@@ -235,6 +246,18 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
       return;
     }
 
+    const clubRogueOutlet = isClubRogueBrand(selectedBrand.id);
+    if (clubRogueOutlet && !eventClubRogueCoverAcknowledged) {
+      setEventBookError("Please acknowledge the ₹2,000 cover charge (fully redeemable).");
+      return;
+    }
+    if (selectedBrand.id === CLUB_ROGUE_GACHIBOWLI_ID) {
+      if (eventBookingNightGenre !== "tollywood" && eventBookingNightGenre !== "bollywood") {
+        setEventBookError("Please select Tollywood or Bollywood night.");
+        return;
+      }
+    }
+
     setEventBookSubmitting(true);
     setEventBookError(null);
     try {
@@ -255,6 +278,10 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
           selectedDiscounts: [],
           brandId: selectedBrand.id,
           brandName: selectedBrand.name,
+          ...(clubRogueOutlet ? { coverChargeAcknowledged: eventClubRogueCoverAcknowledged } : {}),
+          ...(selectedBrand.id === CLUB_ROGUE_GACHIBOWLI_ID
+            ? { bookingNightGenre: eventBookingNightGenre }
+            : {}),
         }),
       });
       if (!res.ok) {
@@ -265,6 +292,8 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
       setEventBookName("");
       setEventBookPhone("");
       setEventBookPeople(2);
+      setEventClubRogueCoverAcknowledged(false);
+      setEventBookingNightGenre("");
       setShowEventBookedToast(true);
       if (eventBookedToastTimeoutRef.current) clearTimeout(eventBookedToastTimeoutRef.current);
       eventBookedToastTimeoutRef.current = setTimeout(() => setShowEventBookedToast(false), 3000);
@@ -688,6 +717,53 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
                   )}
                 </div>
               </div>
+              {isClubRogueBrand(selectedBrand.id) && (
+                <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2.5">
+                  <p className="text-[11px] font-semibold leading-snug text-amber-50/95">
+                    {CLUB_ROGUE_COVER_CHARGE_SUMMARY}
+                  </p>
+                  <label className="mt-2 flex cursor-pointer items-start gap-2 border-t border-amber-500/25 pt-2">
+                    <input
+                      type="checkbox"
+                      checked={eventClubRogueCoverAcknowledged}
+                      onChange={(e) => setEventClubRogueCoverAcknowledged(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/30 bg-black/40"
+                    />
+                    <span className="text-[11px] leading-snug text-amber-50/95">
+                      I understand the ₹2,000 mandatory cover (fully redeemable at the venue). *
+                    </span>
+                  </label>
+                </div>
+              )}
+              {selectedBrand.id === CLUB_ROGUE_GACHIBOWLI_ID && (
+                <div className="mt-3">
+                  <p className="mb-2 text-[11px] font-semibold text-white/85">Tollywood or Bollywood night? *</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        { id: "tollywood" as const, label: "Tollywood" },
+                        { id: "bollywood" as const, label: "Bollywood" },
+                      ] as const
+                    ).map((opt) => {
+                      const sel = eventBookingNightGenre === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setEventBookingNightGenre(opt.id)}
+                          className={`rounded-xl border px-2.5 py-2 text-[11px] font-semibold ${
+                            sel
+                              ? "border-white bg-white/15 text-white"
+                              : "border-white/20 bg-white/[0.04] text-white/80"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div className="mt-3 space-y-2">
                 <input
                   type="text"

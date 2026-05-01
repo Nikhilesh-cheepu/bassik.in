@@ -159,7 +159,7 @@ export default function BookingsPageClient() {
       reservation.brandId === "club-rogue-jubilee-hills";
 
     const coverLine = isClubRogue
-      ? "\n\nCover charge: ₹2000 (fully refundable at the venue)"
+      ? "\n\nMandatory cover: ₹2000 (fully redeemable at the venue)"
       : "";
 
     return `${reservation.brandName}

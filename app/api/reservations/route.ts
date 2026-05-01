@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getDiscountLabel } from "@/lib/reservation-discounts";
 import { getOutletLabelForReservation } from "@/lib/brands";
+import {
+  CLUB_ROGUE_GACHIBOWLI_ID,
+  isClubRogueBrand,
+} from "@/lib/club-rogue";
 
 export const runtime = "nodejs";
 
@@ -96,6 +100,8 @@ export async function POST(request: NextRequest) {
       brandId,
       brandName,
       hubSpotId,
+      coverChargeAcknowledged,
+      bookingNightGenre,
     } = body;
 
     // Normalize to 10-digit Indian number (strip +91, 91, 0 prefix)
@@ -125,6 +131,23 @@ export async function POST(request: NextRequest) {
         { error: "Please provide a valid 10-digit contact number." },
         { status: 400 }
       );
+    }
+
+    const userNotesTrimmed =
+      notes && String(notes).trim() ? String(notes).trim() : "";
+
+    let notesSectionFromUser = "";
+    if (userNotesTrimmed) {
+      const notesLower = userNotesTrimmed.toLowerCase();
+      if (notesLower.includes("birthday") || notesLower.includes("bday")) {
+        notesSectionFromUser = "Birthday";
+      } else if (notesLower.includes("anniversary")) {
+        notesSectionFromUser = "Anniversary";
+      } else if (notesLower.includes("celebration")) {
+        notesSectionFromUser = "Celebration";
+      } else {
+        notesSectionFromUser = userNotesTrimmed;
+      }
     }
 
     // Format date nicely
@@ -164,20 +187,6 @@ export async function POST(request: NextRequest) {
     const totalGuests =
       parseInt(numberOfMen) + parseInt(numberOfWomen) + parseInt(numberOfCouples) * 2;
 
-    let notesSection = "";
-    if (notes && notes.trim()) {
-      const notesLower = notes.toLowerCase();
-      if (notesLower.includes("birthday") || notesLower.includes("bday")) {
-        notesSection = "Birthday";
-      } else if (notesLower.includes("anniversary")) {
-        notesSection = "Anniversary";
-      } else if (notesLower.includes("celebration")) {
-        notesSection = "Celebration";
-      } else {
-        notesSection = notes.trim();
-      }
-    }
-
     const dateShort = formatDateShort(date);
     const timeLabel = timeToFormat ? formatTime(timeToFormat) : "";
 
@@ -196,6 +205,33 @@ export async function POST(request: NextRequest) {
 
     if (!venue) {
       return NextResponse.json({ error: "Unknown outlet" }, { status: 400 });
+    }
+
+    if (isClubRogueBrand(brandId)) {
+      if (coverChargeAcknowledged !== true) {
+        return NextResponse.json(
+          {
+            error:
+              "Please acknowledge the ₹2,000 mandatory cover charge (fully redeemable at the venue) to continue.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    let nightGenre: "tollywood" | "bollywood" | null = null;
+    if (brandId === CLUB_ROGUE_GACHIBOWLI_ID) {
+      const raw =
+        typeof bookingNightGenre === "string"
+          ? bookingNightGenre.toLowerCase().trim()
+          : "";
+      if (raw !== "tollywood" && raw !== "bollywood") {
+        return NextResponse.json(
+          { error: "Please select Tollywood night or Bollywood night." },
+          { status: 400 }
+        );
+      }
+      nightGenre = raw;
     }
 
     const outletDisplayName = getOutletLabelForReservation(
@@ -243,13 +279,21 @@ export async function POST(request: NextRequest) {
     const menNormalized = String(numberOfMen);
     const womenNormalized = String(numberOfWomen);
     const couplesNormalized = String(numberOfCouples);
-    const baseNotes = notes && String(notes).trim() ? String(notes).trim() : "";
     const eventIdNormalized = typeof eventId === "string" && eventId.trim() ? eventId.trim() : null;
     const isEventBooking = Boolean(eventIdNormalized);
-    const notesNormalized = [baseNotes, eventIdNormalized ? `[event:${eventIdNormalized}]` : ""]
-      .filter(Boolean)
-      .join("\n")
-      .trim() || null;
+    const dbNotesParts: string[] = [];
+    if (brandId === CLUB_ROGUE_GACHIBOWLI_ID && nightGenre) {
+      dbNotesParts.push(nightGenre === "tollywood" ? "Tollywood night" : "Bollywood night");
+    }
+    if (userNotesTrimmed) dbNotesParts.push(userNotesTrimmed);
+    const notesNormalized =
+      [
+        dbNotesParts.length > 0 ? dbNotesParts.join("\n") : "",
+        eventIdNormalized ? `[event:${eventIdNormalized}]` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+        .trim() || null;
     let eventNameForTemplate = "Event";
     let eventDateForTemplate = dateShort;
     if (typeof eventName === "string" && eventName.trim()) {
@@ -349,7 +393,16 @@ export async function POST(request: NextRequest) {
     const staffTemplateName = isEventBooking ? staffEventTemplateName : staffBookingTemplateName;
     const staffLanguageCode = isEventBooking ? staffEventLanguageCode : staffBookingLanguageCode;
 
-    const noteValue = notesSection || (notes && String(notes).trim() ? String(notes).trim() : "-");
+    const genreLabelForNotes =
+      brandId === CLUB_ROGUE_GACHIBOWLI_ID && nightGenre
+        ? nightGenre === "tollywood"
+          ? "Tollywood"
+          : "Bollywood"
+        : "";
+    const notesBodyForTemplate =
+      notesSectionFromUser || userNotesTrimmed || "";
+    const noteValue =
+      [genreLabelForNotes, notesBodyForTemplate].filter(Boolean).join(" · ") || "-";
 
     if (!shouldTriggerInterakt) {
       console.log("[RESERVATION API] Duplicate booking detected; skipping WhatsApp trigger.");

@@ -27,7 +27,7 @@ export const OUTLET_CONTACTS: Record<
   },
   "club-rogue-gachibowli": {
     phone: "8328576564",
-    whatsappMessage: `Hi! I'd like to book a table at Club Rogue Gachibowli. I understand there's a ₹2000 cover charge and it's fully refundable at the venue.`,
+    whatsappMessage: `Hi! I'd like to book a table at Club Rogue Gachibowli. I understand there's a mandatory ₹2000 cover charge — fully redeemable at the venue.`,
   },
   "the-hub": {
     phone: "7013884485",
