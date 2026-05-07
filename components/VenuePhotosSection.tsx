@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import Image from "next/image";
+import VenueGalleryCoverflow from "@/components/VenueGalleryCoverflow";
 
 interface VenuePhotosSectionProps {
   loading: boolean;
@@ -28,19 +28,26 @@ export default function VenuePhotosSection({
   photosRequestWhatsAppUrl,
 }: VenuePhotosSectionProps) {
   const hasImages = images.length > 0;
-  const tileImages = hasImages ? images.slice(0, 6) : [];
-  const remainingCount = hasImages ? Math.max(0, images.length - 6) : 0;
   const showInstagram =
     typeof instagramUrl === "string" && instagramUrl.trim() && instagramUrl !== "#";
 
-  const skeletonGrid = (
-    <div className="grid grid-cols-3 gap-2" aria-hidden>
-      <div className="col-span-2 row-span-2 h-44 rounded-2xl bg-gradient-to-br from-white/12 via-white/[0.06] to-white/[0.02] animate-pulse" />
-      <div className="h-[86px] rounded-2xl bg-white/[0.07] animate-pulse" />
-      <div className="h-[86px] rounded-2xl bg-white/[0.07] animate-pulse" />
-      <div className="h-20 rounded-2xl bg-white/[0.05] animate-pulse" />
-      <div className="h-20 rounded-2xl bg-white/[0.05] animate-pulse" />
-      <div className="h-20 rounded-2xl bg-white/[0.05] animate-pulse" />
+  const skeletonOrbit = (
+    <div
+      className="relative mx-auto h-[280px] w-full max-w-[min(100%,28rem)] sm:h-[320px]"
+      aria-hidden
+    >
+      <div
+        className="absolute left-1/2 top-1/2 -translate-x-[calc(50%+30%)] -translate-y-1/2 rounded-[1.5rem] bg-white/[0.04] animate-pulse"
+        style={{ width: "60%", maxWidth: 260, aspectRatio: "4 / 5", transform: "translate(-50%, -50%) scale(0.8)" }}
+      />
+      <div
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[1.5rem] bg-white/[0.07] animate-pulse"
+        style={{ width: "60%", maxWidth: 260, aspectRatio: "4 / 5" }}
+      />
+      <div
+        className="absolute left-1/2 top-1/2 rounded-[1.5rem] bg-white/[0.04] animate-pulse"
+        style={{ width: "60%", maxWidth: 260, aspectRatio: "4 / 5", transform: "translate(calc(-50% + 30%), -50%) scale(0.8)" }}
+      />
     </div>
   );
 
@@ -95,59 +102,18 @@ export default function VenuePhotosSection({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2 }}
-      className="w-full min-w-0 overflow-x-hidden"
+      className="w-full min-w-0 overflow-x-hidden px-1 py-2"
     >
-      <div className="mb-2 flex flex-wrap items-end justify-between gap-x-3 gap-y-1 px-1">
-        <h2 className="text-sm font-semibold text-white">Gallery</h2>
-        {hasImages ? (
-          <span className="text-[11px] font-medium text-white/45">
-            {images.length === 1 ? "1 photo" : `${images.length} photos`}
-            {onOpenGallery ? (
-              <>
-                {" "}
-                ·{" "}
-                <button type="button" className="text-white/65 underline underline-offset-2 hover:text-white" onClick={onOpenGallery}>
-                  view all
-                </button>
-              </>
-            ) : null}
-          </span>
-        ) : null}
-      </div>
       {loading ? (
-        skeletonGrid
+        skeletonOrbit
       ) : !hasImages ? (
         emptyGalleryCard
       ) : (
-        <div className="grid grid-cols-3 gap-2">
-          {tileImages.map((src, idx) => {
-            const className =
-              idx === 0
-                ? "col-span-2 row-span-2 h-44 rounded-2xl"
-                : idx === 1 || idx === 2
-                  ? "h-[86px] rounded-2xl"
-                  : "h-20 rounded-2xl";
-            const isLastVisible = idx === tileImages.length - 1 && remainingCount > 0;
-            return (
-              <motion.button
-                key={`${src}-${idx}`}
-                type="button"
-                whileTap={{ scale: 0.985 }}
-                onClick={onOpenGallery}
-                disabled={!onOpenGallery}
-                className={`group relative overflow-hidden bg-white/[0.06] ring-1 ring-white/[0.08] transition-[box-shadow,ring-color] hover:shadow-lg hover:ring-white/25 focus-visible:outline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-black ${className} ${onOpenGallery ? "" : "cursor-default"}`}
-              >
-                <Image src={src} alt="" fill className="object-cover transition-transform duration-500 group-hover:scale-[1.04]" sizes="(max-width: 768px) 100vw, 400px" unoptimized />
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/50 to-transparent opacity-70" />
-                {isLastVisible && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-lg font-semibold tracking-wide text-white backdrop-blur-[2px]">
-                    +{remainingCount}
-                  </div>
-                )}
-              </motion.button>
-            );
-          })}
-        </div>
+        <VenueGalleryCoverflow
+          images={images}
+          accentColor={accentColor}
+          onOpenGallery={onOpenGallery}
+        />
       )}
     </motion.section>
   );

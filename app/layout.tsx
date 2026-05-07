@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
+import RouteProgressBar from "@/components/RouteProgressBar";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -34,6 +35,7 @@ export default function RootLayout({
         className={`${inter.className} antialiased overflow-x-hidden`}
         style={{ margin: 0, padding: 0 }}
       >
+        <RouteProgressBar />
         {children}
         <Analytics />
       </body>

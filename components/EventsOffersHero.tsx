@@ -157,7 +157,7 @@ export default function EventsOffersHero({
               if (activeOffer) onActiveOfferChange?.(activeOffer.id);
             }}
             className="offers-swiper w-full"
-            loop
+            loop={offers.length >= 4}
             centeredSlides
             slidesPerView={1.75}
             spaceBetween={GAP_PX}

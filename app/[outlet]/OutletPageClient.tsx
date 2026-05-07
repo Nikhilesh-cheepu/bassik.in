@@ -455,6 +455,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
                             src={brandLogoPath}
                             alt={brand.shortName}
                             fill
+                            sizes="16px"
                             className="object-contain"
                             onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
                           />
