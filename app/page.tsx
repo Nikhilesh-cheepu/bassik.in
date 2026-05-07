@@ -7,5 +7,10 @@ export const revalidate = 30;
 export default async function LandingPage() {
   const initialHomeEvents = await getHomeFeedEvents();
   const initialHomeReviews = await getHomeReviewsFeed();
-  return <HomeTrail initialHomeEvents={initialHomeEvents} initialHomeReviews={initialHomeReviews} />;
+  return (
+    <HomeTrail
+      initialHomeEvents={initialHomeEvents}
+      initialHomeReviews={initialHomeReviews}
+    />
+  );
 }

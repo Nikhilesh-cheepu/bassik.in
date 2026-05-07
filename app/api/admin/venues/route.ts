@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getVenueLabelsFromCatalog, fixFireflyTypoInText } from "@/lib/brands";
+import { sanitizeOutletUiForStorage } from "@/lib/outlet-ui-config";
 import {
   requireAdminScope,
   assertBrandInScope,
@@ -53,7 +54,8 @@ export async function POST(request: NextRequest) {
     const scope = scopeRes;
 
     const body = await request.json();
-    const { brandId, name, shortName, address, mapUrl, contactPhone, contactNumbers, amenities, sectionVisibility } = body;
+    const { brandId, name, shortName, address, mapUrl, contactPhone, contactNumbers, sectionVisibility, outletUi } =
+      body;
 
     if (!brandId) {
       return NextResponse.json(
@@ -89,21 +91,16 @@ export async function POST(request: NextRequest) {
         : [];
       updateData.contactNumbers = valid.length > 0 ? valid : null;
     }
-    if (amenities !== undefined) {
-      const validAmenities = Array.isArray(amenities)
-        ? amenities
-            .filter((item: unknown) => typeof item === "string" && item.trim().length > 0)
-            .map((item: string) => item.trim())
-        : [];
-      updateData.amenities = validAmenities.length > 0 ? validAmenities : null;
-    }
     if (sectionVisibility !== undefined && sectionVisibility && typeof sectionVisibility === "object") {
       updateData.sectionVisibility = {
         menu: (sectionVisibility as Record<string, unknown>).menu !== false,
         photos: (sectionVisibility as Record<string, unknown>).photos !== false,
-        amenities: (sectionVisibility as Record<string, unknown>).amenities !== false,
         spots: (sectionVisibility as Record<string, unknown>).spots !== false,
       };
+    }
+    const outletUiSan = sanitizeOutletUiForStorage(outletUi);
+    if (outletUiSan !== undefined) {
+      updateData.outletUi = outletUiSan;
     }
     let venue;
     if (existingVenue) {
@@ -141,21 +138,15 @@ export async function POST(request: NextRequest) {
           : [];
         createData.contactNumbers = valid.length > 0 ? valid : null;
       }
-      if (amenities !== undefined) {
-        const validAmenities = Array.isArray(amenities)
-          ? amenities
-              .filter((item: unknown) => typeof item === "string" && item.trim().length > 0)
-              .map((item: string) => item.trim())
-          : [];
-        createData.amenities = validAmenities.length > 0 ? validAmenities : null;
-      }
       if (sectionVisibility !== undefined && sectionVisibility && typeof sectionVisibility === "object") {
         createData.sectionVisibility = {
           menu: (sectionVisibility as Record<string, unknown>).menu !== false,
           photos: (sectionVisibility as Record<string, unknown>).photos !== false,
-          amenities: (sectionVisibility as Record<string, unknown>).amenities !== false,
           spots: (sectionVisibility as Record<string, unknown>).spots !== false,
         };
+      }
+      if (outletUiSan !== undefined) {
+        createData.outletUi = outletUiSan;
       }
       venue = await prisma.venue.create({ data: createData });
     }

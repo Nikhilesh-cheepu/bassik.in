@@ -2,8 +2,10 @@ import { prisma } from "@/lib/db";
 import { BRANDS, getVenueLabelsFromCatalog } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-contacts";
 import { Prisma } from "@prisma/client";
+import { mergeOutletUi, type MergedOutletUi } from "@/lib/outlet-ui-config";
 
 export type VenuePayload = {
+  outletUi: MergedOutletUi;
   offers: {
     id: string;
     imageUrl: string;
@@ -20,18 +22,16 @@ export type VenuePayload = {
   contactPhone: string;
   contactNumbers: { phone: string; label?: string }[];
   whatsappMessage: string;
-  amenities: string[];
   sectionVisibility: {
     menu: boolean;
     photos: boolean;
-    amenities: boolean;
     spots: boolean;
   };
 };
 
 const DEFAULT_MAP_URL = "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6";
 const defaultLocation = { address: "", mapUrl: DEFAULT_MAP_URL };
-const defaultSectionVisibility = { menu: true, photos: true, amenities: true, spots: true };
+const defaultSectionVisibility = { menu: true, photos: true, spots: true };
 
 
 export async function getVenueDataByBrandId(brandId: string): Promise<VenuePayload | null> {
@@ -101,10 +101,6 @@ export async function getVenueDataByBrandId(brandId: string): Promise<VenuePaylo
       capacityText: o.capacityText ?? null,
     }));
 
-    const rawAmenities = (venue as { amenities?: unknown }).amenities;
-    const amenities = Array.isArray(rawAmenities)
-      ? rawAmenities.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-      : [];
     const rawSectionVisibility = (venue as { sectionVisibility?: unknown }).sectionVisibility;
     const sectionVisibility = {
       menu: rawSectionVisibility && typeof rawSectionVisibility === "object" && "menu" in (rawSectionVisibility as Record<string, unknown>)
@@ -113,15 +109,15 @@ export async function getVenueDataByBrandId(brandId: string): Promise<VenuePaylo
       photos: rawSectionVisibility && typeof rawSectionVisibility === "object" && "photos" in (rawSectionVisibility as Record<string, unknown>)
         ? Boolean((rawSectionVisibility as Record<string, unknown>).photos)
         : true,
-      amenities: rawSectionVisibility && typeof rawSectionVisibility === "object" && "amenities" in (rawSectionVisibility as Record<string, unknown>)
-        ? Boolean((rawSectionVisibility as Record<string, unknown>).amenities)
-        : true,
       spots: rawSectionVisibility && typeof rawSectionVisibility === "object" && "spots" in (rawSectionVisibility as Record<string, unknown>)
         ? Boolean((rawSectionVisibility as Record<string, unknown>).spots)
         : true,
     };
 
+    const outletUi = mergeOutletUi((venue as { outletUi?: unknown }).outletUi);
+
     return {
+      outletUi,
       offers,
       galleryImages,
       menus,
@@ -129,7 +125,6 @@ export async function getVenueDataByBrandId(brandId: string): Promise<VenuePaylo
       contactPhone,
       contactNumbers,
       whatsappMessage,
-      amenities,
       sectionVisibility,
     };
   } catch (error) {
@@ -140,6 +135,7 @@ export async function getVenueDataByBrandId(brandId: string): Promise<VenuePaylo
         const contactPhone = getContactForBrand(brandId);
         const whatsappMessage = getWhatsAppMessageForBrand(brandId, brand.shortName);
         return {
+          outletUi: mergeOutletUi(null),
           offers: [],
           galleryImages: [],
           menus: [],
@@ -147,7 +143,6 @@ export async function getVenueDataByBrandId(brandId: string): Promise<VenuePaylo
           contactPhone,
           contactNumbers: [{ phone: contactPhone, label: "Contact" }],
           whatsappMessage,
-          amenities: [],
           sectionVisibility: defaultSectionVisibility,
         };
       }

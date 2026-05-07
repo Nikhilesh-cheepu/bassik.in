@@ -30,6 +30,7 @@ interface Venue {
   images: any[];
   menus: any[];
   offers?: VenueOffer[];
+  outletUi?: unknown;
 }
 
 type VenuesPageClientProps = {

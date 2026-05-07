@@ -140,7 +140,11 @@ function VenueMiniCard({ brand }: { brand: Brand }) {
   );
 }
 
-export default function HomeTrail({ venues = BRANDS, initialHomeEvents, initialHomeReviews }: HomeTrailProps) {
+export default function HomeTrail({
+  venues = BRANDS,
+  initialHomeEvents,
+  initialHomeReviews,
+}: HomeTrailProps) {
   const visibleVenues = useMemo(
     () => (venues || BRANDS).filter((b) => !HIDDEN_BRAND_IDS.has(b.id)),
     [venues]

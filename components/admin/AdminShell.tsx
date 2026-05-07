@@ -39,6 +39,7 @@ export default function AdminShell({
   const allTabs = [
     { label: "Dashboard", href: "/admin/dashboard" },
     { label: "Assistant", href: "/admin/dashboard/assistant" },
+    { label: "Site gallery", href: "/admin/dashboard/gallery" },
     { label: "Venues", href: "/admin/dashboard/venues" },
     { label: "Bookings", href: "/admin/dashboard/bookings" },
     { label: "Reviews", href: "/admin/dashboard/reviews" },

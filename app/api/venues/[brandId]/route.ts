@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { BRANDS, getVenueLabelsFromCatalog } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-contacts";
+import { mergeOutletUi } from "@/lib/outlet-ui-config";
 
 export const runtime = "nodejs";
 
@@ -95,10 +96,6 @@ export async function GET(
       entryLabel: o.entryLabel ?? null,
       capacityText: o.capacityText ?? null,
     }));
-    const rawAmenities = (venue as { amenities?: unknown }).amenities;
-    const amenities = Array.isArray(rawAmenities)
-      ? rawAmenities.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-      : [];
     const rawSectionVisibility = (venue as { sectionVisibility?: unknown }).sectionVisibility;
     const sectionVisibility = {
       menu: rawSectionVisibility && typeof rawSectionVisibility === "object" && "menu" in (rawSectionVisibility as Record<string, unknown>)
@@ -107,13 +104,12 @@ export async function GET(
       photos: rawSectionVisibility && typeof rawSectionVisibility === "object" && "photos" in (rawSectionVisibility as Record<string, unknown>)
         ? Boolean((rawSectionVisibility as Record<string, unknown>).photos)
         : true,
-      amenities: rawSectionVisibility && typeof rawSectionVisibility === "object" && "amenities" in (rawSectionVisibility as Record<string, unknown>)
-        ? Boolean((rawSectionVisibility as Record<string, unknown>).amenities)
-        : true,
       spots: rawSectionVisibility && typeof rawSectionVisibility === "object" && "spots" in (rawSectionVisibility as Record<string, unknown>)
         ? Boolean((rawSectionVisibility as Record<string, unknown>).spots)
         : true,
     };
+
+    const outletUi = mergeOutletUi((venue as { outletUi?: unknown }).outletUi);
 
     return NextResponse.json(
       {
@@ -130,8 +126,8 @@ export async function GET(
           galleryImages,
           menus,
           offers,
-          amenities,
           sectionVisibility,
+          outletUi,
         },
       },
       { headers }
@@ -176,8 +172,8 @@ export async function GET(
               galleryImages: [],
               menus: [],
               offers: [],
-              amenities: [],
-              sectionVisibility: { menu: true, photos: true, amenities: true, spots: true },
+              sectionVisibility: { menu: true, photos: true, spots: true },
+              outletUi: mergeOutletUi(null),
             },
           },
           { headers }

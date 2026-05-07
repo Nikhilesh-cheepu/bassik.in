@@ -4,7 +4,7 @@ import { getAdminScopeFromRequest } from "@/lib/admin-auth";
 
 const isAdminRoute = (pathname: string) => pathname.startsWith("/admin");
 
-/** Sub-admins: dashboard, bookings, venues only (API enforces data scope). */
+/** Sub-admins: dashboard, bookings, venues only (API enforces data scope). Site gallery is main-admin only. */
 function outletAdminAllowedPath(pathname: string): boolean {
   if (pathname === "/admin/dashboard") return true;
   if (pathname.startsWith("/admin/dashboard/bookings")) return true;

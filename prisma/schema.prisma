@@ -32,8 +32,9 @@ model Venue {
   mapUrl         String?
   contactPhone   String?  // Legacy single number; use contactNumbers when set
   contactNumbers Json?   // [{ "phone": "123", "label": "Main" }]
-  amenities      Json?   // ["Alcohol served", "Free wifi"]
-  sectionVisibility Json? // { "menu": true, "photos": true, "amenities": true, "spots": true }
+  sectionVisibility Json? // { "menu": true, "photos": true, "spots": true }
+  /// Footer pills + contact sheet copy/colors (see lib/outlet-ui-config.ts)
+  outletUi       Json?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -215,6 +216,17 @@ model AutomationContact {
 
   @@index([importId])
   @@index([phone])
+}
+
+/// Site-wide marketing gallery (Vercel Blob URLs + Postgres order). Distinct from per-venue `VenueImage`.
+model GalleryImage {
+  id        String   @id @default(cuid())
+  url       String   @unique
+  alt       String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([sortOrder])
 }
 
 model AutomationWhatsAppMessage {

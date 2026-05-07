@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -12,21 +12,28 @@ import {
   CLUB_ROGUE_GACHIBOWLI_ID,
   isClubRogueBrand,
 } from "@/lib/club-rogue";
-import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-contacts";
+import {
+  getContactForBrand,
+  getFullPhoneNumber,
+  getWhatsAppMessageForBrand,
+} from "@/lib/outlet-contacts";
+import { getVenueUniquenessLine } from "@/lib/venue-uniqueness";
 import { guestEventDateLine } from "@/lib/event-date-display";
 import EventsOffersHero from "@/components/EventsOffersHero";
 import VenueContactBottomSheet from "@/components/VenueContactBottomSheet";
+import OutletBottomActionBar from "@/components/OutletBottomActionBar";
+import { mergeOutletUi } from "@/lib/outlet-ui-config";
 import type { VenuePayload } from "@/lib/venue-data";
 
 const MenuModal = dynamic(() => import("@/components/MenuModal"));
 const GalleryModal = dynamic(() => import("@/components/GalleryModal"));
 const VenuePhotosSection = dynamic(() => import("@/components/VenuePhotosSection"));
-const VenueAmenitiesSection = dynamic(() => import("@/components/VenueAmenitiesSection"));
 
 const DEFAULT_MAP = "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6";
 
 function toClientVenueState(p: VenuePayload) {
   return {
+    outletUi: p.outletUi,
     offers: p.offers,
     galleryImages: p.galleryImages,
     menus: p.menus,
@@ -34,12 +41,12 @@ function toClientVenueState(p: VenuePayload) {
     contactPhone: p.contactPhone,
     contactNumbers: p.contactNumbers,
     whatsappMessage: p.whatsappMessage,
-    amenities: p.amenities,
     sectionVisibility: p.sectionVisibility,
   };
 }
 
 const emptyVenueState = toClientVenueState({
+  outletUi: mergeOutletUi(null),
   offers: [],
   galleryImages: [],
   menus: [],
@@ -47,8 +54,7 @@ const emptyVenueState = toClientVenueState({
   contactPhone: "",
   contactNumbers: [],
   whatsappMessage: "",
-  amenities: [],
-  sectionVisibility: { menu: true, photos: true, amenities: true, spots: true },
+  sectionVisibility: { menu: true, photos: true, spots: true },
 });
 
 interface OutletPageClientProps {
@@ -101,6 +107,41 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
   const eventBookedToastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedBrand = BRANDS.find((b) => b.id === selectedBrandId) || BRANDS[0];
+  const venueTagline = getVenueUniquenessLine(selectedBrandId);
+
+  const outreachWaPhone = useMemo(() => {
+    const raw = venueData.contactPhone || getContactForBrand(selectedBrandId);
+    return getFullPhoneNumber(raw);
+  }, [venueData.contactPhone, selectedBrandId]);
+
+  const galleryPhotosWaUrl = useMemo(() => {
+    const text = `Hi! I'd love to see some photos of ${selectedBrand.shortName} before I visit.`;
+    return `https://wa.me/${outreachWaPhone}?text=${encodeURIComponent(text)}`;
+  }, [outreachWaPhone, selectedBrand.shortName]);
+
+  const menuRequestWaUrl = useMemo(() => {
+    const text = `Hi! Could you share the current menu for ${selectedBrand.shortName}?`;
+    return `https://wa.me/${outreachWaPhone}?text=${encodeURIComponent(text)}`;
+  }, [outreachWaPhone, selectedBrand.shortName]);
+
+  const primaryInstagramUrl = selectedBrand.instagramUrls[0];
+  const instagramLinkValid =
+    typeof primaryInstagramUrl === "string" && primaryInstagramUrl.trim() && primaryInstagramUrl !== "#";
+
+  const contactInstagramHref = useMemo(() => {
+    const resolved = venueData.outletUi.contactSheet.instagramUrlResolved;
+    if (resolved === "") return "";
+    if (typeof resolved === "string" && /^https?:\/\//i.test(resolved.trim())) return resolved.trim();
+    if (instagramLinkValid) return primaryInstagramUrl!.trim();
+    return "";
+  }, [
+    instagramLinkValid,
+    primaryInstagramUrl,
+    venueData.outletUi.contactSheet.instagramUrlResolved,
+  ]);
+
+  const showMenuStripInBar =
+    venueData.outletUi.bottomBar.showMenuInBar && venueData.sectionVisibility.menu;
   const venueOffers = venueData.offers;
   const validGalleryImages = venueData.galleryImages.filter((_, i) => !failedGalleryImages.has(i));
   const logoPath =
@@ -156,6 +197,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
       }
       const v = data.venue || {};
       setVenueData({
+        outletUi: mergeOutletUi(v.outletUi ?? null),
         offers: Array.isArray(v.offers)
           ? v.offers.map((o: Record<string, unknown>) => ({
               ...o,
@@ -168,11 +210,9 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
         contactPhone: v.contactPhone ?? "",
         contactNumbers: Array.isArray(v.contactNumbers) ? v.contactNumbers : [],
         whatsappMessage: v.whatsappMessage ?? "",
-        amenities: Array.isArray(v.amenities) ? v.amenities : [],
         sectionVisibility: {
           menu: v.sectionVisibility?.menu !== false,
           photos: v.sectionVisibility?.photos !== false,
-          amenities: v.sectionVisibility?.amenities !== false,
           spots: v.sectionVisibility?.spots !== false,
         },
       });
@@ -370,6 +410,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
                   src={logoPath}
                   alt={selectedBrand.shortName}
                   fill
+                  sizes="16px"
                   className="object-contain"
                   onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
                 />
@@ -454,7 +495,13 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 pt-3 relative z-10 space-y-3 pb-[calc(5.85rem+env(safe-area-inset-bottom))] sm:pb-[calc(6rem+env(safe-area-inset-bottom))] w-full min-w-0 overflow-x-hidden">
+      <div
+        className={`max-w-4xl mx-auto px-4 pt-3 relative z-10 space-y-3 w-full min-w-0 overflow-x-hidden ${
+          showMenuStripInBar
+            ? "pb-[calc(8rem+env(safe-area-inset-bottom))] sm:pb-[calc(8.25rem+env(safe-area-inset-bottom))]"
+            : "pb-[calc(5.25rem+env(safe-area-inset-bottom))] sm:pb-[calc(5.5rem+env(safe-area-inset-bottom))]"
+        }`}
+      >
         {fetchError && (
           <button type="button" onClick={loadVenueData} className="w-full py-4 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-sm font-medium touch-manipulation" style={{ touchAction: "manipulation" }}>
             {fetchError}
@@ -489,10 +536,21 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
           <VenuePhotosSection
             loading={loading}
             images={validGalleryImages}
-            onOpenGallery={validGalleryImages.length > 0 ? () => { setGalleryStartIndex(0); setIsGalleryModalOpen(true); } : undefined}
+            accentColor={selectedBrand.accentColor}
+            venueTagline={venueTagline}
+            outletShortName={selectedBrand.shortName}
+            instagramUrl={primaryInstagramUrl}
+            photosRequestWhatsAppUrl={galleryPhotosWaUrl}
+            onOpenGallery={
+              validGalleryImages.length > 0
+                ? () => {
+                    setGalleryStartIndex(0);
+                    setIsGalleryModalOpen(true);
+                  }
+                : undefined
+            }
           />
         )}
-        {venueData.sectionVisibility.amenities && <VenueAmenitiesSection amenities={venueData.amenities} />}
         <div className="px-1 pt-1">
           <button
             type="button"
@@ -508,45 +566,18 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
         </div>
       </div>
 
-      <div
-        className="fixed left-1/2 z-[100] w-[calc(100%-1.25rem)] max-w-md -translate-x-1/2 rounded-3xl border border-white/25 bg-black/85 p-2.5 shadow-[0_8px_40px_rgba(0,0,0,0.65)] backdrop-blur-xl"
-        style={{
-          bottom: "max(1rem, env(safe-area-inset-bottom))",
-          boxShadow: `0 8px 40px rgba(0,0,0,0.65), 0 0 0 1px ${selectedBrand.accentColor}22`,
+      <OutletBottomActionBar
+        outletUi={venueData.outletUi}
+        brandBookingPath={`/${selectedBrandId}/book`}
+        showMenuSection={venueData.sectionVisibility.menu}
+        hasOffers={venueOffers.length > 0}
+        onContact={() => setIsQuickContactOpen(true)}
+        onMenu={() => setIsQuickMenuOpen(true)}
+        onBookEvent={() => {
+          const first = venueOffers[0];
+          if (first) openEventQuickBook(first.id);
         }}
-      >
-        <div className="flex w-full flex-row items-stretch gap-2">
-          <button
-            type="button"
-            onClick={() => setIsQuickContactOpen(true)}
-            className="flex min-h-[48px] min-w-0 flex-[0.95] items-center justify-center rounded-2xl border px-1.5 py-2.5 text-center text-xs font-semibold leading-tight text-white transition-transform active:scale-[0.98] sm:px-2 sm:text-sm"
-            style={{
-              borderColor: `${selectedBrand.accentColor}cc`,
-              backgroundColor: `${selectedBrand.accentColor}33`,
-              boxShadow: `0 0 24px ${selectedBrand.accentColor}44`,
-            }}
-          >
-            Contact us
-          </button>
-          {venueData.sectionVisibility.menu ? (
-            <button
-              type="button"
-              onClick={() => setIsQuickMenuOpen(true)}
-              className="flex min-h-[48px] min-w-0 flex-[0.95] items-center justify-center rounded-2xl border border-white/15 bg-white/[0.08] px-1.5 py-2.5 text-center text-xs font-semibold text-white/90 transition-colors hover:bg-white/[0.12] active:scale-[0.98] sm:px-2 sm:text-sm"
-            >
-              Menu
-            </button>
-          ) : null}
-          <Link
-            href={`/${selectedBrandId}/book`}
-            prefetch
-            className="flex min-h-[48px] min-w-0 flex-[1.45] items-center justify-center rounded-2xl border px-2 py-2.5 text-center text-sm font-semibold leading-tight text-white shadow-[0_0_20px_rgba(59,130,246,0.35)] transition-transform active:scale-[0.98] sm:px-3 sm:text-[15px]"
-            style={{ borderColor: "rgba(96,165,250,0.8)", backgroundColor: "rgba(37,99,235,0.5)" }}
-          >
-            Book table
-          </Link>
-        </div>
-      </div>
+      />
 
       {isMenuModalOpen && selectedMenuId && (
         <MenuModal menu={venueData.menus.find((m) => m.id === selectedMenuId)!} brandName={selectedBrand.shortName} onClose={() => { setIsMenuModalOpen(false); setSelectedMenuId(null); }} />
@@ -558,15 +589,13 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
         open={isQuickContactOpen}
         onClose={() => setIsQuickContactOpen(false)}
         brandId={selectedBrandId}
-        venueShortName={selectedBrand.shortName}
-        accentColor={selectedBrand.accentColor}
+        sheet={venueData.outletUi.contactSheet}
         contactRows={venueData.contactNumbers}
         fallbackPhone={venueData.contactPhone || getContactForBrand(selectedBrandId)}
         whatsappMessage={
           venueData.whatsappMessage || getWhatsAppMessageForBrand(selectedBrandId, selectedBrand.shortName)
         }
-        instagramUrl={selectedBrand.instagramUrls[0] || "#"}
-        address={venueData.location.address}
+        instagramUrl={contactInstagramHref}
         mapUrl={venueData.location.mapUrl || DEFAULT_MAP}
       />
       <AnimatePresence>
@@ -591,7 +620,39 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
                 {!venueData.sectionVisibility.menu ? (
                   <p className="text-sm text-white/60">Menu section is hidden for this outlet.</p>
                 ) : venueData.menus.length === 0 ? (
-                  <p className="text-sm text-white/60">No menu available.</p>
+                  <div className="rounded-2xl border border-white/12 bg-gradient-to-br from-white/[0.06] via-black/30 to-black/50 p-4 text-center">
+                    <p className="text-sm font-semibold text-white">Menu uploading soon</p>
+                    <p className="mx-auto mt-2 max-w-[280px] text-xs leading-relaxed text-white/60">
+                      {venueTagline
+                        ? `${venueTagline} Ping us on WhatsApp and we’ll send cocktails, bites, or the full pdf.`
+                        : `We’ll send cocktails, bites, or the full menu on WhatsApp — tap below.`}
+                    </p>
+                    <div className="mt-4 flex flex-wrap justify-center gap-2">
+                      <a
+                        href={menuRequestWaUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex rounded-xl px-3.5 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                        style={{
+                          border: `1px solid ${selectedBrand.accentColor}aa`,
+                          backgroundColor: `${selectedBrand.accentColor}40`,
+                          boxShadow: `0 0 18px ${selectedBrand.accentColor}36`,
+                        }}
+                      >
+                        Request menu on WhatsApp
+                      </a>
+                      {instagramLinkValid ? (
+                        <a
+                          href={primaryInstagramUrl!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex rounded-xl border border-white/20 bg-white/[0.08] px-3.5 py-2 text-xs font-semibold text-white hover:bg-white/[0.12]"
+                        >
+                          See highlights on Instagram
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
                 ) : (
                   venueData.menus.map((menu) => (
                     <button
