@@ -22,6 +22,7 @@ import { guestEventDateLine } from "@/lib/event-date-display";
 import EventsOffersHero from "@/components/EventsOffersHero";
 import VenueContactBottomSheet from "@/components/VenueContactBottomSheet";
 import OutletBottomActionBar from "@/components/OutletBottomActionBar";
+import VenueChatWidget from "@/components/VenueChatWidget";
 import { mergeOutletUi } from "@/lib/outlet-ui-config";
 import type { VenuePayload } from "@/lib/venue-data";
 
@@ -577,6 +578,25 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
         onBookEvent={() => {
           const first = venueOffers[0];
           if (first) openEventQuickBook(first.id);
+        }}
+      />
+      <VenueChatWidget
+        brandId={selectedBrandId}
+        venueShortName={selectedBrand.shortName}
+        accentColor={selectedBrand.accentColor}
+        contactPhone={venueData.contactPhone || getContactForBrand(selectedBrandId)}
+        whatsappMessage={
+          venueData.whatsappMessage || getWhatsAppMessageForBrand(selectedBrandId, selectedBrand.shortName)
+        }
+        mapUrl={venueData.location.mapUrl}
+        address={venueData.location.address}
+        hasMenus={venueData.menus.length > 0}
+        onOpenMenu={() => {
+          const first = venueData.menus[0];
+          if (first) {
+            setSelectedMenuId(first.id);
+            setIsMenuModalOpen(true);
+          }
         }}
       />
 

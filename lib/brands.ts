@@ -218,6 +218,18 @@ export function getOutletLabelForReservation(
 
 export const HIDDEN_BRAND_IDS = new Set<string>(["the-hub", "thezenzspot"]);
 
+/** Leads inbox filter chips: All, then these outlets, then the rest in catalog order. */
+export const LEADS_MANAGER_PINNED_BRAND_IDS = ["c53", "boiler-room", "firefly"] as const;
+
+export function brandsForLeadsManager(): Brand[] {
+  const pinnedSet = new Set<string>(LEADS_MANAGER_PINNED_BRAND_IDS);
+  const pinned = LEADS_MANAGER_PINNED_BRAND_IDS.map((id) => BRANDS.find((b) => b.id === id)).filter(
+    (b): b is Brand => Boolean(b)
+  );
+  const rest = BRANDS.filter((b) => !pinnedSet.has(b.id));
+  return [...pinned, ...rest];
+}
+
 export const getPublicBrands = () => BRANDS.filter((b) => !HIDDEN_BRAND_IDS.has(b.id));
 
 // Helper: Get unique brands for homepage "Connect" section

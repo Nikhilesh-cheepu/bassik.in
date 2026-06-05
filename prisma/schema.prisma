@@ -43,6 +43,7 @@ model Venue {
   offers       VenueOffer[]
   reservations Reservation[]
   discounts    Discount[]
+  chatLeads    VenueChatLead[]
 
   @@index([brandId])
 }
@@ -243,4 +244,83 @@ model AutomationWhatsAppMessage {
 
   @@index([contactId])
   @@index([createdAt])
+}
+
+/// Per-venue ad/chat leads — one thread per browser session (returning visitors resume via cookie).
+model VenueChatLead {
+  id                  String              @id @default(cuid())
+  brandId             String
+  venueId             String?
+  /// Auto label shown in manager inbox: "Lead 1", "Lead 2", …
+  displayLabel        String
+  /// Opaque token stored in visitor cookie
+  sessionToken        String              @unique
+  guestName           String?
+  contactNumber       String?
+  partySize           Int?
+  selectedEventId     String?
+  selectedEventName   String?
+  bookingDate         String?
+  bookingTime         String?
+  selectedDiscounts   Json?
+  status              VenueChatLeadStatus @default(NEW)
+  utmSource           String?
+  utmMedium           String?
+  utmCampaign         String?
+  utmContent          String?
+  reservationId       String?
+  managerNotes        String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  lastMessageAt       DateTime            @default(now())
+
+  venue    Venue?             @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  messages VenueChatMessage[]
+
+  @@index([brandId])
+  @@index([brandId, lastMessageAt])
+  @@index([status])
+  @@index([sessionToken])
+}
+
+enum VenueChatLeadStatus {
+  NEW
+  IN_PROGRESS
+  BOOKING_STARTED
+  BOOKED
+  HANDED_OFF
+  CLOSED
+}
+
+model VenueChatMessage {
+  id        String               @id @default(cuid())
+  leadId    String
+  role      VenueChatMessageRole
+  content   String
+  imageUrl  String?
+  metadata  Json?
+  createdAt DateTime             @default(now())
+
+  lead VenueChatLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, createdAt])
+}
+
+enum VenueChatMessageRole {
+  USER
+  ASSISTANT
+  MANAGER
+  SYSTEM
+}
+
+/// Per-outlet chat AI settings + learned reply snippets (manager training).
+model VenueChatConfig {
+  brandId         String   @id
+  aiEnabled       Boolean  @default(true)
+  hostName        String?
+  /// Manager-written instructions for the AI host
+  playbook        String?
+  /// [{ "user": "...", "reply": "...", "at": "iso" }]
+  learnedExamples Json     @default("[]")
+  updatedAt       DateTime @updatedAt
 }

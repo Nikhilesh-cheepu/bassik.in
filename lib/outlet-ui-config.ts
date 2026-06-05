@@ -43,6 +43,10 @@ export type OutletUiConfig = {
     /** Empty string hides Instagram in the sheet; omitted uses brand URL from code. */
     instagramUrl?: string;
   };
+  chat?: {
+    /** Display name for the venue host in guest chat; empty → friendly neighbourhood host */
+    hostName?: string | null;
+  };
 };
 
 /** Fully merged config for outlet UI rendering. */
@@ -265,6 +269,19 @@ export function sanitizeOutletUiForStorage(raw: unknown): Prisma.InputJsonValue 
       if (typeof c[k] === "boolean") cc[k] = c[k];
     }
     if (Object.keys(cc).length > 0) out.contactSheet = cc;
+  }
+
+  if (src.chat && typeof src.chat === "object" && !Array.isArray(src.chat)) {
+    const ch = src.chat as Record<string, unknown>;
+    const chatOut: Record<string, unknown> = {};
+    if ("hostName" in ch) {
+      if (ch.hostName === null) chatOut.hostName = null;
+      else {
+        const name = takeStr(ch.hostName, 48);
+        if (name !== undefined) chatOut.hostName = name === "" ? null : name;
+      }
+    }
+    if (Object.keys(chatOut).length > 0) out.chat = chatOut;
   }
 
   return out as Prisma.InputJsonValue;
