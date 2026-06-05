@@ -15,6 +15,7 @@ import ChatMessageBubble from "@/components/ChatMessageBubble";
 import ChatOnboardingHero from "@/components/ChatOnboardingHero";
 import ChatTypingIndicator from "@/components/ChatTypingIndicator";
 import ChatAnimatedPlaceholder, { DEFAULT_HINTS } from "@/components/ChatAnimatedPlaceholder";
+import ChatFabHype, { ChatFabPulseRing } from "@/components/ChatFabHype";
 import {
   CLUB_ROGUE_CHAT_HINTS,
   clubRogueChatVenueName,
@@ -31,6 +32,7 @@ import {
   type FlyerItem,
 } from "@/lib/venue-chat-ui-helpers";
 import { getFullPhoneNumber } from "@/lib/outlet-contacts";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import {
   buildOptimisticOnboardingMessages,
   isOptimisticMessageId,
@@ -374,6 +376,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
   ref
 ) {
   const router = useRouter();
+  const reducedMotion = usePrefersReducedMotion();
   const isEmbedded = layout === "embedded";
   const isLanding = layout === "landing";
 
@@ -735,6 +738,15 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     expandChat: () => setOpen(true),
   }));
 
+  useEffect(() => {
+    if (!open) return;
+    try {
+      localStorage.setItem(`bassik-chat-fab-hype-dismissed:${brandId}`, "1");
+    } catch {
+      /* ignore */
+    }
+  }, [open, brandId]);
+
   const panelProps = {
     accentColor,
     displayVenueName,
@@ -789,27 +801,42 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
   return (
     <>
       {!isEmbedded ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="fixed z-[95] flex h-14 w-14 items-center justify-center rounded-full transition-transform active:scale-95 sm:h-[3.25rem] sm:w-[3.25rem]"
-          style={{
-            right: "max(1rem, env(safe-area-inset-right))",
-            bottom: "calc(5.75rem + env(safe-area-inset-bottom))",
-            background: fabTheme.sendGradient,
-            boxShadow: "0 12px 40px rgba(34,211,238,0.4), 0 0 0 1px rgba(255,255,255,0.1)",
-          }}
-          aria-label={`Chat with ${displayVenueName}`}
-        >
-          <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-            />
-          </svg>
-        </button>
+        <>
+          <ChatFabHype
+            accentColor={accentColor}
+            brandId={brandId}
+            visible={!open}
+            onDismiss={() => {}}
+          />
+          <motion.button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="fixed relative z-[95] flex h-14 w-14 items-center justify-center rounded-full sm:h-[3.25rem] sm:w-[3.25rem]"
+            style={{
+              right: "max(1rem, env(safe-area-inset-right))",
+              bottom: "calc(5.75rem + env(safe-area-inset-bottom))",
+              background: fabTheme.sendGradient,
+              boxShadow: "0 12px 40px rgba(34,211,238,0.4), 0 0 0 1px rgba(255,255,255,0.1)",
+            }}
+            aria-label={`Chat with ${displayVenueName}`}
+            animate={reducedMotion ? undefined : { scale: [1, 1.06, 1] }}
+            transition={
+              reducedMotion
+                ? undefined
+                : { repeat: Infinity, duration: 2.4, ease: "easeInOut" }
+            }
+          >
+            <ChatFabPulseRing accentColor={accentColor} reducedMotion={reducedMotion} />
+            <svg className="relative z-[1] h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+              />
+            </svg>
+          </motion.button>
+        </>
       ) : null}
 
       {isEmbedded ? (
