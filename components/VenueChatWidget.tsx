@@ -802,10 +802,10 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     <>
       {!isEmbedded ? (
         <div
-          className="fixed z-[95] flex flex-col items-end"
+          className="fixed z-[102] flex flex-col items-end"
           style={{
             right: "max(1rem, env(safe-area-inset-right))",
-            bottom: "calc(5.75rem + env(safe-area-inset-bottom))",
+            bottom: "calc(6.35rem + env(safe-area-inset-bottom))",
           }}
         >
           <ChatFabHint brandId={brandId} visible={!open} accentColor={accentColor} />
