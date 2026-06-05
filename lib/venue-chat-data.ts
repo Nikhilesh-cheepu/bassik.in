@@ -13,6 +13,10 @@ import {
 } from "@/lib/venue-chat-knowledge";
 import { randomBytes } from "crypto";
 import { sanitizeGuestName } from "@/lib/venue-chat-guest";
+import {
+  autoDisplayLabelForGuestName,
+  isDefaultLeadLabel,
+} from "@/lib/venue-chat-lead-labels";
 
 export type WeekOffer = {
   id: string;
@@ -346,7 +350,27 @@ export type LeadFieldUpdates = {
 
 export async function updateLeadFields(leadId: string, updates: LeadFieldUpdates): Promise<ChatLeadSnapshot> {
   const data: Record<string, unknown> = {};
-  if (updates.guestName !== undefined) data.guestName = updates.guestName;
+
+  if (updates.guestName !== undefined) {
+    const newName = updates.guestName ? sanitizeGuestName(updates.guestName) : null;
+    data.guestName = newName;
+
+    if (newName) {
+      const current = await prisma.venueChatLead.findUnique({
+        where: { id: leadId },
+        select: { guestName: true, displayLabel: true, brandId: true },
+      });
+      const hadName = sanitizeGuestName(current?.guestName);
+      if (!hadName && current && isDefaultLeadLabel(current.displayLabel)) {
+        data.displayLabel = await autoDisplayLabelForGuestName(
+          current.brandId,
+          leadId,
+          newName
+        );
+      }
+    }
+  }
+
   if (updates.contactNumber !== undefined) data.contactNumber = updates.contactNumber;
   if (updates.partySize !== undefined) data.partySize = updates.partySize;
   if (updates.selectedEventId !== undefined) data.selectedEventId = updates.selectedEventId;

@@ -1,6 +1,6 @@
 function rejectBadGuestName(name: string | undefined): string | undefined {
   if (!name?.trim()) return undefined;
-  const n = name.trim();
+  const n = name.trim().replace(/[.,;:!?]+$/g, "").trim();
   if (n.length < 2 || n.length > 48) return undefined;
   if (/^(i'?m|interested|book|table|hi|hello|yes|ok|sure|thanks)$/i.test(n)) return undefined;
   if (/interested in/i.test(n)) return undefined;

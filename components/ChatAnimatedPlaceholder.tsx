@@ -3,14 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 
 const DEFAULT_HINTS = [
+  "Your name & mobile number…",
   "What time does it start tonight?",
-  "What's the dress code?",
+  "Can I book a table for tonight?",
   "What's special this weekend?",
   "Tell me about today's offers",
-  "What's on the food menu?",
-  "How do I book a table?",
+  "What's on the menu?",
   "Any cover charge tonight?",
-  "Is there live music?",
 ];
 
 type ChatAnimatedPlaceholderProps = {
@@ -78,7 +77,7 @@ export default function ChatAnimatedPlaceholder({
 
   return (
     <span
-      className={`pointer-events-none select-none truncate text-[14px] font-normal tracking-wide text-white/25 ${className}`}
+      className={`pointer-events-none select-none truncate text-[15px] font-normal tracking-wide text-white/40 ${className}`}
       aria-hidden
     >
       {display}

@@ -292,28 +292,36 @@ function ChatPanel({
         }}
       >
         <div className="relative flex gap-2.5">
-          <div className="relative min-w-0 flex-1">
+          <div
+            className={`relative min-w-0 flex-1 rounded-[22px] transition-[box-shadow,border-color] duration-300 ${
+              inputFocused ? "ring-1 ring-cyan-400/35" : ""
+            }`}
+            style={
+              inputFocused
+                ? {
+                    boxShadow:
+                      "0 0 0 1px rgba(34,211,238,0.2), 0 0 24px rgba(34,211,238,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
+                  }
+                : {
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+                  }
+            }
+          >
             <ChatAnimatedPlaceholder
               active={!input.trim() && !inputFocused && !sending && !aiPending}
-              className="absolute left-4 top-1/2 max-w-[calc(100%-2rem)] -translate-y-1/2"
+              className="absolute left-4 top-3.5 max-w-[calc(100%-2rem)]"
             />
-            <input
-              type="text"
+            <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void send();
-                }
-              }}
-              placeholder=""
+              placeholder={inputFocused ? "Type your message…" : ""}
+              rows={1}
               maxLength={800}
               disabled={sending}
-              className="relative min-h-[46px] w-full rounded-full border border-white/[0.06] bg-white/[0.04] px-4 text-[14px] font-normal tracking-wide text-white outline-none backdrop-blur-xl disabled:opacity-50"
-              style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)" }}
+              className="relative block max-h-[120px] min-h-[48px] w-full resize-none rounded-[22px] border border-white/[0.08] bg-white/[0.05] px-4 py-3 text-[16px] font-normal leading-snug tracking-wide text-white outline-none backdrop-blur-xl disabled:opacity-50"
+              style={{ WebkitTextSizeAdjust: "100%" }}
             />
           </div>
           <button
