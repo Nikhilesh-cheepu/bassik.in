@@ -9,6 +9,7 @@ import {
 import { formatLearnedForPrompt, getVenueChatConfig } from "@/lib/venue-chat-config";
 import { guestWritesTelugu } from "@/lib/venue-chat-actions";
 import { sanitizeGuestName } from "@/lib/venue-chat-guest";
+import { CLUB_ROGUE_AI_PLAYBOOK, isClubRogueBrand } from "@/lib/club-rogue";
 
 export type AiChatResult = {
   reply: string;
@@ -35,12 +36,17 @@ export async function runVenueChatTurn(params: {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   const telugu = guestWritesTelugu(params.userMessage);
   const guestName = sanitizeGuestName(params.lead.guestName);
+  const isClubRogue = isClubRogueBrand(params.brandId);
   const fallback: AiChatResult = {
     reply: telugu
-      ? `Chala bagundi! Me peru cheppandi — table book chesi help chestha.`
+      ? `Chala bagundi! ${isClubRogue ? "Venue daggara ₹2,000 cover undi — bill meeda adjust avutundi. " : ""}Me peru cheppandi — table book chesi help chestha.`
       : guestName
-        ? `Thanks, ${guestName}! Whenever you're ready, just share your mobile number — I'll sort your table.`
-        : `Happy to help! What's your name and mobile number? I'll get your table sorted.`,
+        ? isClubRogue
+          ? `Thanks, ${guestName}! Cover is ₹2k at the venue — fully on your bill. Share your mobile whenever you're ready and I'll confirm your table.`
+          : `Thanks, ${guestName}! Whenever you're ready, just share your mobile number — I'll sort your table.`
+        : isClubRogue
+          ? `Hey! Welcome to ${params.venueShortName} — one of Hyderabad's most happening clubs. We've got big nights on — Ladies Night, Bollywood, the works. What are you planning?`
+          : `Hey! Welcome — tell me what you're in the mood for tonight and I'll help you pick the right night or table.`,
     leadUpdates: {},
     posterOfferIds: [],
   };
@@ -82,15 +88,21 @@ export async function runVenueChatTurn(params: {
 
   const system = [
     `You are the PR / guest relations host at ${params.venueShortName}. Warm, polished, never pushy — like a good hotel concierge, not a call centre script.`,
+    isClubRogue
+      ? `Venue naming: always say "${params.venueShortName}" in full — never shorten to just the area (e.g. never say only "Gachibowli").`
+      : "",
     "Read the full conversation before replying. Match the guest's language (English, Telugu, Hinglish, etc.).",
     "Tone & flow:",
-    "• Sound human and pleasant. Never say 'share your 10-digit mobile' or 'I will send you the link' — that feels robotic.",
-    "• Booking: if you don't have name and phone yet, ask for both in one warm line ('What's your name and mobile number?'). After name only, ask for mobile. After both are captured, reply briefly ('Perfect, Rahul — you're all set') — the app adds the book button; do NOT paste URLs.",
+    "• Sound human and pleasant — make the night sound exciting. Never say 'share your 10-digit mobile' or 'I will send you the link' — that feels robotic.",
+    "• Engagement first: on hi/hello or vague openers, welcome them and mention vibe, events, or offers — do NOT ask for name/phone unless they want to book.",
+    "• Booking: only when they want a table, event, or entry — then ask for name and mobile in one warm line. After name only, ask for mobile. After both are captured, reply briefly ('Perfect, Rahul — you're all set') — the app adds the book button; do NOT paste URLs.",
+    "• If they share name/phone voluntarily, capture it — never nag if they're just browsing.",
     "• Once you know their real name, use it in every reply.",
     "• NEVER set guestName from phrases like 'I'm interested in…' or event titles — those are not names.",
     "• If they picked or mentioned an event, set selectedEventId and selectedEventName. Use a short event label in chat (e.g. 'DJ SHWETH'), not the full poster line.",
     "• Menu, directions, offers: answer from venue facts. Never invent.",
     "• One question per message. No nosy questions about who they're with.",
+    isClubRogue ? CLUB_ROGUE_AI_PLAYBOOK : "",
     chatCfg.playbook?.trim() ? `Outlet playbook (manager instructions):\n${chatCfg.playbook.trim()}` : "",
     learnedBlock ? `Examples of good replies at this outlet:\n${learnedBlock}` : "",
     venueBlock,

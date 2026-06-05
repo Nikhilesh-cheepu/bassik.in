@@ -11,6 +11,12 @@ import {
 import { bookingPath } from "@/lib/venue-chat-paths";
 import { buildBookingLinkMetadata } from "@/lib/venue-chat-booking-link";
 import {
+  clubRogueBeforeBookingAskCopy,
+  clubRogueBookingLinkIntro,
+  clubRogueAskPhoneCopy,
+  isClubRogueBrand,
+} from "@/lib/club-rogue";
+import {
   friendlyEventLabel,
   rejectExtractedGuestName,
   sanitizeGuestName,
@@ -119,11 +125,14 @@ export async function appendBookingLinkMessage(
   const path = bookingPath(brandId, eventId);
   const name = sanitizeGuestName(guestName);
   const ev = friendlyEventLabel(eventName);
-  const line = name
-    ? ev !== "this night"
-      ? `Perfect, ${name} — you're all set for ${ev}. Tap below when you're ready.`
-      : `Perfect, ${name} — you're all set. Tap below when you're ready.`
-    : `Perfect — you're all set. Tap below when you're ready.`;
+  const line =
+    isClubRogueBrand(brandId) && name
+      ? clubRogueBookingLinkIntro(name, eventName)
+      : name
+        ? ev !== "this night"
+          ? `Perfect, ${name} — you're all set for ${ev}. Tap below when you're ready.`
+          : `Perfect, ${name} — you're all set. Tap below when you're ready.`
+        : `Perfect — you're all set. Tap below when you're ready.`;
   return appendMessage(
     leadId,
     "ASSISTANT",
@@ -132,7 +141,8 @@ export async function appendBookingLinkMessage(
     bookingLinkMeta(brandId, eventId ? "Book this night →" : "Reserve your table →", eventId)
   );
 }
-function askNameCopy(eventName?: string | null): string {
+function askNameCopy(brandId: string, eventName?: string | null): string {
+  if (isClubRogueBrand(brandId)) return clubRogueBeforeBookingAskCopy(eventName);
   const ev = friendlyEventLabel(eventName);
   if (ev !== "this night") {
     return `Great pick — ${ev} is going to be a vibe. What's your name? I'll sort the rest for you.`;
@@ -140,7 +150,8 @@ function askNameCopy(eventName?: string | null): string {
   return `I'd love to get you a table. What's your name? I'll take care of everything from here.`;
 }
 
-function askPhoneCopy(guestName: string, eventName?: string | null): string {
+function askPhoneCopy(brandId: string, guestName: string, eventName?: string | null): string {
+  if (isClubRogueBrand(brandId)) return clubRogueAskPhoneCopy(guestName);
   const name = sanitizeGuestName(guestName) ?? guestName.trim();
   const ev = friendlyEventLabel(eventName);
   if (ev !== "this night") {
@@ -149,7 +160,8 @@ function askPhoneCopy(guestName: string, eventName?: string | null): string {
   return `Lovely to meet you, ${name}. Whenever you're ready, just share your mobile number — I'll sort your table.`;
 }
 
-function askNameAndPhoneCopy(eventName?: string | null): string {
+function askNameAndPhoneCopy(brandId: string, eventName?: string | null): string {
+  if (isClubRogueBrand(brandId)) return clubRogueBeforeBookingAskCopy(eventName);
   const ev = friendlyEventLabel(eventName);
   if (ev !== "this night") {
     return `Great pick — ${ev} is going to be a vibe. What's your name and mobile number? I'll take it from here.`;
@@ -185,10 +197,10 @@ export async function handleInstantAction(params: {
       return out;
     }
     if (name && !lead.contactNumber) {
-      out.push(await appendMessage(leadId, "ASSISTANT", askPhoneCopy(name, lead.selectedEventName)));
+      out.push(await appendMessage(leadId, "ASSISTANT", askPhoneCopy(brandId, name, lead.selectedEventName)));
       return out;
     }
-    out.push(await appendMessage(leadId, "ASSISTANT", askNameAndPhoneCopy(lead.selectedEventName)));
+    out.push(await appendMessage(leadId, "ASSISTANT", askNameAndPhoneCopy(brandId, lead.selectedEventName)));
     return out;
   }
 
@@ -298,12 +310,12 @@ export async function tryInstantContactCaptureReply(params: {
   }
 
   if (fresh.contactNumber && !name) {
-    messages.push(await appendMessage(leadId, "ASSISTANT", askNameCopy(fresh.selectedEventName)));
+    messages.push(await appendMessage(leadId, "ASSISTANT", askNameCopy(brandId, fresh.selectedEventName)));
     return { messages, leadUpdates: true };
   }
 
   if (name && !fresh.contactNumber) {
-    messages.push(await appendMessage(leadId, "ASSISTANT", askPhoneCopy(name, fresh.selectedEventName)));
+    messages.push(await appendMessage(leadId, "ASSISTANT", askPhoneCopy(brandId, name, fresh.selectedEventName)));
     return { messages, leadUpdates: true };
   }
 
@@ -338,7 +350,7 @@ function bookContactAskCopy(_venue: string, _brandId: string, telugu: boolean, e
   if (telugu) {
     return `Chala bagundi! Me peru cheppandi — table book chesi help chestha.`;
   }
-  return askNameCopy(eventName);
+  return askNameCopy(_brandId, eventName);
 }
 
 /** Instant reply when guest taps an event poster — no AI wait. */
@@ -352,7 +364,7 @@ export async function tryInstantEventSelectReply(params: {
 }): Promise<ChatMessageDto[]> {
   const { leadId, brandId, knowledge, lead, eventName, offerId } = params;
   if (!offerId) {
-    return [await appendMessage(leadId, "ASSISTANT", askNameCopy(eventName))];
+    return [await appendMessage(leadId, "ASSISTANT", askNameCopy(brandId, eventName))];
   }
 
   const title = eventName.split(" · ")[0]?.trim() || eventName;
@@ -367,7 +379,7 @@ export async function tryInstantEventSelectReply(params: {
 
   const snapshot = await getLeadSnapshot(leadId);
   if (!snapshot) {
-    return [await appendMessage(leadId, "ASSISTANT", askNameAndPhoneCopy(title))];
+    return [await appendMessage(leadId, "ASSISTANT", askNameAndPhoneCopy(brandId, title))];
   }
 
   const name = sanitizeGuestName(snapshot.guestName);
@@ -386,10 +398,10 @@ export async function tryInstantEventSelectReply(params: {
   }
 
   if (name && !snapshot.contactNumber) {
-    return [await appendMessage(leadId, "ASSISTANT", askPhoneCopy(name, snapshot.selectedEventName))];
+    return [await appendMessage(leadId, "ASSISTANT", askPhoneCopy(brandId, name, snapshot.selectedEventName))];
   }
 
-  return [await appendMessage(leadId, "ASSISTANT", askNameAndPhoneCopy(snapshot.selectedEventName))];
+  return [await appendMessage(leadId, "ASSISTANT", askNameAndPhoneCopy(brandId, snapshot.selectedEventName))];
 }
 
 /** Text message that looks like a book request — same flow as book_table button. */
@@ -416,7 +428,7 @@ export async function tryInstantBookIntentReply(params: {
   await updateLeadFields(params.leadId, { status: "BOOKING_STARTED" });
   const telugu = params.userMessage ? guestWritesTelugu(params.userMessage) : false;
   if (telugu) {
-    return [await appendMessage(params.leadId, "ASSISTANT", bookContactAskCopy("", "", true))];
+    return [await appendMessage(params.leadId, "ASSISTANT", bookContactAskCopy("", params.brandId, true))];
   }
   return handleInstantAction({ ...params, action: "book_table" });
 }

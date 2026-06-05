@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 
 const DEFAULT_HINTS = [
-  "Your name & mobile number…",
-  "What time does it start tonight?",
   "Can I book a table for tonight?",
+  "What time does it start tonight?",
   "What's special this weekend?",
   "Tell me about today's offers",
   "What's on the menu?",
   "Any cover charge tonight?",
+  "Your name & mobile number…",
 ];
 
 type ChatAnimatedPlaceholderProps = {
@@ -23,9 +23,10 @@ export default function ChatAnimatedPlaceholder({
   active = true,
   className = "",
 }: ChatAnimatedPlaceholderProps) {
-  const [display, setDisplay] = useState("");
+  const firstHint = hints[0] ?? "";
+  const [display, setDisplay] = useState(() => (active && firstHint ? firstHint : ""));
   const phraseIdx = useRef(0);
-  const charIdx = useRef(0);
+  const charIdx = useRef(firstHint.length);
   const deleting = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -66,22 +67,30 @@ export default function ChatAnimatedPlaceholder({
       }
     };
 
-    charIdx.current = 0;
+    phraseIdx.current = 0;
+    charIdx.current = firstHint.length;
     deleting.current = false;
-    step();
+    setDisplay(firstHint);
+    timer.current = setTimeout(() => {
+      deleting.current = true;
+      step();
+    }, 2200);
 
     return clear;
-  }, [active, hints]);
+  }, [active, hints, firstHint]);
 
   if (!active) return null;
 
   return (
     <span
-      className={`pointer-events-none select-none truncate text-[15px] font-normal tracking-wide text-white/40 ${className}`}
+      className={`pointer-events-none select-none truncate text-[15px] font-normal tracking-wide text-white/45 ${className}`}
       aria-hidden
     >
       {display}
-      <span className="ml-px inline-block w-[1px] animate-pulse bg-white/20 align-middle" style={{ height: "0.9em" }} />
+      <span
+        className="ml-px inline-block w-[1px] animate-pulse bg-white/25 align-middle"
+        style={{ height: "0.9em" }}
+      />
     </span>
   );
 }

@@ -263,11 +263,10 @@ export async function POST(
             );
           }
         } else {
-          const brand = BRANDS.find((b) => b.id === brandId)!;
           const history = await getMessages(lead.id);
           const ai = await runVenueChatTurn({
             brandId,
-            venueShortName: brand.shortName,
+            venueShortName: knowledge.venueName,
             lead: currentLead,
             offers,
             history,

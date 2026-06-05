@@ -1,6 +1,11 @@
 import { BRANDS } from "@/lib/brands";
 import { getContactForBrand, getWhatsAppMessageForBrand } from "@/lib/outlet-contacts";
 import { getDiscountsForBrand } from "@/lib/reservation-discounts";
+import {
+  clubRogueChatVenueName,
+  isClubRogueBrand,
+  CLUB_ROGUE_COVER_CHAT_LINE,
+} from "@/lib/club-rogue";
 import { getVenueChatConfig, updateVenueChatConfig } from "@/lib/venue-chat-config";
 import { prisma } from "@/lib/db";
 import type { WeekOffer } from "@/lib/venue-chat-data";
@@ -42,10 +47,15 @@ export async function getVenueChatKnowledge(brandId: string): Promise<VenueChatK
   const chatCfg = await getVenueChatConfig(brandId);
   const hostName = chatCfg.hostName;
 
+  const dbFull = venue?.name?.trim() || brand?.name || fallbackName;
+  const rogueChatName = clubRogueChatVenueName(brandId);
+  const chatVenueName =
+    rogueChatName ?? (venue?.shortName?.trim() || brand?.shortName || fallbackName);
+
   return {
     brandId,
-    venueName: venue?.shortName?.trim() || brand?.shortName || fallbackName,
-    fullName: venue?.name?.trim() || brand?.name || fallbackName,
+    venueName: chatVenueName,
+    fullName: rogueChatName ?? dbFull,
     description: brand?.description?.trim() ?? "",
     phone,
     whatsappMessage: getWhatsAppMessageForBrand(brandId, fallbackName),
@@ -93,8 +103,12 @@ export function buildVenueKnowledgePrompt(
         .join("\n")
     : "No preset discount codes — mention best available deal for their night.";
 
+  const venueLine = isClubRogueBrand(knowledge.brandId)
+    ? `Venue: ${knowledge.fullName} — always use this full name in replies; never say only the locality (e.g. never "Gachibowli" alone).`
+    : `Venue: ${knowledge.fullName} (${knowledge.venueName})`;
+
   return [
-    `Venue: ${knowledge.fullName} (${knowledge.venueName})`,
+    venueLine,
     knowledge.description ? `Vibe: ${knowledge.description}` : "",
     knowledge.address ? `Address: ${knowledge.address}` : "",
     knowledge.mapUrl ? `Directions: ${knowledge.mapUrl}` : "",
@@ -107,6 +121,14 @@ export function buildVenueKnowledgePrompt(
     eventLines.length ? eventLines.join("\n") : "(none listed — still help with table booking)",
     "Discounts (guest picks by id):",
     discountLines,
+    isClubRogueBrand(knowledge.brandId)
+      ? [
+          "Positioning: one of Hyderabad's most happening clubs — premium crowd and big nights.",
+          "Cover charge (Club Rogue only):",
+          CLUB_ROGUE_COVER_CHAT_LINE,
+          "Collected at the venue on arrival — not online. Fully redeemable on food & drinks.",
+        ].join("\n")
+      : "",
   ]
     .filter(Boolean)
     .join("\n");

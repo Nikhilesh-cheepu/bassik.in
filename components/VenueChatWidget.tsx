@@ -14,7 +14,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import ChatMessageBubble from "@/components/ChatMessageBubble";
 import ChatOnboardingHero from "@/components/ChatOnboardingHero";
 import ChatTypingIndicator from "@/components/ChatTypingIndicator";
-import ChatAnimatedPlaceholder from "@/components/ChatAnimatedPlaceholder";
+import ChatAnimatedPlaceholder, { DEFAULT_HINTS } from "@/components/ChatAnimatedPlaceholder";
+import {
+  CLUB_ROGUE_CHAT_HINTS,
+  clubRogueChatVenueName,
+  isClubRogueBrand,
+} from "@/lib/club-rogue";
 import EventQuickBookSheet, { type EventQuickBookOffer } from "@/components/EventQuickBookSheet";
 import { getChatNeonTheme } from "@/lib/venue-chat-theme";
 import { clientActionUserMessage, type ClientChatActionType } from "@/lib/venue-chat-copy";
@@ -78,8 +83,9 @@ const EMBEDDED_PREVIEW_H = 280;
 
 function ChatPanel({
   accentColor,
-  venueShortName,
+  displayVenueName,
   contactPhone,
+  placeholderHints,
   showTyping,
   lead,
   loading,
@@ -107,7 +113,8 @@ function ChatPanel({
   showClose,
 }: {
   accentColor: string;
-  venueShortName: string;
+  displayVenueName: string;
+  placeholderHints: string[];
   contactPhone: string;
   showTyping: boolean;
   lead: ChatLead | null;
@@ -136,7 +143,8 @@ function ChatPanel({
   showClose?: boolean;
 }) {
   const theme = getChatNeonTheme(accentColor);
-  const venueCaps = (chatMeta.venueName || venueShortName).toUpperCase();
+  const venueCaps = displayVenueName.toUpperCase();
+  const showAnimatedPlaceholder = !input.trim();
   const venueInitial = venueCaps.charAt(0) || "V";
 
   return (
@@ -238,7 +246,7 @@ function ChatPanel({
           <>
             {onboarding.hasOnboarding ? (
               <ChatOnboardingHero
-                venueName={chatMeta.venueName || venueShortName}
+                venueName={displayVenueName}
                 hostName={chatMeta.hostName}
                 quickActionsMessage={onboarding.quickActionsMessage}
                 eventsMessage={onboarding.eventsMessage}
@@ -293,7 +301,7 @@ function ChatPanel({
       >
         <div className="relative flex gap-2.5">
           <div
-            className={`relative min-w-0 flex-1 rounded-[22px] transition-[box-shadow,border-color] duration-300 ${
+            className={`relative min-w-0 flex-1 overflow-hidden rounded-[22px] border border-white/[0.08] bg-white/[0.05] backdrop-blur-xl transition-[box-shadow,border-color] duration-300 ${
               inputFocused ? "ring-1 ring-cyan-400/35" : ""
             }`}
             style={
@@ -308,19 +316,20 @@ function ChatPanel({
             }
           >
             <ChatAnimatedPlaceholder
-              active={!input.trim() && !inputFocused && !sending && !aiPending}
-              className="absolute left-4 top-3.5 max-w-[calc(100%-2rem)]"
+              active={showAnimatedPlaceholder}
+              hints={placeholderHints}
+              className="absolute left-4 top-3.5 z-0 max-w-[calc(100%-2rem)]"
             />
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
-              placeholder={inputFocused ? "Type your message…" : ""}
+              placeholder=""
               rows={1}
               maxLength={800}
               disabled={sending}
-              className="relative block max-h-[120px] min-h-[48px] w-full resize-none rounded-[22px] border border-white/[0.08] bg-white/[0.05] px-4 py-3 text-[16px] font-normal leading-snug tracking-wide text-white outline-none backdrop-blur-xl disabled:opacity-50"
+              className="relative z-[1] block max-h-[120px] min-h-[48px] w-full resize-none rounded-[22px] border-0 bg-transparent px-4 py-3 text-[16px] font-normal leading-snug tracking-wide text-white caret-cyan-300 outline-none disabled:opacity-50"
               style={{ WebkitTextSizeAdjust: "100%" }}
             />
           </div>
@@ -423,7 +432,10 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
       }
     }
     return buildOptimisticOnboardingMessages({
-      venueName: initialSnapshot?.chat?.venueName ?? venueShortName,
+      venueName:
+        clubRogueChatVenueName(brandId) ??
+        initialSnapshot?.chat?.venueName ??
+        venueShortName,
       hostName: initialSnapshot?.chat?.hostName ?? hostNameProp ?? null,
       contactPhone,
       whatsappMessage,
@@ -433,6 +445,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
       offers,
     }) as ChatMessage[];
   }, [
+    brandId,
     initialSnapshot,
     venueShortName,
     hostNameProp,
@@ -452,9 +465,22 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
       : optimisticSeed()
   );
   const [chatMeta, setChatMeta] = useState<ChatMeta>(() => ({
-    venueName: initialSnapshot?.chat?.venueName ?? venueShortName,
+    venueName:
+      clubRogueChatVenueName(brandId) ??
+      initialSnapshot?.chat?.venueName ??
+      venueShortName,
     hostName: initialSnapshot?.chat?.hostName ?? hostNameProp ?? null,
   }));
+  const displayVenueName = useMemo(
+    () =>
+      clubRogueChatVenueName(brandId) ??
+      (chatMeta.venueName?.trim() || venueShortName),
+    [brandId, chatMeta.venueName, venueShortName]
+  );
+  const placeholderHints = useMemo(
+    () => (isClubRogueBrand(brandId) ? CLUB_ROGUE_CHAT_HINTS : DEFAULT_HINTS),
+    [brandId]
+  );
   const [input, setInput] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -711,7 +737,8 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
 
   const panelProps = {
     accentColor,
-    venueShortName,
+    displayVenueName,
+    placeholderHints,
     contactPhone,
     showTyping,
     lead,
@@ -772,7 +799,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
             background: fabTheme.sendGradient,
             boxShadow: "0 12px 40px rgba(34,211,238,0.4), 0 0 0 1px rgba(255,255,255,0.1)",
           }}
-          aria-label={`Chat with ${venueShortName}`}
+          aria-label={`Chat with ${displayVenueName}`}
         >
           <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path

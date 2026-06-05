@@ -102,7 +102,7 @@ export default function VenuePhotosSection({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2 }}
-      className="w-full min-w-0 overflow-x-hidden px-1 py-2"
+      className="w-full min-w-0 overflow-hidden px-1 py-2"
     >
       {loading ? (
         skeletonOrbit
