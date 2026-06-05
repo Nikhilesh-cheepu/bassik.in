@@ -17,6 +17,7 @@ import {
   getLeadSnapshot,
   getMessages,
   getMessagesAfter,
+  getMessagesSince,
   getOrCreateLead,
   getWeekOffersForBrand,
   shouldSkipAiForLead,
@@ -67,12 +68,15 @@ export async function GET(
   const cookieToken = req.cookies.get(chatCookieName(brandId))?.value ?? null;
   const utm = parseUtm(req);
   const after = req.nextUrl.searchParams.get("after");
+  const since = req.nextUrl.searchParams.get("since");
 
   try {
-    if (after) {
+    if (after || since) {
       const { lead } = await getOrCreateLead(brandId, cookieToken, utm);
       const [delta, fresh] = await Promise.all([
-        getMessagesAfter(lead.id, after),
+        after
+          ? getMessagesAfter(lead.id, after)
+          : getMessagesSince(lead.id, since!),
         getLeadSnapshot(lead.id),
       ]);
       const res = NextResponse.json({

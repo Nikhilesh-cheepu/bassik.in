@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getLeadsManagerFromRequest } from "@/lib/leads-manager-auth";
-import { getLeadSnapshot, getMessages, getMessagesAfter } from "@/lib/venue-chat-data";
+import { getLeadSnapshot, getMessages, getMessagesAfter, getMessagesSince } from "@/lib/venue-chat-data";
 import type { VenueChatLeadStatus } from "@prisma/client";
 
 export async function GET(
@@ -13,11 +13,14 @@ export async function GET(
   }
   const { leadId } = await params;
   const after = req.nextUrl.searchParams.get("after");
+  const since = req.nextUrl.searchParams.get("since");
   const lead = await getLeadSnapshot(leadId);
   if (!lead) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (after) {
-    const delta = await getMessagesAfter(leadId, after);
+  if (after || since) {
+    const delta = after
+      ? await getMessagesAfter(leadId, after)
+      : await getMessagesSince(leadId, since!);
     return NextResponse.json({ lead, messages: delta, delta: true });
   }
 

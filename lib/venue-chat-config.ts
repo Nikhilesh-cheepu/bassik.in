@@ -51,14 +51,6 @@ export async function getVenueChatConfig(brandId: string): Promise<VenueChatConf
   };
 
   try {
-    if (!prisma.venueChatConfig) {
-      if (!(globalThis as { __venueChatCfgWarned?: boolean }).__venueChatCfgWarned) {
-        (globalThis as { __venueChatCfgWarned?: boolean }).__venueChatCfgWarned = true;
-        console.warn("[venue-chat-config] Prisma client stale — run: npx prisma generate");
-      }
-      return fallback;
-    }
-
     let row = await prisma.venueChatConfig.findUnique({ where: { brandId } });
     if (!row) {
       row = await prisma.venueChatConfig.create({
