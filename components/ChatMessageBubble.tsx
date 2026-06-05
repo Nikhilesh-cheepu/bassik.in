@@ -162,9 +162,9 @@ export default function ChatMessageBubble({
 
   if (minimal && isHost && m.content.trim() && !quickActions.length && !(flyers.length > 0 && !suppressFlyers) && !callPhone) {
     return (
-      <div className="flex justify-start pl-0.5">
+      <div className={`flex ${isRight ? "justify-end pr-0.5" : "justify-start pl-0.5"}`}>
         <div
-          className={`max-w-[92%] rounded-[18px] border px-3.5 py-2.5 ${
+          className={`max-w-[92%] rounded-[18px] ${isRight ? "rounded-br-md" : "rounded-bl-md"} border px-3.5 py-2.5 ${
             isManagerReply
               ? "border-cyan-400/25 bg-cyan-500/[0.12]"
               : "border-white/[0.08] bg-white/[0.07]"
@@ -186,18 +186,29 @@ export default function ChatMessageBubble({
 
   if (minimal && isCustomer && m.content.trim() && !hasAttachments) {
     return (
-      <div className="flex justify-end pr-0.5">
+      <div className={`flex ${isRight ? "justify-end pr-0.5" : "justify-start pl-0.5"}`}>
         <div
-          className="max-w-[85%] rounded-[18px] rounded-br-md px-3.5 py-2 text-[14px] leading-[1.45] tracking-[-0.01em] text-white"
-          style={{
-            background:
-              userBubbleGradient ??
-              "linear-gradient(135deg, rgba(6,182,212,0.95) 0%, rgba(139,92,246,0.92) 100%)",
-            boxShadow: "0 6px 20px rgba(34,211,238,0.2)",
-          }}
+          className={`max-w-[85%] rounded-[18px] ${isRight ? "rounded-br-md" : "rounded-bl-md"} px-3.5 py-2 text-[14px] leading-[1.45] tracking-[-0.01em] text-white`}
+          style={
+            isRight
+              ? {
+                  background:
+                    userBubbleGradient ??
+                    "linear-gradient(135deg, rgba(6,182,212,0.95) 0%, rgba(139,92,246,0.92) 100%)",
+                  boxShadow: "0 6px 20px rgba(34,211,238,0.2)",
+                }
+              : {
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                }
+          }
         >
           <p className="whitespace-pre-wrap">{m.content}</p>
-          <p className="mt-1 text-right text-[10px] font-medium text-white/50">{formatChatTime(m.createdAt)}</p>
+          <p
+            className={`mt-1 text-[10px] font-medium ${isRight ? "text-right text-white/50" : "text-white/40"}`}
+          >
+            {formatChatTime(m.createdAt)}
+          </p>
         </div>
       </div>
     );
