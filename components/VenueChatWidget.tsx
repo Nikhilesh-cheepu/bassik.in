@@ -15,7 +15,7 @@ import ChatMessageBubble from "@/components/ChatMessageBubble";
 import ChatOnboardingHero from "@/components/ChatOnboardingHero";
 import ChatTypingIndicator from "@/components/ChatTypingIndicator";
 import ChatAnimatedPlaceholder, { DEFAULT_HINTS } from "@/components/ChatAnimatedPlaceholder";
-import { ChatFabHint, ChatFabPulseRing } from "@/components/ChatFabHype";
+import { ChatFabArrow, ChatFabPulseRing } from "@/components/ChatFabHype";
 import {
   CLUB_ROGUE_CHAT_HINTS,
   clubRogueChatVenueName,
@@ -738,15 +738,6 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     expandChat: () => setOpen(true),
   }));
 
-  useEffect(() => {
-    if (!open) return;
-    try {
-      localStorage.setItem(`bassik-chat-fab-hype-dismissed:${brandId}`, "1");
-    } catch {
-      /* ignore */
-    }
-  }, [open, brandId]);
-
   const panelProps = {
     accentColor,
     displayVenueName,
@@ -802,27 +793,37 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     <>
       {!isEmbedded ? (
         <div
-          className="fixed z-[102] flex flex-col items-end"
+          className="fixed z-[102] flex flex-col items-center"
           style={{
             right: "max(1rem, env(safe-area-inset-right))",
-            bottom: "calc(6.35rem + env(safe-area-inset-bottom))",
+            bottom: "calc(5.85rem + env(safe-area-inset-bottom))",
           }}
         >
-          <ChatFabHint brandId={brandId} visible={!open} accentColor={accentColor} />
+          <ChatFabArrow visible={!open} accentColor={accentColor} />
           <motion.button
             type="button"
             onClick={() => setOpen(true)}
             className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full active:scale-95 sm:h-[3.25rem] sm:w-[3.25rem]"
             style={{
               background: fabTheme.sendGradient,
-              boxShadow: "0 10px 32px rgba(34,211,238,0.35), 0 0 0 1px rgba(255,255,255,0.08)",
+              boxShadow: `0 0 20px ${accentColor}66, 0 0 40px ${accentColor}33, 0 10px 32px rgba(0,0,0,0.45)`,
             }}
             aria-label={`Chat with ${displayVenueName}`}
-            animate={reducedMotion ? undefined : { scale: [1, 1.04, 1] }}
+            animate={
+              reducedMotion
+                ? undefined
+                : {
+                    boxShadow: [
+                      `0 0 16px ${accentColor}77, 0 0 36px ${accentColor}44, 0 10px 32px rgba(0,0,0,0.45)`,
+                      `0 0 28px ${accentColor}99, 0 0 52px ${accentColor}55, 0 10px 32px rgba(0,0,0,0.45)`,
+                      `0 0 16px ${accentColor}77, 0 0 36px ${accentColor}44, 0 10px 32px rgba(0,0,0,0.45)`,
+                    ],
+                  }
+            }
             transition={
               reducedMotion
                 ? undefined
-                : { repeat: Infinity, duration: 2.8, ease: "easeInOut" }
+                : { repeat: Infinity, duration: 2.2, ease: "easeInOut" }
             }
           >
             <ChatFabPulseRing accentColor={accentColor} reducedMotion={reducedMotion} />
