@@ -15,7 +15,7 @@ import ChatMessageBubble from "@/components/ChatMessageBubble";
 import ChatOnboardingHero from "@/components/ChatOnboardingHero";
 import ChatTypingIndicator from "@/components/ChatTypingIndicator";
 import ChatAnimatedPlaceholder, { DEFAULT_HINTS } from "@/components/ChatAnimatedPlaceholder";
-import ChatFabHype, { ChatFabPulseRing } from "@/components/ChatFabHype";
+import { ChatFabHint, ChatFabPulseRing } from "@/components/ChatFabHype";
 import {
   CLUB_ROGUE_CHAT_HINTS,
   clubRogueChatVenueName,
@@ -801,29 +801,28 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
   return (
     <>
       {!isEmbedded ? (
-        <>
-          <ChatFabHype
-            accentColor={accentColor}
-            brandId={brandId}
-            visible={!open}
-            onDismiss={() => {}}
-          />
+        <div
+          className="fixed z-[95] flex flex-col items-end"
+          style={{
+            right: "max(1rem, env(safe-area-inset-right))",
+            bottom: "calc(5.75rem + env(safe-area-inset-bottom))",
+          }}
+        >
+          <ChatFabHint brandId={brandId} visible={!open} accentColor={accentColor} />
           <motion.button
             type="button"
             onClick={() => setOpen(true)}
-            className="fixed relative z-[95] flex h-14 w-14 items-center justify-center rounded-full sm:h-[3.25rem] sm:w-[3.25rem]"
+            className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full active:scale-95 sm:h-[3.25rem] sm:w-[3.25rem]"
             style={{
-              right: "max(1rem, env(safe-area-inset-right))",
-              bottom: "calc(5.75rem + env(safe-area-inset-bottom))",
               background: fabTheme.sendGradient,
-              boxShadow: "0 12px 40px rgba(34,211,238,0.4), 0 0 0 1px rgba(255,255,255,0.1)",
+              boxShadow: "0 10px 32px rgba(34,211,238,0.35), 0 0 0 1px rgba(255,255,255,0.08)",
             }}
             aria-label={`Chat with ${displayVenueName}`}
-            animate={reducedMotion ? undefined : { scale: [1, 1.06, 1] }}
+            animate={reducedMotion ? undefined : { scale: [1, 1.04, 1] }}
             transition={
               reducedMotion
                 ? undefined
-                : { repeat: Infinity, duration: 2.4, ease: "easeInOut" }
+                : { repeat: Infinity, duration: 2.8, ease: "easeInOut" }
             }
           >
             <ChatFabPulseRing accentColor={accentColor} reducedMotion={reducedMotion} />
@@ -836,7 +835,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
               />
             </svg>
           </motion.button>
-        </>
+        </div>
       ) : null}
 
       {isEmbedded ? (
