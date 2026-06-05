@@ -2,14 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BRANDS, brandsForLeadsManager } from "@/lib/brands";
-import ChatEventsStrip from "@/components/ChatEventsStrip";
 import ChatMessageBubble from "@/components/ChatMessageBubble";
 import ChatTypingIndicator from "@/components/ChatTypingIndicator";
+import ManagerQuickSendBar from "@/components/ManagerQuickSendBar";
 import { getChatNeonTheme } from "@/lib/venue-chat-theme";
+import type { ManagerShortcutId } from "@/lib/leads-manager-shortcuts";
 import {
-  extractAllFlyers,
+  buildManagerShortcut,
+  shortcutDraftLabel,
+} from "@/lib/leads-manager-shortcuts-build";
+import {
+  filterManagerThreadView,
   formatListTime,
-  isPosterOnlyMessage,
+  lastConfirmedMessageId,
   type ChatMessageLike,
 } from "@/lib/venue-chat-ui-helpers";
 
@@ -286,22 +291,36 @@ export default function LeadsManagerClient() {
   const [notes, setNotes] = useState("");
   const [labelDraft, setLabelDraft] = useState("");
   const [reply, setReply] = useState("");
-  const [sending, setSending] = useState(false);
+  const [pendingMeta, setPendingMeta] = useState<Record<string, unknown> | null>(null);
+  const [shortcutError, setShortcutError] = useState<string | null>(null);
+  const sendInFlightRef = useRef(false);
   const [loadingThread, setLoadingThread] = useState(false);
   const [savingNotes, setSavingNotes] = useState(false);
   const [savingLabel, setSavingLabel] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const threadCache = useRef<Map<string, { lead: LeadDetail; messages: ChatMessage[] }>>(new Map());
+  const threadLastMsgIdRef = useRef<string>("");
+  const pollInFlightRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
 
   const inboxBrands = useMemo(() => brandsForLeadsManager(), []);
 
-  const chatMessages = useMemo(
-    () => thread.filter((m) => !isPosterOnlyMessage(m)),
-    [thread]
-  );
-  const eventFlyers = useMemo(() => extractAllFlyers(thread), [thread]);
-  const showEventsStrip = !loadingThread && eventFlyers.length > 0;
+  const chatMessages = useMemo(() => filterManagerThreadView(thread), [thread]);
+
+  const mergeThreadMessages = (prev: ChatMessage[], incoming: ChatMessage[]) => {
+    const map = new Map(prev.map((m) => [m.id, m]));
+    for (const m of incoming) map.set(m.id, m);
+    return [...map.values()].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+  };
+
+  const syncThreadCursor = (messages: ChatMessage[]) => {
+    const id = lastConfirmedMessageId(messages);
+    if (id) threadLastMsgIdRef.current = id;
+  };
 
   const loadLeads = useCallback(async (brandId?: string) => {
     const q = brandId ? `?brandId=${encodeURIComponent(brandId)}` : "";
@@ -324,6 +343,50 @@ export default function LeadsManagerClient() {
       threadRef.current.scrollTop = threadRef.current.scrollHeight;
     }
   }, [thread, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId || document.hidden) return;
+    const poll = () => {
+      if (pollInFlightRef.current) return;
+      const after = threadLastMsgIdRef.current;
+      if (!after) return;
+      pollInFlightRef.current = true;
+      fetch(`/api/leads-manager/leads/${selectedId}?after=${encodeURIComponent(after)}`, {
+        credentials: "include",
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!data?.messages) return;
+          const lead = data.lead as LeadDetail;
+          const incoming = data.messages as ChatMessage[];
+          if (data.delta && incoming.length === 0) {
+            setLeadDetail(lead);
+            return;
+          }
+          setThread((prev) => {
+            const next = data.delta ? mergeThreadMessages(prev, incoming) : incoming;
+            syncThreadCursor(next);
+            threadCache.current.set(selectedId, { lead, messages: next });
+            return next;
+          });
+          setLeadDetail(lead);
+        })
+        .catch(() => {})
+        .finally(() => {
+          pollInFlightRef.current = false;
+        });
+    };
+    void poll();
+    const id = window.setInterval(poll, 2000);
+    const onVis = () => {
+      if (!document.hidden) poll();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [selectedId]);
 
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -349,6 +412,7 @@ export default function LeadsManagerClient() {
       setNotes(typeof cached.lead.managerNotes === "string" ? cached.lead.managerNotes : "");
       setLabelDraft(cached.lead.displayLabel ?? "");
       setThread(cached.messages);
+      syncThreadCursor(cached.messages);
       return;
     }
     setLoadingThread(true);
@@ -363,6 +427,7 @@ export default function LeadsManagerClient() {
       setNotes(typeof lead.managerNotes === "string" ? lead.managerNotes : "");
       setLabelDraft(lead.displayLabel ?? "");
       setThread(messages);
+      syncThreadCursor(messages);
     } finally {
       setLoadingThread(false);
     }
@@ -375,56 +440,189 @@ export default function LeadsManagerClient() {
     setNotes("");
     setLabelDraft("");
     setReply("");
+    setPendingMeta(null);
+    setShortcutError(null);
+    threadLastMsgIdRef.current = "";
   };
 
-  const sendReply = async () => {
-    if (!selectedId || !reply.trim() || sending) return;
-    const text = reply.trim();
-    setReply("");
+  const postToGuest = async (
+    body: Record<string, unknown>,
+    optimisticContent: string,
+    optimisticMeta?: Record<string, unknown> | null
+  ) => {
+    if (!selectedId || sendInFlightRef.current) return false;
+    sendInFlightRef.current = true;
     const tmpId = `tmp-host-${Date.now()}`;
     setThread((t) => [
       ...t,
       {
         id: tmpId,
-        role: "ASSISTANT",
-        content: text,
+        role: "ASSISTANT" as const,
+        content: optimisticContent,
         imageUrl: null,
-        metadata: { sentBy: "manager" },
+        metadata: optimisticMeta ?? { sentBy: "manager" },
         createdAt: new Date().toISOString(),
       },
     ]);
-    setSending(true);
     try {
       const res = await fetch(`/api/leads-manager/leads/${selectedId}/messages`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify(body),
       });
-      if (res.ok) {
-        const data = await res.json();
-        const msg = data.message as ChatMessage;
-        setThread((t) => {
-          const next = [...t.filter((m) => m.id !== tmpId), msg];
-          if (selectedId && leadDetail) {
-            threadCache.current.set(selectedId, { lead: leadDetail, messages: next });
-          }
-          return next;
-        });
-        setLeads((prev) =>
-          prev.map((l) =>
-            l.id === selectedId
-              ? { ...l, preview: text.slice(0, 80), lastMessageAt: new Date().toISOString() }
-              : l
-          )
-        );
-      } else {
+      if (!res.ok) {
         setThread((t) => t.filter((m) => m.id !== tmpId));
-        setReply(text);
+        return false;
       }
+      const data = await res.json();
+      const msg = data.message as ChatMessage;
+      setThread((t) => {
+        const next = [...t.filter((m) => m.id !== tmpId), msg];
+        syncThreadCursor(next);
+        if (leadDetail) {
+          threadCache.current.set(selectedId, { lead: leadDetail, messages: next });
+        }
+        return next;
+      });
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === selectedId
+            ? {
+                ...l,
+                preview: msg.content.slice(0, 80) || optimisticContent.slice(0, 80),
+                lastMessageAt: new Date().toISOString(),
+              }
+            : l
+        )
+      );
+      return true;
     } finally {
-      setSending(false);
+      sendInFlightRef.current = false;
     }
+  };
+
+  const sendReply = async () => {
+    if (!selectedId || !reply.trim() || sendInFlightRef.current) return;
+    const text = reply.trim();
+    const meta = pendingMeta;
+    setReply("");
+    setPendingMeta(null);
+    setShortcutError(null);
+    const ok = await postToGuest(
+      meta ? { message: text, metadata: meta } : { message: text },
+      text,
+      meta
+    );
+    if (!ok) {
+      setReply(text);
+      setPendingMeta(meta);
+    }
+  };
+
+  const loadShortcut = (shortcut: ManagerShortcutId) => {
+    if (!leadDetail) return;
+    const built = buildManagerShortcut(shortcut, {
+      brandId: leadDetail.brandId,
+      guestName: leadDetail.guestName,
+      selectedEventId: leadDetail.selectedEventId ?? null,
+      selectedEventName: leadDetail.selectedEventName,
+      contactNumber: leadDetail.contactNumber,
+    });
+    if (!built) {
+      setShortcutError(
+        shortcut === "book_event"
+          ? "Guest hasn't picked an event yet"
+          : shortcut === "whatsapp"
+            ? "WhatsApp link unavailable for this outlet"
+            : "That shortcut isn't available"
+      );
+      return;
+    }
+    setShortcutError(null);
+    setReply(built.content);
+    setPendingMeta(built.metadata);
+  };
+
+  const sendAttachment = async (file: File, caption?: string) => {
+    if (!selectedId || uploading || sendInFlightRef.current) return;
+    const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
+    const tmpId = `tmp-file-${Date.now()}`;
+    const optimisticContent = caption?.trim() || (file.type.startsWith("image/") ? "Sharing a photo…" : "Sending document…");
+
+    setThread((t) => [
+      ...t,
+      {
+        id: tmpId,
+        role: "ASSISTANT" as const,
+        content: optimisticContent,
+        imageUrl: previewUrl,
+        metadata: {
+          sentBy: "manager",
+          type: "attachment",
+          mimeType: file.type,
+          fileName: file.name,
+        },
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      if (caption?.trim()) fd.append("caption", caption.trim());
+      const res = await fetch(`/api/leads-manager/leads/${selectedId}/attachments`, {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+      });
+      if (!res.ok) {
+        setThread((t) => t.filter((m) => m.id !== tmpId));
+        return;
+      }
+      const data = await res.json();
+      const msg = data.message as ChatMessage;
+      setThread((t) => {
+        const next = [...t.filter((m) => m.id !== tmpId), msg];
+        syncThreadCursor(next);
+        if (leadDetail) threadCache.current.set(selectedId, { lead: leadDetail, messages: next });
+        return next;
+      });
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === selectedId
+            ? {
+                ...l,
+                preview: msg.content.slice(0, 80),
+                lastMessageAt: new Date().toISOString(),
+              }
+            : l
+        )
+      );
+    } finally {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setUploading(false);
+    }
+  };
+
+  const onPickAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    let uploadFile = file;
+    if (file.type.startsWith("image/") && file.size > 900_000) {
+      try {
+        const { compressImageToMaxBytes } = await import("@/lib/compress-image");
+        const blob = await compressImageToMaxBytes(file, 900_000);
+        uploadFile = new File([blob], file.name.replace(/\.\w+$/, ".webp"), {
+          type: blob.type || "image/webp",
+        });
+      } catch {
+        uploadFile = file;
+      }
+    }
+    await sendAttachment(uploadFile);
   };
 
   const patchLead = async (body: Record<string, unknown>) => {
@@ -545,7 +743,10 @@ export default function LeadsManagerClient() {
   const subtitle = selectedLead ? leadSubtitle(selectedLead) : "";
 
   return (
-    <div className="mx-auto flex min-h-[100dvh] max-w-lg flex-col text-white" style={shellStyle}>
+    <div
+      className={`mx-auto flex w-full flex-col text-white ${inChat ? "h-[100dvh] max-h-[100dvh]" : "min-h-[100dvh]"} max-w-lg`}
+      style={shellStyle}
+    >
       {!inChat ? (
         <>
           <header
@@ -664,7 +865,7 @@ export default function LeadsManagerClient() {
           </ul>
         </>
       ) : (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
           <header
             className="shrink-0 border-b border-white/[0.06] pt-[max(0.5rem,env(safe-area-inset-top))] backdrop-blur-xl"
             style={{ background: neon.headerGradient }}
@@ -682,10 +883,8 @@ export default function LeadsManagerClient() {
               </button>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[15px] font-semibold">{selectedLead?.displayLabel ?? "Lead"}</p>
-                <p className={`truncate text-[11px] ${sending ? "text-emerald-400" : "text-white/45"}`}>
-                  {sending
-                    ? "Sending…"
-                    : [venueBrand?.shortName, subtitle, leadDetail?.contactNumber].filter(Boolean).join(" · ")}
+                <p className="truncate text-[11px] text-white/45">
+                  {[venueBrand?.shortName, subtitle, leadDetail?.contactNumber].filter(Boolean).join(" · ")}
                 </p>
               </div>
               <button
@@ -731,7 +930,7 @@ export default function LeadsManagerClient() {
           </header>
 
           {showTools ? (
-            <div className="shrink-0 border-b border-white/[0.06] bg-black/20">
+            <div className="max-h-[45vh] shrink-0 overflow-y-auto border-b border-white/[0.06] bg-black/20">
               <div className="flex items-center gap-2 px-4 py-2.5">
                 <select
                   value={leadDetail?.status ?? "NEW"}
@@ -810,12 +1009,17 @@ export default function LeadsManagerClient() {
             </div>
           ) : null}
 
-          {showEventsStrip ? <ChatEventsStrip items={eventFlyers} /> : null}
-
-          <div ref={threadRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
+          <div ref={threadRef} className="min-h-0 flex-1 space-y-2.5 overflow-y-auto overscroll-contain px-3 py-3">
             {loadingThread ? (
               <div className="space-y-3 py-4">
                 <ChatTypingIndicator label="Loading chat…" align="right" />
+              </div>
+            ) : chatMessages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+                <p className="text-sm font-medium text-white/50">No guest messages yet</p>
+                <p className="mt-1 max-w-[240px] text-[12px] leading-relaxed text-white/35">
+                  Welcome cards are hidden here. Use quick send below to message the guest.
+                </p>
               </div>
             ) : (
               chatMessages.map((m) => (
@@ -825,42 +1029,83 @@ export default function LeadsManagerClient() {
                   perspective="manager"
                   accentColor={accentColor}
                   size="md"
-                  suppressFlyers={showEventsStrip}
+                  variant="minimal"
+                  suppressFlyers
                 />
               ))
             )}
           </div>
 
           <div
-            className="shrink-0 border-t border-white/[0.06] px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl"
+            className="shrink-0 backdrop-blur-xl"
             style={{ background: neon.headerGradient }}
           >
-            <p className="mb-1.5 px-1 text-[10px] text-white/35">Reply as host · trains AI when guest asked last</p>
-            <div className="flex gap-2">
+            <ManagerQuickSendBar
+              hasSelectedEvent={Boolean(leadDetail?.selectedEventId)}
+              disabled={uploading}
+              onPick={loadShortcut}
+            />
+            <div className="border-t border-white/[0.06] px-3 py-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              {shortcutError ? (
+                <p className="mb-2 px-1 text-[11px] text-amber-300/90">{shortcutError}</p>
+              ) : null}
+              {pendingMeta && shortcutDraftLabel(pendingMeta) ? (
+                <div className="mb-2 flex items-center gap-2 px-1">
+                  <span className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold text-cyan-100">
+                    + {shortcutDraftLabel(pendingMeta)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPendingMeta(null)}
+                    className="text-[10px] text-white/40 hover:text-white/70"
+                  >
+                    Remove link
+                  </button>
+                </div>
+              ) : null}
               <input
-                value={reply}
-                onChange={(e) => setReply(e.target.value)}
-                placeholder={sending ? "Sending…" : "Reply to guest…"}
-                disabled={sending}
-                className="min-h-[44px] flex-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-4 text-[14px] outline-none placeholder:text-white/35 disabled:opacity-50 focus:border-cyan-500/30"
-                onKeyDown={(e) => e.key === "Enter" && !sending && sendReply()}
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+                className="hidden"
+                onChange={(e) => void onPickAttachment(e)}
               />
-              <button
-                type="button"
-                onClick={sendReply}
-                disabled={sending || !reply.trim()}
-                className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full text-lg font-bold text-black disabled:opacity-40"
-                style={{ background: neon.sendGradient }}
-              >
-                {sending ? (
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/25 border-t-black" />
-                ) : (
-                  "↑"
-                )}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-lg disabled:opacity-40"
+                  aria-label="Send photo or document"
+                >
+                  {uploading ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/25 border-t-white" />
+                  ) : (
+                    "+"
+                  )}
+                </button>
+                <input
+                  value={reply}
+                  onChange={(e) => setReply(e.target.value)}
+                  placeholder="Type your reply…"
+                  disabled={uploading}
+                  className="min-h-[48px] flex-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-4 text-[16px] outline-none placeholder:text-white/35 disabled:opacity-50 focus:border-cyan-500/30"
+                  onKeyDown={(e) => e.key === "Enter" && !uploading && void sendReply()}
+                />
+                <button
+                  type="button"
+                  onClick={() => void sendReply()}
+                  disabled={uploading || !reply.trim()}
+                  className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-full text-lg font-bold text-black disabled:opacity-40"
+                  style={{ background: neon.sendGradient }}
+                  aria-label="Send reply"
+                >
+                  ↑
+                </button>
+              </div>
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

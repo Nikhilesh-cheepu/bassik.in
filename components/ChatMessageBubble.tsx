@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import ChatFlyerCarousel from "@/components/ChatFlyerCarousel";
 import ChatQuickActions, { parseQuickActions } from "@/components/ChatQuickActions";
 import {
@@ -11,6 +12,7 @@ import {
   type ChatPerspective,
   type FlyerItem,
 } from "@/lib/venue-chat-ui-helpers";
+import { parseBookingLinkMetadata } from "@/lib/venue-chat-booking-link";
 import { getFullPhoneNumber } from "@/lib/outlet-contacts";
 
 export type ChatBubbleMessage = ChatMessageLike & {
@@ -32,13 +34,16 @@ type ChatMessageBubbleProps = {
   onSelectFlyer?: (item: FlyerItem) => void;
   onBook?: () => void;
   onMenu?: () => void;
+  onBookingLink?: (link: { kind: "event" | "table"; eventId?: string; url: string }) => void;
   suppressFlyers?: boolean;
 };
 
 function chatLinkFromMetadata(metadata: Record<string, unknown> | null): { url: string; label: string } | null {
+  const parsed = parseBookingLinkMetadata(metadata);
+  if (parsed) return { url: parsed.url, label: parsed.label };
   if (
     metadata &&
-    (metadata.type === "booking_link" || metadata.type === "external_link") &&
+    metadata.type === "external_link" &&
     typeof metadata.url === "string"
   ) {
     return {
@@ -60,6 +65,7 @@ export default function ChatMessageBubble({
   onSelectFlyer,
   onBook,
   onMenu,
+  onBookingLink,
   suppressFlyers = false,
 }: ChatMessageBubbleProps) {
   const side = bubbleSide(m.role, perspective);
@@ -67,6 +73,7 @@ export default function ChatMessageBubble({
   const isSystem = m.role === "SYSTEM";
   const isCustomer = isCustomerRole(m.role);
   const isHost = !isCustomer && !isSystem;
+  const isManagerReply = m.metadata?.sentBy === "manager";
   const flyers = flyersForMessage(m);
   const quickActions = parseQuickActions(m.metadata);
   const callPhone =
@@ -74,38 +81,104 @@ export default function ChatMessageBubble({
       ? m.metadata.phone
       : null;
   const chatLink = chatLinkFromMetadata(m.metadata);
+  const bookingLink = parseBookingLinkMetadata(m.metadata);
+  const attachmentUrl = m.imageUrl?.trim() || null;
+  const attachmentMeta =
+    m.metadata?.type === "attachment" && m.metadata && typeof m.metadata === "object"
+      ? (m.metadata as Record<string, unknown>)
+      : null;
+  const attachmentMime =
+    typeof attachmentMeta?.mimeType === "string" ? attachmentMeta.mimeType : "";
+  const attachmentName =
+    typeof attachmentMeta?.fileName === "string" ? attachmentMeta.fileName : "Attachment";
+  const isImageAttachment = attachmentUrl && (attachmentMime.startsWith("image/") || !attachmentMime);
 
   const hasAttachments =
     callPhone ||
     quickActions.length > 0 ||
     (flyers.length > 0 && !suppressFlyers) ||
-    Boolean(chatLink);
+    Boolean(chatLink) ||
+    Boolean(attachmentUrl);
   const minimal = variant === "minimal";
 
   const linkButton = chatLink ? (
-    <a
-      href={chatLink.url.startsWith("/") ? chatLink.url : chatLink.url}
-      target={chatLink.url.startsWith("/") ? undefined : "_blank"}
-      rel={chatLink.url.startsWith("/") ? undefined : "noopener noreferrer"}
-      className="mt-2 inline-flex items-center rounded-full px-4 py-2.5 text-[13px] font-semibold text-white shadow-lg"
-      style={{
-        background: "linear-gradient(135deg, #22d3ee 0%, #a855f7 100%)",
-        boxShadow: "0 8px 24px rgba(34,211,238,0.3)",
-      }}
-    >
-      {chatLink.label}
-    </a>
+    bookingLink && onBookingLink && (bookingLink.kind === "event" || bookingLink.kind === "table") ? (
+      <button
+        type="button"
+        onClick={() =>
+          onBookingLink({
+            kind: bookingLink.kind as "event" | "table",
+            eventId: bookingLink.eventId,
+            url: bookingLink.url,
+          })
+        }
+        className="mt-2 inline-flex items-center rounded-full px-4 py-2.5 text-[13px] font-semibold text-white shadow-lg"
+        style={{
+          background: "linear-gradient(135deg, #22d3ee 0%, #a855f7 100%)",
+          boxShadow: "0 8px 24px rgba(34,211,238,0.3)",
+        }}
+      >
+        {chatLink.label}
+      </button>
+    ) : (
+      <a
+        href={chatLink.url.startsWith("/") ? chatLink.url : chatLink.url}
+        target={chatLink.url.startsWith("/") ? undefined : "_blank"}
+        rel={chatLink.url.startsWith("/") ? undefined : "noopener noreferrer"}
+        className="mt-2 inline-flex items-center rounded-full px-4 py-2.5 text-[13px] font-semibold text-white shadow-lg"
+        style={{
+          background: "linear-gradient(135deg, #22d3ee 0%, #a855f7 100%)",
+          boxShadow: "0 8px 24px rgba(34,211,238,0.3)",
+        }}
+      >
+        {chatLink.label}
+      </a>
+    )
+  ) : null;
+
+  const attachmentBlock = attachmentUrl ? (
+    isImageAttachment ? (
+      <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="mt-2 block overflow-hidden rounded-xl">
+        <Image
+          src={attachmentUrl}
+          alt={attachmentName}
+          width={280}
+          height={200}
+          className="max-h-52 w-full object-cover"
+          unoptimized
+        />
+      </a>
+    ) : (
+      <a
+        href={attachmentUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-2 inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] px-3 py-2 text-[12px] font-semibold text-cyan-100"
+      >
+        📎 {attachmentName}
+      </a>
+    )
   ) : null;
 
   if (minimal && isHost && m.content.trim() && !quickActions.length && !(flyers.length > 0 && !suppressFlyers) && !callPhone) {
     return (
       <div className="flex justify-start pl-0.5">
-        <div className="max-w-[92%]">
-          <p className="whitespace-pre-wrap text-[14px] font-normal leading-[1.55] tracking-[-0.01em] text-white/88">
+        <div
+          className={`max-w-[92%] rounded-[18px] border px-3.5 py-2.5 ${
+            isManagerReply
+              ? "border-cyan-400/25 bg-cyan-500/[0.12]"
+              : "border-white/[0.08] bg-white/[0.07]"
+          }`}
+        >
+          {isManagerReply ? (
+            <p className="mb-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-cyan-300/80">Team</p>
+          ) : null}
+          <p className="whitespace-pre-wrap text-[14px] font-normal leading-[1.55] tracking-[-0.01em] text-white">
             {m.content}
           </p>
           {linkButton}
-          <p className="mt-1 text-[10px] font-medium tracking-wide text-white/25">{formatChatTime(m.createdAt)}</p>
+          {attachmentBlock}
+          <p className="mt-1 text-[10px] font-medium tracking-wide text-white/40">{formatChatTime(m.createdAt)}</p>
         </div>
       </div>
     );
@@ -150,11 +223,18 @@ export default function ChatMessageBubble({
           background: "rgba(255,255,255,0.06)",
         };
   } else {
-    bubbleClass = isRight ? "rounded-br-md border border-white/10 text-white/95" : "rounded-bl-md border border-white/[0.08] text-white/90";
-    bubbleStyle = {
-      background: "rgba(255,255,255,0.05)",
-      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-    };
+    bubbleClass = isRight
+      ? "rounded-br-md border border-cyan-400/20 text-white"
+      : "rounded-bl-md border border-white/[0.1] text-white";
+    bubbleStyle = isManagerReply
+      ? {
+          background: "rgba(34,211,238,0.12)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+        }
+      : {
+          background: "rgba(255,255,255,0.08)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+        };
   }
 
   return (
@@ -192,6 +272,7 @@ export default function ChatMessageBubble({
           />
         ) : null}
         {linkButton}
+        {attachmentBlock}
         <p
           className={`mt-1.5 text-[10px] font-medium tracking-wide ${
             isCustomer && isRight ? "text-white/55" : "text-white/30"

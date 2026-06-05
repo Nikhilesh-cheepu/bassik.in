@@ -8,6 +8,7 @@ import {
   isInstantAction,
   tryInstantBookIntentReply,
   tryInstantContactCaptureReply,
+  tryInstantEventSelectReply,
   type ChatActionType,
 } from "@/lib/venue-chat-actions";
 import {
@@ -15,7 +16,7 @@ import {
   chatCookieName,
   getLeadSnapshot,
   getMessages,
-  getMessagesSince,
+  getMessagesAfter,
   getOrCreateLead,
   getWeekOffersForBrand,
   shouldSkipAiForLead,
@@ -65,29 +66,19 @@ export async function GET(
 
   const cookieToken = req.cookies.get(chatCookieName(brandId))?.value ?? null;
   const utm = parseUtm(req);
-  const since = req.nextUrl.searchParams.get("since");
+  const after = req.nextUrl.searchParams.get("after");
 
   try {
-    if (since) {
+    if (after) {
       const { lead } = await getOrCreateLead(brandId, cookieToken, utm);
-      const [delta, fresh, knowledge] = await Promise.all([
-        getMessagesSince(lead.id, since),
+      const [delta, fresh] = await Promise.all([
+        getMessagesAfter(lead.id, after),
         getLeadSnapshot(lead.id),
-        getVenueChatKnowledge(brandId),
       ]);
       const res = NextResponse.json({
         lead: fresh ?? lead,
         messages: delta,
         delta: true,
-        venue: {
-          phone: knowledge.phone,
-          mapUrl: knowledge.mapUrl,
-          address: knowledge.address,
-        },
-        chat: {
-          venueName: knowledge.venueName,
-          hostName: knowledge.hostName,
-        },
       });
       setSessionCookie(res, brandId, lead.sessionToken);
       return res;
@@ -182,7 +173,25 @@ export async function POST(
     const newMessages = [];
     let usedInstant = false;
 
-    if (instantAction) {
+    if (action?.type === "select_event") {
+      const sel = action as Extract<ChatAction, { type: "select_event" }>;
+      const offer = findOfferForAction(offers, sel);
+      const eventName =
+        sel.label?.trim() ||
+        (offer ? [offer.title, offer.dateLine].filter(Boolean).join(" · ") : "") ||
+        "this event";
+      const currentLead = (await getLeadSnapshot(lead.id)) ?? lead;
+      const eventReplies = await tryInstantEventSelectReply({
+        leadId: lead.id,
+        brandId,
+        knowledge,
+        lead: currentLead,
+        eventName,
+        offerId: offer?.id ?? sel.offerId,
+      });
+      newMessages.push(...eventReplies);
+      usedInstant = true;
+    } else if (instantAction) {
       const currentLead = (await getLeadSnapshot(lead.id)) ?? lead;
       const instantReplies = await handleInstantAction({
         leadId: lead.id,

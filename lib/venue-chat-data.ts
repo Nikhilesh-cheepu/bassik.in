@@ -12,6 +12,7 @@ import {
   type VenueChatKnowledge,
 } from "@/lib/venue-chat-knowledge";
 import { randomBytes } from "crypto";
+import { sanitizeGuestName } from "@/lib/venue-chat-guest";
 
 export type WeekOffer = {
   id: string;
@@ -191,7 +192,7 @@ function toSnapshot(row: {
     brandId: row.brandId,
     sessionToken: row.sessionToken,
     displayLabel: row.displayLabel,
-    guestName: row.guestName,
+    guestName: sanitizeGuestName(row.guestName),
     contactNumber: row.contactNumber,
     partySize: row.partySize,
     selectedEventId: row.selectedEventId,
@@ -234,14 +235,16 @@ export async function appendMessage(
   };
 }
 
-export async function getMessagesSince(leadId: string, sinceIso: string): Promise<ChatMessageDto[]> {
-  const since = new Date(sinceIso);
-  if (Number.isNaN(since.getTime())) return getMessages(leadId);
-
-  const rows = await prisma.venueChatMessage.findMany({
-    where: { leadId, createdAt: { gt: since } },
-    orderBy: { createdAt: "asc" },
-  });
+function mapMessageRows(
+  rows: {
+    id: string;
+    role: VenueChatMessageRole;
+    content: string;
+    imageUrl: string | null;
+    metadata: unknown;
+    createdAt: Date;
+  }[]
+): ChatMessageDto[] {
   return rows.map((m) => ({
     id: m.id,
     role: m.role,
@@ -250,6 +253,45 @@ export async function getMessagesSince(leadId: string, sinceIso: string): Promis
     metadata: (m.metadata as Record<string, unknown> | null) ?? null,
     createdAt: m.createdAt.toISOString(),
   }));
+}
+
+/** Messages after a cursor id — reliable for live chat polling. */
+export async function getMessagesAfter(
+  leadId: string,
+  afterMessageId: string | null | undefined
+): Promise<ChatMessageDto[]> {
+  const afterId = afterMessageId?.trim();
+  if (!afterId) return [];
+
+  const anchor = await prisma.venueChatMessage.findFirst({
+    where: { id: afterId, leadId },
+    select: { createdAt: true },
+  });
+  if (!anchor) return getMessages(leadId);
+
+  const rows = await prisma.venueChatMessage.findMany({
+    where: {
+      leadId,
+      OR: [
+        { createdAt: { gt: anchor.createdAt } },
+        { createdAt: anchor.createdAt, id: { gt: afterId } },
+      ],
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  return mapMessageRows(rows);
+}
+
+/** @deprecated Prefer getMessagesAfter — timestamp cursors can miss messages. */
+export async function getMessagesSince(leadId: string, sinceIso: string): Promise<ChatMessageDto[]> {
+  const since = new Date(sinceIso);
+  if (Number.isNaN(since.getTime())) return getMessages(leadId);
+
+  const rows = await prisma.venueChatMessage.findMany({
+    where: { leadId, createdAt: { gt: since } },
+    orderBy: { createdAt: "asc" },
+  });
+  return mapMessageRows(rows);
 }
 
 export async function getLeadSnapshot(leadId: string): Promise<ChatLeadSnapshot | null> {
@@ -428,7 +470,7 @@ export async function tryFinalizeBooking(leadId: string): Promise<{ ok: boolean;
   const lead = await prisma.venueChatLead.findUnique({ where: { id: leadId } });
   if (!lead || lead.reservationId) return { ok: false };
 
-  const name = lead.guestName?.trim();
+  const name = sanitizeGuestName(lead.guestName);
   const phone = lead.contactNumber?.replace(/\D/g, "").slice(-10);
   const party = lead.partySize;
   const date = lead.bookingDate;

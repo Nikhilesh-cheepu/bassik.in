@@ -8,6 +8,7 @@ import {
 } from "@/lib/venue-chat-knowledge";
 import { formatLearnedForPrompt, getVenueChatConfig } from "@/lib/venue-chat-config";
 import { guestWritesTelugu } from "@/lib/venue-chat-actions";
+import { sanitizeGuestName } from "@/lib/venue-chat-guest";
 
 export type AiChatResult = {
   reply: string;
@@ -33,10 +34,13 @@ export async function runVenueChatTurn(params: {
 }): Promise<AiChatResult> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   const telugu = guestWritesTelugu(params.userMessage);
+  const guestName = sanitizeGuestName(params.lead.guestName);
   const fallback: AiChatResult = {
     reply: telugu
-      ? `Sure! Table book cheyadaniki me peru mariyu 10-digit mobile number ivvandi — booking link pampistha.`
-      : `Happy to help! Share your name and 10-digit mobile number and I'll send your booking link for ${params.venueShortName}.`,
+      ? `Chala bagundi! Me peru cheppandi — table book chesi help chestha.`
+      : guestName
+        ? `Thanks, ${guestName}! Whenever you're ready, just share your mobile number — I'll sort your table.`
+        : `Happy to help! What's your name and mobile number? I'll get your table sorted.`,
     leadUpdates: {},
     posterOfferIds: [],
   };
@@ -52,7 +56,7 @@ export async function runVenueChatTurn(params: {
 
   const leadState = [
     `Display label: ${params.lead.displayLabel}`,
-    params.lead.guestName ? `Name: ${params.lead.guestName}` : "Name: not yet",
+    guestName ? `Name: ${guestName}` : "Name: not yet",
     params.lead.contactNumber ? `Phone: ${params.lead.contactNumber}` : "Phone: not yet",
     params.lead.partySize ? `Party size: ${params.lead.partySize}` : "Party size: not yet",
     params.lead.bookingDate ? `Date: ${params.lead.bookingDate}` : "Date: not yet",
@@ -77,14 +81,16 @@ export async function runVenueChatTurn(params: {
     }));
 
   const system = [
-    `You are the host at ${params.venueShortName}. Warm, concise, human — never robotic. Never use a personal name; you represent the venue.`,
+    `You are the PR / guest relations host at ${params.venueShortName}. Warm, polished, never pushy — like a good hotel concierge, not a call centre script.`,
     "Read the full conversation before replying. Match the guest's language (English, Telugu, Hinglish, etc.).",
-    "Priority rules:",
-    "• Booking / table / reservation: NEVER ask who they're coming with or about 'vibe' unless they already mentioned it. Go straight to name + 10-digit mobile → booking link.",
-    "• If name or phone is missing, ask only for what's missing — one question at a time.",
-    "• Menu, directions, offers, events: answer from venue facts below. Never invent.",
-    "• If they picked an event, set selectedEventId and selectedEventName from the events list.",
-    "• Do not be nosy. You are a helpful host, not an interrogator.",
+    "Tone & flow:",
+    "• Sound human and pleasant. Never say 'share your 10-digit mobile' or 'I will send you the link' — that feels robotic.",
+    "• Booking: if you don't have name and phone yet, ask for both in one warm line ('What's your name and mobile number?'). After name only, ask for mobile. After both are captured, reply briefly ('Perfect, Rahul — you're all set') — the app adds the book button; do NOT paste URLs.",
+    "• Once you know their real name, use it in every reply.",
+    "• NEVER set guestName from phrases like 'I'm interested in…' or event titles — those are not names.",
+    "• If they picked or mentioned an event, set selectedEventId and selectedEventName. Use a short event label in chat (e.g. 'DJ SHWETH'), not the full poster line.",
+    "• Menu, directions, offers: answer from venue facts. Never invent.",
+    "• One question per message. No nosy questions about who they're with.",
     chatCfg.playbook?.trim() ? `Outlet playbook (manager instructions):\n${chatCfg.playbook.trim()}` : "",
     learnedBlock ? `Examples of good replies at this outlet:\n${learnedBlock}` : "",
     venueBlock,
@@ -120,7 +126,8 @@ export async function runVenueChatTurn(params: {
     const updates: LeadFieldUpdates = {};
     const lu = parsed.leadUpdates ?? {};
     if (typeof lu.guestName === "string" && lu.guestName.trim()) {
-      updates.guestName = lu.guestName.trim().slice(0, 80);
+      const name = sanitizeGuestName(lu.guestName.trim().slice(0, 80));
+      if (name) updates.guestName = name;
     }
     const phone = normalizePhone(
       typeof lu.contactNumber === "string" ? lu.contactNumber : null

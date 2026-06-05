@@ -276,6 +276,7 @@ model VenueChatLead {
 
   venue    Venue?             @relation(fields: [venueId], references: [id], onDelete: SetNull)
   messages VenueChatMessage[]
+  attachments VenueChatAttachment[]
 
   @@index([brandId])
   @@index([brandId, lastMessageAt])
@@ -311,6 +312,24 @@ enum VenueChatMessageRole {
   ASSISTANT
   MANAGER
   SYSTEM
+}
+
+/// Manager-sent chat files (Vercel Blob) — auto-expire after 7 days.
+model VenueChatAttachment {
+  id           String   @id @default(cuid())
+  leadId       String
+  brandId      String
+  blobUrl      String
+  blobPathname String
+  fileName     String?
+  mimeType     String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  lead VenueChatLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([leadId])
 }
 
 /// Per-outlet chat AI settings + learned reply snippets (manager training).

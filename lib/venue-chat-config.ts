@@ -52,7 +52,10 @@ export async function getVenueChatConfig(brandId: string): Promise<VenueChatConf
 
   try {
     if (!prisma.venueChatConfig) {
-      console.warn("[venue-chat-config] Prisma client stale — run: npx prisma generate");
+      if (!(globalThis as { __venueChatCfgWarned?: boolean }).__venueChatCfgWarned) {
+        (globalThis as { __venueChatCfgWarned?: boolean }).__venueChatCfgWarned = true;
+        console.warn("[venue-chat-config] Prisma client stale — run: npx prisma generate");
+      }
       return fallback;
     }
 

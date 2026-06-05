@@ -239,13 +239,6 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
     setSelectedEventId((prev) => (prev && venueOffers.some((o) => o.id === prev) ? prev : venueOffers[0].id));
   }, [venueOffers]);
 
-  useEffect(() => {
-    if (!initialEventId || !venueOffers.length) return;
-    if (venueOffers.some((o) => o.id === initialEventId)) {
-      setSelectedEventId(initialEventId);
-    }
-  }, [initialEventId, venueOffers]);
-
   const handleBrandSelect = (brandId: string) => {
     setSelectedBrandId(brandId);
     setIsDropdownOpen(false);
@@ -267,6 +260,14 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
     setEventBookingNightGenre("");
     setIsEventQuickBookOpen(true);
   };
+
+  useEffect(() => {
+    if (!initialEventId || !venueOffers.length) return;
+    if (venueOffers.some((o) => o.id === initialEventId)) {
+      openEventQuickBook(initialEventId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open booking sheet once offers load
+  }, [initialEventId, venueOffers.length]);
 
   const submitEventQuickBook = async () => {
     const normalizedPhone = eventBookPhone.replace(/\D/g, "").slice(0, 10);
@@ -598,6 +599,7 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
             setIsMenuModalOpen(true);
           }
         }}
+        onOpenEventBook={openEventQuickBook}
       />
 
       {isMenuModalOpen && selectedMenuId && (

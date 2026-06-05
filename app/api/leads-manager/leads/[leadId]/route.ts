@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getLeadsManagerFromRequest } from "@/lib/leads-manager-auth";
-import { getMessages } from "@/lib/venue-chat-data";
+import { getLeadSnapshot, getMessages, getMessagesAfter } from "@/lib/venue-chat-data";
 import type { VenueChatLeadStatus } from "@prisma/client";
 
 export async function GET(
@@ -12,8 +12,15 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { leadId } = await params;
-  const lead = await prisma.venueChatLead.findUnique({ where: { id: leadId } });
+  const after = req.nextUrl.searchParams.get("after");
+  const lead = await getLeadSnapshot(leadId);
   if (!lead) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  if (after) {
+    const delta = await getMessagesAfter(leadId, after);
+    return NextResponse.json({ lead, messages: delta, delta: true });
+  }
+
   const messages = await getMessages(leadId);
   return NextResponse.json({ lead, messages });
 }

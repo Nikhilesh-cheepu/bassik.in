@@ -9,15 +9,18 @@ import {
   useRef,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import ChatMessageBubble from "@/components/ChatMessageBubble";
 import ChatOnboardingHero from "@/components/ChatOnboardingHero";
 import ChatTypingIndicator from "@/components/ChatTypingIndicator";
 import ChatAnimatedPlaceholder from "@/components/ChatAnimatedPlaceholder";
+import EventQuickBookSheet, { type EventQuickBookOffer } from "@/components/EventQuickBookSheet";
 import { getChatNeonTheme } from "@/lib/venue-chat-theme";
 import { clientActionUserMessage, type ClientChatActionType } from "@/lib/venue-chat-copy";
 import {
   isPosterOnlyMessage,
+  lastConfirmedMessageId,
   splitGuestOnboarding,
   type ChatMessageLike,
   type FlyerItem,
@@ -66,6 +69,7 @@ type VenueChatWidgetProps = {
   hasMenus?: boolean;
   hostName?: string | null;
   onOpenMenu?: () => void;
+  onOpenEventBook?: (eventId: string) => void;
   layout?: "fab" | "embedded" | "landing";
   initialSnapshot?: ChatSessionPayload;
 };
@@ -96,6 +100,7 @@ function ChatPanel({
   openMenu,
   openPricing,
   openWebsite,
+  onBookingLink,
   compactHeader,
   onExpand,
   onClose,
@@ -124,6 +129,7 @@ function ChatPanel({
   openMenu: () => void;
   openPricing: () => void;
   openWebsite: () => void;
+  onBookingLink: (link: { kind: "event" | "table"; eventId?: string; url: string }) => void;
   compactHeader?: boolean;
   onExpand?: () => void;
   onClose?: () => void;
@@ -261,6 +267,7 @@ function ChatPanel({
                     onSelectFlyer={selectEvent}
                     onBook={bookTable}
                     onMenu={openMenu}
+                    onBookingLink={onBookingLink}
                   />
                 ))}
               </div>
@@ -343,13 +350,56 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     hasMenus = false,
     hostName: hostNameProp,
     onOpenMenu,
+    onOpenEventBook,
     layout = "fab",
     initialSnapshot,
   },
   ref
 ) {
+  const router = useRouter();
   const isEmbedded = layout === "embedded";
   const isLanding = layout === "landing";
+
+  const [offers, setOffers] = useState<EventQuickBookOffer[]>([]);
+  const [offersLoaded, setOffersLoaded] = useState(false);
+  const [eventSheetId, setEventSheetId] = useState<string | null>(null);
+  const offersPromiseRef = useRef<Promise<EventQuickBookOffer[]> | null>(null);
+
+  const loadOffers = useCallback(async (): Promise<EventQuickBookOffer[]> => {
+    if (offersLoaded && offers.length) return offers;
+    if (offersPromiseRef.current) return offersPromiseRef.current;
+    offersPromiseRef.current = fetch(`/api/venues/${brandId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const list = (data?.venue?.offers ?? []) as EventQuickBookOffer[];
+        setOffers(list);
+        setOffersLoaded(true);
+        return list;
+      })
+      .catch(() => [] as EventQuickBookOffer[])
+      .finally(() => {
+        offersPromiseRef.current = null;
+      });
+    return offersPromiseRef.current;
+  }, [brandId, offersLoaded, offers.length]);
+
+  const handleBookingLink = useCallback(
+    async (link: { kind: "event" | "table"; eventId?: string; url: string }) => {
+      if (link.kind === "table") {
+        router.push(link.url.startsWith("/") ? link.url : `/${brandId}/book`);
+        return;
+      }
+      const eventId = link.eventId;
+      if (!eventId) return;
+      if (onOpenEventBook) {
+        onOpenEventBook(eventId);
+        return;
+      }
+      await loadOffers();
+      setEventSheetId(eventId);
+    },
+    [brandId, loadOffers, onOpenEventBook, router]
+  );
 
   const optimisticSeed = useCallback((): ChatMessage[] => {
     let offers: BootstrapOffer[] = [];
@@ -404,7 +454,8 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
   const [actionBusy, setActionBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bootedRef = useRef(false);
-  const lastMsgAtRef = useRef<string>("");
+  const lastMsgIdRef = useRef<string>("");
+  const pollInFlightRef = useRef(false);
 
   const filteredMessages = useMemo(
     () => messages.filter((m) => !isPosterOnlyMessage(m)),
@@ -420,6 +471,11 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     });
   };
+
+  const syncPollCursor = useCallback((list: ChatMessage[]) => {
+    const id = lastConfirmedMessageId(list);
+    if (id) lastMsgIdRef.current = id;
+  }, []);
 
   const mergeMessages = (prev: ChatMessage[], incoming: ChatMessage[]) => {
     const map = new Map(prev.map((m) => [m.id, m]));
@@ -448,8 +504,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
         const merged = data.delta
           ? mergeMessages(base, data.messages!)
           : (data.messages! as ChatMessage[]);
-        const last = merged[merged.length - 1];
-        if (last) lastMsgAtRef.current = last.createdAt;
+        syncPollCursor(merged);
         return merged;
       });
     }
@@ -472,30 +527,33 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
   }, [brandId]);
 
   const poll = useCallback(async () => {
-    if (!lastMsgAtRef.current || aiPending || !sessionActive) return;
+    if (!sessionActive || document.hidden || pollInFlightRef.current) return;
+    if (!lastMsgIdRef.current) return;
+    pollInFlightRef.current = true;
     try {
       const res = await fetch(
-        `/api/venues/${brandId}/chat?since=${encodeURIComponent(lastMsgAtRef.current)}`,
+        `/api/venues/${brandId}/chat?after=${encodeURIComponent(lastMsgIdRef.current)}`,
         { credentials: "include" }
       );
       if (!res.ok) return;
       const data = await res.json();
       if (data.messages?.length) {
-        applyPayload(data);
+        applyPayload({ ...data, delta: true });
         scrollToBottom();
       } else if (data.lead) {
         setLead(data.lead);
       }
     } catch {
       /* ignore */
+    } finally {
+      pollInFlightRef.current = false;
     }
-  }, [brandId, aiPending, sessionActive]);
+  }, [brandId, sessionActive]);
 
   useEffect(() => {
     if (initialSnapshot) {
       bootedRef.current = true;
-      const last = initialSnapshot.messages[initialSnapshot.messages.length - 1];
-      if (last) lastMsgAtRef.current = last.createdAt;
+      syncPollCursor(initialSnapshot.messages as ChatMessage[]);
       return;
     }
     const shouldBootNow = isLanding || isEmbedded || open;
@@ -507,7 +565,8 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
 
   useEffect(() => {
     if (!sessionActive || document.hidden) return;
-    const id = window.setInterval(poll, 12000);
+    void poll();
+    const id = window.setInterval(() => void poll(), 2000);
     const onVis = () => {
       if (!document.hidden) void poll();
     };
@@ -569,6 +628,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
       setMessages((m) => m.filter((x) => !x.id.startsWith("tmp-")));
       applyPayload(data);
       scrollToBottom();
+      void poll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Send failed");
     } finally {
@@ -615,7 +675,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
         },
         {
           optimisticUserText: `Interested in ${item.label ?? "this event"}`,
-          awaitAi: true,
+          awaitAi: false,
         }
       );
     },
@@ -665,7 +725,20 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     openMenu,
     openPricing,
     openWebsite,
+    onBookingLink: handleBookingLink,
   };
+
+  const eventSheet = !onOpenEventBook ? (
+    <EventQuickBookSheet
+      brandId={brandId}
+      offers={offers}
+      eventId={eventSheetId}
+      isOpen={Boolean(eventSheetId)}
+      onClose={() => setEventSheetId(null)}
+      initialName={lead?.guestName ?? ""}
+      initialPhone={lead?.contactNumber ?? ""}
+    />
+  ) : null;
 
   const fabTheme = getChatNeonTheme(accentColor);
 
@@ -673,6 +746,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     return (
       <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col pt-[env(safe-area-inset-top)]">
         <ChatPanel {...panelProps} />
+        {eventSheet}
       </div>
     );
   }
@@ -739,6 +813,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
           </>
         )}
       </AnimatePresence>
+      {eventSheet}
     </>
   );
 });

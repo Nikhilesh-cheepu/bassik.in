@@ -13,6 +13,15 @@ export type ChatMessageLike = {
   createdAt: string;
 };
 
+/** Last persisted message id — skips optimistic tmp-* rows for poll cursors. */
+export function lastConfirmedMessageId(messages: Pick<ChatMessageLike, "id">[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const id = messages[i].id;
+    if (id && !id.startsWith("tmp-")) return id;
+  }
+  return "";
+}
+
 export function flyersForMessage(m: ChatMessageLike): FlyerItem[] {
   const meta = m.metadata;
   if (meta?.type === "flyers" && Array.isArray(meta.items)) {
@@ -103,6 +112,23 @@ export function splitGuestOnboarding(messages: ChatMessageLike[]) {
 
 export function isPosterOnlyMessage(_m: ChatMessageLike): boolean {
   return false;
+}
+
+/** Guest welcome / quick actions / event carousel — hidden in manager inbox. */
+export function isGuestOnboardingMessage(m: ChatMessageLike): boolean {
+  const type = m.metadata?.type;
+  if (type === "quick_actions" || type === "flyers" || type === "welcome_greeting") return true;
+  const text = m.content.trim();
+  if (/^Dear Guest/i.test(text)) return true;
+  if (/events are coming soon|New events are coming/i.test(text) && !m.metadata) return true;
+  if (/Which night are you thinking|Even a rough plan helps/i.test(text) && !m.metadata) return true;
+  if (m.role === "ASSISTANT" && !text && type === "quick_actions") return true;
+  return false;
+}
+
+/** Manager thread: real conversation only — no guest onboarding noise. */
+export function filterManagerThreadView(messages: ChatMessageLike[]): ChatMessageLike[] {
+  return messages.filter((m) => !isGuestOnboardingMessage(m) && !isPosterOnlyMessage(m));
 }
 
 /** All unique flyers across a thread (metadata carousel + legacy imageUrl messages). */
