@@ -3,13 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 
 const DEFAULT_HINTS = [
-  "Can I book a table for tonight?",
-  "What time does it start tonight?",
-  "What's special this weekend?",
-  "Tell me about today's offers",
+  "Can I book a table for this weekend?",
+  "Table for 4 tomorrow evening?",
+  "What's special next Friday?",
+  "Planning a birthday — which night works?",
   "What's on the menu?",
-  "Any cover charge tonight?",
-  "Your name & mobile number…",
+  "Any cover charge?",
+  "Your name & mobile when you're ready…",
 ];
 
 type ChatAnimatedPlaceholderProps = {

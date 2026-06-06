@@ -13,6 +13,13 @@ import { useRouter } from "next/navigation";
 
 interface ReservationFormProps {
   brand: Brand;
+  prefill?: {
+    name?: string;
+    phone?: string;
+    date?: string;
+    time?: string;
+    party?: number;
+  };
 }
 
 type DiscountItem = {
@@ -26,7 +33,7 @@ type DiscountItem = {
   hideSlotsLeft?: boolean;
 };
 
-export default function ReservationForm({ brand }: ReservationFormProps) {
+export default function ReservationForm({ brand, prefill }: ReservationFormProps) {
   const router = useRouter();
   const accentColor = brand.accentColor;
   const [formData, setFormData] = useState(() => ({
@@ -78,22 +85,39 @@ export default function ReservationForm({ brand }: ReservationFormProps) {
     const now24 = `${t.getHours().toString().padStart(2, "0")}:${t.getMinutes().toString().padStart(2, "0")}`;
     const lunchEnd = "18:00"; // Global lunch window end
     const todayLocal = toLocalDateString(t);
+    const name = prefill?.name?.trim().slice(0, 80) ?? "";
+    const phone = prefill?.phone?.replace(/\D/g, "").slice(-10) ?? "";
+    const date =
+      prefill?.date && /^\d{4}-\d{2}-\d{2}$/.test(prefill.date) && prefill.date >= todayLocal
+        ? prefill.date
+        : todayLocal;
+    const time =
+      prefill?.time &&
+      /^\d{2}:\d{2}$/.test(prefill.time) &&
+      localYmdTimeMs(date, prefill.time) > Date.now()
+        ? prefill.time
+        : "";
+    const party =
+      prefill?.party && prefill.party > 0 ? Math.min(30, Math.round(prefill.party)) : 2;
+
     setFormData((prev) => ({
       ...prev,
-      date: todayLocal,
-      timeSlot: "",
+      fullName: name || prev.fullName,
+      contactNumber: phone.length === 10 ? phone : prev.contactNumber,
+      date,
+      timeSlot: time,
       selectedDiscounts: [],
       clubRogueCoverAcknowledged: false,
       bookingNightGenre: "",
     }));
-    setGuests(2);
-    setTimeSlotTab(now24 >= lunchEnd ? "dinner" : "lunch");
+    setGuests(party);
+    setTimeSlotTab(time && parseInt(time.split(":")[0], 10) < 18 ? "lunch" : now24 >= lunchEnd ? "dinner" : "lunch");
     setDiscounts([]);
     setSubmitStatus({ type: null, message: "" });
     setReservationConfirmed(false);
     setReservationId(null);
     setShowSuccessToast(false);
-  }, [brand.id]);
+  }, [brand.id, prefill?.name, prefill?.phone, prefill?.date, prefill?.time, prefill?.party]);
 
   useEffect(() => {
     return () => {

@@ -10,6 +10,12 @@ import { formatLearnedForPrompt, getVenueChatConfig } from "@/lib/venue-chat-con
 import { guestWritesTelugu } from "@/lib/venue-chat-actions";
 import { sanitizeGuestName } from "@/lib/venue-chat-guest";
 import { CLUB_ROGUE_AI_PLAYBOOK, isClubRogueBrand } from "@/lib/club-rogue";
+import {
+  CHAT_BOOKING_AI_RULES,
+  CHAT_CONCIERGE_PLAYBOOK,
+  buildChatBookingDateContext,
+  sanitizeChatLeadBookingFields,
+} from "@/lib/venue-chat-booking-policy";
 
 export type AiChatResult = {
   reply: string;
@@ -42,11 +48,11 @@ export async function runVenueChatTurn(params: {
       ? `Chala bagundi! ${isClubRogue ? "Venue daggara ₹2,000 cover undi — bill meeda adjust avutundi. " : ""}Me peru cheppandi — table book chesi help chestha.`
       : guestName
         ? isClubRogue
-          ? `Thanks, ${guestName}! Cover is ₹2k at the venue — fully on your bill. Share your mobile whenever you're ready and I'll confirm your table.`
-          : `Thanks, ${guestName}! Whenever you're ready, just share your mobile number — I'll sort your table.`
+          ? `Thanks, ${guestName}! Cover is ₹2k at the venue — fully on your bill. Share your mobile whenever you're ready and I'll send you to our booking page.`
+          : `Thanks, ${guestName}! Whenever you're ready, just share your mobile number — I'll send you to pick a date & time.`
         : isClubRogue
-          ? `Hey! Welcome to ${params.venueShortName} — one of Hyderabad's most happening clubs. We've got big nights on — Ladies Night, Bollywood, the works. What are you planning?`
-          : `Hey! Welcome — tell me what you're in the mood for tonight and I'll help you pick the right night or table.`,
+          ? `Hey! Welcome to ${params.venueShortName} — one of Hyderabad's most happening clubs. Big nights all week — tell me when you're thinking of coming or which event caught your eye.`
+          : `Hey! Welcome — whether it's tonight, this weekend, or a date you're planning ahead, tell me what you're thinking and I'll help you pick the right night.`,
     leadUpdates: {},
     posterOfferIds: [],
   };
@@ -88,15 +94,18 @@ export async function runVenueChatTurn(params: {
 
   const system = [
     `You are the PR / guest relations host at ${params.venueShortName}. Warm, polished, never pushy — like a good hotel concierge, not a call centre script.`,
+    CHAT_CONCIERGE_PLAYBOOK,
     isClubRogue
       ? `Venue naming: always say "${params.venueShortName}" in full — never shorten to just the area (e.g. never say only "Gachibowli").`
       : "",
+    buildChatBookingDateContext(),
     "Read the full conversation before replying. Match the guest's language (English, Telugu, Hinglish, etc.).",
     "Tone & flow:",
     "• Sound human and pleasant — make the night sound exciting. Never say 'share your 10-digit mobile' or 'I will send you the link' — that feels robotic.",
     "• Engagement first: on hi/hello or vague openers, welcome them and mention vibe, events, or offers — do NOT ask for name/phone unless they want to book.",
-    "• Booking: only when they want a table, event, or entry — then ask for name and mobile in one warm line. After name only, ask for mobile. After both are captured, reply briefly ('Perfect, Rahul — you're all set') — the app adds the book button; do NOT paste URLs.",
+    "• Booking: today, tomorrow, any future date — same flow. Ask name + mobile in one warm line when they want a table. After both are captured, reply briefly — the app adds the book button; do NOT paste URLs. Never say they are confirmed or booked.",
     "• If they share name/phone voluntarily, capture it — never nag if they're just browsing.",
+    CHAT_BOOKING_AI_RULES,
     "• Once you know their real name, use it in every reply.",
     "• NEVER set guestName from phrases like 'I'm interested in…' or event titles — those are not names.",
     "• If they picked or mentioned an event, set selectedEventId and selectedEventName. Use a short event label in chat (e.g. 'DJ SHWETH'), not the full poster line.",
@@ -109,7 +118,7 @@ export async function runVenueChatTurn(params: {
     "Current lead state:",
     leadState,
     `Respond as JSON only: {"reply":"string","leadUpdates":{"guestName":null,"contactNumber":null,"partySize":null,"selectedEventId":null,"selectedEventName":null,"bookingDate":null,"bookingTime":null,"selectedDiscountIds":[]},"posterOfferIds":[]}`,
-    "leadUpdates: only fields learned THIS turn. selectedDiscountIds = discount ids from list.",
+    "leadUpdates: only fields learned THIS turn. bookingDate/bookingTime are prefill hints for the booking form only — omit if date/time is in the past. selectedDiscountIds = discount ids from list.",
     "posterOfferIds: offer ids if guest asks to see a poster (max 2).",
   ]
     .filter(Boolean)
@@ -167,13 +176,10 @@ export async function runVenueChatTurn(params: {
         .slice(0, 4);
     }
 
-    if (
-      updates.guestName ||
-      updates.contactNumber ||
-      updates.partySize ||
-      updates.bookingDate
-    ) {
-      updates.status = "BOOKING_STARTED";
+    const sanitized = sanitizeChatLeadBookingFields(updates);
+
+    if (sanitized.guestName || sanitized.contactNumber) {
+      sanitized.status = "BOOKING_STARTED";
     }
 
     const posterOfferIds = Array.isArray(parsed.posterOfferIds)
@@ -188,7 +194,7 @@ export async function runVenueChatTurn(params: {
         typeof parsed.reply === "string" && parsed.reply.trim()
           ? parsed.reply.trim().slice(0, 1200)
           : fallback.reply,
-      leadUpdates: updates,
+      leadUpdates: sanitized,
       posterOfferIds,
     };
   } catch (e) {

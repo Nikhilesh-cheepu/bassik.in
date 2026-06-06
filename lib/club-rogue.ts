@@ -38,12 +38,12 @@ export const CLUB_ROGUE_COVER_CHAT_LINE =
 
 /** Rotating input hints in guest chat — Club Rogue outlets. */
 export const CLUB_ROGUE_CHAT_HINTS = [
-  "Can I book a table for tonight?",
+  "Can I book a table for this weekend?",
   "What's the cover charge?",
   "Tell me about Ladies Night…",
-  "What time does it start tonight?",
-  "Any offers this weekend?",
-  "Your name & mobile number…",
+  "Table for 4 tomorrow evening?",
+  "Any offers next Friday?",
+  "Planning a birthday — what nights work?",
 ];
 
 /** AI system prompt block — Club Rogue only. */
@@ -51,7 +51,7 @@ export const CLUB_ROGUE_AI_PLAYBOOK = `
 Club Rogue brand voice:
 • Club Rogue is one of Hyderabad's most happening clubs — say so naturally when welcoming guests or hyping a night (crowd, energy, premium vibe). Don't repeat it every single message.
 • Always use the full venue name (Club Rogue Gachibowli / Kondapur / Jubilee Hills) — never just the locality.
-• On casual "hi" / "hello": welcome warmly, hype tonight or an event — do NOT ask for name/phone yet. Only ask when they want to book or pick a night.
+• On casual "hi" / "hello": welcome warmly, hype the vibe or an upcoming event — do NOT ask for name/phone yet. Only ask when they want to book or pick a night.
 
 Club Rogue cover policy (mandatory — only for this outlet):
 • ₹2,000 cover per person, paid AT THE VENUE on arrival — NOT online, NOT a booking fee.
@@ -64,10 +64,10 @@ Club Rogue cover policy (mandatory — only for this outlet):
 • Club Rogue Gachibowli only: on booking nights they may need Tollywood or Bollywood — ask which night if relevant.
 
 Example tones (vary naturally — do not copy verbatim every time):
-• "Welcome to Club Rogue Kondapur — one of Hyderabad's most happening clubs. What night are you planning?"
-• "Quick heads-up — ₹2k cover at the door, fully redeemable on your tab. If you're good with that, what's your name and number? I'll sort your table."
-• "Before we lock you in — cover is ₹2,000 at the venue and goes straight onto food & drinks. Happy to proceed? Share your name and mobile."
-• "Love the plan! Just so you know, we run a ₹2,000 redeemable cover at the venue — standard for our nights. Ready to book? Name and number whenever you are."
+• "Welcome to Club Rogue Kondapur — one of Hyderabad's most happening clubs. Planning tonight, this weekend, or a date later?"
+• "Quick heads-up — ₹2k cover at the door, fully redeemable on your tab. If you're good with that, what's your name and number? I'll send you to pick a slot."
+• "Love the plan for Saturday! Cover is ₹2,000 at the venue — goes straight onto food & drinks. Happy to proceed? Share your name and mobile."
+• "Whenever you're ready — ₹2,000 redeemable cover at the venue. Name and number and I'll get you to our booking page for any day that works."
 `.trim();
 
 function eventBit(eventName?: string | null): string {
@@ -82,16 +82,21 @@ export function clubRogueBeforeBookingAskCopy(eventName?: string | null): string
   if (ev) {
     return `Great pick${ev}! ${CLUB_ROGUE_COVER_CHAT_LINE} If you're happy with that, share your name and mobile — I'll take it from here.`;
   }
-  return `${CLUB_ROGUE_COVER_CHAT_LINE} If you're ready to go ahead, share your name and mobile — I'll lock in your table.`;
+  return `${CLUB_ROGUE_COVER_CHAT_LINE} If you're ready to go ahead, share your name and mobile — I'll send you to our booking page.`;
 }
 
 /** After name, before phone — optional shorter nudge. */
 export function clubRogueAskPhoneCopy(guestName: string): string {
-  return `Thanks, ${guestName}! Whenever you're ready, share your mobile — cover is ₹2k at the venue, fully on your bill. I'll confirm your table.`;
+  return `Thanks, ${guestName}! Whenever you're ready, share your mobile — cover is ₹2k at the venue, fully on your bill. Then I'll send you to pick a slot.`;
 }
 
 /** Right before the booking link button. */
-export function clubRogueBookingLinkIntro(guestName: string, eventName?: string | null): string {
+export function clubRogueBookingLinkIntro(
+  guestName: string,
+  eventName?: string | null,
+  dateHint?: string
+): string {
   const ev = eventName?.trim() ? ` for ${eventName.split(" · ")[0]?.trim() || eventName}` : "";
-  return `Perfect, ${guestName} — you're all set${ev}. ₹2,000 redeemable cover at the venue when you arrive. Tap below when you're ready.`;
+  const when = dateHint?.trim() ? dateHint : "";
+  return `Thanks, ${guestName} — tap below${ev}${when} to pick your slot. ₹2,000 redeemable cover at the venue when you arrive.`;
 }

@@ -504,6 +504,11 @@ export async function tryFinalizeBooking(leadId: string): Promise<{ ok: boolean;
     return { ok: false };
   }
 
+  const { isFutureBookingSlot } = await import("@/lib/venue-chat-booking-policy");
+  if (!isFutureBookingSlot(date, time)) {
+    return { ok: false };
+  }
+
   const brand = BRANDS.find((b) => b.id === lead.brandId);
   const venue = await prisma.venue.findUnique({ where: { brandId: lead.brandId } });
   if (!venue) {

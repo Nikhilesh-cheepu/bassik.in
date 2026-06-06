@@ -6,6 +6,7 @@ import {
   guestIsBookingIntent,
   handleInstantAction,
   isInstantAction,
+  maybeSendBookingLinkIfReady,
   tryInstantBookIntentReply,
   tryInstantContactCaptureReply,
   tryInstantEventSelectReply,
@@ -21,12 +22,12 @@ import {
   getOrCreateLead,
   getWeekOffersForBrand,
   shouldSkipAiForLead,
-  tryFinalizeBooking,
   updateLeadFields,
   type UtmParams,
 } from "@/lib/venue-chat-data";
 import { loadChatSession } from "@/lib/venue-chat-session";
 import { runVenueChatTurn } from "@/lib/venue-chat-ai";
+import { tryExtractBookingHints } from "@/lib/venue-chat-booking-policy";
 
 export const runtime = "nodejs";
 
@@ -50,10 +51,6 @@ function setSessionCookie(res: NextResponse, brandId: string, token: string) {
     maxAge: COOKIE_MAX_AGE,
     path: "/",
   });
-}
-
-function bookingRef(id: string): string {
-  return id.slice(-6).toUpperCase();
 }
 
 export async function GET(
@@ -263,6 +260,12 @@ export async function POST(
             );
           }
         } else {
+          const hints = tryExtractBookingHints(text);
+          if (Object.keys(hints).length > 0) {
+            await updateLeadFields(lead.id, hints);
+            currentLead = (await getLeadSnapshot(lead.id)) ?? currentLead;
+          }
+
           const history = await getMessages(lead.id);
           const ai = await runVenueChatTurn({
             brandId,
@@ -300,19 +303,20 @@ export async function POST(
               );
             }
           }
+
+          const bookingIntent =
+            guestIsBookingIntent(text) ||
+            currentLead.status === "BOOKING_STARTED" ||
+            Boolean(ai.leadUpdates.contactNumber || ai.leadUpdates.guestName);
+          const linkMsg = await maybeSendBookingLinkIfReady({
+            leadId: lead.id,
+            brandId,
+            lead: currentLead,
+            bookingIntent,
+          });
+          if (linkMsg) newMessages.push(linkMsg);
         }
       }
-    }
-
-    const booking = await tryFinalizeBooking(lead.id);
-    if (booking.ok && booking.reservationId) {
-      newMessages.push(
-        await appendMessage(
-          lead.id,
-          "SYSTEM",
-          `✅ You're in! Booking ref #${bookingRef(booking.reservationId)}. Our team will confirm on WhatsApp shortly.`
-        )
-      );
     }
 
     const updatedLead = (await getLeadSnapshot(lead.id)) ?? lead;
@@ -322,7 +326,7 @@ export async function POST(
       lead: updatedLead,
       messages: allMessages,
       newMessages,
-      booked: booking.ok,
+      booked: false,
       instant: usedInstant,
     });
     setSessionCookie(res, brandId, lead.sessionToken);
