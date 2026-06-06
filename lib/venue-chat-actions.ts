@@ -3,7 +3,7 @@ import { getDiscountsForBrand } from "@/lib/reservation-discounts";
 import type { VenueChatKnowledge } from "@/lib/venue-chat-knowledge";
 import { bookingPath } from "@/lib/venue-chat-paths";
 import { buildBookingLinkMetadata, parseBookingLinkMetadata } from "@/lib/venue-chat-booking-link";
-import { buildBookingPrefillFromLead, tryExtractBookingHints } from "@/lib/venue-chat-booking-policy";
+import { buildBookingPrefillFromLead, applyMessageBookingContext, formatHumanBookingDate } from "@/lib/venue-chat-booking-policy";
 import {
   appendMessage,
   getLeadSnapshot,
@@ -112,40 +112,58 @@ function linkMetadata(url: string, label: string, kind: "booking_link" | "extern
 }
 
 function bookingLinkMeta(brandId: string, label: string, lead: ChatLeadSnapshot) {
-  const path = bookingPath(brandId, buildBookingPrefillFromLead(lead));
-  return buildBookingLinkMetadata(
-    path,
-    label,
-    lead.selectedEventId ? "event" : "table",
-    lead.selectedEventId
-  );
+  const prefill = buildBookingPrefillFromLead(lead);
+  const path = bookingPath(brandId, prefill);
+  const kind = prefill.eventId ? "event" : "table";
+  return buildBookingLinkMetadata(path, label, kind, prefill.eventId);
+}
+
+function bookingLinkButtonLabel(lead: ChatLeadSnapshot): string {
+  if (lead.bookingDate && /^\d{4}-\d{2}-\d{2}$/.test(lead.bookingDate)) {
+    const [y, mo, d] = lead.bookingDate.split("-").map(Number);
+    const dt = new Date(y, mo - 1, d, 12, 0, 0, 0);
+    const short = dt.toLocaleDateString("en-IN", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    });
+    return `Book for ${short} →`;
+  }
+  if (lead.selectedEventId) return "Book this event →";
+  return "Reserve your table →";
 }
 
 function bookingLinkIntroCopy(
   brandId: string,
   guestName: string | null | undefined,
-  eventName?: string | null,
-  lead?: ChatLeadSnapshot
+  lead: ChatLeadSnapshot
 ): string {
   const name = sanitizeGuestName(guestName);
-  const dateHint =
-    lead?.bookingDate && lead.bookingTime
-      ? ` for ${lead.bookingDate} around ${lead.bookingTime}`
-      : lead?.bookingDate
-        ? ` for ${lead.bookingDate}`
-        : "";
-  const partyHint = lead?.partySize ? ` (party of ${lead.partySize})` : "";
+  const greeting = name ? `${name}, ` : "";
+  const partyHint = lead.partySize ? ` for ${lead.partySize}` : "";
 
+  if (lead.bookingDate && /^\d{4}-\d{2}-\d{2}$/.test(lead.bookingDate)) {
+    const when = formatHumanBookingDate(lead.bookingDate);
+    if (isClubRogueBrand(brandId)) {
+      return name
+        ? `Got it, ${name} — ${when}${partyHint}. Tap below to pick your time (₹2k redeemable cover at the venue).`
+        : `${when}${partyHint} — tap below to pick your time.`;
+    }
+    return `Got it — ${greeting}tap below to pick your time on ${when}${partyHint}. Only live future slots show on our booking page.`;
+  }
+
+  const eventName = lead.selectedEventName;
   if (isClubRogueBrand(brandId) && name) {
-    return clubRogueBookingLinkIntro(name, eventName, dateHint || undefined);
+    return clubRogueBookingLinkIntro(name, eventName, undefined);
   }
   const ev = friendlyEventLabel(eventName);
-  if (name) {
-    return ev !== "this night"
-      ? `Thanks, ${name}! Tap below to pick your slot${dateHint}${partyHint} for ${ev} — only open future times show on our booking page.`
-      : `Thanks, ${name}! Tap below to pick your date & time${dateHint}${partyHint} — live slots only, today or any day ahead.`;
+  if (name && ev !== "this night") {
+    return `${name}, tap below to pick your slot for ${ev} — live times only on our booking page.`;
   }
-  return `Tap below to pick your date & time — today, tomorrow, or any open day on our booking page.`;
+  if (name) {
+    return `${name}, tap below to pick your date & time — today, this weekend, or any open day ahead.`;
+  }
+  return `Tap below to pick your date & time on our booking page.`;
 }
 
 export async function appendBookingLinkMessage(
@@ -155,21 +173,17 @@ export async function appendBookingLinkMessage(
   lead: ChatLeadSnapshot
 ): Promise<ChatMessageDto> {
   const name = sanitizeGuestName(lead.guestName);
-  const line = bookingLinkIntroCopy(brandId, name, lead.selectedEventName, lead);
+  const line = bookingLinkIntroCopy(brandId, name, lead);
   return appendMessage(
     leadId,
     "ASSISTANT",
     line,
     null,
-    bookingLinkMeta(
-      brandId,
-      lead.selectedEventId ? "Book this night →" : "Reserve your table →",
-      lead
-    )
+    bookingLinkMeta(brandId, bookingLinkButtonLabel(lead), lead)
   );
 }
 
-/** After AI or contact capture — send booking link once name + phone are ready. */
+/** After AI or contact capture — send booking link when name + phone are ready. Refreshes if date/context changed. */
 export async function maybeSendBookingLinkIfReady(params: {
   leadId: string;
   brandId: string;
@@ -181,9 +195,13 @@ export async function maybeSendBookingLinkIfReady(params: {
   if (!name || !phone || phone.length !== 10) return null;
   if (!params.bookingIntent && params.lead.status !== "BOOKING_STARTED") return null;
 
+  const newPath = bookingPath(params.brandId, buildBookingPrefillFromLead(params.lead));
   const msgs = await getMessages(params.leadId);
   for (let i = msgs.length - 1; i >= Math.max(0, msgs.length - 8); i--) {
-    if (parseBookingLinkMetadata(msgs[i].metadata)) return null;
+    const parsed = parseBookingLinkMetadata(msgs[i].metadata);
+    if (!parsed) continue;
+    if (parsed.url === newPath) return null;
+    break;
   }
 
   return appendBookingLinkMessage(params.leadId, params.brandId, "", params.lead);
@@ -197,10 +215,18 @@ function askNameCopy(brandId: string, eventName?: string | null): string {
   return `I'd love to get you a table. What's your name? I'll take care of everything from here.`;
 }
 
-function askPhoneCopy(brandId: string, guestName: string, eventName?: string | null): string {
+function askPhoneCopy(
+  brandId: string,
+  guestName: string,
+  lead?: Pick<ChatLeadSnapshot, "selectedEventName" | "bookingDate">
+): string {
   if (isClubRogueBrand(brandId)) return clubRogueAskPhoneCopy(guestName);
   const name = sanitizeGuestName(guestName) ?? guestName.trim();
-  const ev = friendlyEventLabel(eventName);
+  if (lead?.bookingDate) {
+    const when = formatHumanBookingDate(lead.bookingDate);
+    return `Thanks, ${name}! Share your mobile whenever you're ready — I'll send you to pick a time on ${when}.`;
+  }
+  const ev = friendlyEventLabel(lead?.selectedEventName);
   if (ev !== "this night") {
     return `Thanks, ${name}! Whenever you're ready, just share your mobile number — then I'll send you to pick ${ev} on our booking page.`;
   }
@@ -236,7 +262,7 @@ export async function handleInstantAction(params: {
       return out;
     }
     if (name && !lead.contactNumber) {
-      out.push(await appendMessage(leadId, "ASSISTANT", askPhoneCopy(brandId, name, lead.selectedEventName)));
+      out.push(await appendMessage(leadId, "ASSISTANT", askPhoneCopy(brandId, name, lead)));
       return out;
     }
     out.push(await appendMessage(leadId, "ASSISTANT", askNameAndPhoneCopy(brandId, lead.selectedEventName)));
@@ -328,7 +354,7 @@ export async function tryInstantContactCaptureReply(params: {
 
   if (!updates.contactNumber && !updates.guestName) return null;
 
-  const hints = tryExtractBookingHints(userMessage);
+  const hints = applyMessageBookingContext(userMessage);
   const merged = { ...updates, ...hints };
 
   await updateLeadFields(leadId, { ...merged, status: "BOOKING_STARTED" });
@@ -348,7 +374,7 @@ export async function tryInstantContactCaptureReply(params: {
   }
 
   if (name && !fresh.contactNumber) {
-    messages.push(await appendMessage(leadId, "ASSISTANT", askPhoneCopy(brandId, name, fresh.selectedEventName)));
+    messages.push(await appendMessage(leadId, "ASSISTANT", askPhoneCopy(brandId, name, fresh)));
     return { messages, leadUpdates: true };
   }
 
@@ -467,7 +493,7 @@ export async function tryInstantEventSelectReply(params: {
   }
 
   if (name && !snapshot.contactNumber) {
-    return [await appendMessage(leadId, "ASSISTANT", askPhoneCopy(brandId, name, snapshot.selectedEventName))];
+    return [await appendMessage(leadId, "ASSISTANT", askPhoneCopy(brandId, name, snapshot))];
   }
 
   return [await appendMessage(leadId, "ASSISTANT", askNameAndPhoneCopy(brandId, snapshot.selectedEventName))];
@@ -481,26 +507,27 @@ export async function tryInstantBookIntentReply(params: {
   lead: ChatLeadSnapshot;
   userMessage?: string;
 }): Promise<ChatMessageDto[] | null> {
-  if (params.lead.contactNumber && sanitizeGuestName(params.lead.guestName)) {
-    return [
-      await appendBookingLinkMessage(
-        params.leadId,
-        params.brandId,
-        params.knowledge.venueName,
-        params.lead
-      ),
-    ];
+  const text = params.userMessage ?? "";
+  const ctx = text ? applyMessageBookingContext(text) : {};
+
+  if (Object.keys(ctx).length > 0) {
+    await updateLeadFields(params.leadId, ctx);
   }
 
-  const hints = params.userMessage ? tryExtractBookingHints(params.userMessage) : {};
-  if (Object.keys(hints).length > 0) {
-    await updateLeadFields(params.leadId, hints);
+  const lead = (await getLeadSnapshot(params.leadId)) ?? params.lead;
+
+  // Date/plan change → let AI reply + refreshed booking link
+  if (ctx.bookingDate) return null;
+
+  const name = sanitizeGuestName(lead.guestName);
+  if (lead.contactNumber && name) {
+    return [await appendBookingLinkMessage(params.leadId, params.brandId, params.knowledge.venueName, lead)];
   }
 
   await updateLeadFields(params.leadId, { status: "BOOKING_STARTED" });
-  const telugu = params.userMessage ? guestWritesTelugu(params.userMessage) : false;
+  const telugu = text ? guestWritesTelugu(text) : false;
   if (telugu) {
     return [await appendMessage(params.leadId, "ASSISTANT", bookContactAskCopy("", params.brandId, true))];
   }
-  return handleInstantAction({ ...params, action: "book_table" });
+  return handleInstantAction({ ...params, action: "book_table", lead });
 }

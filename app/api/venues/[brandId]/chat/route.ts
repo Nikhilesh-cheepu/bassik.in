@@ -27,7 +27,7 @@ import {
 } from "@/lib/venue-chat-data";
 import { loadChatSession } from "@/lib/venue-chat-session";
 import { runVenueChatTurn } from "@/lib/venue-chat-ai";
-import { tryExtractBookingHints } from "@/lib/venue-chat-booking-policy";
+import { applyMessageBookingContext } from "@/lib/venue-chat-booking-policy";
 
 export const runtime = "nodejs";
 
@@ -206,6 +206,12 @@ export async function POST(
     } else {
       let currentLead = (await getLeadSnapshot(lead.id)) ?? lead;
 
+      const bookingCtx = applyMessageBookingContext(text);
+      if (Object.keys(bookingCtx).length > 0) {
+        await updateLeadFields(lead.id, bookingCtx);
+        currentLead = (await getLeadSnapshot(lead.id)) ?? currentLead;
+      }
+
       const contactCapture = await tryInstantContactCaptureReply({
         leadId: lead.id,
         brandId,
@@ -260,12 +266,6 @@ export async function POST(
             );
           }
         } else {
-          const hints = tryExtractBookingHints(text);
-          if (Object.keys(hints).length > 0) {
-            await updateLeadFields(lead.id, hints);
-            currentLead = (await getLeadSnapshot(lead.id)) ?? currentLead;
-          }
-
           const history = await getMessages(lead.id);
           const ai = await runVenueChatTurn({
             brandId,
@@ -306,6 +306,7 @@ export async function POST(
 
           const bookingIntent =
             guestIsBookingIntent(text) ||
+            Boolean(bookingCtx.bookingDate) ||
             currentLead.status === "BOOKING_STARTED" ||
             Boolean(ai.leadUpdates.contactNumber || ai.leadUpdates.guestName);
           const linkMsg = await maybeSendBookingLinkIfReady({

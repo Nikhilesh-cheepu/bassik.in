@@ -43,7 +43,10 @@ Booking intent scenarios (handle naturally — not scripts):
 • Future: tomorrow, weekend, birthday next week, office party on 12th, anniversary Saturday → acknowledge the plan, capture details, prefill date if clear.
 • Event-led: Ladies Night, DJ night, Bollywood → set selectedEventId/Name; still booking page for slot.
 • Partial info: only date, only time, only headcount → remember in leadUpdates, ask what's missing for the link (usually name + phone).
-• Change of plans: "actually Sunday not Saturday" → update leadUpdates; never claim old slot is held.
+• Change of plans: "actually Sunday not Saturday" → update leadUpdates; clear selectedEventId/Name if they pick a date instead of an event; never claim old slot is held.
+• CRITICAL — respond to the LAST message: if they say "next Wednesday", your reply must mention Wednesday (or the resolved date) — never repeat an old event name (e.g. Soulmates) unless they just asked about that event again.
+• Date-led booking (next Sunday, this Friday, 12th): set bookingDate, set selectedEventId and selectedEventName to null — table booking, not event poster flow.
+• Never set guestName from okay, yes, sure, thanks, or other affirmations.
 • Status: "am I booked?", "did my booking go through?" → if no booking ref in lead state, they still need the booking page; be kind, not robotic.
 • Modify/cancel/no-show → can't change in chat; venue phone/WhatsApp from facts if available.
 • Walk-in: "can we just walk in?" → policy from facts; offer booking link if they want a guaranteed table.
@@ -121,37 +124,117 @@ export function sanitizeChatLeadBookingFields(updates: LeadFieldUpdates): LeadFi
   return out;
 }
 
+const WEEKDAY_DOW: Record<string, number> = {
+  sunday: 0,
+  sun: 0,
+  monday: 1,
+  mon: 1,
+  tuesday: 2,
+  tue: 2,
+  tues: 2,
+  wednesday: 3,
+  wed: 3,
+  wedneseday: 3,
+  wednsesday: 3,
+  thursday: 4,
+  thu: 4,
+  thur: 4,
+  thurs: 4,
+  friday: 5,
+  fri: 5,
+  saturday: 6,
+  sat: 6,
+};
+
+function normalizeWeekdayText(text: string): string {
+  return text
+    .replace(/wednsesday/gi, "wednesday")
+    .replace(/wedneseday/gi, "wednesday")
+    .replace(/thursady/gi, "thursday");
+}
+
+/** Resolve "next Wednesday", "this Sunday", "on Friday" → YYYY-MM-DD. */
+export function parseWeekdayBookingDate(text: string, now = new Date()): string | null {
+  const normalized = normalizeWeekdayText(text);
+  const m = normalized.match(
+    /\b(?:(next|this|coming)\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)\b/i
+  );
+  if (!m) return null;
+
+  const modifier = (m[1] || "").toLowerCase();
+  const dayKey = m[2].toLowerCase();
+  const targetDow = WEEKDAY_DOW[dayKey];
+  if (targetDow === undefined) return null;
+
+  const currentDow = now.getDay();
+  let daysAhead = targetDow - currentDow;
+
+  if (modifier === "next") {
+    if (daysAhead <= 0) daysAhead += 7;
+    if (daysAhead === 0) daysAhead = 7;
+  } else if (modifier === "this" || modifier === "coming") {
+    if (daysAhead < 0) daysAhead += 7;
+  } else if (/\b(?:on|for)\s+(?:next|this)?/i.test(normalized)) {
+    if (daysAhead <= 0) daysAhead += 7;
+  } else {
+    if (daysAhead <= 0) daysAhead += 7;
+  }
+
+  const ymd = toLocalDateString(addLocalDays(now, daysAhead));
+  return isFutureBookingDate(ymd) ? ymd : null;
+}
+
+export function isDateLedBookingMessage(text: string): boolean {
+  const t = normalizeWeekdayText(text);
+  return (
+    parseWeekdayBookingDate(t) !== null ||
+    /\b(tomorrow|tonight|today|weekend|day after tomorrow|20\d{2}-\d{2}-\d{2})\b/i.test(t) ||
+    /\bbook(ing)?\s+(on|for)\s+/i.test(t)
+  );
+}
+
+export function formatHumanBookingDate(dateYmd: string): string {
+  const [y, mo, d] = dateYmd.split("-").map(Number);
+  if (!y || !mo || !d) return dateYmd;
+  const dt = new Date(y, mo - 1, d, 12, 0, 0, 0);
+  return dt.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" });
+}
+
 /** Parse simple party/date hints from guest text (instant path + AI backup). */
 export function tryExtractBookingHints(text: string, now = new Date()): LeadFieldUpdates {
   const hints: LeadFieldUpdates = {};
   const today = toLocalDateString(now);
+  const normalized = normalizeWeekdayText(text);
 
   const partyMatch =
-    text.match(/\b(?:party\s+of|table\s+for|for)\s+(\d{1,2})\b/i) ??
-    text.match(/\b(\d{1,2})\s+(?:people|pax|guests?|members?|of\s+us|log|janalu)\b/i);
+    normalized.match(/\b(?:party\s+of|table\s+for|for)\s+(\d{1,2})\b/i) ??
+    normalized.match(/\b(\d{1,2})\s+(?:people|pax|guests?|members?|of\s+us|log|janalu)\b/i);
   if (partyMatch) {
     const n = parseInt(partyMatch[1], 10);
     if (n >= 1 && n <= 30) hints.partySize = n;
   }
 
-  if (/\b(tonight|today|this evening|ee\s*roju|ikrata|aaj)\b/i.test(text)) {
+  const weekday = parseWeekdayBookingDate(normalized, now);
+  if (weekday) {
+    hints.bookingDate = weekday;
+  } else if (/\b(tonight|today|this evening|ee\s*roju|ikrata|aaj)\b/i.test(normalized)) {
     hints.bookingDate = today;
-  } else if (/\b(tomorrow|repu|kal|naa\s*kalu)\b/i.test(text)) {
+  } else if (/\b(tomorrow|repu|kal|naa\s*kalu)\b/i.test(normalized)) {
     hints.bookingDate = toLocalDateString(addLocalDays(now, 1));
-  } else if (/\bday after tomorrow\b/i.test(text)) {
+  } else if (/\bday after tomorrow\b/i.test(normalized)) {
     hints.bookingDate = toLocalDateString(addLocalDays(now, 2));
-  } else if (/\bthis weekend\b/i.test(text)) {
+  } else if (/\bthis weekend\b/i.test(normalized)) {
     const dow = now.getDay();
     const daysUntilSat = dow === 6 ? 0 : dow === 0 ? 6 : 6 - dow;
     hints.bookingDate = toLocalDateString(addLocalDays(now, daysUntilSat));
   }
 
-  const iso = text.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
+  const iso = normalized.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
   if (iso?.[1] && isFutureBookingDate(iso[1])) {
     hints.bookingDate = iso[1];
   }
 
-  const time12 = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(pm|am)\b/i);
+  const time12 = normalized.match(/\b(\d{1,2})(?::(\d{2}))?\s*(pm|am)\b/i);
   if (time12) {
     let h = parseInt(time12[1], 10);
     const m = time12[2] ? parseInt(time12[2], 10) : 0;
@@ -163,7 +246,7 @@ export function tryExtractBookingHints(text: string, now = new Date()): LeadFiel
     }
   }
 
-  const time24 = text.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+  const time24 = normalized.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
   if (time24 && !hints.bookingTime) {
     hints.bookingTime = `${String(parseInt(time24[1], 10)).padStart(2, "0")}:${time24[2]}`;
   }
@@ -175,9 +258,18 @@ export function tryExtractBookingHints(text: string, now = new Date()): LeadFiel
   return sanitizeChatLeadBookingFields(hints);
 }
 
+/** Apply date/party hints; clear stale event when guest books by date. */
+export function applyMessageBookingContext(text: string, now = new Date()): LeadFieldUpdates {
+  const hints = tryExtractBookingHints(text, now);
+  if (hints.bookingDate && isDateLedBookingMessage(text)) {
+    hints.selectedEventId = null;
+    hints.selectedEventName = null;
+  }
+  return hints;
+}
+
 export function buildBookingPrefillFromLead(lead: ChatLeadSnapshot): BookingPathPrefill {
   const prefill: BookingPathPrefill = {
-    eventId: lead.selectedEventId,
     name: lead.guestName,
     phone: lead.contactNumber,
     party: lead.partySize,
@@ -188,6 +280,11 @@ export function buildBookingPrefillFromLead(lead: ChatLeadSnapshot): BookingPath
     if (lead.bookingTime && isFutureBookingSlot(lead.bookingDate, lead.bookingTime)) {
       prefill.time = lead.bookingTime;
     }
+    return prefill;
+  }
+
+  if (lead.selectedEventId) {
+    prefill.eventId = lead.selectedEventId;
   }
 
   return prefill;

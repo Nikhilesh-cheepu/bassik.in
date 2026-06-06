@@ -23,6 +23,7 @@ import {
 } from "@/lib/club-rogue";
 import EventQuickBookSheet, { type EventQuickBookOffer } from "@/components/EventQuickBookSheet";
 import { getChatNeonTheme } from "@/lib/venue-chat-theme";
+import { normalizeBookingLinkUrl } from "@/lib/venue-chat-booking-link";
 import { clientActionUserMessage, type ClientChatActionType } from "@/lib/venue-chat-copy";
 import {
   isPosterOnlyMessage,
@@ -404,21 +405,12 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
   }, [brandId, offersLoaded, offers.length]);
 
   const handleBookingLink = useCallback(
-    async (link: { kind: "event" | "table"; eventId?: string; url: string }) => {
-      if (link.kind === "table") {
-        router.push(link.url.startsWith("/") ? link.url : `/${brandId}/book`);
-        return;
-      }
-      const eventId = link.eventId;
-      if (!eventId) return;
-      if (onOpenEventBook) {
-        onOpenEventBook(eventId);
-        return;
-      }
-      await loadOffers();
-      setEventSheetId(eventId);
+    (link: { kind: "event" | "table"; eventId?: string; url: string }) => {
+      setOpen(false);
+      const raw = link.url.startsWith("/") ? link.url : `/${brandId}/book`;
+      router.push(normalizeBookingLinkUrl(brandId, raw));
     },
-    [brandId, loadOffers, onOpenEventBook, router]
+    [brandId, router]
   );
 
   const optimisticSeed = useCallback((): ChatMessage[] => {

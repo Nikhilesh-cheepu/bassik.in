@@ -38,13 +38,36 @@ export function parseBookingLinkMetadata(
     return { kind: "event", url, label, eventId };
   }
   if (metadata.bookingKind === "table") {
+    const eventId = extractEventIdFromUrl(url);
+    if (eventId) return { kind: "event", url, label, eventId };
     return { kind: "table", url, label };
   }
 
   const eventId = extractEventIdFromUrl(url);
+  if (url.includes("/book")) {
+    if (eventId) return { kind: "event", url, label, eventId };
+    return { kind: "table", url, label };
+  }
   if (eventId) return { kind: "event", url, label, eventId };
-  if (url.includes("/book")) return { kind: "table", url, label };
   return { kind: "external", url, label };
+}
+
+/** Normalize legacy `/{brand}?eventId=` links to the book page. */
+export function normalizeBookingLinkUrl(brandId: string, url: string): string {
+  if (!url.startsWith("/")) return url;
+  try {
+    const u = new URL(url, "https://bassik.in");
+    const base = `/${brandId}`;
+    if ((u.pathname === base || u.pathname === `${base}/`) && u.search) {
+      return `${base}/book${u.search}`;
+    }
+    if (u.pathname === `${base}/book` || u.pathname === `${base}/book/`) {
+      return `${base}/book${u.search}`;
+    }
+  } catch {
+    /* keep url */
+  }
+  return url;
 }
 
 function extractEventIdFromUrl(url: string): string | null {

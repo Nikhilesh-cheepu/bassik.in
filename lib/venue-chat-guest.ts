@@ -2,7 +2,7 @@ function rejectBadGuestName(name: string | undefined): string | undefined {
   if (!name?.trim()) return undefined;
   const n = name.trim().replace(/[.,;:!?]+$/g, "").trim();
   if (n.length < 2 || n.length > 48) return undefined;
-  if (/^(i'?m|interested|book|table|hi|hello|yes|ok|sure|thanks)$/i.test(n)) return undefined;
+  if (/^(i'?m|interested|book|table|hi|hello|yes|yeah|yep|yup|ok|okay|k|sure|thanks|thank you|fine|cool|great|done|alright|right)$/i.test(n)) return undefined;
   if (/interested in/i.test(n)) return undefined;
   if (/\bDJ\b/i.test(n) && n.split(/\s+/).length > 2) return undefined;
   if (/^\d/.test(n)) return undefined;

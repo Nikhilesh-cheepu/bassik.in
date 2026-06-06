@@ -107,7 +107,8 @@ export async function runVenueChatTurn(params: {
     "• If they share name/phone voluntarily, capture it — never nag if they're just browsing.",
     CHAT_BOOKING_AI_RULES,
     "• Once you know their real name, use it in every reply.",
-    "• NEVER set guestName from phrases like 'I'm interested in…' or event titles — those are not names.",
+    "• NEVER set guestName from okay, yes, sure, thanks, or other affirmations — those are not names.",
+    "• Respond to the LAST user message first: if they change the date (e.g. next Wednesday), acknowledge that date — do not repeat an old event name.",
     "• If they picked or mentioned an event, set selectedEventId and selectedEventName. Use a short event label in chat (e.g. 'DJ SHWETH'), not the full poster line.",
     "• Menu, directions, offers: answer from venue facts. Never invent.",
     "• One question per message. No nosy questions about who they're with.",
@@ -177,6 +178,11 @@ export async function runVenueChatTurn(params: {
     }
 
     const sanitized = sanitizeChatLeadBookingFields(updates);
+
+    if (sanitized.bookingDate) {
+      sanitized.selectedEventId = null;
+      sanitized.selectedEventName = null;
+    }
 
     if (sanitized.guestName || sanitized.contactNumber) {
       sanitized.status = "BOOKING_STARTED";

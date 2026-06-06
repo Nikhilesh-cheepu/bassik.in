@@ -27,6 +27,7 @@ export default async function OutletBookPage({
     date: pickParam(sp.date),
     time: pickParam(sp.time),
     party: Number.isFinite(partyNum) && partyNum > 0 ? partyNum : undefined,
+    eventId: pickParam(sp.eventId),
   };
 
   return (

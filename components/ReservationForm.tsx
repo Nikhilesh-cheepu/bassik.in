@@ -19,6 +19,7 @@ interface ReservationFormProps {
     date?: string;
     time?: string;
     party?: number;
+    eventId?: string;
   };
 }
 
@@ -43,6 +44,7 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
     timeSlot: "",
     selectedDiscounts: [] as string[],
     notes: "",
+    eventId: "" as string,
     hubSpotId: undefined as string | undefined,
     clubRogueCoverAcknowledged: false,
     bookingNightGenre: "" as "" | "tollywood" | "bollywood",
@@ -100,6 +102,8 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
     const party =
       prefill?.party && prefill.party > 0 ? Math.min(30, Math.round(prefill.party)) : 2;
 
+    const eventId = prefill?.eventId?.trim().slice(0, 64) ?? "";
+
     setFormData((prev) => ({
       ...prev,
       fullName: name || prev.fullName,
@@ -107,6 +111,7 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
       date,
       timeSlot: time,
       selectedDiscounts: [],
+      eventId,
       clubRogueCoverAcknowledged: false,
       bookingNightGenre: "",
     }));
@@ -117,7 +122,7 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
     setReservationConfirmed(false);
     setReservationId(null);
     setShowSuccessToast(false);
-  }, [brand.id, prefill?.name, prefill?.phone, prefill?.date, prefill?.time, prefill?.party]);
+  }, [brand.id, prefill?.name, prefill?.phone, prefill?.date, prefill?.time, prefill?.party, prefill?.eventId]);
 
   useEffect(() => {
     return () => {
@@ -253,6 +258,7 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
           timeSlot: formData.timeSlot,
           notes: formData.notes || null,
           selectedDiscounts: formData.selectedDiscounts,
+          ...(formData.eventId ? { eventId: formData.eventId } : {}),
           brandId: brand.id,
           brandName: brand.name,
           hubSpotId: brand.id === "the-hub" ? formData.hubSpotId || null : null,
@@ -273,6 +279,7 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
           timeSlot: "",
           selectedDiscounts: [],
           notes: "",
+          eventId: "",
           hubSpotId: undefined,
           clubRogueCoverAcknowledged: false,
           bookingNightGenre: "",

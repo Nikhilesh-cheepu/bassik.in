@@ -101,39 +101,31 @@ export default function ChatMessageBubble({
     Boolean(attachmentUrl);
   const minimal = variant === "minimal";
 
+  const linkHref = chatLink?.url.startsWith("/") ? chatLink.url : chatLink?.url ?? "#";
+  const useBookingHandler =
+    Boolean(bookingLink && onBookingLink) &&
+    (bookingLink?.kind === "event" || bookingLink?.kind === "table");
+
   const linkButton = chatLink ? (
-    bookingLink && onBookingLink && (bookingLink.kind === "event" || bookingLink.kind === "table") ? (
-      <button
-        type="button"
-        onClick={() =>
-          onBookingLink({
-            kind: bookingLink.kind as "event" | "table",
-            eventId: bookingLink.eventId,
-            url: bookingLink.url,
-          })
-        }
-        className="mt-2 inline-flex items-center rounded-full px-4 py-2.5 text-[13px] font-semibold text-white shadow-lg"
-        style={{
-          background: "linear-gradient(135deg, #22d3ee 0%, #a855f7 100%)",
-          boxShadow: "0 8px 24px rgba(34,211,238,0.3)",
-        }}
-      >
-        {chatLink.label}
-      </button>
-    ) : (
-      <a
-        href={chatLink.url.startsWith("/") ? chatLink.url : chatLink.url}
-        target={chatLink.url.startsWith("/") ? undefined : "_blank"}
-        rel={chatLink.url.startsWith("/") ? undefined : "noopener noreferrer"}
-        className="mt-2 inline-flex items-center rounded-full px-4 py-2.5 text-[13px] font-semibold text-white shadow-lg"
-        style={{
-          background: "linear-gradient(135deg, #22d3ee 0%, #a855f7 100%)",
-          boxShadow: "0 8px 24px rgba(34,211,238,0.3)",
-        }}
-      >
-        {chatLink.label}
-      </a>
-    )
+    <a
+      href={linkHref}
+      onClick={(e) => {
+        if (!useBookingHandler || !bookingLink || !onBookingLink) return;
+        e.preventDefault();
+        onBookingLink({
+          kind: bookingLink.kind as "event" | "table",
+          eventId: bookingLink.eventId,
+          url: bookingLink.url,
+        });
+      }}
+      className="relative z-10 mt-2 inline-flex cursor-pointer items-center rounded-full px-4 py-2.5 text-[13px] font-semibold text-white shadow-lg active:scale-[0.98]"
+      style={{
+        background: "linear-gradient(135deg, #22d3ee 0%, #a855f7 100%)",
+        boxShadow: "0 8px 24px rgba(34,211,238,0.3)",
+      }}
+    >
+      {chatLink.label}
+    </a>
   ) : null;
 
   const attachmentBlock = attachmentUrl ? (

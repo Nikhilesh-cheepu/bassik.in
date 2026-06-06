@@ -35,8 +35,5 @@ export function bookingPath(
   if (opts.time && /^\d{2}:\d{2}$/.test(opts.time)) params.set("time", opts.time);
   if (opts.party && opts.party > 0) params.set("party", String(Math.min(30, opts.party)));
 
-  if (opts.eventId) {
-    return appendQuery(`/${brandId}`, params);
-  }
   return appendQuery(`/${brandId}/book`, params);
 }
