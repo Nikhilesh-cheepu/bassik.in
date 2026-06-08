@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getLeadsManagerFromRequest } from "@/lib/leads-manager-auth";
-import { getLeadSnapshot, getMessages, getMessagesAfter, getMessagesSince } from "@/lib/venue-chat-data";
+import { deleteVenueChatLead, getLeadSnapshot, getMessages, getMessagesAfter, getMessagesSince } from "@/lib/venue-chat-data";
 import type { VenueChatLeadStatus } from "@prisma/client";
 
 export async function GET(
@@ -61,4 +61,23 @@ export async function PATCH(
   }
   const lead = await prisma.venueChatLead.update({ where: { id: leadId }, data });
   return NextResponse.json({ lead });
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ leadId: string }> }
+) {
+  if (!(await getLeadsManagerFromRequest(_req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { leadId } = await params;
+  const existing = await getLeadSnapshot(leadId);
+  if (!existing) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  const ok = await deleteVenueChatLead(leadId);
+  if (!ok) {
+    return NextResponse.json({ error: "Delete failed" }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, deletedLeadId: leadId });
 }

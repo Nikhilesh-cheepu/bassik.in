@@ -336,6 +336,7 @@ export default function LeadsManagerClient() {
   const [savingNotes, setSavingNotes] = useState(false);
   const [savingLabel, setSavingLabel] = useState(false);
   const [showTools, setShowTools] = useState(false);
+  const [deletingLead, setDeletingLead] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const threadCache = useRef<Map<string, { lead: LeadDetail; messages: ChatMessage[] }>>(new Map());
   const threadLastMsgIdRef = useRef<string>("");
@@ -489,6 +490,31 @@ export default function LeadsManagerClient() {
     setPendingMeta(null);
     setShortcutError(null);
     threadLastMsgIdRef.current = "";
+    setShowTools(false);
+  };
+
+  const deleteSelectedLead = async () => {
+    if (!selectedId || !leadDetail) return;
+    if (
+      !window.confirm(
+        `Delete "${leadDetail.displayLabel}" permanently? All messages will be removed and cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeletingLead(true);
+    try {
+      const res = await fetch(`/api/leads-manager/leads/${selectedId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) return;
+      threadCache.current.delete(selectedId);
+      closeChat();
+      await loadLeads(brandFilter || undefined);
+    } finally {
+      setDeletingLead(false);
+    }
   };
 
   const postToGuest = async (
@@ -1051,6 +1077,20 @@ export default function LeadsManagerClient() {
                 >
                   {savingNotes ? "Saving…" : "Save notes"}
                 </button>
+              </div>
+
+              <div className="border-t border-white/[0.06] px-4 py-3">
+                <button
+                  type="button"
+                  onClick={deleteSelectedLead}
+                  disabled={deletingLead}
+                  className="w-full rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-[11px] font-semibold text-red-300 disabled:opacity-40"
+                >
+                  {deletingLead ? "Deleting…" : "Delete this chat"}
+                </button>
+                <p className="mt-1 text-[10px] text-white/35">
+                  Removes this lead and all messages from the database.
+                </p>
               </div>
             </div>
           ) : null}

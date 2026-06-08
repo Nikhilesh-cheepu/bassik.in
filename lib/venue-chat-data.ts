@@ -604,3 +604,25 @@ export async function listLeadsForManager(brandId?: string | null) {
     utmContent: r.utmContent,
   }));
 }
+
+/** Permanently delete one chat lead and all messages/attachments (cascade). */
+export async function deleteVenueChatLead(leadId: string): Promise<boolean> {
+  try {
+    await prisma.venueChatLead.delete({ where: { id: leadId } });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Delete the guest's current session lead for this outlet (if any). */
+export async function deleteVenueChatLeadBySessionToken(
+  brandId: string,
+  sessionToken: string | null | undefined
+): Promise<void> {
+  if (!sessionToken?.trim()) return;
+  const row = await prisma.venueChatLead.findUnique({ where: { sessionToken: sessionToken.trim() } });
+  if (row?.brandId === brandId) {
+    await prisma.venueChatLead.delete({ where: { id: row.id } });
+  }
+}

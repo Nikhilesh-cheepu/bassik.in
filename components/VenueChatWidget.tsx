@@ -123,6 +123,8 @@ function ChatPanel({
   onExpand,
   onClose,
   showClose,
+  onRestartChat,
+  restartingChat,
 }: {
   accentColor: string;
   displayVenueName: string;
@@ -153,6 +155,8 @@ function ChatPanel({
   onExpand?: () => void;
   onClose?: () => void;
   showClose?: boolean;
+  onRestartChat?: () => void;
+  restartingChat?: boolean;
 }) {
   const theme = getChatNeonTheme(accentColor);
   const venueCaps = displayVenueName.toUpperCase();
@@ -215,6 +219,26 @@ function ChatPanel({
             style={{ background: "rgba(255,255,255,0.04)" }}
           >
             Expand
+          </button>
+        ) : null}
+        {onRestartChat ? (
+          <button
+            type="button"
+            onClick={onRestartChat}
+            disabled={restartingChat || loading}
+            className="shrink-0 rounded-full p-2 text-white/45 disabled:opacity-40"
+            style={{ background: "rgba(255,255,255,0.04)" }}
+            aria-label="Start new chat"
+            title="Start new chat"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
           </button>
         ) : null}
         <a
@@ -488,6 +512,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
   const [error, setError] = useState<string | null>(null);
   const [aiPending, setAiPending] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
+  const [restartingChat, setRestartingChat] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bootedRef = useRef(false);
   const lastMsgIdRef = useRef<string>("");
@@ -806,6 +831,35 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     setOpen(false);
   }, [isEmbed]);
 
+  const restartChat = useCallback(async () => {
+    if (
+      !window.confirm(
+        "Start a fresh chat? Your current conversation will be cleared from this device."
+      )
+    ) {
+      return;
+    }
+    setRestartingChat(true);
+    setAiPending(false);
+    setActionBusy(false);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/venues/${brandId}/chat/restart`,
+        chatRequestInit({ method: "POST" })
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not start new chat");
+      lastMsgIdRef.current = "";
+      applyPayload(data);
+      scrollToBottom(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not start new chat");
+    } finally {
+      setRestartingChat(false);
+    }
+  }, [brandId, chatRequestInit, scrollToBottom]);
+
   const handleBookingLink = useCallback(
     (link: { kind: "event" | "table"; eventId?: string; url: string }) => {
       const raw = link.url.startsWith("/") ? link.url : `/${brandId}/book`;
@@ -853,6 +907,8 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     openPricing,
     openWebsite,
     onBookingLink: handleBookingLink,
+    onRestartChat: restartChat,
+    restartingChat,
   };
 
   const eventSheet = !onOpenEventBook ? (

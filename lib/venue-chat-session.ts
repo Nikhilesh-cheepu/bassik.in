@@ -2,6 +2,7 @@ import "server-only";
 
 import { BRANDS } from "@/lib/brands";
 import {
+  deleteVenueChatLeadBySessionToken,
   getLeadSnapshot,
   getMessages,
   getOrCreateLead,
@@ -64,6 +65,16 @@ export async function loadChatSession(
       hostName: knowledge.hostName,
     },
   };
+}
+
+/** Wipe the guest's current thread and start a brand-new lead + welcome messages. */
+export async function restartGuestChatSession(
+  brandId: string,
+  sessionToken: string | null,
+  utm?: UtmParams
+): Promise<ChatSessionPayload> {
+  await deleteVenueChatLeadBySessionToken(brandId, sessionToken);
+  return loadChatSession(brandId, null, utm);
 }
 
 export function resolveBrandId(outletSlug: string): string {
