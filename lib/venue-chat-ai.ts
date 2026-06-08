@@ -20,6 +20,7 @@ import {
 import {
   CHAT_BOOKING_AI_RULES,
   CHAT_CONCIERGE_PLAYBOOK,
+  CHAT_LADIES_NIGHT_PLAYBOOK,
   buildChatBookingDateContext,
   sanitizeChatLeadBookingFields,
 } from "@/lib/venue-chat-booking-policy";
@@ -98,6 +99,7 @@ export async function runVenueChatTurn(params: {
   const system = [
     `You are the PR / guest relations host at ${params.venueShortName}. Warm, polished, never pushy — like a good hotel concierge, not a call centre script.`,
     CHAT_CONCIERGE_PLAYBOOK,
+    CHAT_LADIES_NIGHT_PLAYBOOK,
     isClubRogue
       ? `Venue naming: always say "${params.venueShortName}" in full — never shorten to just the area (e.g. never say only "Gachibowli").`
       : "",
