@@ -14,6 +14,10 @@ import {
 import { randomBytes } from "crypto";
 import { sanitizeGuestName } from "@/lib/venue-chat-guest";
 import {
+  managerInboxLeadWhere,
+  managerInboxPreview,
+} from "@/lib/venue-chat-leads-cleanup";
+import {
   autoDisplayLabelForGuestName,
   isDefaultLeadLabel,
 } from "@/lib/venue-chat-lead-labels";
@@ -562,13 +566,14 @@ export async function tryFinalizeBooking(leadId: string): Promise<{ ok: boolean;
 
 export async function listLeadsForManager(brandId?: string | null) {
   const rows = await prisma.venueChatLead.findMany({
-    where: brandId ? { brandId } : undefined,
+    where: managerInboxLeadWhere(brandId),
     orderBy: { lastMessageAt: "desc" },
     take: 200,
     include: {
       messages: {
         orderBy: { createdAt: "desc" },
-        take: 1,
+        take: 12,
+        select: { role: true, content: true, metadata: true },
       },
     },
   });
@@ -586,7 +591,13 @@ export async function listLeadsForManager(brandId?: string | null) {
     managerNotes: r.managerNotes,
     status: r.status,
     lastMessageAt: r.lastMessageAt.toISOString(),
-    preview: r.messages[0]?.content?.slice(0, 120) ?? "",
+    preview: managerInboxPreview(
+      [...r.messages].reverse().map((m) => ({
+        role: m.role,
+        content: m.content,
+        metadata: m.metadata,
+      }))
+    ),
     utmSource: r.utmSource,
     utmMedium: r.utmMedium,
     utmCampaign: r.utmCampaign,

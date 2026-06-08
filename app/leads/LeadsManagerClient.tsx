@@ -133,6 +133,7 @@ function OutletSettingsCard({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [pruning, setPruning] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/leads-manager/settings?brandId=${encodeURIComponent(brandId)}`, {
@@ -192,6 +193,35 @@ function OutletSettingsCard({
       if (res.ok) onReset();
     } finally {
       setResetting(false);
+    }
+  };
+
+  const pruneTestChats = async () => {
+    if (
+      !window.confirm(
+        `Remove test chats for ${brand?.shortName ?? brandId}? Keeps leads where the guest actually messaged, booked, or left phone + name. Smart-renames the rest.`
+      )
+    ) {
+      return;
+    }
+    if (window.prompt('Type PRUNE to confirm') !== "PRUNE") return;
+    setPruning(true);
+    try {
+      const res = await fetch("/api/leads-manager/prune", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandId, confirm: "PRUNE" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        window.alert(
+          `Done — removed ${data.deletedLeads ?? 0} test chat(s), kept ${data.keptLeads ?? 0}, renamed ${data.relabeledLeads ?? 0}.`
+        );
+        onReset();
+      }
+    } finally {
+      setPruning(false);
     }
   };
 
@@ -268,6 +298,14 @@ function OutletSettingsCard({
         {saved ? <span className="text-[10px] text-emerald-400">Saved</span> : null}
         <button
           type="button"
+          onClick={pruneTestChats}
+          disabled={pruning}
+          className="rounded-full border border-amber-500/30 px-3 py-1.5 text-[10px] font-semibold text-amber-200 disabled:opacity-40"
+        >
+          {pruning ? "Cleaning…" : "Clean test chats"}
+        </button>
+        <button
+          type="button"
           onClick={resetChats}
           disabled={resetting}
           className="ml-auto rounded-full border border-red-500/30 px-3 py-1.5 text-[10px] font-semibold text-red-300 disabled:opacity-40"
@@ -308,6 +346,14 @@ export default function LeadsManagerClient() {
   const inboxBrands = useMemo(() => brandsForLeadsManager(), []);
 
   const chatMessages = useMemo(() => filterManagerThreadView(thread), [thread]);
+  const hiddenWelcomeCount = useMemo(
+    () => Math.max(0, thread.length - chatMessages.length),
+    [thread.length, chatMessages.length]
+  );
+  const hasGuestUserMessage = useMemo(
+    () => thread.some((m) => m.role === "USER"),
+    [thread]
+  );
 
   const mergeThreadMessages = (prev: ChatMessage[], incoming: ChatMessage[]) => {
     const map = new Map(prev.map((m) => [m.id, m]));
@@ -1016,9 +1062,16 @@ export default function LeadsManagerClient() {
               </div>
             ) : chatMessages.length === 0 ? (
               <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
-                <p className="text-sm font-medium text-white/50">No guest messages yet</p>
-                <p className="mt-1 max-w-[240px] text-[12px] leading-relaxed text-white/35">
-                  Welcome cards are hidden here. Use quick send below to message the guest.
+                <p className="text-sm font-medium text-white/50">
+                  {hasGuestUserMessage ? "No visible messages" : "No guest reply yet"}
+                </p>
+                <p className="mt-1 max-w-[260px] text-[12px] leading-relaxed text-white/35">
+                  {hiddenWelcomeCount > 0
+                    ? `Guest opened chat (${hiddenWelcomeCount} welcome/event card${hiddenWelcomeCount === 1 ? "" : "s"} hidden here).`
+                    : "This lead has no messages stored yet."}
+                  {hasGuestUserMessage
+                    ? " Try refreshing or check another lead."
+                    : " When they type, you'll see it here. Use quick send below to nudge them."}
                 </p>
               </div>
             ) : (
