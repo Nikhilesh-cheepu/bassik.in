@@ -8,6 +8,7 @@ import {
   isInstantAction,
   maybeSendBookingLinkIfReady,
   tryInstantBookIntentReply,
+  tryInstantBookingContactPrompt,
   tryInstantContactCaptureReply,
   tryInstantEventSelectReply,
   type ChatActionType,
@@ -227,7 +228,22 @@ export async function POST(
         newMessages.push(...contactCapture.messages);
         currentLead = (await getLeadSnapshot(lead.id)) ?? currentLead;
         usedInstant = true;
-      } else if (guestIsBookingIntent(text)) {
+      } else {
+        const contactPrompt = await tryInstantBookingContactPrompt({
+          leadId: lead.id,
+          brandId,
+          lead: currentLead,
+          userMessage: text,
+          bookingCtxApplied: bookingCtx,
+        });
+        if (contactPrompt?.length) {
+          newMessages.push(...contactPrompt);
+          currentLead = (await getLeadSnapshot(lead.id)) ?? currentLead;
+          usedInstant = true;
+        }
+      }
+
+      if (!usedInstant && guestIsBookingIntent(text)) {
         const bookReplies = await tryInstantBookIntentReply({
           leadId: lead.id,
           brandId,

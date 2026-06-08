@@ -33,6 +33,12 @@ export function formatNameAndPhoneAsk(intro: string, outro?: string): string {
   return `${intro.trim()}\n\nName:-\n\nContact num:-${tail}`;
 }
 
+/** After phone is known — ask name only. */
+export function formatNameAsk(intro: string, outro?: string): string {
+  const tail = outro?.trim() ? `\n\n${outro.trim()}` : "";
+  return `${intro.trim()}\n\nName:-${tail}`;
+}
+
 /** After name is known — ask mobile only. */
 export function formatPhoneAsk(intro: string, outro?: string): string {
   const tail = outro?.trim() ? `\n\n${outro.trim()}` : "";

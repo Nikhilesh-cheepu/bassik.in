@@ -29,7 +29,7 @@ type HistoryRow = { role: "user" | "assistant"; content: string };
 function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const d = raw.replace(/\D/g, "").slice(-10);
-  return d.length === 10 ? d : null;
+  return d.length === 10 && /^[6-9]/.test(d) ? d : null;
 }
 
 export async function runVenueChatTurn(params: {

@@ -23,7 +23,7 @@ Booking rules (critical — chat is NOT the booking engine):
 • NEVER store past dates or past times (including a time earlier today). Tell them live slots are on the booking page.
 • When they want a table/event/entry: capture name + mobile; the app adds the book button — do NOT paste URLs in reply text.
 • bookingDate / bookingTime / partySize in leadUpdates = prefill hints only (today, tomorrow, any future date). Form shows real availability.
-• If they give date/time/party but not name/phone yet → ask name + mobile in one warm line, then they get the booking link.
+• If they give date/time/party but not name/phone yet → ask using the Name:- / Contact num:- layout (with emojis), then they get the booking link.
 • Menu, cover, dress code, directions, events → answer from venue facts. Confirmation only on the official book flow.
 
 Relative dates (use calendar below — always output YYYY-MM-DD in leadUpdates):
@@ -240,6 +240,18 @@ export function tryExtractBookingHints(text: string, now = new Date()): LeadFiel
   const iso = normalized.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
   if (iso?.[1] && isFutureBookingDate(iso[1])) {
     hints.bookingDate = iso[1];
+  }
+
+  const dayOnly = normalized.match(/^(\d{1,2})(?:st|nd|rd|th)?\.?$/i);
+  if (dayOnly && !hints.bookingDate) {
+    const day = parseInt(dayOnly[1], 10);
+    if (day >= 1 && day <= 31) {
+      const candidate = new Date(now.getFullYear(), now.getMonth(), day, 12, 0, 0, 0);
+      if (candidate.getDate() === day) {
+        const ymd = toLocalDateString(candidate);
+        if (isFutureBookingDate(ymd)) hints.bookingDate = ymd;
+      }
+    }
   }
 
   const time12 = normalized.match(/\b(\d{1,2})(?::(\d{2}))?\s*(pm|am)\b/i);

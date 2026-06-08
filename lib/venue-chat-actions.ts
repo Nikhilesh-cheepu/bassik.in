@@ -18,7 +18,7 @@ import {
   clubRogueAskPhoneCopy,
   isClubRogueBrand,
 } from "@/lib/club-rogue";
-import { formatNameAndPhoneAsk, formatPhoneAsk } from "@/lib/venue-chat-copy";
+import { formatNameAndPhoneAsk, formatNameAsk, formatPhoneAsk } from "@/lib/venue-chat-copy";
 import {
   friendlyEventLabel,
   looksLikePlausibleGuestName,
@@ -61,35 +61,87 @@ export function normalizePhone(raw: string | null | undefined): string | null {
   return d.length === 10 && /^[6-9]/.test(d) ? d : null;
 }
 
+function findPhoneInText(text: string): { phone: string; span: string } | null {
+  const structured = text.match(
+    /(?:^|\n)\s*(?:contact\s*(?:num|number|no)?|mobile|phone|number)\s*[:-]+\s*([\d\s+-]{10,})/im
+  );
+  if (structured?.[1]) {
+    const phone = normalizePhone(structured[1]);
+    if (phone) return { phone, span: structured[0] };
+  }
+
+  for (const m of text.matchAll(/\d[\d\s+-]{8,}\d/g)) {
+    const phone = normalizePhone(m[0]);
+    if (phone) return { phone, span: m[0] };
+  }
+
+  for (const m of text.matchAll(/\d[\d\s+-]*/g)) {
+    const phone = normalizePhone(m[0]);
+    if (phone) return { phone, span: m[0] };
+  }
+
+  return null;
+}
+
+function stripPhoneFromText(text: string, phone: string): string {
+  let out = text;
+  for (const m of text.matchAll(/\d[\d\s+-]*/g)) {
+    if (normalizePhone(m[0]) === phone) {
+      out = out.replace(m[0], " ");
+    }
+  }
+  return out;
+}
+
 export function tryExtractContactFromMessage(text: string): {
   guestName?: string;
   contactNumber?: string;
 } {
-  const phone =
-    normalizePhone(text) ??
-    normalizePhone(
-      text.match(/(?:contact\s*(?:num|number|no)?|mobile|phone|number)\s*[:-]+\s*([\d\s+-]{10,})/im)?.[1]
-    );
+  const trimmed = text.trim();
+  if (!trimmed) return {};
+
+  const lines = trimmed.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length >= 2) {
+    let phone: string | undefined;
+    const nameParts: string[] = [];
+    for (const line of lines) {
+      const linePhone = findPhoneInText(line)?.phone ?? normalizePhone(line);
+      if (linePhone && line.replace(/\D/g, "").length >= 10) {
+        phone = linePhone;
+        continue;
+      }
+      const name = rejectExtractedGuestName(line);
+      if (name) nameParts.push(name);
+    }
+    if (phone && nameParts.length > 0) {
+      return { guestName: nameParts.join(" "), contactNumber: phone };
+    }
+  }
+
+  const found = findPhoneInText(trimmed);
+  const phone = found?.phone ?? normalizePhone(trimmed);
 
   let guestName: string | undefined;
 
-  const structuredName = text.match(/(?:^|\n)\s*name\s*[:-]+\s*([A-Za-z][A-Za-z\s.'-]{1,35})/im)?.[1];
+  const structuredName = trimmed.match(
+    /(?:^|\n)\s*name\s*[:-]+\s*([A-Za-z][A-Za-z\s.'-]{1,35})/im
+  )?.[1];
   if (structuredName) {
     guestName = rejectExtractedGuestName(structuredName.trim());
   }
 
   const named =
-    text.match(/(?:^|[\s,])(?:my name is|this is|i am|name[:\s-]+)\s*([A-Za-z][A-Za-z\s.'-]{1,35})/i) ??
-    text.match(/(?:^|[\s,])i'?m\s+(?!interested\b)([A-Za-z][A-Za-z\s.'-]{1,35})/i) ??
-    text.match(/^([A-Za-z][A-Za-z\s.'-]{1,35})\s*[,–—-]/);
+    trimmed.match(/(?:^|[\s,])(?:my name is|this is|i am|name[:\s-]+)\s*([A-Za-z][A-Za-z\s.'-]{1,35})/i) ??
+    trimmed.match(/(?:^|[\s,])i'?m\s+(?!interested\b)([A-Za-z][A-Za-z\s.'-]{1,35})/i) ??
+    trimmed.match(/^([A-Za-z][A-Za-z\s.'-]{1,35})\s*[,–—-]/);
   if (!guestName && named?.[1]) {
-    guestName = rejectExtractedGuestName(named[1].trim().replace(/\s+(and|mobile|phone|number).*$/i, "").trim());
+    guestName = rejectExtractedGuestName(
+      named[1].trim().replace(/\s+(and|mobile|phone|number).*$/i, "").trim()
+    );
   }
 
   if (!guestName && phone) {
-    const stripped = text
-      .replace(phone, "")
-      .replace(/\d{10}/g, "")
+    const stripped = stripPhoneFromText(trimmed, phone)
       .replace(/(?:^|\n)\s*(?:name|contact\s*(?:num|number|no)?|mobile|phone)\s*[:-]+[^\n]*/gim, " ")
       .replace(/[^\w\s.'-]/g, " ")
       .trim();
@@ -101,7 +153,6 @@ export function tryExtractContactFromMessage(text: string): {
   }
 
   if (!guestName && !phone) {
-    const trimmed = text.trim();
     const words = trimmed.split(/\s+/).filter(Boolean);
     if (words.length === 1 && looksLikePlausibleGuestName(trimmed)) {
       guestName = rejectExtractedGuestName(trimmed);
@@ -221,16 +272,21 @@ export async function maybeSendBookingLinkIfReady(params: {
   return appendBookingLinkMessage(params.leadId, params.brandId, "", params.lead);
 }
 function askNameCopy(brandId: string, eventName?: string | null): string {
-  if (isClubRogueBrand(brandId)) return clubRogueBeforeBookingAskCopy(eventName);
+  if (isClubRogueBrand(brandId)) {
+    return formatNameAsk(
+      "Almost there 😊",
+      "Then I'll send you to pick your slot ✨"
+    );
+  }
   const ev = friendlyEventLabel(eventName);
   if (ev !== "this night") {
-    return formatNameAndPhoneAsk(
-      `Great pick — ${ev} is going to be a vibe 🎉`,
+    return formatNameAsk(
+      `Thanks — just need your name for ${ev} 🎉`,
       "I'll sort the rest for you ✨"
     );
   }
-  return formatNameAndPhoneAsk(
-    "I'd love to get you a table 😊",
+  return formatNameAsk(
+    "Thanks 😊",
     "I'll take care of everything from here ✨"
   );
 }
@@ -497,7 +553,78 @@ function bookContactAskCopy(_venue: string, brandId: string, telugu: boolean, ev
       "Table book chesi help chestha ✨"
     );
   }
-  return askNameCopy(brandId, eventName);
+  return askNameAndPhoneCopy(brandId, eventName);
+}
+
+export function guestIsAcknowledgment(text: string): boolean {
+  return /^(ok|okay|k|sure|yes|yeah|yep|yup|fine|cool|great|alright|done|got it|sounds good|perfect|👍|✅)$/i.test(
+    text.trim().replace(/[!.\s]+$/g, "")
+  );
+}
+
+function guestLooksLikeDatePick(text: string): boolean {
+  const t = text.trim();
+  if (/^\d{1,2}(?:st|nd|rd|th)?\.?$/i.test(t)) return true;
+  return Object.keys(applyMessageBookingContext(t)).length > 0;
+}
+
+function guestLooksLikeFactualQuestion(text: string): boolean {
+  if (!/\?/.test(text)) return false;
+  return /\b(cover|charge|price|menu|time|where|when|what|how|cost|parking|dress|vibe|offer|event)\b/i.test(
+    text
+  );
+}
+
+/** Deterministic contact ask — same layout every time during booking flow. */
+export async function tryInstantBookingContactPrompt(params: {
+  leadId: string;
+  brandId: string;
+  lead: ChatLeadSnapshot;
+  userMessage: string;
+  bookingCtxApplied: ReturnType<typeof applyMessageBookingContext>;
+}): Promise<ChatMessageDto[] | null> {
+  const { leadId, brandId, lead, userMessage, bookingCtxApplied } = params;
+  const name = sanitizeGuestName(lead.guestName);
+  const phone = normalizePhone(lead.contactNumber);
+  if (name && phone) return null;
+
+  const inBookingFlow =
+    lead.status === "BOOKING_STARTED" ||
+    Boolean(lead.bookingDate) ||
+    Boolean(lead.selectedEventId) ||
+    Object.keys(bookingCtxApplied).length > 0;
+
+  if (!inBookingFlow) return null;
+  if (guestLooksLikeFactualQuestion(userMessage)) return null;
+
+  const shouldPrompt =
+    Object.keys(bookingCtxApplied).length > 0 ||
+    guestIsAcknowledgment(userMessage) ||
+    guestLooksLikeDatePick(userMessage) ||
+    (lead.status === "BOOKING_STARTED" && Boolean(name || phone));
+
+  if (!shouldPrompt) return null;
+
+  if (lead.status !== "BOOKING_STARTED") {
+    await updateLeadFields(leadId, { status: "BOOKING_STARTED" });
+  }
+
+  const fresh = (await getLeadSnapshot(leadId)) ?? lead;
+  const resolvedName = sanitizeGuestName(fresh.guestName);
+
+  if (resolvedName && !normalizePhone(fresh.contactNumber)) {
+    return [
+      await appendMessage(leadId, "ASSISTANT", askPhoneCopy(brandId, resolvedName, fresh)),
+    ];
+  }
+
+  return [
+    await appendMessage(
+      leadId,
+      "ASSISTANT",
+      askNameAndPhoneCopy(brandId, fresh.selectedEventName)
+    ),
+  ];
 }
 
 /** Instant reply when guest taps an event poster — no AI wait. */
@@ -511,7 +638,7 @@ export async function tryInstantEventSelectReply(params: {
 }): Promise<ChatMessageDto[]> {
   const { leadId, brandId, knowledge, lead, eventName, offerId } = params;
   if (!offerId) {
-    return [await appendMessage(leadId, "ASSISTANT", askNameCopy(brandId, eventName))];
+    return [await appendMessage(leadId, "ASSISTANT", askNameAndPhoneCopy(brandId, eventName))];
   }
 
   const title = eventName.split(" · ")[0]?.trim() || eventName;
