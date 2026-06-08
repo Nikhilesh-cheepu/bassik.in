@@ -21,13 +21,17 @@ import {
 import { formatNameAndPhoneAsk, formatNameAsk, formatPhoneAsk } from "@/lib/venue-chat-copy";
 import {
   friendlyEventLabel,
-  looksLikePlausibleGuestName,
-  rejectExtractedGuestName,
   sanitizeGuestName,
 } from "@/lib/venue-chat-guest";
+import {
+  mergeContactFromConversation,
+  normalizePhone,
+  tryExtractContactFromMessage,
+} from "@/lib/venue-chat-contact";
 
 export { bookingPath } from "@/lib/venue-chat-paths";
 export { friendlyEventLabel, sanitizeGuestName } from "@/lib/venue-chat-guest";
+export { normalizePhone, tryExtractContactFromMessage } from "@/lib/venue-chat-contact";
 
 export type ChatActionType =
   | "select_event"
@@ -55,112 +59,21 @@ export function isInstantAction(type: ChatActionType): boolean {
   return type !== "select_event";
 }
 
-export function normalizePhone(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const d = raw.replace(/\D/g, "").slice(-10);
-  return d.length === 10 && /^[6-9]/.test(d) ? d : null;
-}
+/** Re-read the full thread and persist any name/phone we can infer (conversation memory). */
+export async function syncContactFromConversation(params: {
+  leadId: string;
+  lead: ChatLeadSnapshot;
+}): Promise<ChatLeadSnapshot> {
+  const msgs = await getMessages(params.leadId);
+  const userTexts = msgs.filter((m) => m.role === "USER").map((m) => m.content);
+  const merged = mergeContactFromConversation(params.lead, userTexts);
+  if (!merged.changed) return params.lead;
 
-function findPhoneInText(text: string): { phone: string; span: string } | null {
-  const structured = text.match(
-    /(?:^|\n)\s*(?:contact\s*(?:num|number|no)?|mobile|phone|number)\s*[:-]+\s*([\d\s+-]{10,})/im
-  );
-  if (structured?.[1]) {
-    const phone = normalizePhone(structured[1]);
-    if (phone) return { phone, span: structured[0] };
-  }
-
-  for (const m of text.matchAll(/\d[\d\s+-]{8,}\d/g)) {
-    const phone = normalizePhone(m[0]);
-    if (phone) return { phone, span: m[0] };
-  }
-
-  for (const m of text.matchAll(/\d[\d\s+-]*/g)) {
-    const phone = normalizePhone(m[0]);
-    if (phone) return { phone, span: m[0] };
-  }
-
-  return null;
-}
-
-function stripPhoneFromText(text: string, phone: string): string {
-  let out = text;
-  for (const m of text.matchAll(/\d[\d\s+-]*/g)) {
-    if (normalizePhone(m[0]) === phone) {
-      out = out.replace(m[0], " ");
-    }
-  }
-  return out;
-}
-
-export function tryExtractContactFromMessage(text: string): {
-  guestName?: string;
-  contactNumber?: string;
-} {
-  const trimmed = text.trim();
-  if (!trimmed) return {};
-
-  const lines = trimmed.split(/\n+/).map((l) => l.trim()).filter(Boolean);
-  if (lines.length >= 2) {
-    let phone: string | undefined;
-    const nameParts: string[] = [];
-    for (const line of lines) {
-      const linePhone = findPhoneInText(line)?.phone ?? normalizePhone(line);
-      if (linePhone && line.replace(/\D/g, "").length >= 10) {
-        phone = linePhone;
-        continue;
-      }
-      const name = rejectExtractedGuestName(line);
-      if (name) nameParts.push(name);
-    }
-    if (phone && nameParts.length > 0) {
-      return { guestName: nameParts.join(" "), contactNumber: phone };
-    }
-  }
-
-  const found = findPhoneInText(trimmed);
-  const phone = found?.phone ?? normalizePhone(trimmed);
-
-  let guestName: string | undefined;
-
-  const structuredName = trimmed.match(
-    /(?:^|\n)\s*name\s*[:-]+\s*([A-Za-z][A-Za-z\s.'-]{1,35})/im
-  )?.[1];
-  if (structuredName) {
-    guestName = rejectExtractedGuestName(structuredName.trim());
-  }
-
-  const named =
-    trimmed.match(/(?:^|[\s,])(?:my name is|this is|i am|name[:\s-]+)\s*([A-Za-z][A-Za-z\s.'-]{1,35})/i) ??
-    trimmed.match(/(?:^|[\s,])i'?m\s+(?!interested\b)([A-Za-z][A-Za-z\s.'-]{1,35})/i) ??
-    trimmed.match(/^([A-Za-z][A-Za-z\s.'-]{1,35})\s*[,–—-]/);
-  if (!guestName && named?.[1]) {
-    guestName = rejectExtractedGuestName(
-      named[1].trim().replace(/\s+(and|mobile|phone|number).*$/i, "").trim()
-    );
-  }
-
-  if (!guestName && phone) {
-    const stripped = stripPhoneFromText(trimmed, phone)
-      .replace(/(?:^|\n)\s*(?:name|contact\s*(?:num|number|no)?|mobile|phone)\s*[:-]+[^\n]*/gim, " ")
-      .replace(/[^\w\s.'-]/g, " ")
-      .trim();
-    const words = stripped.split(/\s+/).filter(Boolean);
-    if (words.length >= 1 && words.length <= 3 && !/^(book|table|hi|hello|yes|ok)$/i.test(words[0])) {
-      const candidate = rejectExtractedGuestName(words.slice(0, 3).join(" "));
-      if (candidate) guestName = candidate;
-    }
-  }
-
-  if (!guestName && !phone) {
-    const words = trimmed.split(/\s+/).filter(Boolean);
-    if (words.length === 1 && looksLikePlausibleGuestName(trimmed)) {
-      guestName = rejectExtractedGuestName(trimmed);
-    }
-  }
-
-  if (guestName && guestName.length < 2) guestName = undefined;
-  return { guestName, contactNumber: phone ?? undefined };
+  return updateLeadFields(params.leadId, {
+    ...(merged.guestName ? { guestName: merged.guestName } : {}),
+    ...(merged.contactNumber ? { contactNumber: merged.contactNumber } : {}),
+    ...(merged.guestName || merged.contactNumber ? { status: "BOOKING_STARTED" } : {}),
+  });
 }
 
 export function resolveExploreUrl(brandId: string, knowledge: VenueChatKnowledge): string {
@@ -421,7 +334,7 @@ export async function handleInstantAction(params: {
   return out;
 }
 
-/** After guest shares name/phone in chat — instant booking link, no AI wait. */
+/** After guest shares name/phone — merge full thread memory, then advance booking step. */
 export async function tryInstantContactCaptureReply(params: {
   leadId: string;
   brandId: string;
@@ -429,49 +342,53 @@ export async function tryInstantContactCaptureReply(params: {
   lead: ChatLeadSnapshot;
   userMessage: string;
 }): Promise<{ messages: ChatMessageDto[]; leadUpdates: boolean } | null> {
-  const { leadId, brandId, knowledge, lead, userMessage } = params;
-  const extracted = tryExtractContactFromMessage(userMessage);
-  const existingName = sanitizeGuestName(lead.guestName);
-  const updates: { guestName?: string | null; contactNumber?: string } = {};
+  const { leadId, brandId, knowledge, userMessage } = params;
+  let lead = params.lead;
+  const msgs = await getMessages(leadId);
+  const userTexts = msgs.filter((m) => m.role === "USER").map((m) => m.content);
+  const merged = mergeContactFromConversation(lead, userTexts);
+  const fromThis = tryExtractContactFromMessage(userMessage);
 
-  if (extracted.contactNumber && !lead.contactNumber) {
-    updates.contactNumber = extracted.contactNumber;
+  if (merged.changed) {
+    const hints = applyMessageBookingContext(userMessage);
+    lead = await updateLeadFields(leadId, {
+      ...(merged.guestName ? { guestName: merged.guestName } : {}),
+      ...(merged.contactNumber ? { contactNumber: merged.contactNumber } : {}),
+      ...hints,
+      status: "BOOKING_STARTED",
+    });
   }
-  if (extracted.guestName) {
-    updates.guestName = extracted.guestName;
-  } else if (lead.guestName && !existingName) {
-    updates.guestName = null;
-  }
 
-  if (Object.keys(updates).length === 0) return null;
-
-  const hints = applyMessageBookingContext(userMessage);
-  const merged = { ...updates, ...hints };
-
-  await updateLeadFields(leadId, { ...merged, status: "BOOKING_STARTED" });
-  const snapshot = await getLeadSnapshot(leadId);
-  const fresh = snapshot ?? lead;
-  const name = sanitizeGuestName(fresh.guestName);
+  const name = sanitizeGuestName(lead.guestName);
+  const phone = normalizePhone(lead.contactNumber);
   const messages: ChatMessageDto[] = [];
 
-  if (fresh.contactNumber && name) {
-    messages.push(await appendBookingLinkMessage(leadId, brandId, knowledge.venueName, fresh));
-    return { messages, leadUpdates: true };
+  if (name && phone) {
+    const link = await maybeSendBookingLinkIfReady({
+      leadId,
+      brandId,
+      lead,
+      bookingIntent: true,
+    });
+    if (link) {
+      messages.push(link);
+      return { messages, leadUpdates: merged.changed };
+    }
+    return null;
   }
 
-  if (fresh.contactNumber && !name) {
-    messages.push(await appendMessage(leadId, "ASSISTANT", askNameCopy(brandId, fresh.selectedEventName)));
-    return { messages, leadUpdates: true };
+  if (!merged.changed && !fromThis.guestName && !fromThis.contactNumber) {
+    return null;
   }
 
-  if (name && !fresh.contactNumber) {
-    messages.push(await appendMessage(leadId, "ASSISTANT", askPhoneCopy(brandId, name, fresh)));
-    return { messages, leadUpdates: true };
+  if (phone && !name) {
+    messages.push(await appendMessage(leadId, "ASSISTANT", askNameCopy(brandId, lead.selectedEventName)));
+    return { messages, leadUpdates: merged.changed };
   }
 
-  if (!name && !fresh.contactNumber) {
-    messages.push(await appendMessage(leadId, "ASSISTANT", askNameAndPhoneCopy(brandId, fresh.selectedEventName)));
-    return { messages, leadUpdates: true };
+  if (name && !phone) {
+    messages.push(await appendMessage(leadId, "ASSISTANT", askPhoneCopy(brandId, name, lead)));
+    return { messages, leadUpdates: merged.changed };
   }
 
   return null;

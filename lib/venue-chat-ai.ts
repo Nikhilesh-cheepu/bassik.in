@@ -11,6 +11,12 @@ import { guestWritesTelugu } from "@/lib/venue-chat-actions";
 import { sanitizeGuestName } from "@/lib/venue-chat-guest";
 import { CLUB_ROGUE_AI_PLAYBOOK, clubRogueAskPhoneCopy, isClubRogueBrand } from "@/lib/club-rogue";
 import { formatPhoneAsk } from "@/lib/venue-chat-copy";
+import { buildConversationMemoryPrompt } from "@/lib/venue-chat-memory";
+import {
+  mergeContactFromConversation,
+  normalizePhone,
+  tryExtractContactFromMessage,
+} from "@/lib/venue-chat-contact";
 import {
   CHAT_BOOKING_AI_RULES,
   CHAT_CONCIERGE_PLAYBOOK,
@@ -25,12 +31,6 @@ export type AiChatResult = {
 };
 
 type HistoryRow = { role: "user" | "assistant"; content: string };
-
-function normalizePhone(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const d = raw.replace(/\D/g, "").slice(-10);
-  return d.length === 10 && /^[6-9]/.test(d) ? d : null;
-}
 
 export async function runVenueChatTurn(params: {
   brandId: string;
@@ -93,6 +93,8 @@ export async function runVenueChatTurn(params: {
       content: m.imageUrl ? `${m.content} [poster attached]` : m.content,
     }));
 
+  const memoryBlock = buildConversationMemoryPrompt(params.lead, params.history, params.userMessage);
+
   const system = [
     `You are the PR / guest relations host at ${params.venueShortName}. Warm, polished, never pushy — like a good hotel concierge, not a call centre script.`,
     CHAT_CONCIERGE_PLAYBOOK,
@@ -100,6 +102,7 @@ export async function runVenueChatTurn(params: {
       ? `Venue naming: always say "${params.venueShortName}" in full — never shorten to just the area (e.g. never say only "Gachibowli").`
       : "",
     buildChatBookingDateContext(),
+    memoryBlock,
     "Read the full conversation before replying. Match the guest's language (English, Telugu, Hinglish, etc.).",
     "Tone & flow:",
     "• Sound human and pleasant — make the night sound exciting. Never say 'share your 10-digit mobile' or 'I will send you the link' — that feels robotic.",
@@ -176,6 +179,23 @@ export async function runVenueChatTurn(params: {
       updates.selectedDiscounts = lu.selectedDiscountIds
         .filter((x): x is string => typeof x === "string" && valid.includes(x))
         .slice(0, 4);
+    }
+
+    const userTexts = params.history.filter((m) => m.role === "USER").map((m) => m.content);
+    const threadContact = mergeContactFromConversation(params.lead, userTexts, params.userMessage);
+    if (threadContact.guestName && !updates.guestName) {
+      updates.guestName = threadContact.guestName;
+    }
+    if (threadContact.contactNumber && !updates.contactNumber) {
+      updates.contactNumber = threadContact.contactNumber;
+    }
+    const fromMsg = tryExtractContactFromMessage(params.userMessage);
+    if (fromMsg.guestName && !updates.guestName) {
+      const n = sanitizeGuestName(fromMsg.guestName);
+      if (n) updates.guestName = n;
+    }
+    if (fromMsg.contactNumber && !updates.contactNumber) {
+      updates.contactNumber = fromMsg.contactNumber;
     }
 
     const sanitized = sanitizeChatLeadBookingFields(updates);

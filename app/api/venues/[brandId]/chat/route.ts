@@ -7,6 +7,7 @@ import {
   handleInstantAction,
   isInstantAction,
   maybeSendBookingLinkIfReady,
+  syncContactFromConversation,
   tryInstantBookIntentReply,
   tryInstantBookingContactPrompt,
   tryInstantContactCaptureReply,
@@ -215,6 +216,8 @@ export async function POST(
         await updateLeadFields(lead.id, bookingCtx);
         currentLead = (await getLeadSnapshot(lead.id)) ?? currentLead;
       }
+
+      currentLead = await syncContactFromConversation({ leadId: lead.id, lead: currentLead });
 
       const contactCapture = await tryInstantContactCaptureReply({
         leadId: lead.id,
