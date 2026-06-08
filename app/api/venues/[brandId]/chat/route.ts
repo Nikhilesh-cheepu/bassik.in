@@ -30,6 +30,7 @@ import {
 import { loadChatSession } from "@/lib/venue-chat-session";
 import { resolveChatSessionToken } from "@/lib/venue-chat-session-request";
 import { runVenueChatTurn } from "@/lib/venue-chat-ai";
+import { guestIsVenueQuestion, scrubInvalidGuestName, shouldSkipBookingLinkForMessage, tryInstantVenueQuestionReply } from "@/lib/venue-chat-policy-replies";
 import { applyMessageBookingContext } from "@/lib/venue-chat-booking-policy";
 
 export const runtime = "nodejs";
@@ -210,134 +211,154 @@ export async function POST(
       usedInstant = true;
     } else {
       let currentLead = (await getLeadSnapshot(lead.id)) ?? lead;
+      const isVenueQuestion = guestIsVenueQuestion(text);
 
-      const bookingCtx = applyMessageBookingContext(text);
-      if (Object.keys(bookingCtx).length > 0) {
-        await updateLeadFields(lead.id, bookingCtx);
-        currentLead = (await getLeadSnapshot(lead.id)) ?? currentLead;
-      }
+      currentLead = await scrubInvalidGuestName(lead.id, currentLead);
 
-      currentLead = await syncContactFromConversation({ leadId: lead.id, lead: currentLead });
-
-      const contactCapture = await tryInstantContactCaptureReply({
-        leadId: lead.id,
-        brandId,
-        knowledge,
-        lead: currentLead,
-        userMessage: text,
-      });
-
-      if (contactCapture) {
-        newMessages.push(...contactCapture.messages);
-        currentLead = (await getLeadSnapshot(lead.id)) ?? currentLead;
-        usedInstant = true;
-      } else {
-        const contactPrompt = await tryInstantBookingContactPrompt({
+      if (isVenueQuestion) {
+        const policyReplies = await tryInstantVenueQuestionReply({
           leadId: lead.id,
           brandId,
-          lead: currentLead,
-          userMessage: text,
-          bookingCtxApplied: bookingCtx,
-        });
-        if (contactPrompt?.length) {
-          newMessages.push(...contactPrompt);
-          currentLead = (await getLeadSnapshot(lead.id)) ?? currentLead;
-          usedInstant = true;
-        }
-      }
-
-      if (!usedInstant && guestIsBookingIntent(text)) {
-        const bookReplies = await tryInstantBookIntentReply({
-          leadId: lead.id,
-          brandId,
-          knowledge,
-          lead: currentLead,
           userMessage: text,
         });
-        if (bookReplies?.length) {
-          newMessages.push(...bookReplies);
+        if (policyReplies?.length) {
+          newMessages.push(...policyReplies);
           usedInstant = true;
         }
       }
 
       if (!usedInstant) {
-        if (aiGate.skip) {
-          if (aiGate.reason === "closed") {
-            newMessages.push(
-              await appendMessage(
-                lead.id,
-                "SYSTEM",
-                "This chat is closed. Call or WhatsApp us anytime if you need help."
-              )
-            );
-          } else if (aiGate.reason === "handed_off") {
-            newMessages.push(
-              await appendMessage(
-                lead.id,
-                "ASSISTANT",
-                "Got your message — our team will reply shortly."
-              )
-            );
-          } else if (aiGate.reason === "ai_disabled") {
-            newMessages.push(
-              await appendMessage(
-                lead.id,
-                "ASSISTANT",
-                `Thanks for reaching out! Use the quick buttons above to book, call, or WhatsApp ${knowledge.venueName} — or share your name and mobile if you'd like a booking link.`
-              )
-            );
-          }
-        } else {
-          const history = await getMessages(lead.id);
-          const ai = await runVenueChatTurn({
+        const bookingCtx = applyMessageBookingContext(text);
+        if (Object.keys(bookingCtx).length > 0) {
+          await updateLeadFields(lead.id, bookingCtx);
+          currentLead = (await getLeadSnapshot(lead.id)) ?? currentLead;
+        }
+
+        currentLead = await syncContactFromConversation({ leadId: lead.id, lead: currentLead });
+
+        if (!isVenueQuestion) {
+          const contactCapture = await tryInstantContactCaptureReply({
+            leadId: lead.id,
             brandId,
-            venueShortName: knowledge.venueName,
+            knowledge,
             lead: currentLead,
-            offers,
-            history,
             userMessage: text,
           });
 
-          if (Object.keys(ai.leadUpdates).length > 0) {
-            await updateLeadFields(lead.id, ai.leadUpdates);
+          if (contactCapture) {
+            newMessages.push(...contactCapture.messages);
             currentLead = (await getLeadSnapshot(lead.id)) ?? currentLead;
-          }
-
-          newMessages.push(await appendMessage(lead.id, "ASSISTANT", ai.reply));
-
-          for (const offerId of ai.posterOfferIds) {
-            const offer = offers.find((o) => o.id === offerId);
-            if (offer) {
-              const line = [offer.title, offer.dateLine].filter(Boolean).join(" · ") || "Event poster";
-              newMessages.push(
-                await appendMessage(lead.id, "ASSISTANT", line, null, {
-                  type: "flyers",
-                  items: [
-                    {
-                      id: offer.id,
-                      imageUrl: offer.imageUrl,
-                      title: offer.title,
-                      dateLine: offer.dateLine,
-                    },
-                  ],
-                  selectable: true,
-                })
-              );
+            usedInstant = true;
+          } else {
+            const contactPrompt = await tryInstantBookingContactPrompt({
+              leadId: lead.id,
+              brandId,
+              lead: currentLead,
+              userMessage: text,
+              bookingCtxApplied: bookingCtx,
+            });
+            if (contactPrompt?.length) {
+              newMessages.push(...contactPrompt);
+              currentLead = (await getLeadSnapshot(lead.id)) ?? currentLead;
+              usedInstant = true;
             }
           }
+        }
 
-          const bookingIntent =
-            guestIsBookingIntent(text) ||
-            Boolean(bookingCtx.bookingDate) ||
-            currentLead.status === "BOOKING_STARTED" ||
-            Boolean(ai.leadUpdates.contactNumber || ai.leadUpdates.guestName);
-          const linkMsg = await maybeSendBookingLinkIfReady({
+        if (!usedInstant && !isVenueQuestion && guestIsBookingIntent(text)) {
+          const bookReplies = await tryInstantBookIntentReply({
             leadId: lead.id,
             brandId,
+            knowledge,
             lead: currentLead,
-            bookingIntent,
+            userMessage: text,
           });
-          if (linkMsg) newMessages.push(linkMsg);
+          if (bookReplies?.length) {
+            newMessages.push(...bookReplies);
+            usedInstant = true;
+          }
+        }
+
+        if (!usedInstant) {
+          if (aiGate.skip) {
+            if (aiGate.reason === "closed") {
+              newMessages.push(
+                await appendMessage(
+                  lead.id,
+                  "SYSTEM",
+                  "This chat is closed. Call or WhatsApp us anytime if you need help."
+                )
+              );
+            } else if (aiGate.reason === "handed_off") {
+              newMessages.push(
+                await appendMessage(
+                  lead.id,
+                  "ASSISTANT",
+                  "Got your message — our team will reply shortly."
+                )
+              );
+            } else if (aiGate.reason === "ai_disabled") {
+              newMessages.push(
+                await appendMessage(
+                  lead.id,
+                  "ASSISTANT",
+                  `Thanks for reaching out! Use the quick buttons above to book, call, or WhatsApp ${knowledge.venueName} — or share your name and mobile if you'd like a booking link.`
+                )
+              );
+            }
+          } else {
+            const history = await getMessages(lead.id);
+            const ai = await runVenueChatTurn({
+              brandId,
+              venueShortName: knowledge.venueName,
+              lead: currentLead,
+              offers,
+              history,
+              userMessage: text,
+            });
+
+            if (Object.keys(ai.leadUpdates).length > 0) {
+              await updateLeadFields(lead.id, ai.leadUpdates);
+              currentLead = (await getLeadSnapshot(lead.id)) ?? currentLead;
+            }
+
+            newMessages.push(await appendMessage(lead.id, "ASSISTANT", ai.reply));
+
+            for (const offerId of ai.posterOfferIds) {
+              const offer = offers.find((o) => o.id === offerId);
+              if (offer) {
+                const line = [offer.title, offer.dateLine].filter(Boolean).join(" · ") || "Event poster";
+                newMessages.push(
+                  await appendMessage(lead.id, "ASSISTANT", line, null, {
+                    type: "flyers",
+                    items: [
+                      {
+                        id: offer.id,
+                        imageUrl: offer.imageUrl,
+                        title: offer.title,
+                        dateLine: offer.dateLine,
+                      },
+                    ],
+                    selectable: true,
+                  })
+                );
+              }
+            }
+
+            const bookingIntent =
+              !shouldSkipBookingLinkForMessage(text) &&
+              (guestIsBookingIntent(text) ||
+                Boolean(bookingCtx.bookingDate) ||
+                currentLead.status === "BOOKING_STARTED" ||
+                Boolean(ai.leadUpdates.contactNumber || ai.leadUpdates.guestName));
+            const linkMsg = await maybeSendBookingLinkIfReady({
+              leadId: lead.id,
+              brandId,
+              lead: currentLead,
+              bookingIntent,
+            });
+            if (linkMsg) newMessages.push(linkMsg);
+          }
         }
       }
     }

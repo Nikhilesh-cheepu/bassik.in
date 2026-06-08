@@ -21,6 +21,7 @@ import {
 import { formatNameAndPhoneAsk, formatNameAsk, formatPhoneAsk } from "@/lib/venue-chat-copy";
 import {
   friendlyEventLabel,
+  looksLikeChatQuestion,
   sanitizeGuestName,
 } from "@/lib/venue-chat-guest";
 import {
@@ -343,6 +344,8 @@ export async function tryInstantContactCaptureReply(params: {
   userMessage: string;
 }): Promise<{ messages: ChatMessageDto[]; leadUpdates: boolean } | null> {
   const { leadId, brandId, knowledge, userMessage } = params;
+  if (looksLikeChatQuestion(userMessage)) return null;
+
   let lead = params.lead;
   const msgs = await getMessages(leadId);
   const userTexts = msgs.filter((m) => m.role === "USER").map((m) => m.content);
@@ -486,10 +489,7 @@ function guestLooksLikeDatePick(text: string): boolean {
 }
 
 function guestLooksLikeFactualQuestion(text: string): boolean {
-  if (!/\?/.test(text)) return false;
-  return /\b(cover|charge|price|menu|time|where|when|what|how|cost|parking|dress|vibe|offer|event)\b/i.test(
-    text
-  );
+  return looksLikeChatQuestion(text);
 }
 
 /** Deterministic contact ask — same layout every time during booking flow. */

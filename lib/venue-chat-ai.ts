@@ -8,7 +8,7 @@ import {
 } from "@/lib/venue-chat-knowledge";
 import { formatLearnedForPrompt, getVenueChatConfig } from "@/lib/venue-chat-config";
 import { guestWritesTelugu } from "@/lib/venue-chat-actions";
-import { sanitizeGuestName } from "@/lib/venue-chat-guest";
+import { looksLikeChatQuestion, sanitizeGuestName } from "@/lib/venue-chat-guest";
 import { CLUB_ROGUE_AI_PLAYBOOK, clubRogueAskPhoneCopy, isClubRogueBrand } from "@/lib/club-rogue";
 import { formatPhoneAsk } from "@/lib/venue-chat-copy";
 import { buildConversationMemoryPrompt } from "@/lib/venue-chat-memory";
@@ -114,6 +114,8 @@ export async function runVenueChatTurn(params: {
     CHAT_BOOKING_AI_RULES,
     "• Once you know their real name, use it naturally — never guess a name from random text.",
     "• NEVER set guestName from okay, yes, sure, thanks, keyboard mash, or other non-names.",
+    "• NEVER set guestName from a question (can men come, what is cover, are you open, etc.) — answer the question instead.",
+    "• Never echo the guest's question as if it were their name (never say Got it, {question}).",
     "• Respond to the LAST user message first: if they change the date (e.g. next Wednesday), acknowledge that date — do not repeat an old event name.",
     "• If they picked or mentioned an event, set selectedEventId and selectedEventName. Use a short event label in chat (e.g. 'DJ SHWETH'), not the full poster line.",
     "• Menu, directions, offers: answer from venue facts. Never invent.",
@@ -155,7 +157,7 @@ export async function runVenueChatTurn(params: {
     const lu = parsed.leadUpdates ?? {};
     if (typeof lu.guestName === "string" && lu.guestName.trim()) {
       const name = sanitizeGuestName(lu.guestName.trim().slice(0, 80));
-      if (name) updates.guestName = name;
+      if (name && !looksLikeChatQuestion(params.userMessage)) updates.guestName = name;
     }
     const phone = normalizePhone(
       typeof lu.contactNumber === "string" ? lu.contactNumber : null
@@ -185,14 +187,14 @@ export async function runVenueChatTurn(params: {
 
     const userTexts = params.history.filter((m) => m.role === "USER").map((m) => m.content);
     const threadContact = mergeContactFromConversation(params.lead, userTexts, params.userMessage);
-    if (threadContact.guestName && !updates.guestName) {
+    if (threadContact.guestName && !updates.guestName && !looksLikeChatQuestion(params.userMessage)) {
       updates.guestName = threadContact.guestName;
     }
     if (threadContact.contactNumber && !updates.contactNumber) {
       updates.contactNumber = threadContact.contactNumber;
     }
     const fromMsg = tryExtractContactFromMessage(params.userMessage);
-    if (fromMsg.guestName && !updates.guestName) {
+    if (fromMsg.guestName && !updates.guestName && !looksLikeChatQuestion(params.userMessage)) {
       const n = sanitizeGuestName(fromMsg.guestName);
       if (n) updates.guestName = n;
     }

@@ -1,6 +1,33 @@
+/** Guest is asking something — not sharing their name or booking details. */
+export function looksLikeChatQuestion(text: string): boolean {
+  const t = text.trim().replace(/[!.\s]+$/g, "").trim();
+  if (!t) return false;
+  if (/\?/.test(text)) return true;
+  if (/^(can|could|are|is|am|do|does|did|will|would|what|how|where|when|why|who|which|any|tell me|is there|may i)\b/i.test(t)) {
+    return true;
+  }
+  if (
+    /\b(allowed|welcome|permitted|can i|can we|can men|can women|can ladies|can guys|what about|how much|how many|do you|does the|is it only|is it just|are you|will there|shall i)\b/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(men|guys|boys|women|ladies|girls|cover|charge|price|menu|timing|location|parking|entry|dress code|offer|event|vibe)\b/i.test(
+      t
+    ) &&
+    /^(can|are|is|do|what|how|when|where|tell|any|will|would|could)/i.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /** Plausible human name — rejects keyboard mash and random strings. */
 export function looksLikePlausibleGuestName(raw: string): boolean {
   const n = raw.trim().replace(/[.,;:!?]+$/g, "").trim();
+  if (looksLikeChatQuestion(n)) return false;
   if (n.length < 2 || n.length > 48) return false;
   if (!/^[A-Za-z][A-Za-z\s.'-]*$/.test(n)) return false;
 
@@ -25,6 +52,7 @@ function rejectBadGuestName(name: string | undefined): string | undefined {
   if (!name?.trim()) return undefined;
   const n = name.trim().replace(/[.,;:!?]+$/g, "").trim();
   if (!looksLikePlausibleGuestName(n)) return undefined;
+  if (looksLikeChatQuestion(n)) return undefined;
   if (/^(i'?m|interested|book|table|hi|hello|yes|yeah|yep|yup|ok|okay|k|sure|thanks|thank you|fine|cool|great|done|alright|right)$/i.test(n)) return undefined;
   if (/interested in/i.test(n)) return undefined;
   if (/\bDJ\b/i.test(n) && n.split(/\s+/).length > 2) return undefined;

@@ -3,6 +3,7 @@
  * Scans any guest message format and merges facts across the whole thread.
  */
 import {
+  looksLikeChatQuestion,
   looksLikePlausibleGuestName,
   rejectExtractedGuestName,
   sanitizeGuestName,
@@ -127,6 +128,12 @@ export function tryExtractContactFromMessage(text: string): {
   const trimmed = text.trim();
   if (!trimmed) return {};
 
+  if (looksLikeChatQuestion(trimmed)) {
+    const found = findPhoneInText(trimmed);
+    const phone = found?.phone ?? normalizePhone(trimmed);
+    return phone ? { contactNumber: phone } : {};
+  }
+
   const lines = trimmed.split(/\n+/).map((l) => l.trim()).filter(Boolean);
   if (lines.length >= 2) {
     let phone: string | undefined;
@@ -186,6 +193,11 @@ export function mergeContactFromConversation(
   }
 
   for (const text of texts) {
+    if (looksLikeChatQuestion(text)) {
+      const ex = tryExtractContactFromMessage(text);
+      if (ex.contactNumber) contactNumber = ex.contactNumber;
+      continue;
+    }
     const ex = tryExtractContactFromMessage(text);
     if (ex.guestName) guestName = ex.guestName;
     if (ex.contactNumber) contactNumber = ex.contactNumber;
