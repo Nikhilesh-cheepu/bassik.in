@@ -31,15 +31,28 @@
   var iframe = null;
   var onMessage = null;
   var onKeydown = null;
+  var lockedScrollY = 0;
 
   function lockScroll() {
+    lockedScrollY = window.scrollY || document.documentElement.scrollTop || 0;
     document.documentElement.style.overflow = "hidden";
     document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.top = "-" + lockedScrollY + "px";
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.width = "100%";
   }
 
   function unlockScroll() {
     document.documentElement.style.overflow = "";
     document.body.style.overflow = "";
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.left = "";
+    document.body.style.right = "";
+    document.body.style.width = "";
+    window.scrollTo(0, lockedScrollY);
   }
 
   function embedUrl() {
@@ -90,15 +103,19 @@
     sheet.style.cssText =
       "position:absolute;left:0;right:0;bottom:0;top:" +
       topGap +
-      "px;overflow:hidden;border-radius:18px 18px 0 0;" +
+      "px;display:flex;flex-direction:column;overflow:hidden;" +
+      "border-radius:18px 18px 0 0;" +
       "box-shadow:0 -12px 48px rgba(0,0,0,0.55);background:#040408;" +
+      "overscroll-behavior:contain;touch-action:pan-y;" +
       "transform:translateY(100%);transition:transform 320ms cubic-bezier(0.22,1,0.36,1);";
 
     iframe = document.createElement("iframe");
     iframe.src = embedUrl();
     iframe.title = label;
     iframe.allow = "clipboard-write";
-    iframe.style.cssText = "width:100%;height:100%;border:0;display:block;background:#040408;";
+    iframe.style.cssText =
+      "width:100%;height:100%;min-height:0;flex:1 1 auto;border:0;display:block;" +
+      "background:#040408;touch-action:pan-y;";
 
     sheet.appendChild(iframe);
     overlay.appendChild(peek);

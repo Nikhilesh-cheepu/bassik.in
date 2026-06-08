@@ -17,7 +17,7 @@ type EmbedChatClientProps = {
 
 export default function EmbedChatClient(props: EmbedChatClientProps) {
   return (
-    <div className="flex h-[100dvh] min-h-0 flex-col overflow-hidden rounded-t-[18px] bg-[#040408]">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-t-[18px] bg-[#040408]">
       <VenueChatWidget
         brandId={props.brandId}
         venueShortName={props.venueShortName}

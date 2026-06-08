@@ -1,0 +1,13 @@
+/* Embed iframe: size to the iframe element, not the device viewport (100dvh breaks in iframes). */
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #040408;
+}
+
+body {
+  min-height: 0 !important;
+}

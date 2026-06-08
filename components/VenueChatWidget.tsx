@@ -241,7 +241,7 @@ function ChatPanel({
       <div
         ref={scrollRef}
         className={`min-h-0 overflow-y-auto overscroll-contain px-4 py-2 space-y-2 touch-pan-y ${
-          compactHeader ? "" : "flex-1"
+          compactHeader ? "" : "h-0 flex-1"
         }`}
         style={{
           ...(compactHeader ? { height: EMBEDDED_PREVIEW_H } : {}),
@@ -509,9 +509,16 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
   const scrollToBottom = useCallback(
     (force = false) => {
       requestAnimationFrame(() => {
-        const el = scrollRef.current;
-        if (!el || (!force && !isNearBottom())) return;
-        el.scrollTo({ top: el.scrollHeight, behavior: force ? "smooth" : "auto" });
+        requestAnimationFrame(() => {
+          const el = scrollRef.current;
+          if (!el || (!force && !isNearBottom())) return;
+          const top = el.scrollHeight;
+          if (force) {
+            el.scrollTo({ top, behavior: "smooth" });
+          } else {
+            el.scrollTop = top;
+          }
+        });
       });
     },
     [isNearBottom]
@@ -885,8 +892,8 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
 
   if (isEmbed) {
     return (
-      <div className="mx-auto flex h-full min-h-0 max-w-md flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-md flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
           <ChatPanel {...panelProps} showClose onClose={requestClose} />
         </div>
         {eventSheet}
