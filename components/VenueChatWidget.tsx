@@ -240,13 +240,14 @@ function ChatPanel({
 
       <div
         ref={scrollRef}
-        className={`min-h-0 overflow-y-auto overscroll-contain px-4 py-2 space-y-2 ${
+        className={`min-h-0 overflow-y-auto overscroll-contain px-4 py-2 space-y-2 touch-pan-y ${
           compactHeader ? "" : "flex-1"
         }`}
         style={{
           ...(compactHeader ? { height: EMBEDDED_PREVIEW_H } : {}),
           background: `#040408`,
           backgroundImage: theme.mesh,
+          WebkitOverflowScrolling: "touch",
         }}
       >
         {loading && !onboarding.hasOnboarding ? (
@@ -499,11 +500,22 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
   const showTyping = aiPending && !loading;
   const sessionActive = isEmbedded || isLanding || open;
 
-  const scrollToBottom = () => {
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-    });
-  };
+  const isNearBottom = useCallback((threshold = 96) => {
+    const el = scrollRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+  }, []);
+
+  const scrollToBottom = useCallback(
+    (force = false) => {
+      requestAnimationFrame(() => {
+        const el = scrollRef.current;
+        if (!el || (!force && !isNearBottom())) return;
+        el.scrollTo({ top: el.scrollHeight, behavior: force ? "smooth" : "auto" });
+      });
+    },
+    [isNearBottom]
+  );
 
   const syncPollCursor = useCallback((list: ChatMessage[]) => {
     const id = lastConfirmedMessageId(list);
@@ -573,13 +585,13 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not load chat");
       applyPayload(data);
-      scrollToBottom();
+      scrollToBottom(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Chat unavailable");
     } finally {
       setLoading(false);
     }
-  }, [brandId, chatRequestInit]);
+  }, [brandId, chatRequestInit, scrollToBottom]);
 
   const poll = useCallback(async () => {
     if (!sessionActive || document.hidden || pollInFlightRef.current) return;
@@ -652,9 +664,10 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
 
   useEffect(() => {
     if (sessionActive) scrollToBottom();
-  }, [messages, sessionActive, showTyping]);
+  }, [messages, sessionActive, showTyping, scrollToBottom]);
 
   useEffect(() => {
+    if (isEmbed) return;
     if (!open && !isLanding) return;
     const prev = document.body.style.overflow;
     document.documentElement.style.overflow = "hidden";
@@ -663,7 +676,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
       document.documentElement.style.overflow = "";
       document.body.style.overflow = prev;
     };
-  }, [open, isLanding]);
+  }, [open, isLanding, isEmbed]);
 
   const postChat = async (
     body: Record<string, unknown>,
@@ -682,7 +695,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
           createdAt: new Date().toISOString(),
         },
       ]);
-      scrollToBottom();
+      scrollToBottom(true);
     }
 
     if (opts?.awaitAi) setAiPending(true);
@@ -702,7 +715,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
       if (!res.ok) throw new Error(data.error || "Send failed");
       setMessages((m) => m.filter((x) => !x.id.startsWith("tmp-")));
       applyPayload(data);
-      scrollToBottom();
+      scrollToBottom(true);
       void poll();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Send failed");
@@ -732,7 +745,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
         createdAt: new Date().toISOString(),
       },
     ]);
-    scrollToBottom();
+    scrollToBottom(true);
     await postChat({ message: text }, { awaitAi: true });
   };
 
@@ -872,8 +885,10 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
 
   if (isEmbed) {
     return (
-      <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col pt-[env(safe-area-inset-top)]">
-        <ChatPanel {...panelProps} showClose onClose={requestClose} />
+      <div className="mx-auto flex h-full min-h-0 max-w-md flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <ChatPanel {...panelProps} showClose onClose={requestClose} />
+        </div>
         {eventSheet}
         {otpSheet}
       </div>
