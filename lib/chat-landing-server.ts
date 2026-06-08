@@ -9,9 +9,10 @@ import { loadChatSession, resolveBrandId, utmFromSearchParams } from "@/lib/venu
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
-export async function loadChatLandingPageProps(
+async function loadChatPageProps(
   outlet: string,
-  searchParams: Record<string, string | string[] | undefined>
+  searchParams: Record<string, string | string[] | undefined>,
+  options: { persistSessionCookie: boolean }
 ) {
   const brandId = resolveBrandId(outlet);
   const brand = BRANDS.find((b) => b.id === brandId)!;
@@ -25,13 +26,16 @@ export async function loadChatLandingPageProps(
     loadChatSession(brandId, token, utm),
   ]);
 
-  cookieStore.set(chatCookieName(brandId), session.sessionToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: COOKIE_MAX_AGE,
-    path: "/",
-  });
+  // Embed iframes cannot set cookies during RSC render — client calls /api/venues/.../chat instead.
+  if (options.persistSessionCookie) {
+    cookieStore.set(chatCookieName(brandId), session.sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: COOKIE_MAX_AGE,
+      path: "/",
+    });
+  }
 
   return {
     brandId,
@@ -44,4 +48,19 @@ export async function loadChatLandingPageProps(
     hasMenus: (venueData?.menus.length ?? 0) > 0,
     initialSnapshot: session,
   };
+}
+
+export async function loadChatLandingPageProps(
+  outlet: string,
+  searchParams: Record<string, string | string[] | undefined>
+) {
+  return loadChatPageProps(outlet, searchParams, { persistSessionCookie: true });
+}
+
+/** Firefly / partner sites iframe this route — no cookie writes in RSC. */
+export async function loadChatEmbedPageProps(
+  outlet: string,
+  searchParams: Record<string, string | string[] | undefined>
+) {
+  return loadChatPageProps(outlet, searchParams, { persistSessionCookie: false });
 }

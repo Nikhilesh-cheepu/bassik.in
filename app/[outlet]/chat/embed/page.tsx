@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { BRANDS } from "@/lib/brands";
-import { loadChatLandingPageProps } from "@/lib/chat-landing-server";
+import { loadChatEmbedPageProps } from "@/lib/chat-landing-server";
 import { resolveBrandId } from "@/lib/venue-chat-session";
 import EmbedChatClient from "./EmbedChatClient";
 
@@ -25,6 +25,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function ChatEmbedPage({ params, searchParams }: PageProps) {
   const { outlet } = await params;
   const sp = await searchParams;
-  const props = await loadChatLandingPageProps(outlet, sp);
+  const props = await loadChatEmbedPageProps(outlet, sp);
   return <EmbedChatClient {...props} />;
 }

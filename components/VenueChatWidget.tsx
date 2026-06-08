@@ -579,6 +579,13 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
   }, [brandId, sessionActive]);
 
   useEffect(() => {
+    if (isEmbed) {
+      if (!bootedRef.current) {
+        bootedRef.current = true;
+        void loadSession();
+      }
+      return;
+    }
     if (initialSnapshot) {
       bootedRef.current = true;
       syncPollCursor(initialSnapshot.messages as ChatMessage[]);
@@ -589,7 +596,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
       bootedRef.current = true;
       void loadSession();
     }
-  }, [initialSnapshot, loadSession, isLanding, isEmbedded, open]);
+  }, [initialSnapshot, loadSession, isLanding, isEmbedded, isEmbed, open]);
 
   useEffect(() => {
     if (!sessionActive || document.hidden) return;
