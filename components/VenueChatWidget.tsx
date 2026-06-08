@@ -42,6 +42,7 @@ import {
   type BootstrapOffer,
 } from "@/lib/venue-chat-bootstrap";
 import type { ChatSessionPayload } from "@/lib/venue-chat-session";
+import { BASSIK_CHAT_EMBED_CLOSE } from "@/lib/chat-embed-origins";
 
 type ChatLead = {
   id: string;
@@ -80,7 +81,7 @@ type VenueChatWidgetProps = {
   hostName?: string | null;
   onOpenMenu?: () => void;
   onOpenEventBook?: (eventId: string) => void;
-  layout?: "fab" | "embedded" | "landing";
+  layout?: "fab" | "embedded" | "landing" | "embed";
   initialSnapshot?: ChatSessionPayload;
 };
 
@@ -381,7 +382,8 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
   const router = useRouter();
   const reducedMotion = usePrefersReducedMotion();
   const isEmbedded = layout === "embedded";
-  const isLanding = layout === "landing";
+  const isEmbed = layout === "embed";
+  const isLanding = layout === "landing" || isEmbed;
 
   const [offers, setOffers] = useState<EventQuickBookOffer[]>([]);
   const [offersLoaded, setOffersLoaded] = useState(false);
@@ -727,6 +729,14 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     expandChat: () => setOpen(true),
   }));
 
+  const requestClose = useCallback(() => {
+    if (isEmbed && typeof window !== "undefined" && window.parent !== window) {
+      window.parent.postMessage({ type: BASSIK_CHAT_EMBED_CLOSE }, "*");
+      return;
+    }
+    setOpen(false);
+  }, [isEmbed]);
+
   const handleBookingLink = useCallback(
     (link: { kind: "event" | "table"; eventId?: string; url: string }) => {
       const raw = link.url.startsWith("/") ? link.url : `/${brandId}/book`;
@@ -788,6 +798,41 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     />
   ) : null;
 
+  const otpSheet = (
+    <PhoneOtpSheet
+      open={otpOpen}
+      phone={otpPhone}
+      name={lead?.guestName ?? undefined}
+      leadId={lead?.id}
+      accentColor={accentColor}
+      title="Quick verify"
+      subtitle="Verify your number to continue booking — takes a few seconds."
+      onClose={() => {
+        setOtpOpen(false);
+        setPendingBookingUrl(null);
+      }}
+      onVerified={() => {
+        void refreshGuest();
+        setOtpOpen(false);
+        if (pendingBookingUrl) {
+          setOpen(false);
+          router.push(pendingBookingUrl);
+          setPendingBookingUrl(null);
+        }
+      }}
+    />
+  );
+
+  if (isEmbed) {
+    return (
+      <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col pt-[env(safe-area-inset-top)]">
+        <ChatPanel {...panelProps} showClose onClose={requestClose} />
+        {eventSheet}
+        {otpSheet}
+      </div>
+    );
+  }
+
   const fabTheme = getChatNeonTheme(accentColor);
 
   if (isLanding) {
@@ -795,6 +840,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
       <div className="mx-auto flex min-h-[100dvh] max-w-md flex-col pt-[env(safe-area-inset-top)]">
         <ChatPanel {...panelProps} />
         {eventSheet}
+        {otpSheet}
       </div>
     );
   }
@@ -886,28 +932,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
         )}
       </AnimatePresence>
       {eventSheet}
-      <PhoneOtpSheet
-        open={otpOpen}
-        phone={otpPhone}
-        name={lead?.guestName ?? undefined}
-        leadId={lead?.id}
-        accentColor={accentColor}
-        title="Quick verify"
-        subtitle="Verify your number to continue booking — takes a few seconds."
-        onClose={() => {
-          setOtpOpen(false);
-          setPendingBookingUrl(null);
-        }}
-        onVerified={() => {
-          void refreshGuest();
-          setOtpOpen(false);
-          if (pendingBookingUrl) {
-            setOpen(false);
-            router.push(pendingBookingUrl);
-            setPendingBookingUrl(null);
-          }
-        }}
-      />
+      {otpSheet}
     </>
   );
 });

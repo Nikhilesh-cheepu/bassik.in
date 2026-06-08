@@ -1,3 +1,18 @@
+const BASE_CSP =
+  "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:;";
+
+function chatEmbedFrameAncestorsDirective() {
+  const fromEnv = (process.env.CHAT_EMBED_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (fromEnv.length) return `'self' ${fromEnv.join(" ")}`;
+  if (process.env.NODE_ENV !== "production") {
+    return "'self' http://localhost:3000 http://localhost:3001 http://127.0.0.1:3000";
+  }
+  return "'self'";
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Let Next load @clerk/nextjs from node_modules on the server instead of bundling (fixes vendor-chunks/@clerk.js resolution)
@@ -54,17 +69,31 @@ const nextConfig = {
 
   // Headers for performance, security, and mobile TLS support
   async headers() {
+    const embedFrameAncestors = chatEmbedFrameAncestorsDirective();
     return [
+      {
+        source: "/:outlet/chat/embed",
+        headers: [
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: `${BASE_CSP} frame-ancestors ${embedFrameAncestors};`,
+          },
+        ],
+      },
       {
         source: "/:path*",
         headers: [
           {
             key: "X-DNS-Prefetch-Control",
             value: "on",
-          },
-          {
-            key: "X-Frame-Options",
-            value: "SAMEORIGIN",
           },
           {
             key: "X-Content-Type-Options",
@@ -75,11 +104,8 @@ const nextConfig = {
             value: "strict-origin-when-cross-origin",
           },
           {
-            // CRITICAL: Allow unsafe-eval ONLY for Next.js runtime (required for code splitting)
-            // Without this, iOS Safari blocks Next.js's internal eval() and crashes
-            // This is the minimal CSP needed - unsafe-eval is only for Next.js chunks
             key: "Content-Security-Policy",
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https:;",
+            value: `${BASE_CSP} frame-ancestors 'self';`,
           },
         ],
       },
