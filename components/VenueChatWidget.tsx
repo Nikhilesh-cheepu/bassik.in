@@ -42,10 +42,15 @@ import {
   type BootstrapOffer,
 } from "@/lib/venue-chat-bootstrap";
 import type { ChatSessionPayload } from "@/lib/venue-chat-session";
+import {
+  chatSessionRequestHeaders,
+  writeStoredChatSessionToken,
+} from "@/lib/venue-chat-session-token";
 import { BASSIK_CHAT_EMBED_CLOSE } from "@/lib/chat-embed-origins";
 
 type ChatLead = {
   id: string;
+  sessionToken?: string;
   displayLabel: string;
   guestName: string | null;
   contactNumber: string | null;
@@ -513,13 +518,35 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     );
   };
 
+  const persistSessionToken = useCallback(
+    (token?: string | null) => {
+      if (token?.trim()) writeStoredChatSessionToken(brandId, token);
+    },
+    [brandId]
+  );
+
+  const chatRequestInit = useCallback(
+    (init: RequestInit = {}): RequestInit => ({
+      ...init,
+      credentials: "include",
+      headers: {
+        ...chatSessionRequestHeaders(brandId),
+        ...(init.headers ?? {}),
+      },
+    }),
+    [brandId]
+  );
+
   const applyPayload = (data: {
     lead?: ChatLead;
     messages?: ChatMessage[];
     delta?: boolean;
     chat?: { venueName?: string; hostName?: string | null };
   }) => {
-    if (data.lead) setLead(data.lead);
+    if (data.lead) {
+      persistSessionToken(data.lead.sessionToken);
+      setLead(data.lead);
+    }
     if (data.chat) {
       setChatMeta((prev) => ({
         venueName: data.chat?.venueName?.trim() || prev.venueName,
@@ -542,7 +569,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     setError(null);
     try {
       const utm = typeof window !== "undefined" ? window.location.search : "";
-      const res = await fetch(`/api/venues/${brandId}/chat${utm}`, { credentials: "include" });
+      const res = await fetch(`/api/venues/${brandId}/chat${utm}`, chatRequestInit());
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not load chat");
       applyPayload(data);
@@ -552,7 +579,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     } finally {
       setLoading(false);
     }
-  }, [brandId]);
+  }, [brandId, chatRequestInit]);
 
   const poll = useCallback(async () => {
     if (!sessionActive || document.hidden || pollInFlightRef.current) return;
@@ -561,7 +588,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     try {
       const res = await fetch(
         `/api/venues/${brandId}/chat?after=${encodeURIComponent(lastMsgIdRef.current)}`,
-        { credentials: "include" }
+        chatRequestInit()
       );
       if (!res.ok) return;
       const data = await res.json();
@@ -576,10 +603,21 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     } finally {
       pollInFlightRef.current = false;
     }
-  }, [brandId, sessionActive]);
+  }, [brandId, sessionActive, chatRequestInit]);
+
+  useEffect(() => {
+    if (initialSnapshot?.sessionToken) {
+      persistSessionToken(initialSnapshot.sessionToken);
+    }
+  }, [initialSnapshot?.sessionToken, persistSessionToken]);
 
   useEffect(() => {
     if (isEmbed) {
+      if (initialSnapshot?.messages?.length) {
+        bootedRef.current = true;
+        syncPollCursor(initialSnapshot.messages as ChatMessage[]);
+        return;
+      }
       if (!bootedRef.current) {
         bootedRef.current = true;
         void loadSession();
@@ -652,12 +690,14 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     setError(null);
 
     try {
-      const res = await fetch(`/api/venues/${brandId}/chat`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const res = await fetch(
+        `/api/venues/${brandId}/chat`,
+        chatRequestInit({
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Send failed");
       setMessages((m) => m.filter((x) => !x.id.startsWith("tmp-")));

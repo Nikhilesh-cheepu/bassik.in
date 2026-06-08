@@ -26,6 +26,7 @@ import {
   type UtmParams,
 } from "@/lib/venue-chat-data";
 import { loadChatSession } from "@/lib/venue-chat-session";
+import { resolveChatSessionToken } from "@/lib/venue-chat-session-request";
 import { runVenueChatTurn } from "@/lib/venue-chat-ai";
 import { applyMessageBookingContext } from "@/lib/venue-chat-booking-policy";
 
@@ -44,10 +45,12 @@ function parseUtm(req: NextRequest): UtmParams {
 }
 
 function setSessionCookie(res: NextResponse, brandId: string, token: string) {
+  const secure = process.env.NODE_ENV === "production";
   res.cookies.set(chatCookieName(brandId), token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure,
+    // Cross-site embeds (e.g. fireflyteluguclub.com iframe) need None; header fallback still applies.
+    sameSite: secure ? "none" : "lax",
     maxAge: COOKIE_MAX_AGE,
     path: "/",
   });
@@ -62,14 +65,14 @@ export async function GET(
     return NextResponse.json({ error: "Unknown venue" }, { status: 404 });
   }
 
-  const cookieToken = req.cookies.get(chatCookieName(brandId))?.value ?? null;
+  const sessionToken = resolveChatSessionToken(req, brandId);
   const utm = parseUtm(req);
   const after = req.nextUrl.searchParams.get("after");
   const since = req.nextUrl.searchParams.get("since");
 
   try {
     if (after || since) {
-      const { lead } = await getOrCreateLead(brandId, cookieToken, utm);
+      const { lead } = await getOrCreateLead(brandId, sessionToken, utm);
       const [delta, fresh] = await Promise.all([
         after
           ? getMessagesAfter(lead.id, after)
@@ -85,7 +88,7 @@ export async function GET(
       return res;
     }
 
-    const session = await loadChatSession(brandId, cookieToken, utm);
+    const session = await loadChatSession(brandId, sessionToken, utm);
     const res = NextResponse.json({
       lead: session.lead,
       messages: session.messages,
@@ -136,11 +139,11 @@ export async function POST(
   let text = typeof body.message === "string" ? body.message.trim() : "";
   const instantAction = action?.type && isInstantAction(action.type) ? action.type : null;
 
-  const cookieToken = req.cookies.get(chatCookieName(brandId))?.value ?? null;
+  const sessionToken = resolveChatSessionToken(req, brandId);
   const utm = parseUtm(req);
 
   try {
-    const { lead } = await getOrCreateLead(brandId, cookieToken, utm);
+    const { lead } = await getOrCreateLead(brandId, sessionToken, utm);
     const offers = await getWeekOffersForBrand(brandId);
     const knowledge = await getVenueChatKnowledge(brandId);
 
