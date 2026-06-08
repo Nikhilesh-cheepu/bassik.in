@@ -24,6 +24,8 @@ import {
 import EventQuickBookSheet, { type EventQuickBookOffer } from "@/components/EventQuickBookSheet";
 import { getChatNeonTheme } from "@/lib/venue-chat-theme";
 import { normalizeBookingLinkUrl } from "@/lib/venue-chat-booking-link";
+import PhoneOtpSheet from "@/components/PhoneOtpSheet";
+import { useGuestSession } from "@/lib/use-guest-session";
 import { clientActionUserMessage, type ClientChatActionType } from "@/lib/venue-chat-copy";
 import {
   isPosterOnlyMessage,
@@ -384,6 +386,10 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
   const [offers, setOffers] = useState<EventQuickBookOffer[]>([]);
   const [offersLoaded, setOffersLoaded] = useState(false);
   const [eventSheetId, setEventSheetId] = useState<string | null>(null);
+  const [otpOpen, setOtpOpen] = useState(false);
+  const [otpPhone, setOtpPhone] = useState("");
+  const [pendingBookingUrl, setPendingBookingUrl] = useState<string | null>(null);
+  const { isVerifiedPhone, refresh: refreshGuest } = useGuestSession();
   const offersPromiseRef = useRef<Promise<EventQuickBookOffer[]> | null>(null);
 
   const loadOffers = useCallback(async (): Promise<EventQuickBookOffer[]> => {
@@ -403,15 +409,6 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
       });
     return offersPromiseRef.current;
   }, [brandId, offersLoaded, offers.length]);
-
-  const handleBookingLink = useCallback(
-    (link: { kind: "event" | "table"; eventId?: string; url: string }) => {
-      setOpen(false);
-      const raw = link.url.startsWith("/") ? link.url : `/${brandId}/book`;
-      router.push(normalizeBookingLinkUrl(brandId, raw));
-    },
-    [brandId, router]
-  );
 
   const optimisticSeed = useCallback((): ChatMessage[] => {
     let offers: BootstrapOffer[] = [];
@@ -730,6 +727,27 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     expandChat: () => setOpen(true),
   }));
 
+  const handleBookingLink = useCallback(
+    (link: { kind: "event" | "table"; eventId?: string; url: string }) => {
+      const raw = link.url.startsWith("/") ? link.url : `/${brandId}/book`;
+      const url = normalizeBookingLinkUrl(brandId, raw);
+      const phone =
+        lead?.contactNumber?.replace(/\D/g, "").slice(-10) ??
+        otpPhone.replace(/\D/g, "").slice(-10);
+
+      if (phone.length === 10 && !isVerifiedPhone(phone)) {
+        setOtpPhone(phone);
+        setPendingBookingUrl(url);
+        setOtpOpen(true);
+        return;
+      }
+
+      setOpen(false);
+      router.push(url);
+    },
+    [brandId, isVerifiedPhone, lead?.contactNumber, otpPhone, router]
+  );
+
   const panelProps = {
     accentColor,
     displayVenueName,
@@ -868,6 +886,28 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
         )}
       </AnimatePresence>
       {eventSheet}
+      <PhoneOtpSheet
+        open={otpOpen}
+        phone={otpPhone}
+        name={lead?.guestName ?? undefined}
+        leadId={lead?.id}
+        accentColor={accentColor}
+        title="Quick verify"
+        subtitle="Verify your number to continue booking — takes a few seconds."
+        onClose={() => {
+          setOtpOpen(false);
+          setPendingBookingUrl(null);
+        }}
+        onVerified={() => {
+          void refreshGuest();
+          setOtpOpen(false);
+          if (pendingBookingUrl) {
+            setOpen(false);
+            router.push(pendingBookingUrl);
+            setPendingBookingUrl(null);
+          }
+        }}
+      />
     </>
   );
 });

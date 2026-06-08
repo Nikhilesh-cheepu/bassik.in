@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { getGuestFromRequest } from "@/lib/guest-auth";
 import { getDiscountLabel } from "@/lib/reservation-discounts";
 import { getOutletLabelForReservation } from "@/lib/brands";
 import {
@@ -132,6 +133,16 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const guest = await getGuestFromRequest(request);
+    const otpRequired = process.env.MSG91_OTP_REQUIRED !== "false";
+    if (otpRequired && (!guest || guest.phone !== contactNumber)) {
+      return NextResponse.json(
+        { error: "Please verify your mobile number before booking.", code: "PHONE_NOT_VERIFIED" },
+        { status: 403 }
+      );
+    }
+    const guestId = guest?.guestId ?? null;
 
     const userNotesTrimmed =
       notes && String(notes).trim() ? String(notes).trim() : "";
@@ -352,6 +363,7 @@ export async function POST(request: NextRequest) {
             selectedDiscounts: selectedDiscountsNormalized,
             status: "CONFIRMED",
             userId,
+            guestId,
           },
           select: { id: true },
         });

@@ -23,6 +23,23 @@ model User {
   @@index([email])
 }
 
+/// Verified guest identity via mobile OTP (booking + chat — no login wall before browse).
+model Guest {
+  id         String   @id @default(cuid())
+  phone      String   @unique // 10-digit Indian mobile
+  name       String?
+  verifiedAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  reservations Reservation[]
+  chatLeads    VenueChatLead[]
+
+  @@index([phone])
+  @@index([lastSeenAt])
+}
+
 model Venue {
   id             String   @id @default(cuid())
   brandId        String   @unique // Matches brand.id from brands.ts
@@ -172,6 +189,9 @@ model Reservation {
   userId String? // Clerk user ID - optional for backward compatibility
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  guestId String?
+  guest   Guest? @relation(fields: [guestId], references: [id], onDelete: SetNull)
+
   venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
 
   @@index([venueId])
@@ -180,6 +200,7 @@ model Reservation {
   @@index([status])
   @@index([createdAt])
   @@index([userId])
+  @@index([guestId])
 }
 
 enum ReservationStatus {
@@ -270,10 +291,13 @@ model VenueChatLead {
   utmContent          String?
   reservationId       String?
   managerNotes        String?
+  guestId             String?
+  phoneVerifiedAt     DateTime?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   lastMessageAt       DateTime            @default(now())
 
+  guest    Guest?             @relation(fields: [guestId], references: [id], onDelete: SetNull)
   venue    Venue?             @relation(fields: [venueId], references: [id], onDelete: SetNull)
   messages VenueChatMessage[]
   attachments VenueChatAttachment[]
@@ -282,6 +306,7 @@ model VenueChatLead {
   @@index([brandId, lastMessageAt])
   @@index([status])
   @@index([sessionToken])
+  @@index([guestId])
 }
 
 enum VenueChatLeadStatus {

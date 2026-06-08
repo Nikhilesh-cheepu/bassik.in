@@ -10,6 +10,8 @@ import {
 } from "@/lib/club-rogue";
 import { addLocalDays, localYmdTimeMs, toLocalDateString } from "@/lib/local-date";
 import { useRouter } from "next/navigation";
+import PhoneOtpSheet from "@/components/PhoneOtpSheet";
+import { useGuestSession } from "@/lib/use-guest-session";
 
 interface ReservationFormProps {
   brand: Brand;
@@ -37,6 +39,8 @@ type DiscountItem = {
 export default function ReservationForm({ brand, prefill }: ReservationFormProps) {
   const router = useRouter();
   const accentColor = brand.accentColor;
+  const { isVerifiedPhone, refresh: refreshGuest } = useGuestSession();
+  const [otpOpen, setOtpOpen] = useState(false);
   const [formData, setFormData] = useState(() => ({
     fullName: "",
     contactNumber: "",
@@ -228,16 +232,33 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
   const isValidPhone = (p: string) => /^\d{10}$/.test(p.replace(/\D/g, ""));
   const isClubRogue = isClubRogueBrand(brand.id);
   const isGachibowliClubRogue = brand.id === CLUB_ROGUE_GACHIBOWLI_ID;
+  const phoneVerified = isVerifiedPhone(formData.contactNumber);
 
   const canSubmit = () =>
-    formData.date && formData.timeSlot && guests >= 1 && formData.fullName.trim() && isValidPhone(formData.contactNumber) &&
+    formData.date &&
+    formData.timeSlot &&
+    guests >= 1 &&
+    formData.fullName.trim() &&
+    isValidPhone(formData.contactNumber) &&
+    phoneVerified &&
     (brand.id !== "the-hub" || formData.hubSpotId) &&
     (!isClubRogue || formData.clubRogueCoverAcknowledged) &&
     (!isGachibowliClubRogue || (formData.bookingNightGenre === "tollywood" || formData.bookingNightGenre === "bollywood"));
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!canSubmit() || isSubmitting) return;
+    if (!canSubmit() || isSubmitting) {
+      if (
+        isValidPhone(formData.contactNumber) &&
+        !phoneVerified &&
+        formData.date &&
+        formData.timeSlot &&
+        formData.fullName.trim()
+      ) {
+        setOtpOpen(true);
+      }
+      return;
+    }
     if (isSlotInPast(formData.date, formData.timeSlot)) {
       setSubmitStatus({ type: "error", message: "Please choose a date and time in the future." });
       return;
@@ -612,6 +633,18 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
         {formData.contactNumber && !isValidPhone(formData.contactNumber) && (
           <p className="text-xs text-red-400">Enter a valid 10-digit number</p>
         )}
+        {isValidPhone(formData.contactNumber) && !phoneVerified && (
+          <button
+            type="button"
+            onClick={() => setOtpOpen(true)}
+            className="w-full rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-100"
+          >
+            Verify mobile to confirm booking →
+          </button>
+        )}
+        {phoneVerified && (
+          <p className="text-xs text-emerald-400/90">✓ Mobile verified</p>
+        )}
       </div>
 
       {brand.id === "the-hub" && (
@@ -659,6 +692,20 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
           {isSubmitting ? "Processing..." : "Confirm Booking"}
         </motion.button>
       </div>
+
+      <PhoneOtpSheet
+        open={otpOpen}
+        phone={formData.contactNumber}
+        name={formData.fullName}
+        accentColor={accentColor}
+        title="Verify to confirm booking"
+        subtitle="One quick OTP — then you're all set to book."
+        onClose={() => setOtpOpen(false)}
+        onVerified={() => {
+          void refreshGuest();
+          setOtpOpen(false);
+        }}
+      />
     </form>
   );
 }
