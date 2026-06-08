@@ -125,6 +125,7 @@ function ChatPanel({
   showClose,
   onRestartChat,
   restartingChat,
+  onRequestManager,
 }: {
   accentColor: string;
   displayVenueName: string;
@@ -157,6 +158,7 @@ function ChatPanel({
   showClose?: boolean;
   onRestartChat?: () => void;
   restartingChat?: boolean;
+  onRequestManager?: () => void;
 }) {
   const theme = getChatNeonTheme(accentColor);
   const venueCaps = displayVenueName.toUpperCase();
@@ -313,6 +315,7 @@ function ChatPanel({
                     onBook={bookTable}
                     onMenu={openMenu}
                     onBookingLink={onBookingLink}
+                    onRequestManager={onRequestManager}
                   />
                 ))}
               </div>
@@ -601,10 +604,8 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     }
     if (data.messages?.length) {
       setMessages((prev) => {
-        const base = data.delta ? prev.filter((m) => !isOptimisticMessageId(m.id)) : [];
-        const merged = data.delta
-          ? mergeMessages(base, data.messages!)
-          : (data.messages! as ChatMessage[]);
+        const base = prev.filter((m) => !isOptimisticMessageId(m.id));
+        const merged = mergeMessages(base, data.messages!);
         syncPollCursor(merged);
         return merged;
       });
@@ -860,6 +861,14 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     }
   }, [brandId, chatRequestInit, scrollToBottom]);
 
+  const requestManager = useCallback(() => {
+    if (actionBusy || aiPending) return;
+    postChat(
+      { action: { type: "request_manager" } },
+      { optimisticUserText: "I'd like to speak with the manager" }
+    );
+  }, [actionBusy, aiPending]);
+
   const handleBookingLink = useCallback(
     (link: { kind: "event" | "table"; eventId?: string; url: string }) => {
       const raw = link.url.startsWith("/") ? link.url : `/${brandId}/book`;
@@ -909,6 +918,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
     onBookingLink: handleBookingLink,
     onRestartChat: restartChat,
     restartingChat,
+    onRequestManager: requestManager,
   };
 
   const eventSheet = !onOpenEventBook ? (

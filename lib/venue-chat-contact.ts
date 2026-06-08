@@ -4,6 +4,7 @@
  */
 import {
   looksLikeChatQuestion,
+  looksLikeCasualNonNameMessage,
   looksLikePlausibleGuestName,
   rejectExtractedGuestName,
   sanitizeGuestName,
@@ -108,6 +109,7 @@ function extractNameFromRemainder(text: string, phone: string | undefined): stri
   }
 
   if (!phone && !/\d/.test(text.trim())) {
+    if (looksLikeCasualNonNameMessage(text.trim())) return undefined;
     const candidate = text.trim();
     if (looksLikePlausibleGuestName(candidate)) {
       return cleanExtractedName(candidate);
@@ -129,6 +131,12 @@ export function tryExtractContactFromMessage(text: string): {
   if (!trimmed) return {};
 
   if (looksLikeChatQuestion(trimmed)) {
+    const found = findPhoneInText(trimmed);
+    const phone = found?.phone ?? normalizePhone(trimmed);
+    return phone ? { contactNumber: phone } : {};
+  }
+
+  if (looksLikeCasualNonNameMessage(trimmed)) {
     const found = findPhoneInText(trimmed);
     const phone = found?.phone ?? normalizePhone(trimmed);
     return phone ? { contactNumber: phone } : {};

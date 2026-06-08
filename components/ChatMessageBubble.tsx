@@ -35,6 +35,7 @@ type ChatMessageBubbleProps = {
   onBook?: () => void;
   onMenu?: () => void;
   onBookingLink?: (link: { kind: "event" | "table"; eventId?: string; url: string }) => void;
+  onRequestManager?: () => void;
   suppressFlyers?: boolean;
 };
 
@@ -66,6 +67,7 @@ export default function ChatMessageBubble({
   onBook,
   onMenu,
   onBookingLink,
+  onRequestManager,
   suppressFlyers = false,
 }: ChatMessageBubbleProps) {
   const side = bubbleSide(m.role, perspective);
@@ -82,6 +84,10 @@ export default function ChatMessageBubble({
       : null;
   const chatLink = chatLinkFromMetadata(m.metadata);
   const bookingLink = parseBookingLinkMetadata(m.metadata);
+  const managerHandoff =
+    m.metadata?.type === "manager_handoff" && typeof m.metadata.label === "string"
+      ? m.metadata.label
+      : null;
   const attachmentUrl = m.imageUrl?.trim() || null;
   const attachmentMeta =
     m.metadata?.type === "attachment" && m.metadata && typeof m.metadata === "object"
@@ -98,6 +104,7 @@ export default function ChatMessageBubble({
     quickActions.length > 0 ||
     (flyers.length > 0 && !suppressFlyers) ||
     Boolean(chatLink) ||
+    Boolean(managerHandoff) ||
     Boolean(attachmentUrl);
   const minimal = variant === "minimal";
 
@@ -152,7 +159,18 @@ export default function ChatMessageBubble({
     )
   ) : null;
 
-  if (minimal && isHost && m.content.trim() && !quickActions.length && !(flyers.length > 0 && !suppressFlyers) && !callPhone) {
+  const managerHandoffButton = managerHandoff ? (
+    <button
+      type="button"
+      onClick={onRequestManager}
+      disabled={!onRequestManager}
+      className="relative z-10 mt-2 inline-flex cursor-pointer items-center rounded-full border border-cyan-400/30 bg-cyan-500/15 px-4 py-2.5 text-[13px] font-semibold text-cyan-100 shadow-lg active:scale-[0.98] disabled:opacity-50"
+    >
+      {managerHandoff}
+    </button>
+  ) : null;
+
+  if (minimal && isHost && m.content.trim() && !quickActions.length && !(flyers.length > 0 && !suppressFlyers) && !callPhone && !managerHandoff) {
     return (
       <div className={`flex ${isRight ? "justify-end pr-0.5" : "justify-start pl-0.5"}`}>
         <div
@@ -169,6 +187,7 @@ export default function ChatMessageBubble({
             {m.content}
           </p>
           {linkButton}
+          {managerHandoffButton}
           {attachmentBlock}
           <p className="mt-1 text-[10px] font-medium tracking-wide text-white/40">{formatChatTime(m.createdAt)}</p>
         </div>
@@ -275,6 +294,7 @@ export default function ChatMessageBubble({
           />
         ) : null}
         {linkButton}
+        {managerHandoffButton}
         {attachmentBlock}
         <p
           className={`mt-1.5 text-[10px] font-medium tracking-wide ${

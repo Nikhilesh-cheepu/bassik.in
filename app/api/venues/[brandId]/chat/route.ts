@@ -21,6 +21,7 @@ import {
   getMessagesSince,
   getOrCreateLead,
   getWeekOffersForBrand,
+  seedWelcomeThread,
   shouldSkipAiForLead,
   updateLeadFields,
   type UtmParams,
@@ -28,6 +29,10 @@ import {
 import { loadChatSession } from "@/lib/venue-chat-session";
 import { resolveChatSessionToken } from "@/lib/venue-chat-session-request";
 import { runVenueChatTurn } from "@/lib/venue-chat-ai";
+import {
+  handleRequestManager,
+  managerHandoffButtonMetadata,
+} from "@/lib/venue-chat-manager-handoff";
 import { scrubInvalidGuestName, shouldSkipBookingLinkForMessage } from "@/lib/venue-chat-policy-replies";
 import { applyMessageBookingContext } from "@/lib/venue-chat-booking-policy";
 
@@ -106,6 +111,7 @@ export async function GET(
 
 type ChatAction =
   | { type: "select_event"; offerId: string; label?: string; imageUrl?: string }
+  | { type: "request_manager" }
   | { type: ChatActionType };
 
 function findOfferForAction(
@@ -126,6 +132,14 @@ function findOfferForAction(
   return offer;
 }
 
+function isTypedInstantAction(
+  type: ChatAction["type"] | undefined
+): type is ChatActionType {
+  return Boolean(
+    type && type !== "select_event" && type !== "request_manager" && isInstantAction(type)
+  );
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ brandId: string }> }
@@ -138,7 +152,7 @@ export async function POST(
   const body = await req.json().catch(() => ({}));
   const action = body.action as ChatAction | undefined;
   let text = typeof body.message === "string" ? body.message.trim() : "";
-  const instantAction = action?.type && isInstantAction(action.type) ? action.type : null;
+  const instantAction = isTypedInstantAction(action?.type) ? action.type : null;
 
   const sessionToken = resolveChatSessionToken(req, brandId);
   const utm = parseUtm(req);
@@ -148,7 +162,14 @@ export async function POST(
     const offers = await getWeekOffersForBrand(brandId);
     const knowledge = await getVenueChatKnowledge(brandId);
 
-    if (action?.type === "select_event") {
+    const existingMessages = await getMessages(lead.id);
+    if (existingMessages.length === 0) {
+      await seedWelcomeThread(lead.id, brandId, offers, knowledge);
+    }
+
+    if (action?.type === "request_manager") {
+      text = "I'd like to speak with the manager";
+    } else if (action?.type === "select_event") {
       const sel = action as Extract<ChatAction, { type: "select_event" }>;
       const offer = findOfferForAction(offers, sel);
       const eventName =
@@ -178,7 +199,16 @@ export async function POST(
     const newMessages = [];
     let usedInstant = false;
 
-    if (action?.type === "select_event") {
+    if (action?.type === "request_manager") {
+      const currentLead = (await getLeadSnapshot(lead.id)) ?? lead;
+      const handoffReplies = await handleRequestManager({
+        leadId: lead.id,
+        venueName: knowledge.venueName,
+        lead: currentLead,
+      });
+      newMessages.push(...handoffReplies);
+      usedInstant = true;
+    } else if (action?.type === "select_event") {
       const sel = action as Extract<ChatAction, { type: "select_event" }>;
       const offer = findOfferForAction(offers, sel);
       const eventName =
@@ -230,11 +260,17 @@ export async function POST(
             )
           );
         } else if (aiGate.reason === "handed_off") {
+          let currentLead = (await getLeadSnapshot(lead.id)) ?? lead;
+          const hadPhone = Boolean(currentLead.contactNumber?.replace(/\D/g, "").slice(-10));
+          currentLead = await syncContactFromConversation({ leadId: lead.id, lead: currentLead });
+          const hasPhone = Boolean(currentLead.contactNumber?.replace(/\D/g, "").slice(-10));
           newMessages.push(
             await appendMessage(
               lead.id,
               "ASSISTANT",
-              "Got your message — our team will reply shortly."
+              !hadPhone && hasPhone
+                ? "Thanks — our manager has your number and will follow up on WhatsApp. Please wait here; they'll reply in this chat too."
+                : "Got your message — our team will reply shortly."
             )
           );
         } else if (aiGate.reason === "ai_disabled") {
@@ -267,7 +303,15 @@ export async function POST(
           lead: (await getLeadSnapshot(lead.id)) ?? currentLead,
         });
 
-        newMessages.push(await appendMessage(lead.id, "ASSISTANT", ai.reply));
+        newMessages.push(
+          await appendMessage(
+            lead.id,
+            "ASSISTANT",
+            ai.reply,
+            null,
+            ai.suggestManagerHandoff ? managerHandoffButtonMetadata() : null
+          )
+        );
 
         for (const offerId of ai.posterOfferIds) {
           const offer = offers.find((o) => o.id === offerId);

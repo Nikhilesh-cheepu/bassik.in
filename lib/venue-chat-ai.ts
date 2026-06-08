@@ -8,7 +8,7 @@ import {
 } from "@/lib/venue-chat-knowledge";
 import { formatLearnedForPrompt, getVenueChatConfig } from "@/lib/venue-chat-config";
 import { guestWritesTelugu } from "@/lib/venue-chat-actions";
-import { looksLikeChatQuestion, sanitizeGuestName } from "@/lib/venue-chat-guest";
+import { looksLikeChatQuestion, looksLikeCasualNonNameMessage, sanitizeGuestName } from "@/lib/venue-chat-guest";
 import { CLUB_ROGUE_AI_PLAYBOOK, clubRogueAskPhoneCopy, isClubRogueBrand } from "@/lib/club-rogue";
 import { formatPhoneAsk } from "@/lib/venue-chat-copy";
 import { buildConversationMemoryPrompt } from "@/lib/venue-chat-memory";
@@ -29,6 +29,7 @@ export type AiChatResult = {
   reply: string;
   leadUpdates: LeadFieldUpdates;
   posterOfferIds: string[];
+  suggestManagerHandoff?: boolean;
 };
 
 type HistoryRow = { role: "user" | "assistant"; content: string };
@@ -116,7 +117,9 @@ export async function runVenueChatTurn(params: {
     CHAT_BOOKING_AI_RULES,
     "• Once you know their real name, use it naturally — never guess a name from random text.",
     "• NEVER set guestName from okay, yes, sure, thanks, keyboard mash, or other non-names.",
+    "• NEVER set guestName from casual Telugu/Hinglish words (vasta, repu, randi, chalo, etc.) — they mean coming/visit, not a name.",
     "• NEVER set guestName from a question (can men come, what is cover, are you open, etc.) — answer the question instead.",
+    "• If you cannot answer from venue facts, or the guest needs a human (complaints, special requests, unclear after one try), set suggestManagerHandoff:true and briefly offer to connect them with the team.",
     "• Never echo the guest's question as if it were their name (never say Got it, {question}).",
     "• Respond to the LAST user message first: if they change the date (e.g. next Wednesday), acknowledge that date — do not repeat an old event name.",
     "• If they picked or mentioned an event, set selectedEventId and selectedEventName. Use a short event label in chat (e.g. 'DJ SHWETH'), not the full poster line.",
@@ -128,9 +131,10 @@ export async function runVenueChatTurn(params: {
     venueBlock,
     "Current lead state:",
     leadState,
-    `Respond as JSON only: {"reply":"string","leadUpdates":{"guestName":null,"contactNumber":null,"partySize":null,"selectedEventId":null,"selectedEventName":null,"bookingDate":null,"bookingTime":null,"selectedDiscountIds":[]},"posterOfferIds":[]}`,
+    `Respond as JSON only: {"reply":"string","leadUpdates":{"guestName":null,"contactNumber":null,"partySize":null,"selectedEventId":null,"selectedEventName":null,"bookingDate":null,"bookingTime":null,"selectedDiscountIds":[]},"posterOfferIds":[],"suggestManagerHandoff":false}`,
     "leadUpdates: only fields learned THIS turn. bookingDate/bookingTime are prefill hints for the booking form only — omit if date/time is in the past. selectedDiscountIds = discount ids from list.",
     "posterOfferIds: offer ids if guest asks to see a poster (max 2).",
+    "suggestManagerHandoff: true only when a human manager should take over — guest will see a Talk to our team button.",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -153,13 +157,18 @@ export async function runVenueChatTurn(params: {
       reply?: string;
       leadUpdates?: Record<string, unknown>;
       posterOfferIds?: string[];
+      suggestManagerHandoff?: boolean;
     };
+
+    const skipNameCapture =
+      looksLikeChatQuestion(params.userMessage) ||
+      looksLikeCasualNonNameMessage(params.userMessage);
 
     const updates: LeadFieldUpdates = {};
     const lu = parsed.leadUpdates ?? {};
     if (typeof lu.guestName === "string" && lu.guestName.trim()) {
       const name = sanitizeGuestName(lu.guestName.trim().slice(0, 80));
-      if (name && !looksLikeChatQuestion(params.userMessage)) updates.guestName = name;
+      if (name && !skipNameCapture) updates.guestName = name;
     }
     const phone = normalizePhone(
       typeof lu.contactNumber === "string" ? lu.contactNumber : null
@@ -189,14 +198,14 @@ export async function runVenueChatTurn(params: {
 
     const userTexts = params.history.filter((m) => m.role === "USER").map((m) => m.content);
     const threadContact = mergeContactFromConversation(params.lead, userTexts, params.userMessage);
-    if (threadContact.guestName && !updates.guestName && !looksLikeChatQuestion(params.userMessage)) {
+    if (threadContact.guestName && !updates.guestName && !skipNameCapture) {
       updates.guestName = threadContact.guestName;
     }
     if (threadContact.contactNumber && !updates.contactNumber) {
       updates.contactNumber = threadContact.contactNumber;
     }
     const fromMsg = tryExtractContactFromMessage(params.userMessage);
-    if (fromMsg.guestName && !updates.guestName && !looksLikeChatQuestion(params.userMessage)) {
+    if (fromMsg.guestName && !updates.guestName && !skipNameCapture) {
       const n = sanitizeGuestName(fromMsg.guestName);
       if (n) updates.guestName = n;
     }
@@ -229,6 +238,7 @@ export async function runVenueChatTurn(params: {
           : fallback.reply,
       leadUpdates: sanitized,
       posterOfferIds,
+      suggestManagerHandoff: parsed.suggestManagerHandoff === true,
     };
   } catch (e) {
     console.error("[venue-chat-ai]", e);
