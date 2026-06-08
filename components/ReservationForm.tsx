@@ -11,6 +11,7 @@ import {
 import { addLocalDays, localYmdTimeMs, toLocalDateString } from "@/lib/local-date";
 import { useRouter } from "next/navigation";
 import PhoneOtpSheet from "@/components/PhoneOtpSheet";
+import { isGuestOtpRequiredOnClient } from "@/lib/guest-otp-config";
 import { useGuestSession } from "@/lib/use-guest-session";
 
 interface ReservationFormProps {
@@ -232,7 +233,8 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
   const isValidPhone = (p: string) => /^\d{10}$/.test(p.replace(/\D/g, ""));
   const isClubRogue = isClubRogueBrand(brand.id);
   const isGachibowliClubRogue = brand.id === CLUB_ROGUE_GACHIBOWLI_ID;
-  const phoneVerified = isVerifiedPhone(formData.contactNumber);
+  const otpRequired = isGuestOtpRequiredOnClient();
+  const phoneVerified = !otpRequired || isVerifiedPhone(formData.contactNumber);
 
   const canSubmit = () =>
     formData.date &&
@@ -249,8 +251,9 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
     e.preventDefault();
     if (!canSubmit() || isSubmitting) {
       if (
+        otpRequired &&
         isValidPhone(formData.contactNumber) &&
-        !phoneVerified &&
+        !isVerifiedPhone(formData.contactNumber) &&
         formData.date &&
         formData.timeSlot &&
         formData.fullName.trim()
@@ -633,7 +636,7 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
         {formData.contactNumber && !isValidPhone(formData.contactNumber) && (
           <p className="text-xs text-red-400">Enter a valid 10-digit number</p>
         )}
-        {isValidPhone(formData.contactNumber) && !phoneVerified && (
+        {otpRequired && isValidPhone(formData.contactNumber) && !isVerifiedPhone(formData.contactNumber) && (
           <button
             type="button"
             onClick={() => setOtpOpen(true)}
@@ -642,7 +645,7 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
             Verify mobile to confirm booking →
           </button>
         )}
-        {phoneVerified && (
+        {otpRequired && isVerifiedPhone(formData.contactNumber) && (
           <p className="text-xs text-emerald-400/90">✓ Mobile verified</p>
         )}
       </div>
@@ -694,7 +697,7 @@ export default function ReservationForm({ brand, prefill }: ReservationFormProps
       </div>
 
       <PhoneOtpSheet
-        open={otpOpen}
+        open={otpRequired && otpOpen}
         phone={formData.contactNumber}
         name={formData.fullName}
         accentColor={accentColor}

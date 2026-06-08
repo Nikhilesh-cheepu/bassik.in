@@ -1,7 +1,30 @@
+/** Plausible human name — rejects keyboard mash and random strings. */
+export function looksLikePlausibleGuestName(raw: string): boolean {
+  const n = raw.trim().replace(/[.,;:!?]+$/g, "").trim();
+  if (n.length < 2 || n.length > 48) return false;
+  if (!/^[A-Za-z][A-Za-z\s.'-]*$/.test(n)) return false;
+
+  const words = n.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > 3) return false;
+
+  const letters = n.replace(/[^a-zA-Z]/g, "");
+  if (letters.length < 2) return false;
+  if (!/[aeiouAEIOU]/.test(letters)) return false;
+  if (/[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]{5,}/.test(letters)) return false;
+  if (/^(asdf|qwer|zxcv|hjkl|dfgh|sdfg|ghjk|fghj|jklk|lkjh|hgfd|fdsa|qwerty)/i.test(letters)) return false;
+  if (words.length === 1 && letters.length > 14) return false;
+
+  for (const w of words) {
+    if (w.length >= 3 && !/[aeiouAEIOU]/.test(w)) return false;
+  }
+
+  return true;
+}
+
 function rejectBadGuestName(name: string | undefined): string | undefined {
   if (!name?.trim()) return undefined;
   const n = name.trim().replace(/[.,;:!?]+$/g, "").trim();
-  if (n.length < 2 || n.length > 48) return undefined;
+  if (!looksLikePlausibleGuestName(n)) return undefined;
   if (/^(i'?m|interested|book|table|hi|hello|yes|yeah|yep|yup|ok|okay|k|sure|thanks|thank you|fine|cool|great|done|alright|right)$/i.test(n)) return undefined;
   if (/interested in/i.test(n)) return undefined;
   if (/\bDJ\b/i.test(n) && n.split(/\s+/).length > 2) return undefined;

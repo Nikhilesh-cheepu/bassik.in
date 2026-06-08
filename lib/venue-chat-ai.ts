@@ -9,7 +9,8 @@ import {
 import { formatLearnedForPrompt, getVenueChatConfig } from "@/lib/venue-chat-config";
 import { guestWritesTelugu } from "@/lib/venue-chat-actions";
 import { sanitizeGuestName } from "@/lib/venue-chat-guest";
-import { CLUB_ROGUE_AI_PLAYBOOK, isClubRogueBrand } from "@/lib/club-rogue";
+import { CLUB_ROGUE_AI_PLAYBOOK, clubRogueAskPhoneCopy, isClubRogueBrand } from "@/lib/club-rogue";
+import { formatPhoneAsk } from "@/lib/venue-chat-copy";
 import {
   CHAT_BOOKING_AI_RULES,
   CHAT_CONCIERGE_PLAYBOOK,
@@ -45,14 +46,14 @@ export async function runVenueChatTurn(params: {
   const isClubRogue = isClubRogueBrand(params.brandId);
   const fallback: AiChatResult = {
     reply: telugu
-      ? `Chala bagundi! ${isClubRogue ? "Venue daggara ₹2,000 cover undi — bill meeda adjust avutundi. " : ""}Me peru cheppandi — table book chesi help chestha.`
+      ? `Chala bagundi! Table book cheyyadaniki me details kavali 😊\n\nPeru:-\n\nContact num:-`
       : guestName
         ? isClubRogue
-          ? `Thanks, ${guestName}! Cover is ₹2k at the venue — fully on your bill. Share your mobile whenever you're ready and I'll send you to our booking page.`
-          : `Thanks, ${guestName}! Whenever you're ready, just share your mobile number — I'll send you to pick a date & time.`
+          ? clubRogueAskPhoneCopy(guestName)
+          : formatPhoneAsk(`Got it, ${guestName} 😊`, "I'll send you to pick a date & time.")
         : isClubRogue
-          ? `Hey! Welcome to ${params.venueShortName} — one of Hyderabad's most happening clubs. Big nights all week — tell me when you're thinking of coming or which event caught your eye.`
-          : `Hey! Welcome — whether it's tonight, this weekend, or a date you're planning ahead, tell me what you're thinking and I'll help you pick the right night.`,
+          ? `Hey! Welcome to ${params.venueShortName} — one of Hyderabad's most happening clubs 🎉\n\nBig nights all week — tell me when you're thinking of coming, or tap an event above.`
+          : `Hey! Welcome 😊\n\nWhether it's tonight, this weekend, or a date you're planning ahead — tell me what you're thinking and I'll help you pick the right night.`,
     leadUpdates: {},
     posterOfferIds: [],
   };
@@ -103,11 +104,11 @@ export async function runVenueChatTurn(params: {
     "Tone & flow:",
     "• Sound human and pleasant — make the night sound exciting. Never say 'share your 10-digit mobile' or 'I will send you the link' — that feels robotic.",
     "• Engagement first: on hi/hello or vague openers, welcome them and mention vibe, events, or offers — do NOT ask for name/phone unless they want to book.",
-    "• Booking: today, tomorrow, any future date — same flow. Ask name + mobile in one warm line when they want a table. After both are captured, reply briefly — the app adds the book button; do NOT paste URLs. Never say they are confirmed or booked.",
+    "• Booking: today, tomorrow, any future date — same flow. Ask name + mobile using the Name:- / Contact num:- layout (warm, with an emoji). After both are captured, reply briefly — the app adds the book button; do NOT paste URLs. Never say they are confirmed or booked.",
     "• If they share name/phone voluntarily, capture it — never nag if they're just browsing.",
     CHAT_BOOKING_AI_RULES,
-    "• Once you know their real name, use it in every reply.",
-    "• NEVER set guestName from okay, yes, sure, thanks, or other affirmations — those are not names.",
+    "• Once you know their real name, use it naturally — never guess a name from random text.",
+    "• NEVER set guestName from okay, yes, sure, thanks, keyboard mash, or other non-names.",
     "• Respond to the LAST user message first: if they change the date (e.g. next Wednesday), acknowledge that date — do not repeat an old event name.",
     "• If they picked or mentioned an event, set selectedEventId and selectedEventName. Use a short event label in chat (e.g. 'DJ SHWETH'), not the full poster line.",
     "• Menu, directions, offers: answer from venue facts. Never invent.",

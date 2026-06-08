@@ -18,8 +18,10 @@ import {
   clubRogueAskPhoneCopy,
   isClubRogueBrand,
 } from "@/lib/club-rogue";
+import { formatNameAndPhoneAsk, formatPhoneAsk } from "@/lib/venue-chat-copy";
 import {
   friendlyEventLabel,
+  looksLikePlausibleGuestName,
   rejectExtractedGuestName,
   sanitizeGuestName,
 } from "@/lib/venue-chat-guest";
@@ -63,14 +65,24 @@ export function tryExtractContactFromMessage(text: string): {
   guestName?: string;
   contactNumber?: string;
 } {
-  const phone = normalizePhone(text);
+  const phone =
+    normalizePhone(text) ??
+    normalizePhone(
+      text.match(/(?:contact\s*(?:num|number|no)?|mobile|phone|number)\s*[:-]+\s*([\d\s+-]{10,})/im)?.[1]
+    );
+
   let guestName: string | undefined;
 
+  const structuredName = text.match(/(?:^|\n)\s*name\s*[:-]+\s*([A-Za-z][A-Za-z\s.'-]{1,35})/im)?.[1];
+  if (structuredName) {
+    guestName = rejectExtractedGuestName(structuredName.trim());
+  }
+
   const named =
-    text.match(/(?:^|[\s,])(?:my name is|this is|name[:\s-]+)\s*([A-Za-z][A-Za-z\s.'-]{1,35})/i) ??
+    text.match(/(?:^|[\s,])(?:my name is|this is|i am|name[:\s-]+)\s*([A-Za-z][A-Za-z\s.'-]{1,35})/i) ??
     text.match(/(?:^|[\s,])i'?m\s+(?!interested\b)([A-Za-z][A-Za-z\s.'-]{1,35})/i) ??
     text.match(/^([A-Za-z][A-Za-z\s.'-]{1,35})\s*[,–—-]/);
-  if (named?.[1]) {
+  if (!guestName && named?.[1]) {
     guestName = rejectExtractedGuestName(named[1].trim().replace(/\s+(and|mobile|phone|number).*$/i, "").trim());
   }
 
@@ -78,18 +90,20 @@ export function tryExtractContactFromMessage(text: string): {
     const stripped = text
       .replace(phone, "")
       .replace(/\d{10}/g, "")
+      .replace(/(?:^|\n)\s*(?:name|contact\s*(?:num|number|no)?|mobile|phone)\s*[:-]+[^\n]*/gim, " ")
       .replace(/[^\w\s.'-]/g, " ")
       .trim();
     const words = stripped.split(/\s+/).filter(Boolean);
-    if (words.length >= 1 && words.length <= 4 && !/^(book|table|hi|hello|yes|ok)$/i.test(words[0])) {
-      guestName = rejectExtractedGuestName(words.slice(0, 3).join(" "));
+    if (words.length >= 1 && words.length <= 3 && !/^(book|table|hi|hello|yes|ok)$/i.test(words[0])) {
+      const candidate = rejectExtractedGuestName(words.slice(0, 3).join(" "));
+      if (candidate) guestName = candidate;
     }
   }
 
   if (!guestName && !phone) {
     const trimmed = text.trim();
     const words = trimmed.split(/\s+/).filter(Boolean);
-    if (words.length >= 1 && words.length <= 3 && !/^\d/.test(trimmed) && !/interested/i.test(trimmed)) {
+    if (words.length === 1 && looksLikePlausibleGuestName(trimmed)) {
       guestName = rejectExtractedGuestName(trimmed);
     }
   }
@@ -210,9 +224,15 @@ function askNameCopy(brandId: string, eventName?: string | null): string {
   if (isClubRogueBrand(brandId)) return clubRogueBeforeBookingAskCopy(eventName);
   const ev = friendlyEventLabel(eventName);
   if (ev !== "this night") {
-    return `Great pick — ${ev} is going to be a vibe. What's your name? I'll sort the rest for you.`;
+    return formatNameAndPhoneAsk(
+      `Great pick — ${ev} is going to be a vibe 🎉`,
+      "I'll sort the rest for you ✨"
+    );
   }
-  return `I'd love to get you a table. What's your name? I'll take care of everything from here.`;
+  return formatNameAndPhoneAsk(
+    "I'd love to get you a table 😊",
+    "I'll take care of everything from here ✨"
+  );
 }
 
 function askPhoneCopy(
@@ -224,22 +244,37 @@ function askPhoneCopy(
   const name = sanitizeGuestName(guestName) ?? guestName.trim();
   if (lead?.bookingDate) {
     const when = formatHumanBookingDate(lead.bookingDate);
-    return `Thanks, ${name}! Share your mobile whenever you're ready — I'll send you to pick a time on ${when}.`;
+    return formatPhoneAsk(
+      `Lovely, ${name} 😊`,
+      `I'll send you to pick a time on ${when}.`
+    );
   }
   const ev = friendlyEventLabel(lead?.selectedEventName);
   if (ev !== "this night") {
-    return `Thanks, ${name}! Whenever you're ready, just share your mobile number — then I'll send you to pick ${ev} on our booking page.`;
+    return formatPhoneAsk(
+      `Thanks, ${name} 😊`,
+      `Then I'll send you to pick ${ev} on our booking page.`
+    );
   }
-  return `Lovely to meet you, ${name}. Whenever you're ready, just share your mobile number — I'll send you to our booking page to pick a slot.`;
+  return formatPhoneAsk(
+    `Lovely to meet you, ${name} 😊`,
+    "I'll send you to our booking page to pick a slot."
+  );
 }
 
 function askNameAndPhoneCopy(brandId: string, eventName?: string | null): string {
   if (isClubRogueBrand(brandId)) return clubRogueBeforeBookingAskCopy(eventName);
   const ev = friendlyEventLabel(eventName);
   if (ev !== "this night") {
-    return `Great pick — ${ev} is going to be a vibe. What's your name and mobile? I'll send you to pick a date & time.`;
+    return formatNameAndPhoneAsk(
+      `Great pick — ${ev} is going to be a vibe 🎉`,
+      "I'll send you to pick a date & time ✨"
+    );
   }
-  return `Happy to help — today, this weekend, or any day ahead. What's your name and mobile? I'll send you to our booking page.`;
+  return formatNameAndPhoneAsk(
+    "Happy to help — today, this weekend, or any day ahead 😊",
+    "I'll send you to our booking page ✨"
+  );
 }
 
 export async function handleInstantAction(params: {
@@ -352,7 +387,7 @@ export async function tryInstantContactCaptureReply(params: {
     updates.guestName = null;
   }
 
-  if (!updates.contactNumber && !updates.guestName) return null;
+  if (Object.keys(updates).length === 0) return null;
 
   const hints = applyMessageBookingContext(userMessage);
   const merged = { ...updates, ...hints };
@@ -375,6 +410,11 @@ export async function tryInstantContactCaptureReply(params: {
 
   if (name && !fresh.contactNumber) {
     messages.push(await appendMessage(leadId, "ASSISTANT", askPhoneCopy(brandId, name, fresh)));
+    return { messages, leadUpdates: true };
+  }
+
+  if (!name && !fresh.contactNumber) {
+    messages.push(await appendMessage(leadId, "ASSISTANT", askNameAndPhoneCopy(brandId, fresh.selectedEventName)));
     return { messages, leadUpdates: true };
   }
 
@@ -450,11 +490,14 @@ export function guestIsBookingIntent(text: string): boolean {
   return false;
 }
 
-function bookContactAskCopy(_venue: string, _brandId: string, telugu: boolean, eventName?: string | null): string {
+function bookContactAskCopy(_venue: string, brandId: string, telugu: boolean, eventName?: string | null): string {
   if (telugu) {
-    return `Chala bagundi! Me peru cheppandi — table book chesi help chestha.`;
+    return formatNameAndPhoneAsk(
+      "Chala bagundi! 😊",
+      "Table book chesi help chestha ✨"
+    );
   }
-  return askNameCopy(_brandId, eventName);
+  return askNameCopy(brandId, eventName);
 }
 
 /** Instant reply when guest taps an event poster — no AI wait. */

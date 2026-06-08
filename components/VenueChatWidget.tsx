@@ -25,6 +25,7 @@ import EventQuickBookSheet, { type EventQuickBookOffer } from "@/components/Even
 import { getChatNeonTheme } from "@/lib/venue-chat-theme";
 import { normalizeBookingLinkUrl } from "@/lib/venue-chat-booking-link";
 import PhoneOtpSheet from "@/components/PhoneOtpSheet";
+import { isGuestOtpRequiredOnClient } from "@/lib/guest-otp-config";
 import { useGuestSession } from "@/lib/use-guest-session";
 import { clientActionUserMessage, type ClientChatActionType } from "@/lib/venue-chat-copy";
 import {
@@ -398,6 +399,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
   const [otpPhone, setOtpPhone] = useState("");
   const [pendingBookingUrl, setPendingBookingUrl] = useState<string | null>(null);
   const { isVerifiedPhone, refresh: refreshGuest } = useGuestSession();
+  const otpRequired = isGuestOtpRequiredOnClient();
   const offersPromiseRef = useRef<Promise<EventQuickBookOffer[]> | null>(null);
 
   const loadOffers = useCallback(async (): Promise<EventQuickBookOffer[]> => {
@@ -812,7 +814,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
         lead?.contactNumber?.replace(/\D/g, "").slice(-10) ??
         otpPhone.replace(/\D/g, "").slice(-10);
 
-      if (phone.length === 10 && !isVerifiedPhone(phone)) {
+      if (otpRequired && phone.length === 10 && !isVerifiedPhone(phone)) {
         setOtpPhone(phone);
         setPendingBookingUrl(url);
         setOtpOpen(true);
@@ -822,7 +824,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
       setOpen(false);
       router.push(url);
     },
-    [brandId, isVerifiedPhone, lead?.contactNumber, otpPhone, router]
+    [brandId, isVerifiedPhone, lead?.contactNumber, otpPhone, otpRequired, router]
   );
 
   const panelProps = {
@@ -867,7 +869,7 @@ const VenueChatWidget = forwardRef<VenueChatWidgetHandle, VenueChatWidgetProps>(
 
   const otpSheet = (
     <PhoneOtpSheet
-      open={otpOpen}
+      open={otpRequired && otpOpen}
       phone={otpPhone}
       name={lead?.guestName ?? undefined}
       leadId={lead?.id}

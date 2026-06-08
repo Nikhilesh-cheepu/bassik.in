@@ -26,3 +26,15 @@ export function clientActionUserMessage(type: ClientChatActionType): string {
       return "I'd like to explore your website";
   }
 }
+
+/** Warm ask for name + mobile — use line breaks exactly as shown. */
+export function formatNameAndPhoneAsk(intro: string, outro?: string): string {
+  const tail = outro?.trim() ? `\n\n${outro.trim()}` : "";
+  return `${intro.trim()}\n\nName:-\n\nContact num:-${tail}`;
+}
+
+/** After name is known — ask mobile only. */
+export function formatPhoneAsk(intro: string, outro?: string): string {
+  const tail = outro?.trim() ? `\n\n${outro.trim()}` : "";
+  return `${intro.trim()}\n\nContact num:-${tail}`;
+}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getGuestFromRequest } from "@/lib/guest-auth";
+import { isGuestOtpRequiredOnServer } from "@/lib/guest-otp-config";
 import { getDiscountLabel } from "@/lib/reservation-discounts";
 import { getOutletLabelForReservation } from "@/lib/brands";
 import {
@@ -135,8 +136,7 @@ export async function POST(request: NextRequest) {
     }
 
     const guest = await getGuestFromRequest(request);
-    const otpRequired = process.env.MSG91_OTP_REQUIRED !== "false";
-    if (otpRequired && (!guest || guest.phone !== contactNumber)) {
+    if (isGuestOtpRequiredOnServer() && (!guest || guest.phone !== contactNumber)) {
       return NextResponse.json(
         { error: "Please verify your mobile number before booking.", code: "PHONE_NOT_VERIFIED" },
         { status: 403 }

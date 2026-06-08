@@ -56,18 +56,20 @@ Club Rogue brand voice:
 Club Rogue cover policy (mandatory — only for this outlet):
 • ₹2,000 cover per person, paid AT THE VENUE on arrival — NOT online, NOT a booking fee.
 • Fully redeemable against food and beverage on the bill.
-• Mention it clearly and warmly BEFORE you ask for name/phone or push booking — never hide it.
-• Frame it positively: premium crowd, Hyderabad's happening club nights, redeemable spend — not a "fee".
-• If they ask to book, table, event, or entry: cover first, then "if you're happy with that" → name + mobile.
-• If they hesitate: reassure it's redeemable on the bill; no online prepayment required.
-• Never say "mandatory fee" or "extra charge" — say "cover at the venue" or "redeemable cover".
+• Mention cover ONCE when they start booking — warm and brief, not pushy. Do NOT repeat cover on every follow-up.
+• Frame it positively: premium crowd, redeemable spend — not a "fee".
+• If they ask to book, table, event, or entry: one gentle cover line, then ask for details using the Name:- / Contact num:- format.
+• Never say "Thanks {name}" unless you are sure they gave a real name — never treat random text as a name.
 • Club Rogue Gachibowli only: on booking nights they may need Tollywood or Bollywood — ask which night if relevant.
 
-Example tones (vary naturally — do not copy verbatim every time):
-• "Welcome to Club Rogue Kondapur — one of Hyderabad's most happening clubs. Planning tonight, this weekend, or a date later?"
-• "Quick heads-up — ₹2k cover at the door, fully redeemable on your tab. If you're good with that, what's your name and number? I'll send you to pick a slot."
-• "Love the plan for Saturday! Cover is ₹2,000 at the venue — goes straight onto food & drinks. Happy to proceed? Share your name and mobile."
-• "Whenever you're ready — ₹2,000 redeemable cover at the venue. Name and number and I'll get you to our booking page for any day that works."
+When asking for name/phone, use this layout (with emojis, line breaks):
+Intro line 😊
+
+Name:-
+
+Contact num:-
+
+Short outro ✨
 `.trim();
 
 function eventBit(eventName?: string | null): string {
@@ -80,14 +82,14 @@ function eventBit(eventName?: string | null): string {
 export function clubRogueBeforeBookingAskCopy(eventName?: string | null): string {
   const ev = eventBit(eventName);
   if (ev) {
-    return `Great pick${ev}! ${CLUB_ROGUE_COVER_CHAT_LINE} If you're happy with that, share your name and mobile — I'll take it from here.`;
+    return `Great pick${ev}! 🎉\n\nJust so you know — ₹2,000 cover at the venue, fully on your food & drinks. No online prepayment 😊\n\nIf you're happy to go ahead, share your details:\n\nName:-\n\nContact num:-\n\nI'll send you to pick your slot ✨`;
   }
-  return `${CLUB_ROGUE_COVER_CHAT_LINE} If you're ready to go ahead, share your name and mobile — I'll send you to our booking page.`;
+  return `Happy to help you book! 🙌\n\nQuick heads-up — ₹2,000 cover at the venue, fully redeemable on your bill.\n\nWhen you're ready, drop your details here:\n\nName:-\n\nContact num:-\n\nI'll take it from there ✨`;
 }
 
-/** After name, before phone — optional shorter nudge. */
+/** After a real name — ask mobile only (no cover repeat). */
 export function clubRogueAskPhoneCopy(guestName: string): string {
-  return `Thanks, ${guestName}! Whenever you're ready, share your mobile — cover is ₹2k at the venue, fully on your bill. Then I'll send you to pick a slot.`;
+  return `Got it, ${guestName} 😊\n\nCould you share your contact number?\n\nContact num:-\n\nThen I'll send you to pick your slot.`;
 }
 
 /** Right before the booking link button. */
@@ -98,5 +100,5 @@ export function clubRogueBookingLinkIntro(
 ): string {
   const ev = eventName?.trim() ? ` for ${eventName.split(" · ")[0]?.trim() || eventName}` : "";
   const when = dateHint?.trim() ? dateHint : "";
-  return `Thanks, ${guestName} — tap below${ev}${when} to pick your slot. ₹2,000 redeemable cover at the venue when you arrive.`;
+  return `Perfect, ${guestName} ✨\n\nTap below${ev}${when} to pick your slot.\n\n(Cover is ₹2,000 at the venue — fully on your bill when you arrive.)`;
 }
