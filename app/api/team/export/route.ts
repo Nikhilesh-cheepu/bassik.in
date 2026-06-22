@@ -2,20 +2,33 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import { teamOutletLabel } from "@/lib/team-outlets";
+import { teamMemberName } from "@/lib/team-members";
 import { filterTeamTasks, formatTeamEndDateTime, formatTeamStartDate, primaryCreativeLink, type TeamTaskFilter } from "@/lib/team-tasks";
 import { prisma } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
-  if (!(await getTeamFromRequest(req))) {
+  const session = await getTeamFromRequest(req);
+  if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const sp = req.nextUrl.searchParams;
   const filter = (sp.get("filter") as TeamTaskFilter) || "all";
   const outletId = sp.get("outletId");
+  const assigneeParam = sp.get("assignee");
+
+  let assigneeId: string | undefined;
+  if (session.role === "member") {
+    assigneeId = session.memberId ?? session.username;
+  } else if (assigneeParam && assigneeParam !== "all") {
+    assigneeId = assigneeParam;
+  }
 
   const rows = await prisma.teamAdTask.findMany({
-    where: outletId ? { outletId } : undefined,
+    where: {
+      ...(outletId ? { outletId } : {}),
+      ...(assigneeId ? { assigneeId } : {}),
+    },
     orderBy: [{ status: "asc" }, { startDate: "asc" }, { createdAt: "desc" }],
   });
 
@@ -28,6 +41,7 @@ export async function GET(req: NextRequest) {
     Status: t.status,
     "Creative link": primaryCreativeLink(t) ?? "",
     Source: t.creativeSource,
+    Assignee: teamMemberName(t.assigneeId),
     "Start date": formatTeamStartDate(t.startDate),
     "End date": formatTeamEndDateTime(t.endDate, t.endTime),
     "Created by": t.createdBy,

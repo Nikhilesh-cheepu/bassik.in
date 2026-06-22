@@ -11,6 +11,7 @@ export type TeamTaskDto = {
   startDate: string | null;
   endDate: string | null;
   endTime: string | null;
+  assigneeId: string;
   status: TeamAdTaskStatus;
   createdBy: string;
   completedBy: string | null;
@@ -31,6 +32,7 @@ export function toTeamTaskDto(row: TeamAdTask): TeamTaskDto {
     startDate: row.startDate,
     endDate: row.endDate,
     endTime: row.endTime,
+    assigneeId: row.assigneeId,
     status: row.status,
     createdBy: row.createdBy,
     completedBy: row.completedBy,

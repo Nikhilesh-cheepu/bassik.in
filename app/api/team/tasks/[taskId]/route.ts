@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import { isTeamOutletId } from "@/lib/team-outlets";
+import { isTeamMemberId } from "@/lib/team-members";
 import { detectCreativeSource, normalizeTeamEndTime, normalizeTeamStartDate, toTeamTaskDto } from "@/lib/team-tasks";
 import { prisma } from "@/lib/db";
 
@@ -17,6 +18,13 @@ export async function PATCH(
   const existing = await prisma.teamAdTask.findUnique({ where: { id: taskId } });
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  if (session.role === "member") {
+    const mid = session.memberId ?? session.username;
+    if (existing.assigneeId !== mid) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   const body = await req.json().catch(() => ({}));
@@ -58,6 +66,13 @@ export async function PATCH(
     if (body.endTime !== undefined) {
       const t = typeof body.endTime === "string" ? body.endTime.trim() : "";
       data.endTime = normalizeTeamEndTime(t);
+    }
+    if (body.assigneeId !== undefined) {
+      const id = typeof body.assigneeId === "string" ? body.assigneeId.trim() : "";
+      if (!isTeamMemberId(id)) {
+        return NextResponse.json({ error: "Invalid team member" }, { status: 400 });
+      }
+      data.assigneeId = id;
     }
   }
 

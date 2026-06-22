@@ -1,3 +1,4 @@
+import { getTeamMemberPasswords, getTeamMemberRoster, isTeamMemberId } from "@/lib/team-members";
 import { SignJWT, jwtVerify } from "jose";
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
@@ -9,6 +10,7 @@ export type TeamRole = "admin" | "member";
 export type TeamSession = {
   username: string;
   role: TeamRole;
+  memberId?: string;
 };
 
 const JWT_SECRET = new TextEncoder().encode(
@@ -17,13 +19,19 @@ const JWT_SECRET = new TextEncoder().encode(
     "dev-team-secret-change-in-production"
 );
 
-function teamAccounts(): { username: string; password: string; role: TeamRole }[] {
+function teamAccounts(): { username: string; password: string; role: TeamRole; memberId?: string }[] {
+  const passwords = getTeamMemberPasswords();
+  const members = getTeamMemberRoster()
+    .map((m) => ({
+      username: m.id,
+      password: passwords[m.id]?.trim() ?? "",
+      role: "member" as const,
+      memberId: m.id,
+    }))
+    .filter((m) => m.password);
+
   return [
-    {
-      username: "amit",
-      password: process.env.TEAM_MEMBER_PASSWORD?.trim() || "amit01",
-      role: "member",
-    },
+    ...members,
     {
       username: "admin",
       password: process.env.TEAM_ADMIN_PASSWORD?.trim() || "7013884485",
@@ -37,11 +45,19 @@ export function resolveTeamLogin(password: string): TeamSession | null {
   if (!p) return null;
   const hit = teamAccounts().find((a) => a.password === p);
   if (!hit) return null;
-  return { username: hit.username, role: hit.role };
+  return {
+    username: hit.username,
+    role: hit.role,
+    ...(hit.memberId ? { memberId: hit.memberId } : {}),
+  };
 }
 
 export async function createTeamToken(session: TeamSession): Promise<string> {
-  return new SignJWT({ sub: session.username, role: session.role })
+  return new SignJWT({
+    sub: session.username,
+    role: session.role,
+    memberId: session.memberId ?? null,
+  })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("14d")
     .sign(JWT_SECRET);
@@ -53,7 +69,13 @@ export async function verifyTeamSession(token: string): Promise<TeamSession | nu
     const username = typeof payload.sub === "string" ? payload.sub : "";
     const role = payload.role === "admin" ? "admin" : "member";
     if (!username) return null;
-    return { username, role };
+    const memberId =
+      typeof payload.memberId === "string" && isTeamMemberId(payload.memberId)
+        ? payload.memberId
+        : role === "member" && isTeamMemberId(username)
+          ? username
+          : undefined;
+    return { username, role, memberId };
   } catch {
     return null;
   }

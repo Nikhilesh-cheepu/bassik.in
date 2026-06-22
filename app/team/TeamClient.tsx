@@ -16,8 +16,10 @@ import {
   type TeamEndTimeMode,
 } from "@/lib/team-end-time";
 
-type TeamUser = { username: string; role: "admin" | "member" };
+type TeamUser = { username: string; role: "admin" | "member"; memberId?: string };
+type TeamMember = { id: string; name: string; role?: string };
 type Filter = "all" | "todo" | "done";
+type MemberTab = "all" | string;
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
@@ -29,6 +31,7 @@ type StartTiming = "asap" | "date" | "none";
 
 type TaskForm = {
   outletId: string;
+  assigneeId: string;
   title: string;
   description: string;
   creativeUrl: string;
@@ -41,8 +44,9 @@ type TaskForm = {
   endTimeCustom: string;
 };
 
-const emptyForm = (): TaskForm => ({
+const emptyForm = (assigneeId = "amit"): TaskForm => ({
   outletId: TEAM_AD_OUTLETS[0].id,
+  assigneeId,
   title: "",
   description: "",
   creativeUrl: "",
@@ -54,6 +58,10 @@ const emptyForm = (): TaskForm => ({
   endTimeMode: "none",
   endTimeCustom: "",
 });
+
+function memberName(members: TeamMember[], id: string): string {
+  return members.find((m) => m.id === id)?.name ?? id;
+}
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -90,11 +98,13 @@ function creativeLink(task: TeamTaskDto): string | null {
 
 export default function TeamClient() {
   const [user, setUser] = useState<TeamUser | null>(null);
+  const [members, setMembers] = useState<TeamMember[]>([]);
   const [booting, setBooting] = useState(true);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [tasks, setTasks] = useState<TeamTaskDto[]>([]);
   const [filter, setFilter] = useState<Filter>("todo");
+  const [memberTab, setMemberTab] = useState<MemberTab>("all");
   const [outletFilter, setOutletFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,11 +115,30 @@ export default function TeamClient() {
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>(null);
   const [saving, setSaving] = useState(false);
 
+  const soleMember = members.length === 1 ? members[0] : null;
+  const showMemberTabs = user?.role === "admin" && members.length > 1;
+
   const counts = useMemo(() => {
     const todo = tasks.filter((t) => t.status === "TODO").length;
     const done = tasks.filter((t) => t.status === "DONE").length;
     return { todo, done, total: tasks.length };
   }, [tasks]);
+
+  const loadMembers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/team/members");
+      if (res.status === 401) {
+        setUser(null);
+        return;
+      }
+      if (res.ok) {
+        const data = await res.json();
+        setMembers(data.members ?? []);
+      }
+    } catch {
+      /* roster optional for display */
+    }
+  }, []);
 
   const loadTasks = useCallback(async () => {
     setLoading(true);
@@ -117,6 +146,7 @@ export default function TeamClient() {
     try {
       const qs = new URLSearchParams({ filter });
       if (outletFilter) qs.set("outletId", outletFilter);
+      if (user?.role === "admin" && memberTab !== "all") qs.set("assignee", memberTab);
       const res = await fetch(`/api/team/tasks?${qs}`);
       if (res.status === 401) {
         setUser(null);
@@ -130,7 +160,7 @@ export default function TeamClient() {
     } finally {
       setLoading(false);
     }
-  }, [filter, outletFilter]);
+  }, [filter, outletFilter, memberTab, user?.role]);
 
   const probeSession = useCallback(async () => {
     try {
@@ -151,8 +181,11 @@ export default function TeamClient() {
   }, [probeSession]);
 
   useEffect(() => {
-    if (user) void loadTasks();
-  }, [user, loadTasks]);
+    if (user) {
+      void loadMembers();
+      void loadTasks();
+    }
+  }, [user, loadMembers, loadTasks]);
 
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -174,12 +207,17 @@ export default function TeamClient() {
   const logout = async () => {
     await fetch("/api/team/auth", { method: "DELETE" });
     setUser(null);
+    setMembers([]);
+    setMemberTab("all");
     setTasks([]);
   };
 
+  const resolveAssigneeId = () =>
+    soleMember?.id ?? (memberTab !== "all" ? memberTab : (members[0]?.id ?? "amit"));
+
   const openCreate = () => {
     setEditing(null);
-    setForm(emptyForm());
+    setForm(emptyForm(resolveAssigneeId()));
     setUploadStatus(null);
     setShowForm(true);
   };
@@ -190,6 +228,7 @@ export default function TeamClient() {
     setEditing(task);
     setForm({
       outletId: task.outletId,
+      assigneeId: task.assigneeId,
       title: task.title,
       description: task.description ?? "",
       creativeUrl: task.creativeUrl ?? "",
@@ -242,6 +281,7 @@ export default function TeamClient() {
     try {
       const payload = {
         outletId: form.outletId,
+        assigneeId: soleMember?.id ?? form.assigneeId,
         title: form.title.trim(),
         description: form.description.trim(),
         creativeUrl: form.creativeUrl.trim(),
@@ -298,8 +338,12 @@ export default function TeamClient() {
   const exportExcel = () => {
     const qs = new URLSearchParams({ filter });
     if (outletFilter) qs.set("outletId", outletFilter);
+    if (user?.role === "admin" && memberTab !== "all") qs.set("assignee", memberTab);
     window.open(`/api/team/export?${qs}`, "_blank");
   };
+
+  const activeMemberLabel =
+    memberTab !== "all" ? memberName(members, memberTab) : null;
 
   if (booting) {
     return (
@@ -355,7 +399,11 @@ export default function TeamClient() {
             </p>
             <h1 className="text-lg font-semibold">Ads & creatives</h1>
             <p className="text-xs text-white/40">
-              {user.role === "admin" ? "Admin" : "Member"} · {counts.todo} to do · {counts.done} done
+              {user.role === "admin"
+                ? "Admin"
+                : memberName(members, user.memberId ?? user.username)}{" "}
+              · {counts.todo} to do · {counts.done} done
+              {activeMemberLabel ? ` · ${activeMemberLabel}'s board` : ""}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -413,6 +461,36 @@ export default function TeamClient() {
             ))}
           </select>
         </div>
+
+        {showMemberTabs ? (
+          <div className="mx-auto flex max-w-5xl flex-wrap gap-2 border-t border-white/[0.04] px-4 py-3">
+            <button
+              type="button"
+              onClick={() => setMemberTab("all")}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                memberTab === "all"
+                  ? "bg-violet-500/20 text-violet-100 ring-1 ring-violet-400/30"
+                  : "bg-white/[0.04] text-white/50"
+              }`}
+            >
+              All members
+            </button>
+            {members.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setMemberTab(m.id)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium ${
+                  memberTab === m.id
+                    ? "bg-violet-500/20 text-violet-100 ring-1 ring-violet-400/30"
+                    : "bg-white/[0.04] text-white/50"
+                }`}
+              >
+                {m.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </header>
 
       <main className="mx-auto max-w-5xl px-4 py-4">
@@ -433,7 +511,9 @@ export default function TeamClient() {
         ) : tasks.length === 0 ? (
           <p className="py-12 text-center text-sm text-white/40">
             {user.role === "admin"
-              ? 'No tasks in this view. Create one with "New ad task".'
+              ? activeMemberLabel
+                ? `No tasks for ${activeMemberLabel}. Create one with "New ad task".`
+                : 'No tasks in this view. Create one with "New ad task".'
               : "No tasks in this view. Ask admin to add ad tasks."}
           </p>
         ) : (
@@ -463,6 +543,11 @@ export default function TeamClient() {
                         >
                           {done ? "Done" : "To do"}
                         </span>
+                        {showMemberTabs && memberTab === "all" ? (
+                          <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-medium text-violet-200">
+                            {memberName(members, task.assigneeId)}
+                          </span>
+                        ) : null}
                       </div>
                       <h2 className="mt-2 text-base font-semibold text-white">{task.title}</h2>
                       {task.description ? (
@@ -547,10 +632,31 @@ export default function TeamClient() {
           >
             <h2 className="text-lg font-semibold">{editing ? "Edit task" : "New ad task"}</h2>
             <p className="mt-1 text-xs text-white/40">
-              Pick outlet, add creative link or upload file, optional campaign dates.
+              {soleMember
+                ? `Tasks go to ${soleMember.name}. Pick outlet, add creative link or upload file.`
+                : "Pick member and outlet, add creative link or upload file, optional campaign dates."}
             </p>
 
-            <label className="mt-4 block text-xs font-medium text-white/50">Outlet</label>
+            {showMemberTabs ? (
+              <>
+                <label className="mt-4 block text-xs font-medium text-white/50">Assign to</label>
+                <select
+                  value={form.assigneeId}
+                  onChange={(e) => setForm((f) => ({ ...f, assigneeId: e.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm"
+                >
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : null}
+
+            <label className={`block text-xs font-medium text-white/50 ${showMemberTabs ? "mt-3" : "mt-4"}`}>
+              Outlet
+            </label>
             <select
               value={form.outletId}
               onChange={(e) => setForm((f) => ({ ...f, outletId: e.target.value }))}

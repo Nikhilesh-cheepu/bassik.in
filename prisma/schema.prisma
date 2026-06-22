@@ -393,6 +393,7 @@ model TeamAdTask {
   startDate       String?             // YYYY-MM-DD or ASAP
   endDate         String?             // YYYY-MM-DD
   endTime         String?             // morning | afternoon | evening | midnight | HH:MM
+  assigneeId      String              @default("amit")
   status          TeamAdTaskStatus    @default(TODO)
   createdBy       String
   completedBy     String?
@@ -402,6 +403,7 @@ model TeamAdTask {
 
   @@index([outletId])
   @@index([status])
+  @@index([assigneeId])
   @@index([startDate])
   @@index([endDate])
   @@index([createdAt])
