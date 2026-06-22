@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import { isTeamOutletId } from "@/lib/team-outlets";
-import { detectCreativeSource, normalizeTeamStartDate, toTeamTaskDto } from "@/lib/team-tasks";
+import { detectCreativeSource, normalizeTeamEndTime, normalizeTeamStartDate, toTeamTaskDto } from "@/lib/team-tasks";
 import { prisma } from "@/lib/db";
 
 export async function PATCH(
@@ -54,6 +54,10 @@ export async function PATCH(
     if (body.endDate !== undefined) {
       const d = typeof body.endDate === "string" ? body.endDate.trim() : "";
       data.endDate = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+    }
+    if (body.endTime !== undefined) {
+      const t = typeof body.endTime === "string" ? body.endTime.trim() : "";
+      data.endTime = normalizeTeamEndTime(t);
     }
   }
 

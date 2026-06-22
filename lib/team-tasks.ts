@@ -10,6 +10,7 @@ export type TeamTaskDto = {
   uploadedUrl: string | null;
   startDate: string | null;
   endDate: string | null;
+  endTime: string | null;
   status: TeamAdTaskStatus;
   createdBy: string;
   completedBy: string | null;
@@ -29,6 +30,7 @@ export function toTeamTaskDto(row: TeamAdTask): TeamTaskDto {
     uploadedUrl: row.uploadedUrl,
     startDate: row.startDate,
     endDate: row.endDate,
+    endTime: row.endTime,
     status: row.status,
     createdBy: row.createdBy,
     completedBy: row.completedBy,
@@ -80,6 +82,8 @@ export function detectCreativeSource(url: string): "DRIVE_LINK" | "INSTAGRAM" | 
   if (u.includes("instagram.com")) return "INSTAGRAM";
   return "DRIVE_LINK";
 }
+
+export { formatTeamEndDateTime, normalizeTeamEndTime } from "@/lib/team-end-time";
 
 export function primaryCreativeLink(task: Pick<TeamTaskDto, "uploadedUrl" | "creativeUrl">): string | null {
   return task.uploadedUrl?.trim() || task.creativeUrl?.trim() || null;

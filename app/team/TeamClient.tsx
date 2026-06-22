@@ -3,11 +3,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TEAM_AD_OUTLETS, teamOutletLabel } from "@/lib/team-outlets";
 import {
+  formatTeamEndDateTime,
   formatTeamStartDate,
   isAsapStartDate,
   TEAM_START_ASAP,
   type TeamTaskDto,
 } from "@/lib/team-tasks";
+import {
+  endTimeModeFromTask,
+  resolveEndTimeForSave,
+  TEAM_END_TIME_PRESETS,
+  type TeamEndTimeMode,
+} from "@/lib/team-end-time";
 
 type TeamUser = { username: string; role: "admin" | "member" };
 type Filter = "all" | "todo" | "done";
@@ -30,6 +37,8 @@ type TaskForm = {
   startTiming: StartTiming;
   startDate: string;
   endDate: string;
+  endTimeMode: TeamEndTimeMode;
+  endTimeCustom: string;
 };
 
 const emptyForm = (): TaskForm => ({
@@ -42,14 +51,9 @@ const emptyForm = (): TaskForm => ({
   startTiming: "asap",
   startDate: "",
   endDate: "",
+  endTimeMode: "none",
+  endTimeCustom: "",
 });
-
-function formatShortDate(iso: string | null): string {
-  if (!iso) return "—";
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(y, m - 1, d);
-  return dt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-}
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
@@ -182,6 +186,7 @@ export default function TeamClient() {
 
   const openEdit = (task: TeamTaskDto) => {
     const timing = startTimingFromTask(task);
+    const end = endTimeModeFromTask(task.endTime);
     setEditing(task);
     setForm({
       outletId: task.outletId,
@@ -193,6 +198,8 @@ export default function TeamClient() {
       startTiming: timing,
       startDate: timing === "date" ? (task.startDate ?? "") : "",
       endDate: task.endDate ?? "",
+      endTimeMode: end.mode,
+      endTimeCustom: end.customTime,
     });
     setShowForm(true);
   };
@@ -241,6 +248,7 @@ export default function TeamClient() {
         uploadedUrl: form.uploadedUrl.trim(),
         startDate: resolveStartDateForSave(form),
         endDate: form.endDate,
+        endTime: resolveEndTimeForSave(form.endTimeMode, form.endTimeCustom),
       };
 
       if (editing) {
@@ -462,7 +470,7 @@ export default function TeamClient() {
                       ) : null}
                       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/40">
                         <span>Ad start: {formatTeamStartDate(task.startDate)}</span>
-                        <span>Ad end: {formatShortDate(task.endDate)}</span>
+                        <span>Ad end: {formatTeamEndDateTime(task.endDate, task.endTime)}</span>
                         <span>Created: {formatDateTime(task.createdAt)}</span>
                         {task.completedAt ? (
                           <span className="text-emerald-300/80">
@@ -664,6 +672,37 @@ export default function TeamClient() {
                   className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm"
                   disabled={Boolean(editing && user.role !== "admin")}
                 />
+                <label className="mt-2 block text-xs font-medium text-white/50">End time</label>
+                <select
+                  value={form.endTimeMode}
+                  onChange={(e) => {
+                    const next = e.target.value as TeamEndTimeMode;
+                    setForm((f) => ({
+                      ...f,
+                      endTimeMode: next,
+                      endTimeCustom: next === "custom" ? f.endTimeCustom : "",
+                    }));
+                  }}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm"
+                  disabled={Boolean(editing && user.role !== "admin")}
+                >
+                  <option value="none">No end time</option>
+                  {TEAM_END_TIME_PRESETS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label} ({p.hint})
+                    </option>
+                  ))}
+                  <option value="custom">Pick exact time</option>
+                </select>
+                {form.endTimeMode === "custom" ? (
+                  <input
+                    type="time"
+                    value={form.endTimeCustom}
+                    onChange={(e) => setForm((f) => ({ ...f, endTimeCustom: e.target.value }))}
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm"
+                    disabled={Boolean(editing && user.role !== "admin")}
+                  />
+                ) : null}
               </div>
             </div>
 

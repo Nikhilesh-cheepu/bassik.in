@@ -4,6 +4,7 @@ import { isTeamOutletId } from "@/lib/team-outlets";
 import {
   detectCreativeSource,
   filterTeamTasks,
+  normalizeTeamEndTime,
   normalizeTeamStartDate,
   toTeamTaskDto,
   type TeamTaskFilter,
@@ -52,6 +53,7 @@ export async function POST(req: NextRequest) {
   const uploadedUrl = typeof body.uploadedUrl === "string" ? body.uploadedUrl.trim() : "";
   const startDate = typeof body.startDate === "string" ? body.startDate.trim() : "";
   const endDate = typeof body.endDate === "string" ? body.endDate.trim() : "";
+  const endTime = typeof body.endTime === "string" ? body.endTime.trim() : "";
 
   if (!isTeamOutletId(outletId)) {
     return NextResponse.json({ error: "Pick a valid outlet" }, { status: 400 });
@@ -79,6 +81,7 @@ export async function POST(req: NextRequest) {
       uploadedUrl: uploadedUrl || null,
       startDate: normalizeTeamStartDate(startDate),
       endDate: /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? endDate : null,
+      endTime: normalizeTeamEndTime(endTime),
       createdBy: session.username,
     },
   });

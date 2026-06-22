@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import { teamOutletLabel } from "@/lib/team-outlets";
-import { filterTeamTasks, formatTeamStartDate, primaryCreativeLink, type TeamTaskFilter } from "@/lib/team-tasks";
+import { filterTeamTasks, formatTeamEndDateTime, formatTeamStartDate, primaryCreativeLink, type TeamTaskFilter } from "@/lib/team-tasks";
 import { prisma } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     "Creative link": primaryCreativeLink(t) ?? "",
     Source: t.creativeSource,
     "Start date": formatTeamStartDate(t.startDate),
-    "End date": t.endDate ?? "",
+    "End date": formatTeamEndDateTime(t.endDate, t.endTime),
     "Created by": t.createdBy,
     "Completed by": t.completedBy ?? "",
     "Completed at": t.completedAt?.toISOString() ?? "",

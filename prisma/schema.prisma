@@ -390,8 +390,9 @@ model TeamAdTask {
   creativeUrl     String?
   creativeSource  TeamCreativeSource  @default(NONE)
   uploadedUrl     String?
-  startDate       String?             // YYYY-MM-DD
+  startDate       String?             // YYYY-MM-DD or ASAP
   endDate         String?             // YYYY-MM-DD
+  endTime         String?             // morning | afternoon | evening | midnight | HH:MM
   status          TeamAdTaskStatus    @default(TODO)
   createdBy       String
   completedBy     String?
