@@ -75,6 +75,8 @@ export async function POST(req: NextRequest) {
   const startDate = typeof body.startDate === "string" ? body.startDate.trim() : "";
   const endDate = typeof body.endDate === "string" ? body.endDate.trim() : "";
   const endTime = typeof body.endTime === "string" ? body.endTime.trim() : "";
+  const deadlineDate = typeof body.deadlineDate === "string" ? body.deadlineDate.trim() : "";
+  const deadlineTime = typeof body.deadlineTime === "string" ? body.deadlineTime.trim() : "";
 
   if (!isTeamOutletId(outletId)) {
     return NextResponse.json({ error: "Pick a valid outlet" }, { status: 400 });
@@ -107,6 +109,8 @@ export async function POST(req: NextRequest) {
       startDate: normalizeTeamStartDate(startDate),
       endDate: /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? endDate : null,
       endTime: normalizeTeamEndTime(endTime),
+      deadlineDate: /^\d{4}-\d{2}-\d{2}$/.test(deadlineDate) ? deadlineDate : null,
+      deadlineTime: normalizeTeamEndTime(deadlineTime),
       createdBy: session.username,
     },
   });

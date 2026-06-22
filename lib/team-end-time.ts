@@ -79,3 +79,23 @@ export function resolveEndTimeForSave(mode: TeamEndTimeMode, customTime: string)
   if (mode === "custom") return customTime.trim();
   return mode;
 }
+
+/** True when deadline date/time has passed (for open tasks). */
+export function isPastDeadline(
+  deadlineDate: string | null | undefined,
+  deadlineTime: string | null | undefined
+): boolean {
+  if (!deadlineDate || !/^\d{4}-\d{2}-\d{2}$/.test(deadlineDate)) return false;
+  const [y, m, d] = deadlineDate.split("-").map(Number);
+  const end = new Date(y, m - 1, d);
+  const t = deadlineTime?.trim() ?? "";
+  if (t === "morning") end.setHours(12, 0, 0, 0);
+  else if (t === "afternoon") end.setHours(17, 0, 0, 0);
+  else if (t === "evening") end.setHours(23, 0, 0, 0);
+  else if (t === "midnight") end.setHours(23, 59, 59, 999);
+  else if (/^\d{2}:\d{2}$/.test(t)) {
+    const [h, min] = t.split(":").map(Number);
+    end.setHours(h, min, 0, 0);
+  } else end.setHours(23, 59, 59, 999);
+  return Date.now() > end.getTime();
+}

@@ -393,6 +393,8 @@ model TeamAdTask {
   startDate       String?             // YYYY-MM-DD or ASAP
   endDate         String?             // YYYY-MM-DD
   endTime         String?             // morning | afternoon | evening | midnight | HH:MM
+  deadlineDate    String?             // YYYY-MM-DD — internal due date
+  deadlineTime    String?             // preset or HH:MM
   assigneeId      String              @default("amit")
   status          TeamAdTaskStatus    @default(TODO)
   createdBy       String
@@ -406,5 +408,27 @@ model TeamAdTask {
   @@index([assigneeId])
   @@index([startDate])
   @@index([endDate])
+  @@index([deadlineDate])
+  @@index([createdAt])
+}
+
+/// Personal reminders on /team (per user — not ad/creative workflow).
+model TeamReminder {
+  id           String           @id @default(cuid())
+  ownerId      String           // admin | member id
+  title        String
+  description  String?
+  startDate    String?          // YYYY-MM-DD
+  endDate      String?          // YYYY-MM-DD
+  deadlineDate String?          // YYYY-MM-DD
+  deadlineTime String?          // morning | afternoon | evening | midnight | HH:MM
+  status       TeamAdTaskStatus @default(TODO)
+  completedAt  DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([deadlineDate])
   @@index([createdAt])
 }

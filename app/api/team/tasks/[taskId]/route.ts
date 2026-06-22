@@ -67,6 +67,14 @@ export async function PATCH(
       const t = typeof body.endTime === "string" ? body.endTime.trim() : "";
       data.endTime = normalizeTeamEndTime(t);
     }
+    if (body.deadlineDate !== undefined) {
+      const d = typeof body.deadlineDate === "string" ? body.deadlineDate.trim() : "";
+      data.deadlineDate = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+    }
+    if (body.deadlineTime !== undefined) {
+      const t = typeof body.deadlineTime === "string" ? body.deadlineTime.trim() : "";
+      data.deadlineTime = normalizeTeamEndTime(t);
+    }
     if (body.assigneeId !== undefined) {
       const id = typeof body.assigneeId === "string" ? body.assigneeId.trim() : "";
       if (!isTeamMemberId(id)) {

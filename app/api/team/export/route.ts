@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
     Assignee: teamMemberName(t.assigneeId),
     "Start date": formatTeamStartDate(t.startDate),
     "End date": formatTeamEndDateTime(t.endDate, t.endTime),
+    Deadline: formatTeamEndDateTime(t.deadlineDate, t.deadlineTime),
     "Created by": t.createdBy,
     "Completed by": t.completedBy ?? "",
     "Completed at": t.completedAt?.toISOString() ?? "",

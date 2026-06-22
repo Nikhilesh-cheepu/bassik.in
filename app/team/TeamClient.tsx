@@ -11,15 +11,19 @@ import {
 } from "@/lib/team-tasks";
 import {
   endTimeModeFromTask,
+  formatTeamEndDateTime as formatDeadline,
+  isPastDeadline,
   resolveEndTimeForSave,
   TEAM_END_TIME_PRESETS,
   type TeamEndTimeMode,
 } from "@/lib/team-end-time";
+import type { TeamReminderDto } from "@/lib/team-reminders";
 
 type TeamUser = { username: string; role: "admin" | "member"; memberId?: string };
 type TeamMember = { id: string; name: string; role?: string };
 type Filter = "all" | "todo" | "done";
 type MemberTab = "all" | string;
+type ViewMode = "ads" | "reminders";
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
@@ -42,9 +46,22 @@ type TaskForm = {
   endDate: string;
   endTimeMode: TeamEndTimeMode;
   endTimeCustom: string;
+  deadlineDate: string;
+  deadlineTimeMode: TeamEndTimeMode;
+  deadlineTimeCustom: string;
 };
 
-const emptyForm = (assigneeId = "amit"): TaskForm => ({
+type ReminderForm = {
+  title: string;
+  description: string;
+  startDate: string;
+  endDate: string;
+  deadlineDate: string;
+  deadlineTimeMode: TeamEndTimeMode;
+  deadlineTimeCustom: string;
+};
+
+const emptyTaskForm = (assigneeId = "amit"): TaskForm => ({
   outletId: TEAM_AD_OUTLETS[0].id,
   assigneeId,
   title: "",
@@ -57,10 +74,33 @@ const emptyForm = (assigneeId = "amit"): TaskForm => ({
   endDate: "",
   endTimeMode: "none",
   endTimeCustom: "",
+  deadlineDate: "",
+  deadlineTimeMode: "none",
+  deadlineTimeCustom: "",
+});
+
+const emptyReminderForm = (): ReminderForm => ({
+  title: "",
+  description: "",
+  startDate: "",
+  endDate: "",
+  deadlineDate: "",
+  deadlineTimeMode: "none",
+  deadlineTimeCustom: "",
 });
 
 function memberName(members: TeamMember[], id: string): string {
   return members.find((m) => m.id === id)?.name ?? id;
+}
+
+function chipClass(active: boolean, tone: "cyan" | "violet" = "cyan"): string {
+  const on =
+    tone === "violet"
+      ? "bg-violet-500/20 text-violet-100 ring-1 ring-violet-400/30"
+      : "bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/30";
+  return `shrink-0 rounded-full px-3.5 py-2 text-xs font-medium min-h-[40px] ${
+    active ? on : "bg-white/[0.06] text-white/55"
+  }`;
 }
 
 function formatDateTime(iso: string | null): string {
@@ -68,7 +108,6 @@ function formatDateTime(iso: string | null): string {
   return new Date(iso).toLocaleString("en-IN", {
     day: "numeric",
     month: "short",
-    year: "numeric",
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
@@ -87,13 +126,87 @@ function resolveStartDateForSave(form: TaskForm): string {
   return "";
 }
 
-type UploadStatus = {
-  fileName: string;
-  siteUrl: string;
-} | null;
-
 function creativeLink(task: TeamTaskDto): string | null {
   return task.uploadedUrl?.trim() || task.creativeUrl?.trim() || null;
+}
+
+function DeadlineBadge({
+  deadlineDate,
+  deadlineTime,
+  done,
+}: {
+  deadlineDate: string | null;
+  deadlineTime: string | null;
+  done: boolean;
+}) {
+  if (!deadlineDate) return null;
+  const overdue = !done && isPastDeadline(deadlineDate, deadlineTime);
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+        overdue
+          ? "bg-red-500/20 text-red-200 ring-1 ring-red-400/30"
+          : "bg-orange-500/15 text-orange-200"
+      }`}
+    >
+      {overdue ? "Overdue · " : "Due · "}
+      {formatDeadline(deadlineDate, deadlineTime)}
+    </span>
+  );
+}
+
+function DateFields({
+  label,
+  dateValue,
+  onDateChange,
+  timeMode,
+  onTimeModeChange,
+  timeCustom,
+  onTimeCustomChange,
+  timeLabel = "Time",
+}: {
+  label: string;
+  dateValue: string;
+  onDateChange: (v: string) => void;
+  timeMode: TeamEndTimeMode;
+  onTimeModeChange: (v: TeamEndTimeMode) => void;
+  timeCustom: string;
+  onTimeCustomChange: (v: string) => void;
+  timeLabel?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <label className="block text-xs font-medium text-white/50">{label}</label>
+      <input
+        type="date"
+        value={dateValue}
+        onChange={(e) => onDateChange(e.target.value)}
+        className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base text-white"
+      />
+      <label className="block text-xs font-medium text-white/50">{timeLabel}</label>
+      <select
+        value={timeMode}
+        onChange={(e) => onTimeModeChange(e.target.value as TeamEndTimeMode)}
+        className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base text-white"
+      >
+        <option value="none">No time</option>
+        {TEAM_END_TIME_PRESETS.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.label} ({p.hint})
+          </option>
+        ))}
+        <option value="custom">Exact time</option>
+      </select>
+      {timeMode === "custom" ? (
+        <input
+          type="time"
+          value={timeCustom}
+          onChange={(e) => onTimeCustomChange(e.target.value)}
+          className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base text-white"
+        />
+      ) : null}
+    </div>
+  );
 }
 
 export default function TeamClient() {
@@ -102,65 +215,97 @@ export default function TeamClient() {
   const [booting, setBooting] = useState(true);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("ads");
   const [tasks, setTasks] = useState<TeamTaskDto[]>([]);
+  const [reminders, setReminders] = useState<TeamReminderDto[]>([]);
+  const [tasksReady, setTasksReady] = useState(false);
+  const [remindersReady, setRemindersReady] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>("todo");
   const [memberTab, setMemberTab] = useState<MemberTab>("all");
   const [outletFilter, setOutletFilter] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [showReminderForm, setShowReminderForm] = useState(false);
   const [editing, setEditing] = useState<TeamTaskDto | null>(null);
-  const [form, setForm] = useState<TaskForm>(emptyForm);
+  const [editingReminder, setEditingReminder] = useState<TeamReminderDto | null>(null);
+  const [taskForm, setTaskForm] = useState<TaskForm>(emptyTaskForm);
+  const [reminderForm, setReminderForm] = useState<ReminderForm>(emptyReminderForm);
   const [uploading, setUploading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<UploadStatus>(null);
+  const [uploadStatus, setUploadStatus] = useState<{ fileName: string; siteUrl: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   const soleMember = members.length === 1 ? members[0] : null;
-  const showMemberTabs = user?.role === "admin" && members.length > 1;
+  const showMemberTabs = user?.role === "admin" && members.length > 1 && viewMode === "ads";
 
   const counts = useMemo(() => {
-    const todo = tasks.filter((t) => t.status === "TODO").length;
-    const done = tasks.filter((t) => t.status === "DONE").length;
-    return { todo, done, total: tasks.length };
-  }, [tasks]);
+    const list = viewMode === "ads" ? tasks : reminders;
+    const todo = list.filter((t) => t.status === "TODO").length;
+    const done = list.filter((t) => t.status === "DONE").length;
+    return { todo, done };
+  }, [tasks, reminders, viewMode]);
 
   const loadMembers = useCallback(async () => {
-    try {
-      const res = await fetch("/api/team/members");
-      if (res.status === 401) {
-        setUser(null);
-        return;
-      }
-      if (res.ok) {
-        const data = await res.json();
-        setMembers(data.members ?? []);
-      }
-    } catch {
-      /* roster optional for display */
+    const res = await fetch("/api/team/members");
+    if (res.status === 401) {
+      setUser(null);
+      return;
+    }
+    if (res.ok) {
+      const data = await res.json();
+      setMembers(data.members ?? []);
     }
   }, []);
 
-  const loadTasks = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const qs = new URLSearchParams({ filter });
-      if (outletFilter) qs.set("outletId", outletFilter);
-      if (user?.role === "admin" && memberTab !== "all") qs.set("assignee", memberTab);
-      const res = await fetch(`/api/team/tasks?${qs}`);
-      if (res.status === 401) {
-        setUser(null);
-        return;
+  const loadTasks = useCallback(
+    async (silent = false) => {
+      if (!silent) setRefreshing(true);
+      setError(null);
+      try {
+        const qs = new URLSearchParams({ filter });
+        if (outletFilter) qs.set("outletId", outletFilter);
+        if (user?.role === "admin" && memberTab !== "all") qs.set("assignee", memberTab);
+        const res = await fetch(`/api/team/tasks?${qs}`);
+        if (res.status === 401) {
+          setUser(null);
+          return;
+        }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Could not load tasks");
+        setTasks(data.tasks ?? []);
+        setTasksReady(true);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Load failed");
+      } finally {
+        setRefreshing(false);
       }
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not load tasks");
-      setTasks(data.tasks ?? []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Load failed");
-    } finally {
-      setLoading(false);
-    }
-  }, [filter, outletFilter, memberTab, user?.role]);
+    },
+    [filter, outletFilter, memberTab, user?.role]
+  );
+
+  const loadReminders = useCallback(
+    async (silent = false) => {
+      if (!silent) setRefreshing(true);
+      setError(null);
+      try {
+        const qs = new URLSearchParams({ filter });
+        const res = await fetch(`/api/team/reminders?${qs}`);
+        if (res.status === 401) {
+          setUser(null);
+          return;
+        }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Could not load reminders");
+        setReminders(data.reminders ?? []);
+        setRemindersReady(true);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Load failed");
+      } finally {
+        setRefreshing(false);
+      }
+    },
+    [filter]
+  );
 
   const probeSession = useCallback(async () => {
     try {
@@ -168,9 +313,7 @@ export default function TeamClient() {
       if (res.ok) {
         const data = await res.json();
         setUser(data.user ?? null);
-      } else {
-        setUser(null);
-      }
+      } else setUser(null);
     } finally {
       setBooting(false);
     }
@@ -181,11 +324,23 @@ export default function TeamClient() {
   }, [probeSession]);
 
   useEffect(() => {
-    if (user) {
-      void loadMembers();
-      void loadTasks();
-    }
-  }, [user, loadMembers, loadTasks]);
+    if (!user) return;
+    void loadMembers();
+  }, [user, loadMembers]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (viewMode === "ads") void loadTasks(tasksReady);
+    else void loadReminders(remindersReady);
+  }, [user, viewMode, loadTasks, loadReminders]);
+
+  useEffect(() => {
+    const open = showTaskForm || showReminderForm;
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [showTaskForm, showReminderForm]);
 
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,23 +365,27 @@ export default function TeamClient() {
     setMembers([]);
     setMemberTab("all");
     setTasks([]);
+    setReminders([]);
+    setTasksReady(false);
+    setRemindersReady(false);
   };
 
   const resolveAssigneeId = () =>
     soleMember?.id ?? (memberTab !== "all" ? memberTab : (members[0]?.id ?? "amit"));
 
-  const openCreate = () => {
+  const openCreateTask = () => {
     setEditing(null);
-    setForm(emptyForm(resolveAssigneeId()));
+    setTaskForm(emptyTaskForm(resolveAssigneeId()));
     setUploadStatus(null);
-    setShowForm(true);
+    setShowTaskForm(true);
   };
 
-  const openEdit = (task: TeamTaskDto) => {
+  const openEditTask = (task: TeamTaskDto) => {
     const timing = startTimingFromTask(task);
     const end = endTimeModeFromTask(task.endTime);
+    const dl = endTimeModeFromTask(task.deadlineTime);
     setEditing(task);
-    setForm({
+    setTaskForm({
       outletId: task.outletId,
       assigneeId: task.assigneeId,
       title: task.title,
@@ -239,8 +398,32 @@ export default function TeamClient() {
       endDate: task.endDate ?? "",
       endTimeMode: end.mode,
       endTimeCustom: end.customTime,
+      deadlineDate: task.deadlineDate ?? "",
+      deadlineTimeMode: dl.mode,
+      deadlineTimeCustom: dl.customTime,
     });
-    setShowForm(true);
+    setShowTaskForm(true);
+  };
+
+  const openCreateReminder = () => {
+    setEditingReminder(null);
+    setReminderForm(emptyReminderForm());
+    setShowReminderForm(true);
+  };
+
+  const openEditReminder = (r: TeamReminderDto) => {
+    const dl = endTimeModeFromTask(r.deadlineTime);
+    setEditingReminder(r);
+    setReminderForm({
+      title: r.title,
+      description: r.description ?? "",
+      startDate: r.startDate ?? "",
+      endDate: r.endDate ?? "",
+      deadlineDate: r.deadlineDate ?? "",
+      deadlineTimeMode: dl.mode,
+      deadlineTimeCustom: dl.customTime,
+    });
+    setShowReminderForm(true);
   };
 
   const uploadFile = async (file: File) => {
@@ -250,25 +433,18 @@ export default function TeamClient() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      fd.append("outletId", form.outletId);
+      fd.append("outletId", taskForm.outletId);
       const res = await fetch("/api/team/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
-
-      setUploadStatus({
-        fileName: data.fileName || file.name,
-        siteUrl: data.url,
-      });
-
-      setForm((f) => ({
+      setUploadStatus({ fileName: data.fileName || file.name, siteUrl: data.url });
+      setTaskForm((f) => ({
         ...f,
         uploadedUrl: data.url ?? "",
         uploadedName: data.fileName || file.name,
       }));
-      setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
-      setUploadStatus(null);
     } finally {
       setUploading(false);
     }
@@ -280,38 +456,29 @@ export default function TeamClient() {
     setError(null);
     try {
       const payload = {
-        outletId: form.outletId,
-        assigneeId: soleMember?.id ?? form.assigneeId,
-        title: form.title.trim(),
-        description: form.description.trim(),
-        creativeUrl: form.creativeUrl.trim(),
-        uploadedUrl: form.uploadedUrl.trim(),
-        startDate: resolveStartDateForSave(form),
-        endDate: form.endDate,
-        endTime: resolveEndTimeForSave(form.endTimeMode, form.endTimeCustom),
+        outletId: taskForm.outletId,
+        assigneeId: soleMember?.id ?? taskForm.assigneeId,
+        title: taskForm.title.trim(),
+        description: taskForm.description.trim(),
+        creativeUrl: taskForm.creativeUrl.trim(),
+        uploadedUrl: taskForm.uploadedUrl.trim(),
+        startDate: resolveStartDateForSave(taskForm),
+        endDate: taskForm.endDate,
+        endTime: resolveEndTimeForSave(taskForm.endTimeMode, taskForm.endTimeCustom),
+        deadlineDate: taskForm.deadlineDate,
+        deadlineTime: resolveEndTimeForSave(taskForm.deadlineTimeMode, taskForm.deadlineTimeCustom),
       };
-
-      if (editing) {
-        const res = await fetch(`/api/team/tasks/${editing.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Save failed");
-      } else {
-        const res = await fetch("/api/team/tasks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Create failed");
-      }
-
-      setShowForm(false);
+      const url = editing ? `/api/team/tasks/${editing.id}` : "/api/team/tasks";
+      const res = await fetch(url, {
+        method: editing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      setShowTaskForm(false);
       setEditing(null);
-      await loadTasks();
+      await loadTasks(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -319,20 +486,70 @@ export default function TeamClient() {
     }
   };
 
-  const toggleDone = async (task: TeamTaskDto) => {
-    const next = task.status === "DONE" ? "TODO" : "DONE";
+  const saveReminder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = {
+        title: reminderForm.title.trim(),
+        description: reminderForm.description.trim(),
+        startDate: reminderForm.startDate,
+        endDate: reminderForm.endDate,
+        deadlineDate: reminderForm.deadlineDate,
+        deadlineTime: resolveEndTimeForSave(
+          reminderForm.deadlineTimeMode,
+          reminderForm.deadlineTimeCustom
+        ),
+      };
+      const url = editingReminder
+        ? `/api/team/reminders/${editingReminder.id}`
+        : "/api/team/reminders";
+      const res = await fetch(url, {
+        method: editingReminder ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      setShowReminderForm(false);
+      setEditingReminder(null);
+      await loadReminders(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleTaskDone = async (task: TeamTaskDto) => {
     const res = await fetch(`/api/team/tasks/${task.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: next }),
+      body: JSON.stringify({ status: task.status === "DONE" ? "TODO" : "DONE" }),
     });
-    if (res.ok) await loadTasks();
+    if (res.ok) await loadTasks(true);
+  };
+
+  const toggleReminderDone = async (r: TeamReminderDto) => {
+    const res = await fetch(`/api/team/reminders/${r.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: r.status === "DONE" ? "TODO" : "DONE" }),
+    });
+    if (res.ok) await loadReminders(true);
   };
 
   const deleteTask = async (task: TeamTaskDto) => {
     if (!window.confirm(`Delete "${task.title}"?`)) return;
     const res = await fetch(`/api/team/tasks/${task.id}`, { method: "DELETE" });
-    if (res.ok) await loadTasks();
+    if (res.ok) await loadTasks(true);
+  };
+
+  const deleteReminder = async (r: TeamReminderDto) => {
+    if (!window.confirm(`Delete "${r.title}"?`)) return;
+    const res = await fetch(`/api/team/reminders/${r.id}`, { method: "DELETE" });
+    if (res.ok) await loadReminders(true);
   };
 
   const exportExcel = () => {
@@ -344,6 +561,8 @@ export default function TeamClient() {
 
   const activeMemberLabel =
     memberTab !== "all" ? memberName(members, memberTab) : null;
+  const listReady = viewMode === "ads" ? tasksReady : remindersReady;
+  const listEmpty = viewMode === "ads" ? tasks.length === 0 : reminders.length === 0;
 
   if (booting) {
     return (
@@ -355,32 +574,28 @@ export default function TeamClient() {
 
   if (!user) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-[#06060a] px-4">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#06060a] px-4 pb-[env(safe-area-inset-bottom)]">
         <form
           onSubmit={login}
-          className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl"
+          className="w-full max-w-sm rounded-2xl border border-white/10 bg-white/[0.04] p-6"
         >
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-300/80">
             Bassik Team
           </p>
-          <h1 className="mt-2 text-xl font-semibold text-white">Ads & SEO board</h1>
-          <p className="mt-1 text-sm text-white/45">
-            Enter your team password to manage ad tasks across outlets.
-          </p>
+          <h1 className="mt-2 text-xl font-semibold text-white">Team board</h1>
+          <p className="mt-1 text-sm text-white/45">Enter your password to continue.</p>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Password"
-            className="mt-5 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none ring-cyan-400/30 focus:ring-2"
+            className="mt-5 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3.5 text-base text-white outline-none ring-cyan-400/30 focus:ring-2"
             autoFocus
           />
-          {loginError ? (
-            <p className="mt-2 text-sm text-red-300">{loginError}</p>
-          ) : null}
+          {loginError ? <p className="mt-2 text-sm text-red-300">{loginError}</p> : null}
           <button
             type="submit"
-            className="mt-4 w-full rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 py-3 text-sm font-semibold text-white"
+            className="mt-4 w-full min-h-[48px] rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-sm font-semibold text-white"
           >
             Sign in
           </button>
@@ -390,232 +605,312 @@ export default function TeamClient() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-[#06060a] text-white">
-      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#06060a]/95 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-4">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300/70">
-              Bassik Team
-            </p>
-            <h1 className="text-lg font-semibold">Ads & creatives</h1>
-            <p className="text-xs text-white/40">
-              {user.role === "admin"
-                ? "Admin"
-                : memberName(members, user.memberId ?? user.username)}{" "}
-              · {counts.todo} to do · {counts.done} done
-              {activeMemberLabel ? ` · ${activeMemberLabel}'s board` : ""}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={exportExcel}
-              className="rounded-full border border-white/10 px-3 py-2 text-xs font-medium text-white/70"
-            >
-              Export Excel
-            </button>
-            {user.role === "admin" ? (
-              <button
-                type="button"
-                onClick={openCreate}
-                className="rounded-full bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-xs font-semibold text-white"
-              >
-                + New ad task
-              </button>
-            ) : null}
+    <div className="min-h-[100dvh] bg-[#06060a] text-white pb-[env(safe-area-inset-bottom)]">
+      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#06060a]">
+        <div className="mx-auto max-w-lg px-3 pt-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300/70">
+                Bassik Team
+              </p>
+              <h1 className="truncate text-base font-semibold">
+                {viewMode === "ads" ? "Ads & creatives" : "My reminders"}
+              </h1>
+              <p className="text-[11px] text-white/40">
+                {user.role === "admin"
+                  ? "Admin"
+                  : memberName(members, user.memberId ?? user.username)}{" "}
+                · {counts.todo} to do · {counts.done} done
+                {refreshing ? " · …" : ""}
+              </p>
+            </div>
             <button
               type="button"
               onClick={() => void logout()}
-              className="rounded-full border border-white/10 px-3 py-2 text-xs text-white/45"
+              className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs text-white/50 min-h-[40px]"
             >
               Lock
             </button>
           </div>
-        </div>
 
-        <div className="mx-auto flex max-w-5xl flex-wrap gap-2 px-4 pb-3">
-          {FILTERS.map((f) => (
+          <div className="mt-3 flex gap-2">
             <button
-              key={f.id}
               type="button"
-              onClick={() => setFilter(f.id)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                filter === f.id
+              onClick={() => setViewMode("ads")}
+              className={`flex-1 rounded-xl py-2.5 text-xs font-semibold min-h-[44px] ${
+                viewMode === "ads"
                   ? "bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/30"
                   : "bg-white/[0.04] text-white/50"
               }`}
             >
-              {f.label}
+              Ad tasks
             </button>
-          ))}
-          <select
-            value={outletFilter}
-            onChange={(e) => setOutletFilter(e.target.value)}
-            className="ml-auto rounded-full border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-white/70"
-          >
-            <option value="">All outlets</option>
-            {TEAM_AD_OUTLETS.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {showMemberTabs ? (
-          <div className="mx-auto flex max-w-5xl flex-wrap gap-2 border-t border-white/[0.04] px-4 py-3">
             <button
               type="button"
-              onClick={() => setMemberTab("all")}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                memberTab === "all"
-                  ? "bg-violet-500/20 text-violet-100 ring-1 ring-violet-400/30"
+              onClick={() => setViewMode("reminders")}
+              className={`flex-1 rounded-xl py-2.5 text-xs font-semibold min-h-[44px] ${
+                viewMode === "reminders"
+                  ? "bg-amber-500/20 text-amber-100 ring-1 ring-amber-400/30"
                   : "bg-white/[0.04] text-white/50"
               }`}
             >
-              All members
+              My reminders
             </button>
-            {members.map((m) => (
+          </div>
+
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {FILTERS.map((f) => (
               <button
-                key={m.id}
+                key={f.id}
                 type="button"
-                onClick={() => setMemberTab(m.id)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium ${
-                  memberTab === m.id
-                    ? "bg-violet-500/20 text-violet-100 ring-1 ring-violet-400/30"
-                    : "bg-white/[0.04] text-white/50"
-                }`}
+                onClick={() => setFilter(f.id)}
+                className={chipClass(filter === f.id)}
               >
-                {m.name}
+                {f.label}
               </button>
             ))}
+            {viewMode === "ads" ? (
+              <select
+                value={outletFilter}
+                onChange={(e) => setOutletFilter(e.target.value)}
+                className="shrink-0 rounded-full border border-white/10 bg-black/30 px-3 py-2 text-xs text-white/70 min-h-[40px]"
+              >
+                <option value="">All outlets</option>
+                {TEAM_AD_OUTLETS.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            ) : null}
           </div>
-        ) : null}
+
+          {showMemberTabs ? (
+            <div className="mt-2 flex gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <button
+                type="button"
+                onClick={() => setMemberTab("all")}
+                className={chipClass(memberTab === "all", "violet")}
+              >
+                All
+              </button>
+              {members.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setMemberTab(m.id)}
+                  className={chipClass(memberTab === m.id, "violet")}
+                >
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="h-2" />
+          )}
+        </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-4">
-        <div className="mb-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-xs leading-relaxed text-white/45">
-          <strong className="text-white/70">Workflow:</strong> upload the creative in Google Drive (or
-          Instagram), paste the link on the task, mark done when posted. Optional: attach a file here
-          if you don&apos;t have a link yet.
-        </div>
-
+      <main className="mx-auto max-w-lg px-3 py-3 min-h-[40vh]">
         {error ? (
           <p className="mb-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
             {error}
           </p>
         ) : null}
 
-        {loading ? (
-          <p className="py-12 text-center text-sm text-white/40">Loading tasks…</p>
-        ) : tasks.length === 0 ? (
-          <p className="py-12 text-center text-sm text-white/40">
-            {user.role === "admin"
-              ? activeMemberLabel
-                ? `No tasks for ${activeMemberLabel}. Create one with "New ad task".`
-                : 'No tasks in this view. Create one with "New ad task".'
-              : "No tasks in this view. Ask admin to add ad tasks."}
+        {!listReady ? (
+          <div className="space-y-3 py-2">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-28 animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.03]"
+              />
+            ))}
+          </div>
+        ) : listEmpty ? (
+          <p className="py-16 text-center text-sm text-white/40">
+            {viewMode === "ads"
+              ? user.role === "admin"
+                ? activeMemberLabel
+                  ? `No tasks for ${activeMemberLabel}.`
+                  : "No ad tasks here yet."
+                : "No tasks assigned to you yet."
+              : "No reminders yet. Tap + below to add one."}
           </p>
-        ) : (
+        ) : viewMode === "ads" ? (
           <div className="space-y-3">
             {tasks.map((task) => {
               const link = creativeLink(task);
               const done = task.status === "DONE";
+              const overdue =
+                !done && isPastDeadline(task.deadlineDate, task.deadlineTime);
               return (
                 <article
                   key={task.id}
-                  className={`rounded-2xl border p-4 ${
+                  className={`rounded-2xl border p-3.5 ${
                     done
                       ? "border-emerald-400/15 bg-emerald-500/[0.04]"
-                      : "border-white/[0.08] bg-white/[0.03]"
+                      : overdue
+                        ? "border-red-400/20 bg-red-500/[0.03]"
+                        : "border-white/[0.08] bg-white/[0.03]"
                   }`}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-white/[0.06] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-200/90">
-                          {teamOutletLabel(task.outletId)}
-                        </span>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                            done ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/15 text-amber-200"
-                          }`}
-                        >
-                          {done ? "Done" : "To do"}
-                        </span>
-                        {showMemberTabs && memberTab === "all" ? (
-                          <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-medium text-violet-200">
-                            {memberName(members, task.assigneeId)}
-                          </span>
-                        ) : null}
-                      </div>
-                      <h2 className="mt-2 text-base font-semibold text-white">{task.title}</h2>
-                      {task.description ? (
-                        <p className="mt-1 whitespace-pre-wrap text-sm text-white/55">{task.description}</p>
-                      ) : null}
-                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/40">
-                        <span>Ad start: {formatTeamStartDate(task.startDate)}</span>
-                        <span>Ad end: {formatTeamEndDateTime(task.endDate, task.endTime)}</span>
-                        <span>Created: {formatDateTime(task.createdAt)}</span>
-                        {task.completedAt ? (
-                          <span className="text-emerald-300/80">
-                            Done: {formatDateTime(task.completedAt)}
-                            {task.completedBy ? ` · ${task.completedBy}` : ""}
-                          </span>
-                        ) : null}
-                        <span>By {task.createdBy}</span>
-                      </div>
-                      {link ? (
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <a
-                            href={link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex text-sm font-medium text-cyan-300 hover:underline"
-                          >
-                            Open creative →
-                          </a>
-                          {task.uploadedUrl ? (
-                            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-200">
-                              Saved on Bassik
-                            </span>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <p className="mt-2 text-xs text-white/30">No creative link yet</p>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 flex-col gap-2">
-                      {user.role === "admin" ? (
-                        <button
-                          type="button"
-                          onClick={() => openEdit(task)}
-                          className="rounded-full border border-cyan-400/35 bg-cyan-500/15 px-3 py-1.5 text-xs font-semibold text-cyan-100"
-                        >
-                          Edit
-                        </button>
-                      ) : null}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold uppercase text-cyan-200/90">
+                      {teamOutletLabel(task.outletId)}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        done ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/15 text-amber-200"
+                      }`}
+                    >
+                      {done ? "Done" : "To do"}
+                    </span>
+                    <DeadlineBadge
+                      deadlineDate={task.deadlineDate}
+                      deadlineTime={task.deadlineTime}
+                      done={done}
+                    />
+                    {showMemberTabs && memberTab === "all" ? (
+                      <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] text-violet-200">
+                        {memberName(members, task.assigneeId)}
+                      </span>
+                    ) : null}
+                  </div>
+                  <h2 className="mt-2 text-[15px] font-semibold leading-snug text-white">
+                    {task.title}
+                  </h2>
+                  {task.description ? (
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-white/55">{task.description}</p>
+                  ) : null}
+                  <div className="mt-2 space-y-0.5 text-[11px] text-white/40">
+                    <p>Start: {formatTeamStartDate(task.startDate)}</p>
+                    <p>Ad end: {formatTeamEndDateTime(task.endDate, task.endTime)}</p>
+                    {task.deadlineDate ? (
+                      <p className={overdue ? "text-red-300/90" : "text-orange-300/80"}>
+                        Deadline: {formatDeadline(task.deadlineDate, task.deadlineTime)}
+                      </p>
+                    ) : null}
+                  </div>
+                  {link ? (
+                    <a
+                      href={link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-block text-sm font-medium text-cyan-300"
+                    >
+                      Open creative →
+                    </a>
+                  ) : null}
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {user.role === "admin" ? (
                       <button
                         type="button"
-                        onClick={() => void toggleDone(task)}
-                        className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                          done
-                            ? "border border-white/15 text-white/60"
-                            : "bg-emerald-500/20 text-emerald-100"
-                        }`}
+                        onClick={() => openEditTask(task)}
+                        className="min-h-[44px] rounded-xl border border-cyan-400/30 bg-cyan-500/10 text-xs font-semibold text-cyan-100"
                       >
-                        {done ? "Reopen" : "Mark done"}
+                        Edit
                       </button>
-                      {user.role === "admin" ? (
-                        <button
-                          type="button"
-                          onClick={() => void deleteTask(task)}
-                          className="rounded-full border border-red-400/20 px-3 py-1.5 text-xs text-red-300/80"
-                        >
-                          Delete
-                        </button>
-                      ) : null}
-                    </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => void toggleTaskDone(task)}
+                      className={`min-h-[44px] rounded-xl text-xs font-semibold ${
+                        user.role === "admin" ? "" : "col-span-2"
+                      } ${
+                        done
+                          ? "border border-white/15 text-white/60"
+                          : "bg-emerald-500/20 text-emerald-100"
+                      }`}
+                    >
+                      {done ? "Reopen" : "Mark done"}
+                    </button>
+                    {user.role === "admin" ? (
+                      <button
+                        type="button"
+                        onClick={() => void deleteTask(task)}
+                        className="col-span-2 min-h-[40px] rounded-xl border border-red-400/20 text-xs text-red-300/80"
+                      >
+                        Delete
+                      </button>
+                    ) : null}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {reminders.map((r) => {
+              const done = r.status === "DONE";
+              const overdue = !done && isPastDeadline(r.deadlineDate, r.deadlineTime);
+              return (
+                <article
+                  key={r.id}
+                  className={`rounded-2xl border p-3.5 ${
+                    done
+                      ? "border-emerald-400/15 bg-emerald-500/[0.04]"
+                      : overdue
+                        ? "border-red-400/20 bg-red-500/[0.03]"
+                        : "border-amber-400/15 bg-amber-500/[0.04]"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+                      Reminder
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        done ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-white/70"
+                      }`}
+                    >
+                      {done ? "Done" : "Open"}
+                    </span>
+                    <DeadlineBadge
+                      deadlineDate={r.deadlineDate}
+                      deadlineTime={r.deadlineTime}
+                      done={done}
+                    />
+                  </div>
+                  <h2 className="mt-2 text-[15px] font-semibold leading-snug text-white">{r.title}</h2>
+                  {r.description ? (
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-white/55">{r.description}</p>
+                  ) : null}
+                  <div className="mt-2 space-y-0.5 text-[11px] text-white/40">
+                    {r.startDate ? <p>From: {formatTeamStartDate(r.startDate)}</p> : null}
+                    {r.endDate ? <p>Until: {formatTeamStartDate(r.endDate)}</p> : null}
+                    {r.deadlineDate ? (
+                      <p className={overdue ? "text-red-300/90" : "text-orange-300/80"}>
+                        Deadline: {formatDeadline(r.deadlineDate, r.deadlineTime)}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditReminder(r)}
+                      className="min-h-[44px] rounded-xl border border-amber-400/30 bg-amber-500/10 text-xs font-semibold text-amber-100"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void toggleReminderDone(r)}
+                      className={`min-h-[44px] rounded-xl text-xs font-semibold ${
+                        done
+                          ? "border border-white/15 text-white/60"
+                          : "bg-emerald-500/20 text-emerald-100"
+                      }`}
+                    >
+                      {done ? "Reopen" : "Done"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void deleteReminder(r)}
+                      className="col-span-2 min-h-[40px] rounded-xl border border-red-400/20 text-xs text-red-300/80"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </article>
               );
@@ -624,26 +919,55 @@ export default function TeamClient() {
         )}
       </main>
 
-      {showForm && user.role === "admin" ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center">
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/[0.06] bg-[#06060a]/98 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="mx-auto flex max-w-lg gap-2">
+          {viewMode === "ads" && user.role === "admin" ? (
+            <>
+              <button
+                type="button"
+                onClick={exportExcel}
+                className="min-h-[48px] rounded-xl border border-white/10 px-4 text-xs font-medium text-white/70"
+              >
+                Export
+              </button>
+              <button
+                type="button"
+                onClick={openCreateTask}
+                className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-sm font-semibold text-white"
+              >
+                + New ad task
+              </button>
+            </>
+          ) : viewMode === "reminders" ? (
+            <button
+              type="button"
+              onClick={openCreateReminder}
+              className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-sm font-semibold text-white"
+            >
+              + New reminder
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="h-24" />
+
+      {showTaskForm && user.role === "admin" ? (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/75">
           <form
             onSubmit={saveTask}
-            className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#0c0c12] p-5 shadow-2xl"
+            className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0c0c12] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
           >
-            <h2 className="text-lg font-semibold">{editing ? "Edit task" : "New ad task"}</h2>
-            <p className="mt-1 text-xs text-white/40">
-              {soleMember
-                ? `Tasks go to ${soleMember.name}. Pick outlet, add creative link or upload file.`
-                : "Pick member and outlet, add creative link or upload file, optional campaign dates."}
-            </p>
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
+            <h2 className="text-lg font-semibold">{editing ? "Edit ad task" : "New ad task"}</h2>
 
             {showMemberTabs ? (
               <>
                 <label className="mt-4 block text-xs font-medium text-white/50">Assign to</label>
                 <select
-                  value={form.assigneeId}
-                  onChange={(e) => setForm((f) => ({ ...f, assigneeId: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm"
+                  value={taskForm.assigneeId}
+                  onChange={(e) => setTaskForm((f) => ({ ...f, assigneeId: e.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
                 >
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>
@@ -654,14 +978,11 @@ export default function TeamClient() {
               </>
             ) : null}
 
-            <label className={`block text-xs font-medium text-white/50 ${showMemberTabs ? "mt-3" : "mt-4"}`}>
-              Outlet
-            </label>
+            <label className="mt-3 block text-xs font-medium text-white/50">Outlet</label>
             <select
-              value={form.outletId}
-              onChange={(e) => setForm((f) => ({ ...f, outletId: e.target.value }))}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm"
-              disabled={Boolean(editing && user.role !== "admin")}
+              value={taskForm.outletId}
+              onChange={(e) => setTaskForm((f) => ({ ...f, outletId: e.target.value }))}
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
             >
               {TEAM_AD_OUTLETS.map((o) => (
                 <option key={o.id} value={o.id}>
@@ -670,168 +991,216 @@ export default function TeamClient() {
               ))}
             </select>
 
-            <label className="mt-3 block text-xs font-medium text-white/50">Title (optional)</label>
+            <label className="mt-3 block text-xs font-medium text-white/50">Title</label>
             <input
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              placeholder="e.g. Ladies Night reel — Firefly"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm"
-              disabled={Boolean(editing && user.role !== "admin")}
+              value={taskForm.title}
+              onChange={(e) => setTaskForm((f) => ({ ...f, title: e.target.value }))}
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
             />
 
-            <label className="mt-3 block text-xs font-medium text-white/50">Notes / brief</label>
+            <label className="mt-3 block text-xs font-medium text-white/50">Notes</label>
             <textarea
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              value={taskForm.description}
+              onChange={(e) => setTaskForm((f) => ({ ...f, description: e.target.value }))}
               rows={3}
-              placeholder="What ad, which platform, sizes, copy…"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm"
-              disabled={Boolean(editing && user.role !== "admin")}
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
             />
 
-            <label className="mt-3 block text-xs font-medium text-white/50">
-              Creative link (Google Drive or Instagram) — main
-            </label>
+            <label className="mt-3 block text-xs font-medium text-white/50">Creative link</label>
             <input
-              value={form.creativeUrl}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  creativeUrl: e.target.value,
-                }))
-              }
-              placeholder="https://drive.google.com/… or instagram.com/p/…"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm"
-              disabled={Boolean(editing && user.role !== "admin")}
+              value={taskForm.creativeUrl}
+              onChange={(e) => setTaskForm((f) => ({ ...f, creativeUrl: e.target.value }))}
+              placeholder="Drive or Instagram URL"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
             />
 
-            <p className="mt-3 text-xs font-medium text-white/50">Optional — attach file here</p>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <label className="cursor-pointer rounded-xl border border-dashed border-white/15 px-3 py-2 text-xs text-white/60 hover:bg-white/[0.04]">
-                {uploading ? "Uploading…" : "Choose file"}
-                <input
-                  type="file"
-                  className="hidden"
-                  accept="image/*,video/mp4,video/quicktime,application/pdf"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void uploadFile(file);
-                  }}
-                  disabled={uploading || Boolean(editing && user.role !== "admin")}
-                />
-              </label>
-              {uploading ? (
-                <p className="text-xs text-cyan-200">Uploading…</p>
-              ) : uploadStatus ? (
-                <p className="text-xs text-emerald-300">
-                  ✓ {uploadStatus.fileName} attached ·{" "}
-                  <a
-                    href={uploadStatus.siteUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline"
-                  >
-                    preview
-                  </a>
-                </p>
-              ) : form.uploadedName ? (
-                <span className="text-xs text-emerald-300">✓ {form.uploadedName}</span>
-              ) : null}
-            </div>
+            <label className="mt-3 block cursor-pointer text-xs font-medium text-white/50">
+              Attach file
+              <input
+                type="file"
+                className="mt-1 block w-full text-sm text-white/60"
+                accept="image/*,video/mp4,video/quicktime,application/pdf"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void uploadFile(file);
+                }}
+                disabled={uploading}
+              />
+            </label>
+            {uploading ? <p className="text-xs text-cyan-200">Uploading…</p> : null}
+            {uploadStatus ? (
+              <p className="text-xs text-emerald-300">✓ {uploadStatus.fileName}</p>
+            ) : null}
 
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="mt-4 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-white/50">Ad start</label>
                 <select
-                  value={form.startTiming}
+                  value={taskForm.startTiming}
                   onChange={(e) => {
                     const next = e.target.value as StartTiming;
-                    setForm((f) => ({
+                    setTaskForm((f) => ({
                       ...f,
                       startTiming: next,
                       startDate: next === "date" ? f.startDate : "",
                     }));
                   }}
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm"
-                  disabled={Boolean(editing && user.role !== "admin")}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
                 >
                   <option value="asap">ASAP</option>
                   <option value="date">Pick a date</option>
-                  <option value="none">No start date</option>
+                  <option value="none">No start</option>
                 </select>
-                {form.startTiming === "date" ? (
+                {taskForm.startTiming === "date" ? (
                   <input
                     type="date"
-                    value={form.startDate}
-                    onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
-                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm"
-                    disabled={Boolean(editing && user.role !== "admin")}
+                    value={taskForm.startDate}
+                    onChange={(e) => setTaskForm((f) => ({ ...f, startDate: e.target.value }))}
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
                   />
                 ) : null}
               </div>
-              <div>
-                <label className="block text-xs font-medium text-white/50">Ad end date</label>
-                <input
-                  type="date"
-                  value={form.endDate}
-                  onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm"
-                  disabled={Boolean(editing && user.role !== "admin")}
-                />
-                <label className="mt-2 block text-xs font-medium text-white/50">End time</label>
-                <select
-                  value={form.endTimeMode}
-                  onChange={(e) => {
-                    const next = e.target.value as TeamEndTimeMode;
-                    setForm((f) => ({
-                      ...f,
-                      endTimeMode: next,
-                      endTimeCustom: next === "custom" ? f.endTimeCustom : "",
-                    }));
-                  }}
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm"
-                  disabled={Boolean(editing && user.role !== "admin")}
-                >
-                  <option value="none">No end time</option>
-                  {TEAM_END_TIME_PRESETS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label} ({p.hint})
-                    </option>
-                  ))}
-                  <option value="custom">Pick exact time</option>
-                </select>
-                {form.endTimeMode === "custom" ? (
-                  <input
-                    type="time"
-                    value={form.endTimeCustom}
-                    onChange={(e) => setForm((f) => ({ ...f, endTimeCustom: e.target.value }))}
-                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm"
-                    disabled={Boolean(editing && user.role !== "admin")}
-                  />
-                ) : null}
-              </div>
+              <DateFields
+                label="Ad end date"
+                dateValue={taskForm.endDate}
+                onDateChange={(v) => setTaskForm((f) => ({ ...f, endDate: v }))}
+                timeMode={taskForm.endTimeMode}
+                onTimeModeChange={(v) =>
+                  setTaskForm((f) => ({
+                    ...f,
+                    endTimeMode: v,
+                    endTimeCustom: v === "custom" ? f.endTimeCustom : "",
+                  }))
+                }
+                timeCustom={taskForm.endTimeCustom}
+                onTimeCustomChange={(v) => setTaskForm((f) => ({ ...f, endTimeCustom: v }))}
+                timeLabel="Ad end time"
+              />
+              <DateFields
+                label="Deadline (due by)"
+                dateValue={taskForm.deadlineDate}
+                onDateChange={(v) => setTaskForm((f) => ({ ...f, deadlineDate: v }))}
+                timeMode={taskForm.deadlineTimeMode}
+                onTimeModeChange={(v) =>
+                  setTaskForm((f) => ({
+                    ...f,
+                    deadlineTimeMode: v,
+                    deadlineTimeCustom: v === "custom" ? f.deadlineTimeCustom : "",
+                  }))
+                }
+                timeCustom={taskForm.deadlineTimeCustom}
+                onTimeCustomChange={(v) => setTaskForm((f) => ({ ...f, deadlineTimeCustom: v }))}
+                timeLabel="Deadline time"
+              />
             </div>
 
             <div className="mt-5 flex gap-2">
               <button
                 type="button"
                 onClick={() => {
-                  setShowForm(false);
+                  setShowTaskForm(false);
                   setEditing(null);
                 }}
-                className="flex-1 rounded-xl border border-white/10 py-2.5 text-sm text-white/60"
+                className="min-h-[48px] flex-1 rounded-xl border border-white/10 text-sm text-white/60"
               >
                 Cancel
               </button>
-              {(!editing || user.role === "admin") && (
-                <button
-                  type="submit"
-                  disabled={saving || uploading}
-                  className="flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 py-2.5 text-sm font-semibold disabled:opacity-50"
-                >
-                  {saving ? "Saving…" : editing ? "Save changes" : "Create task"}
-                </button>
-              )}
+              <button
+                type="submit"
+                disabled={saving || uploading}
+                className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-sm font-semibold disabled:opacity-50"
+              >
+                {saving ? "Saving…" : editing ? "Save" : "Create"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {showReminderForm ? (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/75">
+          <form
+            onSubmit={saveReminder}
+            className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0c0c12] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+          >
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
+            <h2 className="text-lg font-semibold">
+              {editingReminder ? "Edit reminder" : "New reminder"}
+            </h2>
+            <p className="mt-1 text-xs text-white/40">
+              Personal notes — not shared ad work. Set a deadline to stay on track.
+            </p>
+
+            <label className="mt-4 block text-xs font-medium text-white/50">Title</label>
+            <input
+              value={reminderForm.title}
+              onChange={(e) => setReminderForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="e.g. Follow up with outlet"
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
+            />
+
+            <label className="mt-3 block text-xs font-medium text-white/50">Notes</label>
+            <textarea
+              value={reminderForm.description}
+              onChange={(e) => setReminderForm((f) => ({ ...f, description: e.target.value }))}
+              rows={3}
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
+            />
+
+            <div className="mt-4 grid grid-cols-1 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-white/50">Start date (optional)</label>
+                <input
+                  type="date"
+                  value={reminderForm.startDate}
+                  onChange={(e) => setReminderForm((f) => ({ ...f, startDate: e.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-white/50">End date (optional)</label>
+                <input
+                  type="date"
+                  value={reminderForm.endDate}
+                  onChange={(e) => setReminderForm((f) => ({ ...f, endDate: e.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
+                />
+              </div>
+              <DateFields
+                label="Deadline"
+                dateValue={reminderForm.deadlineDate}
+                onDateChange={(v) => setReminderForm((f) => ({ ...f, deadlineDate: v }))}
+                timeMode={reminderForm.deadlineTimeMode}
+                onTimeModeChange={(v) =>
+                  setReminderForm((f) => ({
+                    ...f,
+                    deadlineTimeMode: v,
+                    deadlineTimeCustom: v === "custom" ? f.deadlineTimeCustom : "",
+                  }))
+                }
+                timeCustom={reminderForm.deadlineTimeCustom}
+                onTimeCustomChange={(v) => setReminderForm((f) => ({ ...f, deadlineTimeCustom: v }))}
+              />
+            </div>
+
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReminderForm(false);
+                  setEditingReminder(null);
+                }}
+                className="min-h-[48px] flex-1 rounded-xl border border-white/10 text-sm text-white/60"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-sm font-semibold disabled:opacity-50"
+              >
+                {saving ? "Saving…" : editingReminder ? "Save" : "Add"}
+              </button>
             </div>
           </form>
         </div>
