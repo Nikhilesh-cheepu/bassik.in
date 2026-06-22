@@ -15,6 +15,9 @@ export async function PATCH(
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (session.role === "viewer") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { reminderId } = await params;
   const existing = await prisma.teamReminder.findUnique({ where: { id: reminderId } });
@@ -74,6 +77,9 @@ export async function DELETE(
   const session = await getTeamFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (session.role === "viewer") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { reminderId } = await params;

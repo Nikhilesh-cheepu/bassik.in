@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 
 export const TEAM_COOKIE = "team_session";
 
-export type TeamRole = "admin" | "member";
+export type TeamRole = "admin" | "member" | "viewer";
 
 export type TeamSession = {
   username: string;
@@ -37,6 +37,11 @@ function teamAccounts(): { username: string; password: string; role: TeamRole; m
       password: process.env.TEAM_ADMIN_PASSWORD?.trim() || "7013884485",
       role: "admin",
     },
+    {
+      username: "viewer",
+      password: process.env.TEAM_VIEWER_PASSWORD?.trim() || "view01",
+      role: "viewer",
+    },
   ];
 }
 
@@ -67,8 +72,14 @@ export async function verifyTeamSession(token: string): Promise<TeamSession | nu
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET);
     const username = typeof payload.sub === "string" ? payload.sub : "";
-    const role = payload.role === "admin" ? "admin" : "member";
+    const role: TeamRole =
+      payload.role === "admin"
+        ? "admin"
+        : payload.role === "viewer"
+          ? "viewer"
+          : "member";
     if (!username) return null;
+    if (role === "viewer") return { username, role };
     const memberId =
       typeof payload.memberId === "string" && isTeamMemberId(payload.memberId)
         ? payload.memberId

@@ -16,6 +16,9 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (session.role === "viewer") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const filter = (req.nextUrl.searchParams.get("filter") as TeamReminderFilter) || "todo";
   const safeFilter = FILTERS.has(filter) ? filter : "todo";

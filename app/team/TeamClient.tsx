@@ -19,7 +19,7 @@ import {
 } from "@/lib/team-end-time";
 import type { TeamReminderDto } from "@/lib/team-reminders";
 
-type TeamUser = { username: string; role: "admin" | "member"; memberId?: string };
+type TeamUser = { username: string; role: "admin" | "member" | "viewer"; memberId?: string };
 type TeamMember = { id: string; name: string; role?: string };
 type Filter = "all" | "todo" | "done";
 type MemberTab = "all" | string;
@@ -236,7 +236,9 @@ export default function TeamClient() {
   const [saving, setSaving] = useState(false);
 
   const soleMember = members.length === 1 ? members[0] : null;
-  const showMemberTabs = user?.role === "admin" && members.length > 1 && viewMode === "ads";
+  const isViewer = user?.role === "viewer";
+  const canBrowseAllMembers = user?.role === "admin" || user?.role === "viewer";
+  const showMemberTabs = canBrowseAllMembers && members.length > 1 && viewMode === "ads";
 
   const counts = useMemo(() => {
     const list = viewMode === "ads" ? tasks : reminders;
@@ -264,7 +266,7 @@ export default function TeamClient() {
       try {
         const qs = new URLSearchParams({ filter });
         if (outletFilter) qs.set("outletId", outletFilter);
-        if (user?.role === "admin" && memberTab !== "all") qs.set("assignee", memberTab);
+        if (canBrowseAllMembers && memberTab !== "all") qs.set("assignee", memberTab);
         const res = await fetch(`/api/team/tasks?${qs}`);
         if (res.status === 401) {
           setUser(null);
@@ -280,7 +282,7 @@ export default function TeamClient() {
         setRefreshing(false);
       }
     },
-    [filter, outletFilter, memberTab, user?.role]
+    [filter, outletFilter, memberTab, canBrowseAllMembers]
   );
 
   const loadReminders = useCallback(
@@ -324,6 +326,10 @@ export default function TeamClient() {
   }, [probeSession]);
 
   useEffect(() => {
+    if (user?.role === "viewer") setViewMode("ads");
+  }, [user?.role]);
+
+  useEffect(() => {
     if (!user) return;
     void loadMembers();
   }, [user, loadMembers]);
@@ -331,8 +337,8 @@ export default function TeamClient() {
   useEffect(() => {
     if (!user) return;
     if (viewMode === "ads") void loadTasks(tasksReady);
-    else void loadReminders(remindersReady);
-  }, [user, viewMode, loadTasks, loadReminders]);
+    else if (!isViewer) void loadReminders(remindersReady);
+  }, [user, viewMode, loadTasks, loadReminders, isViewer]);
 
   useEffect(() => {
     const open = showTaskForm || showReminderForm;
@@ -357,6 +363,7 @@ export default function TeamClient() {
     }
     setUser(data.user);
     setPassword("");
+    if (data.user?.role === "viewer") setViewMode("ads");
   };
 
   const logout = async () => {
@@ -619,7 +626,9 @@ export default function TeamClient() {
               <p className="text-[11px] text-white/40">
                 {user.role === "admin"
                   ? "Admin"
-                  : memberName(members, user.memberId ?? user.username)}{" "}
+                  : user.role === "viewer"
+                    ? "Viewer · read-only"
+                    : memberName(members, user.memberId ?? user.username)}{" "}
                 · {counts.todo} to do · {counts.done} done
                 {refreshing ? " · …" : ""}
               </p>
@@ -633,32 +642,34 @@ export default function TeamClient() {
             </button>
           </div>
 
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setViewMode("ads")}
-              className={`flex-1 rounded-xl py-2.5 text-xs font-semibold min-h-[44px] ${
-                viewMode === "ads"
-                  ? "bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/30"
-                  : "bg-white/[0.04] text-white/50"
-              }`}
-            >
-              Ad tasks
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("reminders")}
-              className={`flex-1 rounded-xl py-2.5 text-xs font-semibold min-h-[44px] ${
-                viewMode === "reminders"
-                  ? "bg-amber-500/20 text-amber-100 ring-1 ring-amber-400/30"
-                  : "bg-white/[0.04] text-white/50"
-              }`}
-            >
-              My reminders
-            </button>
-          </div>
+          {!isViewer ? (
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setViewMode("ads")}
+                className={`flex-1 rounded-xl py-2.5 text-xs font-semibold min-h-[44px] ${
+                  viewMode === "ads"
+                    ? "bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/30"
+                    : "bg-white/[0.04] text-white/50"
+                }`}
+              >
+                Ad tasks
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("reminders")}
+                className={`flex-1 rounded-xl py-2.5 text-xs font-semibold min-h-[44px] ${
+                  viewMode === "reminders"
+                    ? "bg-amber-500/20 text-amber-100 ring-1 ring-amber-400/30"
+                    : "bg-white/[0.04] text-white/50"
+                }`}
+              >
+                My reminders
+              </button>
+            </div>
+          ) : null}
 
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className={`flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isViewer ? "mt-3" : ""}`}>
             {FILTERS.map((f) => (
               <button
                 key={f.id}
@@ -730,11 +741,15 @@ export default function TeamClient() {
         ) : listEmpty ? (
           <p className="py-16 text-center text-sm text-white/40">
             {viewMode === "ads"
-              ? user.role === "admin"
+              ? isViewer
                 ? activeMemberLabel
                   ? `No tasks for ${activeMemberLabel}.`
-                  : "No ad tasks here yet."
-                : "No tasks assigned to you yet."
+                  : "No ad tasks to show."
+                : user.role === "admin"
+                  ? activeMemberLabel
+                    ? `No tasks for ${activeMemberLabel}.`
+                    : "No ad tasks here yet."
+                  : "No tasks assigned to you yet."
               : "No reminders yet. Tap + below to add one."}
           </p>
         ) : viewMode === "ads" ? (
@@ -802,39 +817,41 @@ export default function TeamClient() {
                       Open creative →
                     </a>
                   ) : null}
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    {user.role === "admin" ? (
+                  {!isViewer ? (
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      {user.role === "admin" ? (
+                        <button
+                          type="button"
+                          onClick={() => openEditTask(task)}
+                          className="min-h-[44px] rounded-xl border border-cyan-400/30 bg-cyan-500/10 text-xs font-semibold text-cyan-100"
+                        >
+                          Edit
+                        </button>
+                      ) : null}
                       <button
                         type="button"
-                        onClick={() => openEditTask(task)}
-                        className="min-h-[44px] rounded-xl border border-cyan-400/30 bg-cyan-500/10 text-xs font-semibold text-cyan-100"
+                        onClick={() => void toggleTaskDone(task)}
+                        className={`min-h-[44px] rounded-xl text-xs font-semibold ${
+                          user.role === "admin" ? "" : "col-span-2"
+                        } ${
+                          done
+                            ? "border border-white/15 text-white/60"
+                            : "bg-emerald-500/20 text-emerald-100"
+                        }`}
                       >
-                        Edit
+                        {done ? "Reopen" : "Mark done"}
                       </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => void toggleTaskDone(task)}
-                      className={`min-h-[44px] rounded-xl text-xs font-semibold ${
-                        user.role === "admin" ? "" : "col-span-2"
-                      } ${
-                        done
-                          ? "border border-white/15 text-white/60"
-                          : "bg-emerald-500/20 text-emerald-100"
-                      }`}
-                    >
-                      {done ? "Reopen" : "Mark done"}
-                    </button>
-                    {user.role === "admin" ? (
-                      <button
-                        type="button"
-                        onClick={() => void deleteTask(task)}
-                        className="col-span-2 min-h-[40px] rounded-xl border border-red-400/20 text-xs text-red-300/80"
-                      >
-                        Delete
-                      </button>
-                    ) : null}
-                  </div>
+                      {user.role === "admin" ? (
+                        <button
+                          type="button"
+                          onClick={() => void deleteTask(task)}
+                          className="col-span-2 min-h-[40px] rounded-xl border border-red-400/20 text-xs text-red-300/80"
+                        >
+                          Delete
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </article>
               );
             })}
@@ -919,38 +936,40 @@ export default function TeamClient() {
         )}
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/[0.06] bg-[#06060a]/98 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="mx-auto flex max-w-lg gap-2">
-          {viewMode === "ads" && user.role === "admin" ? (
-            <>
+      {!isViewer ? (
+        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/[0.06] bg-[#06060a]/98 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="mx-auto flex max-w-lg gap-2">
+            {viewMode === "ads" && user.role === "admin" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={exportExcel}
+                  className="min-h-[48px] rounded-xl border border-white/10 px-4 text-xs font-medium text-white/70"
+                >
+                  Export
+                </button>
+                <button
+                  type="button"
+                  onClick={openCreateTask}
+                  className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-sm font-semibold text-white"
+                >
+                  + New ad task
+                </button>
+              </>
+            ) : viewMode === "reminders" ? (
               <button
                 type="button"
-                onClick={exportExcel}
-                className="min-h-[48px] rounded-xl border border-white/10 px-4 text-xs font-medium text-white/70"
+                onClick={openCreateReminder}
+                className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-sm font-semibold text-white"
               >
-                Export
+                + New reminder
               </button>
-              <button
-                type="button"
-                onClick={openCreateTask}
-                className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-sm font-semibold text-white"
-              >
-                + New ad task
-              </button>
-            </>
-          ) : viewMode === "reminders" ? (
-            <button
-              type="button"
-              onClick={openCreateReminder}
-              className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-sm font-semibold text-white"
-            >
-              + New reminder
-            </button>
-          ) : null}
+            ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
 
-      <div className="h-24" />
+      <div className={isViewer ? "h-4" : "h-24"} />
 
       {showTaskForm && user.role === "admin" ? (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/75">

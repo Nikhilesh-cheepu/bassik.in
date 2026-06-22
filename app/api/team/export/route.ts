@@ -11,6 +11,9 @@ export async function GET(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (session.role === "viewer") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const sp = req.nextUrl.searchParams;
   const filter = (sp.get("filter") as TeamTaskFilter) || "all";

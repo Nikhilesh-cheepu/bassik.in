@@ -13,6 +13,9 @@ export async function PATCH(
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (session.role === "viewer") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { taskId } = await params;
   const existing = await prisma.teamAdTask.findUnique({ where: { id: taskId } });
