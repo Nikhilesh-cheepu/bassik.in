@@ -368,3 +368,40 @@ model VenueChatConfig {
   learnedExamples Json     @default("[]")
   updatedAt       DateTime @updatedAt
 }
+
+enum TeamAdTaskStatus {
+  TODO
+  DONE
+}
+
+enum TeamCreativeSource {
+  DRIVE_LINK
+  INSTAGRAM
+  UPLOAD
+  NONE
+}
+
+/// SEO & performance marketing ad/creative tasks (internal /team board).
+model TeamAdTask {
+  id              String              @id @default(cuid())
+  outletId        String
+  title           String
+  description     String?
+  creativeUrl     String?
+  creativeSource  TeamCreativeSource  @default(NONE)
+  uploadedUrl     String?
+  startDate       String?             // YYYY-MM-DD
+  endDate         String?             // YYYY-MM-DD
+  status          TeamAdTaskStatus    @default(TODO)
+  createdBy       String
+  completedBy     String?
+  completedAt     DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([outletId])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([createdAt])
+}

@@ -1,0 +1,95 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getTeamFromRequest } from "@/lib/team-auth";
+import { isTeamOutletId } from "@/lib/team-outlets";
+import { detectCreativeSource, normalizeTeamStartDate, toTeamTaskDto } from "@/lib/team-tasks";
+import { prisma } from "@/lib/db";
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ taskId: string }> }
+) {
+  const session = await getTeamFromRequest(req);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { taskId } = await params;
+  const existing = await prisma.teamAdTask.findUnique({ where: { id: taskId } });
+  if (!existing) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const data: Record<string, unknown> = {};
+
+  if (session.role === "admin") {
+    if (typeof body.outletId === "string" && isTeamOutletId(body.outletId.trim())) {
+      data.outletId = body.outletId.trim();
+    }
+    if (typeof body.title === "string" && body.title.trim()) {
+      data.title = body.title.trim().slice(0, 200);
+    }
+    if (body.description !== undefined) {
+      data.description =
+        typeof body.description === "string" && body.description.trim()
+          ? body.description.trim().slice(0, 2000)
+          : null;
+    }
+    if (body.creativeUrl !== undefined) {
+      const url = typeof body.creativeUrl === "string" ? body.creativeUrl.trim() : "";
+      data.creativeUrl = url || null;
+      if (url && !body.uploadedUrl) {
+        data.creativeSource = detectCreativeSource(url);
+      }
+    }
+    if (body.uploadedUrl !== undefined) {
+      const url = typeof body.uploadedUrl === "string" ? body.uploadedUrl.trim() : "";
+      data.uploadedUrl = url || null;
+      if (url) data.creativeSource = "UPLOAD";
+    }
+    if (body.startDate !== undefined) {
+      const d = typeof body.startDate === "string" ? body.startDate.trim() : "";
+      data.startDate = normalizeTeamStartDate(d);
+    }
+    if (body.endDate !== undefined) {
+      const d = typeof body.endDate === "string" ? body.endDate.trim() : "";
+      data.endDate = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
+    }
+  }
+
+  if (body.status === "TODO" || body.status === "DONE") {
+    data.status = body.status;
+    if (body.status === "DONE") {
+      data.completedBy = session.username;
+      data.completedAt = new Date();
+    } else {
+      data.completedBy = null;
+      data.completedAt = null;
+    }
+  }
+
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+  }
+
+  const row = await prisma.teamAdTask.update({
+    where: { id: taskId },
+    data,
+  });
+
+  return NextResponse.json({ task: toTeamTaskDto(row) });
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ taskId: string }> }
+) {
+  const session = await getTeamFromRequest(req);
+  if (!session || session.role !== "admin") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { taskId } = await params;
+  await prisma.teamAdTask.delete({ where: { id: taskId } });
+  return NextResponse.json({ success: true });
+}
