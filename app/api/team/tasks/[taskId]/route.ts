@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import { isTeamOutletId } from "@/lib/team-outlets";
 import { isTeamMemberId } from "@/lib/team-members";
+import { normalizeTeamPriority } from "@/lib/team-priority";
 import { detectCreativeSource, normalizeTeamEndTime, normalizeTeamStartDate, toTeamTaskDto } from "@/lib/team-tasks";
 import { prisma } from "@/lib/db";
 
@@ -84,6 +85,14 @@ export async function PATCH(
         return NextResponse.json({ error: "Invalid team member" }, { status: 400 });
       }
       data.assigneeId = id;
+    }
+    if (body.priority !== undefined) {
+      data.priority = normalizeTeamPriority(
+        typeof body.priority === "string" ? body.priority : undefined
+      );
+    }
+    if (body.sortOrder !== undefined && typeof body.sortOrder === "number") {
+      data.sortOrder = Math.round(body.sortOrder);
     }
   }
 

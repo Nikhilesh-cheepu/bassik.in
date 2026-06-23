@@ -374,6 +374,12 @@ enum TeamAdTaskStatus {
   DONE
 }
 
+enum TeamTaskPriority {
+  HIGH
+  NORMAL
+  LOW
+}
+
 enum TeamCreativeSource {
   DRIVE_LINK
   INSTAGRAM
@@ -396,6 +402,8 @@ model TeamAdTask {
   deadlineDate    String?             // YYYY-MM-DD — internal due date
   deadlineTime    String?             // preset or HH:MM
   assigneeId      String              @default("amit")
+  priority        TeamTaskPriority    @default(NORMAL)
+  sortOrder       Int                 @default(0)
   status          TeamAdTaskStatus    @default(TODO)
   createdBy       String
   completedBy     String?
@@ -406,6 +414,8 @@ model TeamAdTask {
   @@index([outletId])
   @@index([status])
   @@index([assigneeId])
+  @@index([priority])
+  @@index([sortOrder])
   @@index([startDate])
   @@index([endDate])
   @@index([deadlineDate])

@@ -3,7 +3,8 @@ import * as XLSX from "xlsx";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import { teamOutletLabel } from "@/lib/team-outlets";
 import { teamMemberName } from "@/lib/team-members";
-import { filterTeamTasks, formatTeamEndDateTime, formatTeamStartDate, primaryCreativeLink, type TeamTaskFilter } from "@/lib/team-tasks";
+import { TEAM_PRIORITY_LABELS } from "@/lib/team-priority";
+import { filterTeamTasks, formatTeamEndDateTime, formatTeamStartDate, primaryCreativeLink, sortTeamTasks, type TeamTaskFilter } from "@/lib/team-tasks";
 import { prisma } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
@@ -32,10 +33,10 @@ export async function GET(req: NextRequest) {
       ...(outletId ? { outletId } : {}),
       ...(assigneeId ? { assigneeId } : {}),
     },
-    orderBy: [{ status: "asc" }, { startDate: "asc" }, { createdAt: "desc" }],
+    orderBy: [{ priority: "asc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
   });
 
-  const filtered = filterTeamTasks(rows, filter);
+  const filtered = sortTeamTasks(filterTeamTasks(rows, filter));
 
   const sheetRows = filtered.map((t) => ({
     Outlet: teamOutletLabel(t.outletId),
@@ -45,6 +46,7 @@ export async function GET(req: NextRequest) {
     "Creative link": primaryCreativeLink(t) ?? "",
     Source: t.creativeSource,
     Assignee: teamMemberName(t.assigneeId),
+    Priority: TEAM_PRIORITY_LABELS[t.priority],
     "Start date": formatTeamStartDate(t.startDate),
     "End date": formatTeamEndDateTime(t.endDate, t.endTime),
     Deadline: formatTeamEndDateTime(t.deadlineDate, t.deadlineTime),

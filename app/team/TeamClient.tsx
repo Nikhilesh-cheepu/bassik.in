@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { TEAM_AD_OUTLETS, teamOutletLabel } from "@/lib/team-outlets";
+import { TEAM_AD_OUTLETS } from "@/lib/team-outlets";
 import {
-  formatTeamEndDateTime,
   formatTeamStartDate,
   isAsapStartDate,
   TEAM_START_ASAP,
@@ -18,6 +17,9 @@ import {
   type TeamEndTimeMode,
 } from "@/lib/team-end-time";
 import type { TeamReminderDto } from "@/lib/team-reminders";
+import type { TeamTaskPriority } from "@prisma/client";
+import { TEAM_PRIORITY_LABELS, TEAM_PRIORITIES } from "@/lib/team-priority";
+import AdTaskList from "./AdTaskList";
 
 type TeamUser = { username: string; role: "admin" | "member" | "viewer"; memberId?: string };
 type TeamMember = { id: string; name: string; role?: string };
@@ -49,6 +51,7 @@ type TaskForm = {
   deadlineDate: string;
   deadlineTimeMode: TeamEndTimeMode;
   deadlineTimeCustom: string;
+  priority: TeamTaskPriority;
 };
 
 type ReminderForm = {
@@ -77,6 +80,7 @@ const emptyTaskForm = (assigneeId = "amit"): TaskForm => ({
   deadlineDate: "",
   deadlineTimeMode: "none",
   deadlineTimeCustom: "",
+  priority: "NORMAL",
 });
 
 const emptyReminderForm = (): ReminderForm => ({
@@ -96,10 +100,10 @@ function memberName(members: TeamMember[], id: string): string {
 function chipClass(active: boolean, tone: "cyan" | "violet" = "cyan"): string {
   const on =
     tone === "violet"
-      ? "bg-violet-500/20 text-violet-100 ring-1 ring-violet-400/30"
-      : "bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/30";
-  return `shrink-0 rounded-full px-3.5 py-2 text-xs font-medium min-h-[40px] ${
-    active ? on : "bg-white/[0.06] text-white/55"
+      ? "bg-violet-500/15 text-violet-100"
+      : "bg-white/10 text-white";
+  return `shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium ${
+    active ? on : "text-white/45"
   }`;
 }
 
@@ -124,35 +128,6 @@ function resolveStartDateForSave(form: TaskForm): string {
   if (form.startTiming === "asap") return TEAM_START_ASAP;
   if (form.startTiming === "date" && form.startDate) return form.startDate;
   return "";
-}
-
-function creativeLink(task: TeamTaskDto): string | null {
-  return task.uploadedUrl?.trim() || task.creativeUrl?.trim() || null;
-}
-
-function DeadlineBadge({
-  deadlineDate,
-  deadlineTime,
-  done,
-}: {
-  deadlineDate: string | null;
-  deadlineTime: string | null;
-  done: boolean;
-}) {
-  if (!deadlineDate) return null;
-  const overdue = !done && isPastDeadline(deadlineDate, deadlineTime);
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-        overdue
-          ? "bg-red-500/20 text-red-200 ring-1 ring-red-400/30"
-          : "bg-orange-500/15 text-orange-200"
-      }`}
-    >
-      {overdue ? "Overdue · " : "Due · "}
-      {formatDeadline(deadlineDate, deadlineTime)}
-    </span>
-  );
 }
 
 function DateFields({
@@ -408,6 +383,7 @@ export default function TeamClient() {
       deadlineDate: task.deadlineDate ?? "",
       deadlineTimeMode: dl.mode,
       deadlineTimeCustom: dl.customTime,
+      priority: task.priority,
     });
     setShowTaskForm(true);
   };
@@ -474,6 +450,7 @@ export default function TeamClient() {
         endTime: resolveEndTimeForSave(taskForm.endTimeMode, taskForm.endTimeCustom),
         deadlineDate: taskForm.deadlineDate,
         deadlineTime: resolveEndTimeForSave(taskForm.deadlineTimeMode, taskForm.deadlineTimeCustom),
+        priority: taskForm.priority,
       };
       const url = editing ? `/api/team/tasks/${editing.id}` : "/api/team/tasks";
       const res = await fetch(url, {
@@ -552,6 +529,26 @@ export default function TeamClient() {
     const res = await fetch(`/api/team/tasks/${task.id}`, { method: "DELETE" });
     if (res.ok) await loadTasks(true);
   };
+
+  const reorderTasks = async (taskIds: string[]) => {
+    const res = await fetch("/api/team/tasks/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskIds }),
+    });
+    if (res.ok) await loadTasks(true);
+  };
+
+  const changeTaskPriority = async (task: TeamTaskDto, priority: TeamTaskPriority) => {
+    const res = await fetch(`/api/team/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ priority }),
+    });
+    if (res.ok) await loadTasks(true);
+  };
+
+  const canDragTasks = user?.role === "admin" && filter === "todo" && viewMode === "ads";
 
   const deleteReminder = async (r: TeamReminderDto) => {
     if (!window.confirm(`Delete "${r.title}"?`)) return;
@@ -753,181 +750,86 @@ export default function TeamClient() {
               : "No reminders yet. Tap + below to add one."}
           </p>
         ) : viewMode === "ads" ? (
-          <div className="space-y-3">
-            {tasks.map((task) => {
-              const link = creativeLink(task);
-              const done = task.status === "DONE";
-              const overdue =
-                !done && isPastDeadline(task.deadlineDate, task.deadlineTime);
-              return (
-                <article
-                  key={task.id}
-                  className={`rounded-2xl border p-3.5 ${
-                    done
-                      ? "border-emerald-400/15 bg-emerald-500/[0.04]"
-                      : overdue
-                        ? "border-red-400/20 bg-red-500/[0.03]"
-                        : "border-white/[0.08] bg-white/[0.03]"
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-semibold uppercase text-cyan-200/90">
-                      {teamOutletLabel(task.outletId)}
-                    </span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        done ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/15 text-amber-200"
-                      }`}
-                    >
-                      {done ? "Done" : "To do"}
-                    </span>
-                    <DeadlineBadge
-                      deadlineDate={task.deadlineDate}
-                      deadlineTime={task.deadlineTime}
-                      done={done}
-                    />
-                    {showMemberTabs && memberTab === "all" ? (
-                      <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] text-violet-200">
-                        {memberName(members, task.assigneeId)}
-                      </span>
-                    ) : null}
-                  </div>
-                  <h2 className="mt-2 text-[15px] font-semibold leading-snug text-white">
-                    {task.title}
-                  </h2>
-                  {task.description ? (
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-white/55">{task.description}</p>
-                  ) : null}
-                  <div className="mt-2 space-y-0.5 text-[11px] text-white/40">
-                    <p>Start: {formatTeamStartDate(task.startDate)}</p>
-                    <p>Ad end: {formatTeamEndDateTime(task.endDate, task.endTime)}</p>
-                    {task.deadlineDate ? (
-                      <p className={overdue ? "text-red-300/90" : "text-orange-300/80"}>
-                        Deadline: {formatDeadline(task.deadlineDate, task.deadlineTime)}
-                      </p>
-                    ) : null}
-                  </div>
-                  {link ? (
-                    <a
-                      href={link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-2 inline-block text-sm font-medium text-cyan-300"
-                    >
-                      Open creative →
-                    </a>
-                  ) : null}
-                  {!isViewer ? (
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      {user.role === "admin" ? (
-                        <button
-                          type="button"
-                          onClick={() => openEditTask(task)}
-                          className="min-h-[44px] rounded-xl border border-cyan-400/30 bg-cyan-500/10 text-xs font-semibold text-cyan-100"
-                        >
-                          Edit
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => void toggleTaskDone(task)}
-                        className={`min-h-[44px] rounded-xl text-xs font-semibold ${
-                          user.role === "admin" ? "" : "col-span-2"
-                        } ${
-                          done
-                            ? "border border-white/15 text-white/60"
-                            : "bg-emerald-500/20 text-emerald-100"
-                        }`}
-                      >
-                        {done ? "Reopen" : "Mark done"}
-                      </button>
-                      {user.role === "admin" ? (
-                        <button
-                          type="button"
-                          onClick={() => void deleteTask(task)}
-                          className="col-span-2 min-h-[40px] rounded-xl border border-red-400/20 text-xs text-red-300/80"
-                        >
-                          Delete
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })}
-          </div>
+          <AdTaskList
+            tasks={tasks}
+            members={members}
+            showAssignee={showMemberTabs && memberTab === "all"}
+            isViewer={isViewer}
+            isAdmin={user.role === "admin"}
+            canDrag={canDragTasks}
+            onToggleDone={(t) => void toggleTaskDone(t)}
+            onEdit={openEditTask}
+            onDelete={(t) => void deleteTask(t)}
+            onReorder={reorderTasks}
+            onPriorityChange={changeTaskPriority}
+          />
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {reminders.map((r) => {
               const done = r.status === "DONE";
               const overdue = !done && isPastDeadline(r.deadlineDate, r.deadlineTime);
+              const meta = [
+                r.startDate ? `From ${formatTeamStartDate(r.startDate)}` : null,
+                r.endDate ? `Until ${formatTeamStartDate(r.endDate)}` : null,
+                r.deadlineDate
+                  ? `${overdue ? "Overdue" : "Due"} ${formatDeadline(r.deadlineDate, r.deadlineTime)}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ");
               return (
                 <article
                   key={r.id}
-                  className={`rounded-2xl border p-3.5 ${
-                    done
-                      ? "border-emerald-400/15 bg-emerald-500/[0.04]"
-                      : overdue
-                        ? "border-red-400/20 bg-red-500/[0.03]"
-                        : "border-amber-400/15 bg-amber-500/[0.04]"
+                  className={`relative overflow-hidden rounded-xl bg-[#0e0e14] ring-1 ring-white/[0.06] ${
+                    done ? "opacity-80" : ""
                   }`}
                 >
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-200">
-                      Reminder
-                    </span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        done ? "bg-emerald-500/20 text-emerald-200" : "bg-white/10 text-white/70"
+                  <div
+                    className={`absolute inset-y-0 left-0 w-1 ${
+                      done ? "bg-emerald-500/70" : overdue ? "bg-red-500" : "bg-amber-500/60"
+                    }`}
+                  />
+                  <div className="py-3 pl-3.5 pr-3">
+                    <h2
+                      className={`text-[15px] font-medium leading-snug ${
+                        done ? "text-white/55 line-through" : "text-white"
                       }`}
                     >
-                      {done ? "Done" : "Open"}
-                    </span>
-                    <DeadlineBadge
-                      deadlineDate={r.deadlineDate}
-                      deadlineTime={r.deadlineTime}
-                      done={done}
-                    />
-                  </div>
-                  <h2 className="mt-2 text-[15px] font-semibold leading-snug text-white">{r.title}</h2>
-                  {r.description ? (
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-white/55">{r.description}</p>
-                  ) : null}
-                  <div className="mt-2 space-y-0.5 text-[11px] text-white/40">
-                    {r.startDate ? <p>From: {formatTeamStartDate(r.startDate)}</p> : null}
-                    {r.endDate ? <p>Until: {formatTeamStartDate(r.endDate)}</p> : null}
-                    {r.deadlineDate ? (
-                      <p className={overdue ? "text-red-300/90" : "text-orange-300/80"}>
-                        Deadline: {formatDeadline(r.deadlineDate, r.deadlineTime)}
+                      {r.title}
+                    </h2>
+                    {meta ? (
+                      <p className={`mt-1 text-xs ${overdue ? "text-red-300/80" : "text-white/38"}`}>
+                        {meta}
                       </p>
                     ) : null}
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openEditReminder(r)}
-                      className="min-h-[44px] rounded-xl border border-amber-400/30 bg-amber-500/10 text-xs font-semibold text-amber-100"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void toggleReminderDone(r)}
-                      className={`min-h-[44px] rounded-xl text-xs font-semibold ${
-                        done
-                          ? "border border-white/15 text-white/60"
-                          : "bg-emerald-500/20 text-emerald-100"
-                      }`}
-                    >
-                      {done ? "Reopen" : "Done"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void deleteReminder(r)}
-                      className="col-span-2 min-h-[40px] rounded-xl border border-red-400/20 text-xs text-red-300/80"
-                    >
-                      Delete
-                    </button>
+                    {r.description ? (
+                      <p className="mt-1.5 line-clamp-2 text-sm text-white/50">{r.description}</p>
+                    ) : null}
+                    <div className="mt-3 flex items-center gap-2 border-t border-white/[0.05] pt-2.5">
+                      <button
+                        type="button"
+                        onClick={() => void toggleReminderDone(r)}
+                        className={`min-h-[40px] flex-1 rounded-lg text-xs font-medium ${
+                          done ? "text-white/45" : "bg-white/[0.06] text-emerald-200/90"
+                        }`}
+                      >
+                        {done ? "Reopen" : "Done"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openEditReminder(r)}
+                        className="min-h-[40px] rounded-lg px-3 text-xs text-white/50"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void deleteReminder(r)}
+                        className="min-h-[40px] rounded-lg px-2 text-xs text-red-300/60"
+                      >
+                        Del
+                      </button>
+                    </div>
                   </div>
                 </article>
               );
@@ -1016,6 +918,21 @@ export default function TeamClient() {
               onChange={(e) => setTaskForm((f) => ({ ...f, title: e.target.value }))}
               className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
             />
+
+            <label className="mt-3 block text-xs font-medium text-white/50">Priority</label>
+            <select
+              value={taskForm.priority}
+              onChange={(e) =>
+                setTaskForm((f) => ({ ...f, priority: e.target.value as TeamTaskPriority }))
+              }
+              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
+            >
+              {TEAM_PRIORITIES.map((p) => (
+                <option key={p} value={p}>
+                  {TEAM_PRIORITY_LABELS[p]}
+                </option>
+              ))}
+            </select>
 
             <label className="mt-3 block text-xs font-medium text-white/50">Notes</label>
             <textarea

@@ -1,4 +1,5 @@
-import type { TeamAdTask, TeamAdTaskStatus } from "@prisma/client";
+import type { TeamAdTask, TeamAdTaskStatus, TeamTaskPriority } from "@prisma/client";
+import { priorityRank } from "@/lib/team-priority";
 
 export type TeamTaskDto = {
   id: string;
@@ -14,6 +15,8 @@ export type TeamTaskDto = {
   deadlineDate: string | null;
   deadlineTime: string | null;
   assigneeId: string;
+  priority: TeamTaskPriority;
+  sortOrder: number;
   status: TeamAdTaskStatus;
   createdBy: string;
   completedBy: string | null;
@@ -37,6 +40,8 @@ export function toTeamTaskDto(row: TeamAdTask): TeamTaskDto {
     deadlineDate: row.deadlineDate,
     deadlineTime: row.deadlineTime,
     assigneeId: row.assigneeId,
+    priority: row.priority,
+    sortOrder: row.sortOrder,
     status: row.status,
     createdBy: row.createdBy,
     completedBy: row.completedBy,
@@ -79,6 +84,18 @@ export function filterTeamTasks(tasks: TeamAdTask[], filter: TeamTaskFilter): Te
     default:
       return tasks;
   }
+}
+
+export function sortTeamTasks(tasks: TeamAdTask[]): TeamAdTask[] {
+  return [...tasks].sort((a, b) => {
+    const statusOrder = (s: TeamAdTaskStatus) => (s === "TODO" ? 0 : 1);
+    const statusCmp = statusOrder(a.status) - statusOrder(b.status);
+    if (statusCmp !== 0) return statusCmp;
+    const pri = priorityRank(a.priority) - priorityRank(b.priority);
+    if (pri !== 0) return pri;
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    return b.createdAt.getTime() - a.createdAt.getTime();
+  });
 }
 
 export function detectCreativeSource(url: string): "DRIVE_LINK" | "INSTAGRAM" | "NONE" {

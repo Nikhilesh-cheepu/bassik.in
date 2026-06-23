@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import { defaultTeamMemberId, isTeamMemberId } from "@/lib/team-members";
+import { normalizeTeamPriority } from "@/lib/team-priority";
 import { isTeamOutletId } from "@/lib/team-outlets";
 import {
   detectCreativeSource,
   filterTeamTasks,
   normalizeTeamEndTime,
   normalizeTeamStartDate,
+  sortTeamTasks,
   toTeamTaskDto,
   type TeamTaskFilter,
 } from "@/lib/team-tasks";
@@ -41,11 +43,11 @@ export async function GET(req: NextRequest) {
       ...(outletId && isTeamOutletId(outletId) ? { outletId } : {}),
       ...(assigneeId ? { assigneeId } : {}),
     },
-    orderBy: [{ status: "asc" }, { startDate: "asc" }, { createdAt: "desc" }],
+    orderBy: [{ priority: "asc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
   });
 
   const safeFilter = FILTERS.has(filter) ? filter : "all";
-  const filtered = filterTeamTasks(rows, safeFilter);
+  const filtered = sortTeamTasks(filterTeamTasks(rows, safeFilter));
 
   return NextResponse.json({
     tasks: filtered.map(toTeamTaskDto),
@@ -77,6 +79,12 @@ export async function POST(req: NextRequest) {
   const endTime = typeof body.endTime === "string" ? body.endTime.trim() : "";
   const deadlineDate = typeof body.deadlineDate === "string" ? body.deadlineDate.trim() : "";
   const deadlineTime = typeof body.deadlineTime === "string" ? body.deadlineTime.trim() : "";
+  const priority = normalizeTeamPriority(
+    typeof body.priority === "string" ? body.priority : undefined
+  );
+
+  const maxSort = await prisma.teamAdTask.aggregate({ _max: { sortOrder: true } });
+  const sortOrder = (maxSort._max.sortOrder ?? 0) + 1000;
 
   if (!isTeamOutletId(outletId)) {
     return NextResponse.json({ error: "Pick a valid outlet" }, { status: 400 });
@@ -101,6 +109,8 @@ export async function POST(req: NextRequest) {
     data: {
       outletId,
       assigneeId,
+      priority,
+      sortOrder,
       title: finalTitle,
       description: description || null,
       creativeUrl: creativeUrl || null,
