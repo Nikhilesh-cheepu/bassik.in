@@ -20,6 +20,7 @@ import type { TeamReminderDto } from "@/lib/team-reminders";
 import type { TeamTaskPriority } from "@prisma/client";
 import { TEAM_PRIORITY_LABELS, TEAM_PRIORITIES } from "@/lib/team-priority";
 import AdTaskList from "./AdTaskList";
+import ExpandableText from "./ExpandableText";
 
 type TeamUser = { username: string; role: "admin" | "member" | "viewer"; memberId?: string };
 type TeamMember = { id: string; name: string; role?: string };
@@ -802,9 +803,7 @@ export default function TeamClient() {
                         {meta}
                       </p>
                     ) : null}
-                    {r.description ? (
-                      <p className="mt-1.5 line-clamp-2 text-sm text-white/50">{r.description}</p>
-                    ) : null}
+                    {r.description ? <ExpandableText text={r.description} /> : null}
                     <div className="mt-3 flex items-center gap-2 border-t border-white/[0.05] pt-2.5">
                       <button
                         type="button"

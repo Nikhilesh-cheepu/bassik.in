@@ -32,6 +32,7 @@ import {
   type TeamTaskDto,
 } from "@/lib/team-tasks";
 import { formatTeamEndDateTime as formatDeadline, isPastDeadline } from "@/lib/team-end-time";
+import ExpandableText from "./ExpandableText";
 
 type TeamMember = { id: string; name: string };
 
@@ -161,9 +162,7 @@ function AdTaskCard({
           <p className={`mt-1 text-xs ${overdue ? "text-red-300/80" : "text-white/38"}`}>
             {taskMetaLine(task, members, showAssignee)}
           </p>
-          {task.description ? (
-            <p className="mt-1.5 line-clamp-2 text-sm text-white/50">{task.description}</p>
-          ) : null}
+          {task.description ? <ExpandableText text={task.description} /> : null}
           {!done && task.endDate ? (
             <p className="mt-1 text-[11px] text-white/30">
               Runs until {formatTeamEndDateTime(task.endDate, task.endTime)}
