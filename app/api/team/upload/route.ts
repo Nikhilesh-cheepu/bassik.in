@@ -34,21 +34,31 @@ export async function POST(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.role !== "admin") {
-    return NextResponse.json({ error: "Only admin can upload creatives" }, { status: 403 });
+  if (session.role === "viewer") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const formData = await req.formData().catch(() => null);
   const file = formData?.get("file");
   const outletField = formData?.get("outletId");
+  const kindField = formData?.get("kind");
   const outletId = typeof outletField === "string" ? outletField.trim() : "general";
+  const isReference = kindField === "reference";
+
+  if (!isReference && session.role !== "admin") {
+    return NextResponse.json({ error: "Only admin can upload creatives" }, { status: 403 });
+  }
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
 
   const mimeType = resolveMime(file);
-  if (
+  if (isReference) {
+    if (!mimeType?.startsWith("image/")) {
+      return NextResponse.json({ error: "Reference uploads must be images." }, { status: 400 });
+    }
+  } else if (
     !mimeType ||
     !ALLOWED_PREFIXES.some((p) => mimeType.startsWith(p) || mimeType === "application/pdf")
   ) {
@@ -70,7 +80,8 @@ export async function POST(req: NextRequest) {
   const slug = isTeamOutletId(outletId) ? outletId : "general";
   const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
   const safeName = (file.name || `creative.${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
-  const pathname = `team/creatives/${slug}/${Date.now()}-${safeName}`;
+  const folder = isReference ? "references" : "creatives";
+  const pathname = `team/${folder}/${slug}/${Date.now()}-${safeName}`;
 
   try {
     const bytes = Buffer.from(await file.arrayBuffer());

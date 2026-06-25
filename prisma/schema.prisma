@@ -387,6 +387,12 @@ enum TeamCreativeSource {
   NONE
 }
 
+enum TeamPlanningType {
+  PLANNING
+  DISCUSSION
+  FEEDBACK
+}
+
 /// SEO & performance marketing ad/creative tasks (internal /team board).
 model TeamAdTask {
   id              String              @id @default(cuid())
@@ -396,6 +402,7 @@ model TeamAdTask {
   creativeUrl     String?
   creativeSource  TeamCreativeSource  @default(NONE)
   uploadedUrl     String?
+  referenceUrls   Json?               // string[] — moodboards / refs in Blob
   startDate       String?             // YYYY-MM-DD or ASAP
   endDate         String?             // YYYY-MM-DD
   endTime         String?             // morning | afternoon | evening | midnight | HH:MM
@@ -419,6 +426,23 @@ model TeamAdTask {
   @@index([startDate])
   @@index([endDate])
   @@index([deadlineDate])
+  @@index([createdAt])
+}
+
+/// Team planning, discussions & feedback (shared workspace on /team).
+model TeamPlanningNote {
+  id          String           @id @default(cuid())
+  type        TeamPlanningType @default(PLANNING)
+  title       String
+  body        String?
+  outletId    String?
+  imageUrls   Json?            // string[]
+  createdBy   String
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([type])
+  @@index([outletId])
   @@index([createdAt])
 }
 

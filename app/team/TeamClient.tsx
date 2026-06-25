@@ -21,12 +21,28 @@ import type { TeamTaskPriority } from "@prisma/client";
 import { TEAM_PRIORITY_LABELS, TEAM_PRIORITIES } from "@/lib/team-priority";
 import AdTaskList from "./AdTaskList";
 import ExpandableText from "./ExpandableText";
+import TeamBottomNav, { type TeamTab } from "./TeamBottomNav";
+import TeamAiPanel from "./TeamAiPanel";
+import {
+  emptyPlanningForm,
+  PlanningFilters,
+  PlanningFormSheet,
+  PlanningNoteList,
+  type PlanningForm,
+} from "./TeamPlanningView";
+import type { TeamPlanningDto, TeamPlanningFilter } from "@/lib/team-planning";
 
 type TeamUser = { username: string; role: "admin" | "member" | "viewer"; memberId?: string };
 type TeamMember = { id: string; name: string; role?: string };
 type Filter = "all" | "todo" | "done";
 type MemberTab = "all" | string;
-type ViewMode = "ads" | "reminders";
+
+const TAB_TITLES: Record<TeamTab, string> = {
+  ads: "Ads & creatives",
+  planning: "Planning & feedback",
+  reminders: "My reminders",
+  ai: "AI assistant",
+};
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
@@ -53,6 +69,7 @@ type TaskForm = {
   deadlineTimeMode: TeamEndTimeMode;
   deadlineTimeCustom: string;
   priority: TeamTaskPriority;
+  referenceUrls: string[];
 };
 
 type ReminderForm = {
@@ -82,6 +99,7 @@ const emptyTaskForm = (assigneeId = "amit"): TaskForm => ({
   deadlineTimeMode: "none",
   deadlineTimeCustom: "",
   priority: "NORMAL",
+  referenceUrls: [],
 });
 
 const emptyReminderForm = (): ReminderForm => ({
@@ -96,6 +114,21 @@ const emptyReminderForm = (): ReminderForm => ({
 
 function memberName(members: TeamMember[], id: string): string {
   return members.find((m) => m.id === id)?.name ?? id;
+}
+
+async function readTeamApiJson(res: Response) {
+  const text = await res.text();
+  if (!text) {
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    return {};
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      res.ok ? "Invalid server response" : `Server error (${res.status}) — try refreshing`
+    );
+  }
 }
 
 function chipClass(active: boolean, tone: "cyan" | "violet" = "cyan"): string {
@@ -191,11 +224,18 @@ export default function TeamClient() {
   const [booting, setBooting] = useState(true);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("ads");
+  const [tab, setTab] = useState<TeamTab>("ads");
   const [tasks, setTasks] = useState<TeamTaskDto[]>([]);
   const [reminders, setReminders] = useState<TeamReminderDto[]>([]);
+  const [planningNotes, setPlanningNotes] = useState<TeamPlanningDto[]>([]);
   const [tasksReady, setTasksReady] = useState(false);
   const [remindersReady, setRemindersReady] = useState(false);
+  const [planningReady, setPlanningReady] = useState(false);
+  const [planningFilter, setPlanningFilter] = useState<TeamPlanningFilter>("all");
+  const [showPlanningForm, setShowPlanningForm] = useState(false);
+  const [editingPlanning, setEditingPlanning] = useState<TeamPlanningDto | null>(null);
+  const [planningForm, setPlanningForm] = useState<PlanningForm>(emptyPlanningForm);
+  const [refUploading, setRefUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>("todo");
   const [memberTab, setMemberTab] = useState<MemberTab>("all");
@@ -214,14 +254,14 @@ export default function TeamClient() {
   const soleMember = members.length === 1 ? members[0] : null;
   const isViewer = user?.role === "viewer";
   const canBrowseAllMembers = user?.role === "admin" || user?.role === "viewer";
-  const showMemberTabs = canBrowseAllMembers && members.length > 1 && viewMode === "ads";
+  const showMemberTabs = canBrowseAllMembers && members.length > 1 && tab === "ads";
 
   const counts = useMemo(() => {
-    const list = viewMode === "ads" ? tasks : reminders;
+    const list = tab === "ads" ? tasks : tab === "reminders" ? reminders : [];
     const todo = list.filter((t) => t.status === "TODO").length;
     const done = list.filter((t) => t.status === "DONE").length;
     return { todo, done };
-  }, [tasks, reminders, viewMode]);
+  }, [tasks, reminders, tab]);
 
   const loadMembers = useCallback(async () => {
     const res = await fetch("/api/team/members");
@@ -230,7 +270,7 @@ export default function TeamClient() {
       return;
     }
     if (res.ok) {
-      const data = await res.json();
+      const data = await readTeamApiJson(res);
       setMembers(data.members ?? []);
     }
   }, []);
@@ -248,7 +288,7 @@ export default function TeamClient() {
           setUser(null);
           return;
         }
-        const data = await res.json();
+        const data = await readTeamApiJson(res);
         if (!res.ok) throw new Error(data.error || "Could not load tasks");
         setTasks(data.tasks ?? []);
         setTasksReady(true);
@@ -272,7 +312,7 @@ export default function TeamClient() {
           setUser(null);
           return;
         }
-        const data = await res.json();
+        const data = await readTeamApiJson(res);
         if (!res.ok) throw new Error(data.error || "Could not load reminders");
         setReminders(data.reminders ?? []);
         setRemindersReady(true);
@@ -285,11 +325,36 @@ export default function TeamClient() {
     [filter]
   );
 
+  const loadPlanning = useCallback(
+    async (silent = false) => {
+      if (!silent) setRefreshing(true);
+      setError(null);
+      try {
+        const qs = new URLSearchParams();
+        if (planningFilter !== "all") qs.set("type", planningFilter);
+        const res = await fetch(`/api/team/planning?${qs}`);
+        if (res.status === 401) {
+          setUser(null);
+          return;
+        }
+        const data = await readTeamApiJson(res);
+        if (!res.ok) throw new Error(data.error || "Could not load planning");
+        setPlanningNotes(data.notes ?? []);
+        setPlanningReady(true);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Load failed");
+      } finally {
+        setRefreshing(false);
+      }
+    },
+    [planningFilter]
+  );
+
   const probeSession = useCallback(async () => {
     try {
       const res = await fetch("/api/team/auth");
       if (res.ok) {
-        const data = await res.json();
+        const data = await readTeamApiJson(res);
         setUser(data.user ?? null);
       } else setUser(null);
     } finally {
@@ -302,27 +367,40 @@ export default function TeamClient() {
   }, [probeSession]);
 
   useEffect(() => {
-    if (user?.role === "viewer") setViewMode("ads");
-  }, [user?.role]);
-
-  useEffect(() => {
     if (!user) return;
     void loadMembers();
   }, [user, loadMembers]);
 
   useEffect(() => {
     if (!user) return;
-    if (viewMode === "ads") void loadTasks(tasksReady);
-    else if (!isViewer) void loadReminders(remindersReady);
-  }, [user, viewMode, loadTasks, loadReminders, isViewer]);
+    if (tab === "ads") void loadTasks(tasksReady);
+    else if (tab === "reminders" && !isViewer) void loadReminders(remindersReady);
+    else if (tab === "planning") void loadPlanning(planningReady);
+  }, [user, tab, loadTasks, loadReminders, loadPlanning, isViewer]);
 
   useEffect(() => {
-    const open = showTaskForm || showReminderForm;
+    if (!user || tab !== "planning") return;
+    void loadPlanning(planningReady);
+  }, [planningFilter]);
+
+  useEffect(() => {
+    const open = showTaskForm || showReminderForm || showPlanningForm;
     document.body.style.overflow = open ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
-  }, [showTaskForm, showReminderForm]);
+  }, [showTaskForm, showReminderForm, showPlanningForm]);
+
+  const uploadBlob = async (file: File, kind: "creative" | "reference") => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("outletId", taskForm.outletId);
+    fd.append("kind", kind);
+    const res = await fetch("/api/team/upload", { method: "POST", body: fd });
+    const data = await readTeamApiJson(res);
+    if (!res.ok) throw new Error(data.error || "Upload failed");
+    return data.url as string;
+  };
 
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -332,14 +410,13 @@ export default function TeamClient() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password }),
     });
-    const data = await res.json();
+    const data = await readTeamApiJson(res);
     if (!res.ok) {
       setLoginError(data.error || "Invalid password");
       return;
     }
     setUser(data.user);
     setPassword("");
-    if (data.user?.role === "viewer") setViewMode("ads");
   };
 
   const logout = async () => {
@@ -347,10 +424,13 @@ export default function TeamClient() {
     setUser(null);
     setMembers([]);
     setMemberTab("all");
+    setTab("ads");
     setTasks([]);
     setReminders([]);
+    setPlanningNotes([]);
     setTasksReady(false);
     setRemindersReady(false);
+    setPlanningReady(false);
   };
 
   const resolveAssigneeId = () =>
@@ -385,6 +465,7 @@ export default function TeamClient() {
       deadlineTimeMode: dl.mode,
       deadlineTimeCustom: dl.customTime,
       priority: task.priority,
+      referenceUrls: task.referenceUrls ?? [],
     });
     setShowTaskForm(true);
   };
@@ -415,23 +496,106 @@ export default function TeamClient() {
     setError(null);
     setUploadStatus(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("outletId", taskForm.outletId);
-      const res = await fetch("/api/team/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      setUploadStatus({ fileName: data.fileName || file.name, siteUrl: data.url });
+      const url = await uploadBlob(file, "creative");
+      setUploadStatus({ fileName: file.name, siteUrl: url });
       setTaskForm((f) => ({
         ...f,
-        uploadedUrl: data.url ?? "",
-        uploadedName: data.fileName || file.name,
+        uploadedUrl: url,
+        uploadedName: file.name,
       }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setUploading(false);
     }
+  };
+
+  const uploadReference = async (file: File) => {
+    setRefUploading(true);
+    setError(null);
+    try {
+      const url = await uploadBlob(file, "reference");
+      setTaskForm((f) => ({ ...f, referenceUrls: [...f.referenceUrls, url] }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setRefUploading(false);
+    }
+  };
+
+  const uploadPlanningImage = async (file: File) => {
+    setRefUploading(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("outletId", planningForm.outletId || taskForm.outletId);
+      fd.append("kind", "reference");
+      const res = await fetch("/api/team/upload", { method: "POST", body: fd });
+      const data = await readTeamApiJson(res);
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setPlanningForm((f) => ({ ...f, imageUrls: [...f.imageUrls, data.url] }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setRefUploading(false);
+    }
+  };
+
+  const openCreatePlanning = () => {
+    setEditingPlanning(null);
+    setPlanningForm(emptyPlanningForm());
+    setShowPlanningForm(true);
+  };
+
+  const openEditPlanning = (n: TeamPlanningDto) => {
+    setEditingPlanning(n);
+    setPlanningForm({
+      type: n.type,
+      title: n.title,
+      body: n.body ?? "",
+      outletId: n.outletId ?? "",
+      imageUrls: n.imageUrls,
+    });
+    setShowPlanningForm(true);
+  };
+
+  const savePlanning = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = {
+        type: planningForm.type,
+        title: planningForm.title.trim(),
+        body: planningForm.body.trim(),
+        outletId: planningForm.outletId,
+        imageUrls: planningForm.imageUrls,
+      };
+      const url = editingPlanning
+        ? `/api/team/planning/${editingPlanning.id}`
+        : "/api/team/planning";
+      const res = await fetch(url, {
+        method: editingPlanning ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await readTeamApiJson(res);
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      setShowPlanningForm(false);
+      setEditingPlanning(null);
+      await loadPlanning(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deletePlanningNote = async (n: TeamPlanningDto) => {
+    if (!window.confirm(`Delete "${n.title}"?`)) return;
+    const res = await fetch(`/api/team/planning/${n.id}`, { method: "DELETE" });
+    if (res.ok) await loadPlanning(true);
   };
 
   const saveTask = async (e: React.FormEvent) => {
@@ -452,6 +616,7 @@ export default function TeamClient() {
         deadlineDate: taskForm.deadlineDate,
         deadlineTime: resolveEndTimeForSave(taskForm.deadlineTimeMode, taskForm.deadlineTimeCustom),
         priority: taskForm.priority,
+        referenceUrls: taskForm.referenceUrls,
       };
       const url = editing ? `/api/team/tasks/${editing.id}` : "/api/team/tasks";
       const res = await fetch(url, {
@@ -459,7 +624,7 @@ export default function TeamClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data = await readTeamApiJson(res);
       if (!res.ok) throw new Error(data.error || "Save failed");
       setShowTaskForm(false);
       setEditing(null);
@@ -495,7 +660,7 @@ export default function TeamClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data = await readTeamApiJson(res);
       if (!res.ok) throw new Error(data.error || "Save failed");
       setShowReminderForm(false);
       setEditingReminder(null);
@@ -549,7 +714,7 @@ export default function TeamClient() {
     if (res.ok) await loadTasks(true);
   };
 
-  const canDragTasks = user?.role === "admin" && filter === "todo" && viewMode === "ads";
+  const canDragTasks = user?.role === "admin" && filter === "todo" && tab === "ads";
 
   const deleteReminder = async (r: TeamReminderDto) => {
     if (!window.confirm(`Delete "${r.title}"?`)) return;
@@ -566,8 +731,10 @@ export default function TeamClient() {
 
   const activeMemberLabel =
     memberTab !== "all" ? memberName(members, memberTab) : null;
-  const listReady = viewMode === "ads" ? tasksReady : remindersReady;
-  const listEmpty = viewMode === "ads" ? tasks.length === 0 : reminders.length === 0;
+  const listReady =
+    tab === "ads" ? tasksReady : tab === "reminders" ? remindersReady : tab === "planning" ? planningReady : true;
+  const listEmpty =
+    tab === "ads" ? tasks.length === 0 : tab === "reminders" ? reminders.length === 0 : tab === "planning" ? planningNotes.length === 0 : false;
 
   if (booting) {
     return (
@@ -618,16 +785,16 @@ export default function TeamClient() {
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300/70">
                 Bassik Team
               </p>
-              <h1 className="truncate text-base font-semibold">
-                {viewMode === "ads" ? "Ads & creatives" : "My reminders"}
-              </h1>
+              <h1 className="truncate text-base font-semibold">{TAB_TITLES[tab]}</h1>
               <p className="text-[11px] text-white/40">
                 {user.role === "admin"
                   ? "Admin"
                   : user.role === "viewer"
                     ? "Viewer · read-only"
-                    : memberName(members, user.memberId ?? user.username)}{" "}
-                · {counts.todo} to do · {counts.done} done
+                    : memberName(members, user.memberId ?? user.username)}
+                {tab === "ads" || tab === "reminders"
+                  ? ` · ${counts.todo} to do · ${counts.done} done`
+                  : null}
                 {refreshing ? " · …" : ""}
               </p>
             </div>
@@ -640,49 +807,22 @@ export default function TeamClient() {
             </button>
           </div>
 
-          {!isViewer ? (
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setViewMode("ads")}
-                className={`flex-1 rounded-xl py-2.5 text-xs font-semibold min-h-[44px] ${
-                  viewMode === "ads"
-                    ? "bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/30"
-                    : "bg-white/[0.04] text-white/50"
-                }`}
-              >
-                Ad tasks
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("reminders")}
-                className={`flex-1 rounded-xl py-2.5 text-xs font-semibold min-h-[44px] ${
-                  viewMode === "reminders"
-                    ? "bg-amber-500/20 text-amber-100 ring-1 ring-amber-400/30"
-                    : "bg-white/[0.04] text-white/50"
-                }`}
-              >
-                My reminders
-              </button>
-            </div>
-          ) : null}
-
-          <div className={`flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isViewer ? "mt-3" : ""}`}>
-            {FILTERS.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setFilter(f.id)}
-                className={chipClass(filter === f.id)}
-              >
-                {f.label}
-              </button>
-            ))}
-            {viewMode === "ads" ? (
+          {tab === "ads" ? (
+            <div className={`mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}>
+              {FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setFilter(f.id)}
+                  className={chipClass(filter === f.id)}
+                >
+                  {f.label}
+                </button>
+              ))}
               <select
                 value={outletFilter}
                 onChange={(e) => setOutletFilter(e.target.value)}
-                className="shrink-0 rounded-full border border-white/10 bg-black/30 px-3 py-2 text-xs text-white/70 min-h-[40px]"
+                className="shrink-0 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-white/70"
               >
                 <option value="">All outlets</option>
                 {TEAM_AD_OUTLETS.map((o) => (
@@ -691,8 +831,27 @@ export default function TeamClient() {
                   </option>
                 ))}
               </select>
-            ) : null}
-          </div>
+            </div>
+          ) : tab === "planning" ? (
+            <div className="mt-3">
+              <PlanningFilters filter={planningFilter} onFilterChange={setPlanningFilter} />
+            </div>
+          ) : tab === "reminders" ? (
+            <div className="mt-3 flex gap-2">
+              {FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setFilter(f.id)}
+                  className={chipClass(filter === f.id)}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-2" />
+          )}
 
           {showMemberTabs ? (
             <div className="mt-2 flex gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -736,9 +895,9 @@ export default function TeamClient() {
               />
             ))}
           </div>
-        ) : listEmpty ? (
+        ) : listEmpty && tab !== "ai" ? (
           <p className="py-16 text-center text-sm text-white/40">
-            {viewMode === "ads"
+            {tab === "ads"
               ? isViewer
                 ? activeMemberLabel
                   ? `No tasks for ${activeMemberLabel}.`
@@ -748,9 +907,13 @@ export default function TeamClient() {
                     ? `No tasks for ${activeMemberLabel}.`
                     : "No ad tasks here yet."
                   : "No tasks assigned to you yet."
-              : "No reminders yet. Tap + below to add one."}
+              : tab === "planning"
+                ? isViewer
+                  ? "No planning notes yet."
+                  : "No notes yet. Tap + below to add one."
+                : "No reminders yet. Tap + below to add one."}
           </p>
-        ) : viewMode === "ads" ? (
+        ) : tab === "ads" ? (
           <AdTaskList
             tasks={tasks}
             members={members}
@@ -764,6 +927,16 @@ export default function TeamClient() {
             onReorder={reorderTasks}
             onPriorityChange={changeTaskPriority}
           />
+        ) : tab === "planning" ? (
+          <PlanningNoteList
+            notes={planningNotes}
+            ready={planningReady}
+            isViewer={isViewer}
+            onEdit={openEditPlanning}
+            onDelete={(n) => void deletePlanningNote(n)}
+          />
+        ) : tab === "ai" ? (
+          <TeamAiPanel onTasksCreated={() => void loadTasks(true)} />
         ) : (
           <div className="space-y-2">
             {reminders.map((r) => {
@@ -837,40 +1010,54 @@ export default function TeamClient() {
         )}
       </main>
 
-      {!isViewer ? (
-        <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/[0.06] bg-[#06060a]/98 px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-          <div className="mx-auto flex max-w-lg gap-2">
-            {viewMode === "ads" && user.role === "admin" ? (
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#06060a]/98 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+        {!isViewer && tab !== "ai" ? (
+          <div className="mx-auto flex max-w-lg gap-2 px-3 py-2">
+            {tab === "ads" && user.role === "admin" ? (
               <>
                 <button
                   type="button"
                   onClick={exportExcel}
-                  className="min-h-[48px] rounded-xl border border-white/10 px-4 text-xs font-medium text-white/70"
+                  className="min-h-[44px] rounded-xl border border-white/10 px-3 text-xs text-white/60"
                 >
                   Export
                 </button>
                 <button
                   type="button"
                   onClick={openCreateTask}
-                  className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-sm font-semibold text-white"
+                  className="min-h-[44px] flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-sm font-semibold text-white"
                 >
-                  + New ad task
+                  + Ad task
                 </button>
               </>
-            ) : viewMode === "reminders" ? (
+            ) : tab === "planning" ? (
+              <button
+                type="button"
+                onClick={openCreatePlanning}
+                className="min-h-[44px] flex-1 rounded-xl bg-sky-500/80 text-sm font-semibold text-white"
+              >
+                + Note
+              </button>
+            ) : tab === "reminders" ? (
               <button
                 type="button"
                 onClick={openCreateReminder}
-                className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-sm font-semibold text-white"
+                className="min-h-[44px] flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-sm font-semibold text-white"
               >
-                + New reminder
+                + Reminder
               </button>
             ) : null}
           </div>
-        </div>
-      ) : null}
+        ) : null}
+        <TeamBottomNav
+          active={tab}
+          onChange={setTab}
+          hideReminders={isViewer}
+          hideAi={isViewer}
+        />
+      </div>
 
-      <div className={isViewer ? "h-4" : "h-24"} />
+      <div className="h-[108px]" />
 
       {showTaskForm && user.role === "admin" ? (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/75">
@@ -967,6 +1154,44 @@ export default function TeamClient() {
               <p className="text-xs text-emerald-300">✓ {uploadStatus.fileName}</p>
             ) : null}
 
+            <label className="mt-3 block text-xs font-medium text-white/50">
+              Reference images (moodboard / examples)
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              className="mt-1 block w-full text-sm text-white/60"
+              disabled={refUploading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void uploadReference(file);
+                e.target.value = "";
+              }}
+            />
+            {refUploading ? <p className="text-xs text-cyan-200">Uploading…</p> : null}
+            {taskForm.referenceUrls.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {taskForm.referenceUrls.map((url) => (
+                  <div key={url} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="" className="h-14 w-14 rounded-lg object-cover" />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTaskForm((f) => ({
+                          ...f,
+                          referenceUrls: f.referenceUrls.filter((u) => u !== url),
+                        }))
+                      }
+                      className="absolute -right-1 -top-1 rounded-full bg-black/80 px-1.5 text-[10px] text-red-300"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
             <div className="mt-4 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-white/50">Ad start</label>
@@ -1042,7 +1267,7 @@ export default function TeamClient() {
               </button>
               <button
                 type="submit"
-                disabled={saving || uploading}
+                disabled={saving || uploading || refUploading}
                 className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-sm font-semibold disabled:opacity-50"
               >
                 {saving ? "Saving…" : editing ? "Save" : "Create"}
@@ -1140,6 +1365,21 @@ export default function TeamClient() {
           </form>
         </div>
       ) : null}
+
+      <PlanningFormSheet
+        open={showPlanningForm}
+        form={planningForm}
+        setForm={setPlanningForm}
+        editing={editingPlanning}
+        saving={saving}
+        uploading={refUploading}
+        onClose={() => {
+          setShowPlanningForm(false);
+          setEditingPlanning(null);
+        }}
+        onSubmit={savePlanning}
+        onUploadImage={(file) => void uploadPlanningImage(file)}
+      />
     </div>
   );
 }

@@ -178,6 +178,20 @@ function AdTaskCard({
               View creative
             </a>
           ) : null}
+          {task.referenceUrls.length > 0 ? (
+            <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+              {task.referenceUrls.map((url) => (
+                <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={url}
+                    alt="Reference"
+                    className="h-14 w-14 rounded-lg object-cover ring-1 ring-white/10"
+                  />
+                </a>
+              ))}
+            </div>
+          ) : null}
           {!isViewer ? (
             <div className="mt-3 flex items-center gap-2 border-t border-white/[0.05] pt-2.5">
               <button

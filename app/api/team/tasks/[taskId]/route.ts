@@ -3,6 +3,7 @@ import { getTeamFromRequest } from "@/lib/team-auth";
 import { isTeamOutletId } from "@/lib/team-outlets";
 import { isTeamMemberId } from "@/lib/team-members";
 import { normalizeTeamPriority } from "@/lib/team-priority";
+import { parseUrlList } from "@/lib/team-planning";
 import { detectCreativeSource, normalizeTeamEndTime, normalizeTeamStartDate, toTeamTaskDto } from "@/lib/team-tasks";
 import { prisma } from "@/lib/db";
 
@@ -58,6 +59,10 @@ export async function PATCH(
       const url = typeof body.uploadedUrl === "string" ? body.uploadedUrl.trim() : "";
       data.uploadedUrl = url || null;
       if (url) data.creativeSource = "UPLOAD";
+    }
+    if (body.referenceUrls !== undefined) {
+      const urls = parseUrlList(body.referenceUrls);
+      data.referenceUrls = urls;
     }
     if (body.startDate !== undefined) {
       const d = typeof body.startDate === "string" ? body.startDate.trim() : "";

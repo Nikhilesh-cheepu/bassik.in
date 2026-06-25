@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTeamFromRequest } from "@/lib/team-auth";
-import { defaultTeamMemberId, isTeamMemberId } from "@/lib/team-members";
-import { normalizeTeamPriority } from "@/lib/team-priority";
+import { createTeamAdTask } from "@/lib/team-task-create";
+import { isTeamMemberId } from "@/lib/team-members";
 import { isTeamOutletId } from "@/lib/team-outlets";
 import {
-  detectCreativeSource,
   filterTeamTasks,
-  normalizeTeamEndTime,
-  normalizeTeamStartDate,
   sortTeamTasks,
   toTeamTaskDto,
   type TeamTaskFilter,
 } from "@/lib/team-tasks";
 import { prisma } from "@/lib/db";
+import { prismaSchemaErrorResponse } from "@/lib/prisma-schema-error";
 
 const FILTERS = new Set<TeamTaskFilter>(["all", "todo", "done"]);
 
@@ -38,22 +36,29 @@ export async function GET(req: NextRequest) {
     assigneeId = assigneeParam;
   }
 
-  const rows = await prisma.teamAdTask.findMany({
-    where: {
-      ...(outletId && isTeamOutletId(outletId) ? { outletId } : {}),
-      ...(assigneeId ? { assigneeId } : {}),
-    },
-    orderBy: [{ priority: "asc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
-  });
+  try {
+    const rows = await prisma.teamAdTask.findMany({
+      where: {
+        ...(outletId && isTeamOutletId(outletId) ? { outletId } : {}),
+        ...(assigneeId ? { assigneeId } : {}),
+      },
+      orderBy: [{ priority: "asc" }, { sortOrder: "asc" }, { createdAt: "desc" }],
+    });
 
-  const safeFilter = FILTERS.has(filter) ? filter : "all";
-  const filtered = sortTeamTasks(filterTeamTasks(rows, safeFilter));
+    const safeFilter = FILTERS.has(filter) ? filter : "all";
+    const filtered = sortTeamTasks(filterTeamTasks(rows, safeFilter));
 
-  return NextResponse.json({
-    tasks: filtered.map(toTeamTaskDto),
-    filter: safeFilter,
-    assignee: assigneeId ?? "all",
-  });
+    return NextResponse.json({
+      tasks: filtered.map(toTeamTaskDto),
+      filter: safeFilter,
+      assignee: assigneeId ?? "all",
+    });
+  } catch (error) {
+    const schema = prismaSchemaErrorResponse(error);
+    if (schema) return schema;
+    console.error("[team tasks GET]", error);
+    return NextResponse.json({ error: "Could not load tasks" }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -66,64 +71,30 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const outletId = typeof body.outletId === "string" ? body.outletId.trim() : "";
-  const assigneeId =
-    (typeof body.assigneeId === "string" ? body.assigneeId.trim() : "") ||
-    defaultTeamMemberId();
-  const title = typeof body.title === "string" ? body.title.trim() : "";
-  const description = typeof body.description === "string" ? body.description.trim() : "";
-  const creativeUrl = typeof body.creativeUrl === "string" ? body.creativeUrl.trim() : "";
-  const uploadedUrl = typeof body.uploadedUrl === "string" ? body.uploadedUrl.trim() : "";
-  const startDate = typeof body.startDate === "string" ? body.startDate.trim() : "";
-  const endDate = typeof body.endDate === "string" ? body.endDate.trim() : "";
-  const endTime = typeof body.endTime === "string" ? body.endTime.trim() : "";
-  const deadlineDate = typeof body.deadlineDate === "string" ? body.deadlineDate.trim() : "";
-  const deadlineTime = typeof body.deadlineTime === "string" ? body.deadlineTime.trim() : "";
-  const priority = normalizeTeamPriority(
-    typeof body.priority === "string" ? body.priority : undefined
-  );
 
-  const maxSort = await prisma.teamAdTask.aggregate({ _max: { sortOrder: true } });
-  const sortOrder = (maxSort._max.sortOrder ?? 0) + 1000;
-
-  if (!isTeamOutletId(outletId)) {
-    return NextResponse.json({ error: "Pick a valid outlet" }, { status: 400 });
+  try {
+    const task = await createTeamAdTask(
+      {
+        outletId: typeof body.outletId === "string" ? body.outletId : "",
+        assigneeId: typeof body.assigneeId === "string" ? body.assigneeId : undefined,
+        title: typeof body.title === "string" ? body.title : "",
+        description: typeof body.description === "string" ? body.description : undefined,
+        creativeUrl: typeof body.creativeUrl === "string" ? body.creativeUrl : undefined,
+        uploadedUrl: typeof body.uploadedUrl === "string" ? body.uploadedUrl : undefined,
+        referenceUrls: body.referenceUrls,
+        startDate: typeof body.startDate === "string" ? body.startDate : undefined,
+        endDate: typeof body.endDate === "string" ? body.endDate : undefined,
+        endTime: typeof body.endTime === "string" ? body.endTime : undefined,
+        deadlineDate: typeof body.deadlineDate === "string" ? body.deadlineDate : undefined,
+        deadlineTime: typeof body.deadlineTime === "string" ? body.deadlineTime : undefined,
+        priority: typeof body.priority === "string" ? body.priority : undefined,
+      },
+      session.username
+    );
+    return NextResponse.json({ task });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Create failed";
+    const status = message.includes("Invalid") || message.includes("long") ? 400 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
-  if (!isTeamMemberId(assigneeId)) {
-    return NextResponse.json({ error: "Pick a team member" }, { status: 400 });
-  }
-
-  const finalTitle = title || description.slice(0, 80) || `Ad — ${outletId}`;
-  if (finalTitle.length > 200) {
-    return NextResponse.json({ error: "Title too long" }, { status: 400 });
-  }
-
-  let creativeSource: "DRIVE_LINK" | "INSTAGRAM" | "UPLOAD" | "NONE" = "NONE";
-  if (uploadedUrl) {
-    creativeSource = "UPLOAD";
-  } else if (creativeUrl) {
-    creativeSource = detectCreativeSource(creativeUrl);
-  }
-
-  const row = await prisma.teamAdTask.create({
-    data: {
-      outletId,
-      assigneeId,
-      priority,
-      sortOrder,
-      title: finalTitle,
-      description: description || null,
-      creativeUrl: creativeUrl || null,
-      creativeSource,
-      uploadedUrl: uploadedUrl || null,
-      startDate: normalizeTeamStartDate(startDate),
-      endDate: /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? endDate : null,
-      endTime: normalizeTeamEndTime(endTime),
-      deadlineDate: /^\d{4}-\d{2}-\d{2}$/.test(deadlineDate) ? deadlineDate : null,
-      deadlineTime: normalizeTeamEndTime(deadlineTime),
-      createdBy: session.username,
-    },
-  });
-
-  return NextResponse.json({ task: toTeamTaskDto(row) });
 }

@@ -1,4 +1,5 @@
 import type { TeamAdTask, TeamAdTaskStatus, TeamTaskPriority } from "@prisma/client";
+import { parseUrlList } from "@/lib/team-planning";
 import { priorityRank } from "@/lib/team-priority";
 
 export type TeamTaskDto = {
@@ -9,6 +10,7 @@ export type TeamTaskDto = {
   creativeUrl: string | null;
   creativeSource: string;
   uploadedUrl: string | null;
+  referenceUrls: string[];
   startDate: string | null;
   endDate: string | null;
   endTime: string | null;
@@ -34,6 +36,7 @@ export function toTeamTaskDto(row: TeamAdTask): TeamTaskDto {
     creativeUrl: row.creativeUrl,
     creativeSource: row.creativeSource,
     uploadedUrl: row.uploadedUrl,
+    referenceUrls: parseUrlList(row.referenceUrls),
     startDate: row.startDate,
     endDate: row.endDate,
     endTime: row.endTime,
