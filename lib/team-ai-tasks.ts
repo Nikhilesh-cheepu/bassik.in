@@ -19,40 +19,41 @@ function buildParseSystem() {
     .map((m) => `- ${m.name} (say "${m.name}" or "${m.id}") → assigneeId: "${m.id}"`)
     .join("\n");
 
-  return `You parse Bassik team ad briefs into structured tasks. Today is used to infer year when only day+month given (e.g. "26 June" → 2026-06-26 if June 2026 is upcoming).
+  return `You parse Bassik team ad briefs into structured tasks. Be FLEXIBLE — the user speaks casually, mixes Hindi/English, uses short lines, and may skip details. Your job is to CREATE tasks, not write long briefs back.
 
-Valid outlet ids (match fuzzy names like "Club Rogue Gachibowli"):
+Today is used to infer year when only day+month given (e.g. "27 june" → 2026-06-27).
+
+Valid outlet ids (match fuzzy/short names — boilerroom → boiler-room, c53 → c53):
 ${OUTLET_MAP}
 
 Team members — ALWAYS set assigneeId when the user names someone:
 ${memberLines}
 
-Assignee rules (very important):
-- Phrases like "assign to Amit", "for Mahesh", "give to Jeslyn", "Amit should do" → set defaultAssigneeId or per-task assigneeId
-- If one person for the whole brief, set defaultAssigneeId AND each task's assigneeId
-- If different people per line, set assigneeId on each task
-- Only default to amit when NO member is mentioned anywhere in the brief or conversation context
-- assigneeId must be the member id string (amit, jeslyn, mahesh), not the display name
+Assignee rules:
+- "assign to/for Jeslyn", "for Mahesh", "give Amit", "Jeslyn should do" → assigneeId
+- One person for whole brief → same assigneeId on every task
+- Different people per line → per-task assigneeId
+- Only default to amit when NO member is mentioned
+- assigneeId must be member id (amit, jeslyn, mahesh), not display name
 
-When the user names outlets + a creative/task (flyer, post, ad, creative) with or without links, set shouldCreateTasks=true.
-Create ONE task per outlet mentioned (comma-separated counts as multiple outlets).
-Links are optional — do not require Instagram/Drive URLs to create tasks.
-Other defaults unless overridden:
-- priority: HIGH
-- startDate: ASAP
-- endDate + deadlineDate: event date
-- endTime + deadlineTime: "evening" when they say evening/11pm/11
-- creativeUrl: Instagram/Drive link on that line
-- title: shared campaign title + outlet/theme suffix when multiple lines
+Task creation rules (default: CREATE tasks):
+- If user mentions outlet(s) + any work (flyer, post, ad, creative, story, reel, banner, event) → shouldCreateTasks=true
+- ONE task per outlet (comma-separated = multiple tasks)
+- Links optional — never block creation because a link is missing
+- Infer sensible titles from context ("monday flyer" → "Monday flyer — {outlet}")
+- Infer dates from "27th june", "by friday", "asap", "this weekend"
+- priority: HIGH unless user says normal/low
+- startDate: ASAP unless a start date is given
+- Put the user's full message in description when helpful
 
-If the message is a normal question (summarize, advice), set shouldCreateTasks=false and tasks=[].
+ONLY set shouldCreateTasks=false for clear questions: "summarize", "what's pending", "who has most tasks" — with NO new work requested.
 
 Respond with JSON only:
 {
   "shouldCreateTasks": boolean,
   "defaultAssigneeId": "member id or omit",
   "tasks": [{ "outletId", "title", "description?", "creativeUrl?", "referenceUrls?", "startDate?", "endDate?", "endTime?", "deadlineDate?", "deadlineTime?", "priority?", "assigneeId?" }],
-  "reply": "short friendly message — mention who tasks are assigned to"
+  "reply": "1-2 short sentences — confirm what you created and for whom. No markdown essays."
 }`;
 }
 
@@ -147,9 +148,14 @@ export function looksLikeTaskBrief(text: string): boolean {
 
 /** Admin: try task parser unless the message is clearly a Q&A request. */
 export function shouldTryTaskParse(text: string, isAdmin: boolean): boolean {
-  if (!isAdmin) return looksLikeTaskBrief(text);
   if (isSummarizeQuestion(text)) return false;
-  return looksLikeTaskBrief(text) || OUTLET_PATTERN.test(text) || resolveTeamMemberFromText(text) !== undefined;
+  if (!isAdmin) return looksLikeTaskBrief(text);
+  // Admin: be flexible — try to create tasks unless it's clearly just a question
+  if (looksLikeTaskBrief(text)) return true;
+  if (OUTLET_PATTERN.test(text)) return true;
+  if (resolveTeamMemberFromText(text)) return true;
+  if (BRIEF_CUE_PATTERN.test(text) && text.trim().length >= 12) return true;
+  return false;
 }
 
 export async function parseBriefForTasks(

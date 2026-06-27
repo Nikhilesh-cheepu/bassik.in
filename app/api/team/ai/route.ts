@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   try {
     if (shouldTryTaskParse(lastUser, isAdmin)) {
       const parsed = await parseBriefForTasks(lastUser, userContext);
-      const willCreate = isAdmin && parsed.tasks.length > 0 && (parsed.shouldCreateTasks || looksLikeTaskBrief(lastUser));
+      const willCreate = isAdmin && parsed.tasks.length > 0;
 
       if (willCreate) {
         const { created, errors } = await createTeamAdTasks(parsed.tasks, session.username);
