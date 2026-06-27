@@ -38,10 +38,11 @@ export async function POST(req: NextRequest) {
     .slice(-4)
     .map((m) => m.content)
     .join("\n");
+  const fullBrief = [userContext, lastUser].filter(Boolean).join("\n");
   const isAdmin = session.role === "admin";
 
   try {
-    if (shouldTryTaskParse(lastUser, isAdmin)) {
+    if (shouldTryTaskParse(lastUser, isAdmin, userContext)) {
       const parsed = await parseBriefForTasks(lastUser, userContext);
       const willCreate = isAdmin && parsed.tasks.length > 0;
 
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
         const { created, errors } = await createTeamAdTasks(parsed.tasks, session.username);
         const lines = created.map(
           (t) =>
-            `• ${t.title} — ${teamOutletLabel(t.outletId)} → ${teamMemberName(t.assigneeId)} [HIGH]`
+            `• ${t.title} — ${teamOutletLabel(t.outletId)} → ${teamMemberName(t.assigneeId)} [${t.priority}]`
         );
         let reply = parsed.reply;
         if (created.length) {
@@ -68,8 +69,15 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      if (parsed.tasks.length > 0 || looksLikeTaskBrief(lastUser)) {
+      if (parsed.tasks.length > 0) {
         return NextResponse.json({ reply: parsed.reply, previewTasks: parsed.tasks });
+      }
+
+      if (looksLikeTaskBrief(fullBrief)) {
+        return NextResponse.json({
+          reply:
+            "I understood the brief but couldn't create tasks. Paste outlet names (e.g. C53, Firefly), assignee, and links in one message — or try again.",
+        });
       }
     }
 

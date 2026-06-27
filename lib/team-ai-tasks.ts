@@ -1,5 +1,6 @@
 import OpenAI from "openai";
-import { TEAM_AD_OUTLETS, isTeamOutletId } from "@/lib/team-outlets";
+import type { TeamTaskPriority } from "@prisma/client";
+import { TEAM_AD_OUTLETS, isTeamOutletId, type TeamOutletId } from "@/lib/team-outlets";
 import {
   defaultTeamMemberId,
   getTeamMemberRoster,
@@ -37,14 +38,17 @@ Assignee rules:
 - assigneeId must be member id (amit, jeslyn, mahesh), not display name
 
 Task creation rules (default: CREATE tasks):
-- If user mentions outlet(s) + any work (flyer, post, ad, creative, story, reel, banner, event) → shouldCreateTasks=true
-- ONE task per outlet (comma-separated = multiple tasks)
-- Links optional — never block creation because a link is missing
-- Infer sensible titles from context ("monday flyer" → "Monday flyer — {outlet}")
-- Infer dates from "27th june", "by friday", "asap", "this weekend"
-- priority: HIGH unless user says normal/low
-- startDate: ASAP unless a start date is given
+- If user mentions outlet(s) + any work (flyer, post, ad, creative, story, reel, banner, event, edit photos) → shouldCreateTasks=true
+- ONE task per outlet when multiple real outlets are named (c53, boiler, firefly…)
+- Swiggy and Zomato are platforms — NOT outlets. For "edit for swiggy and zomato" create ONE task with a valid outletId from the list (pick c53 if unsure) and mention swiggy/zomato in title/description
+- Brand names not in the outlet list (e.g. Antervedi) → ONE task, use outletId "c53" (or closest match), put brand name in title
+- outletId MUST be exactly one of the valid ids from the list above — never invent ids like "antervedi" or "swiggy"
+- Links: put Google Drive / Instagram URLs in creativeUrl
+- priority: NORMAL when user says normal/not high priority; LOW when they say low; else HIGH
+- startDate: ASAP when user says asap/start asap/no due date
+- deadlineDate: omit when user says no due date
 - Put the user's full message in description when helpful
+- reply: only say tasks were created if tasks array is non-empty. If unsure, say what you will create — do not claim creation in reply alone
 
 ONLY set shouldCreateTasks=false for clear questions: "summarize", "what's pending", "who has most tasks" — with NO new work requested.
 
@@ -70,33 +74,109 @@ export type ParsedBriefResult = {
   reply: string;
 };
 
+const DEFAULT_TASK_OUTLET = TEAM_AD_OUTLETS[0].id;
+
+function extractUrls(text: string): string[] {
+  return [...text.matchAll(/https?:\/\/[^\s<>"']+/gi)].map((m) => m[0]);
+}
+
+function detectPriorityFromText(text: string): TeamTaskPriority | undefined {
+  const t = text.toLowerCase();
+  if (/\b(normal|not high|no high)\b/.test(t)) return "NORMAL";
+  if (/\blow priority\b/.test(t)) return "LOW";
+  if (/\bhigh priority\b/.test(t)) return "HIGH";
+  return undefined;
+}
+
+/** Map free text to a valid outlet id; falls back to default when work has no outlet. */
+export function resolveOutletId(raw: string, context = ""): string {
+  const combined = `${raw} ${context}`.toLowerCase();
+  const v = raw.trim().toLowerCase();
+
+  if (v && isTeamOutletId(v)) return v;
+
+  for (const o of TEAM_AD_OUTLETS) {
+    if (v === o.id || v.replace(/\s+/g, "") === o.id.replace(/-/g, "")) return o.id;
+  }
+
+  const rules: [RegExp, TeamOutletId][] = [
+    [/boiler\s*room|boilerroom/i, "boiler-room"],
+    [/club\s*rogue.*jubilee|jubilee.*clubrogue/i, "clubrogue-jubilee-hills"],
+    [/club\s*rogue.*kondapur|kondapur.*clubrogue/i, "clubrogue-kondapur"],
+    [/club\s*rogue.*gachibowli|gachibowli.*clubrogue/i, "clubrogue-gachibowli"],
+    [/gachibowli/i, "clubrogue-gachibowli"],
+    [/kondapur/i, "clubrogue-kondapur"],
+    [/jubilee/i, "clubrogue-jubilee-hills"],
+    [/\bc53\b/i, "c53"],
+    [/firefly/i, "firefly"],
+    [/komma/i, "komma"],
+    [/kiik/i, "kiik69"],
+    [/asil/i, "asilmandi"],
+  ];
+
+  for (const [re, id] of rules) {
+    if (re.test(combined)) return id;
+  }
+
+  for (const o of TEAM_AD_OUTLETS) {
+    if (combined.includes(o.label.toLowerCase())) return o.id;
+  }
+
+  return DEFAULT_TASK_OUTLET;
+}
+
 function normalizeTask(
   raw: unknown,
-  fallbackAssigneeId: string
+  fallbackAssigneeId: string,
+  userContext: string
 ): CreateTeamAdTaskInput | null {
   if (!raw || typeof raw !== "object") return null;
   const t = raw as Record<string, unknown>;
-  const outletId = typeof t.outletId === "string" ? t.outletId.trim() : "";
+  const rawOutlet = typeof t.outletId === "string" ? t.outletId.trim() : "";
   const title = typeof t.title === "string" ? t.title.trim() : "";
-  if (!outletId || !title || !isTeamOutletId(outletId)) return null;
+  if (!title) return null;
+
+  const outletId = resolveOutletId(rawOutlet, userContext);
 
   const rawAssignee =
     typeof t.assigneeId === "string" ? resolveTeamMemberRef(t.assigneeId) : undefined;
   const assigneeId =
     rawAssignee && isTeamMemberId(rawAssignee) ? rawAssignee : fallbackAssigneeId;
 
-  const creativeUrl = typeof t.creativeUrl === "string" ? t.creativeUrl.trim() : undefined;
-  const description = typeof t.description === "string" ? t.description.trim() : undefined;
+  const urls = extractUrls(userContext);
+  const creativeUrl =
+    (typeof t.creativeUrl === "string" ? t.creativeUrl.trim() : "") ||
+    urls.find((u) => /drive\.google|docs\.google|instagram/i.test(u)) ||
+    urls[0] ||
+    undefined;
+
+  const description =
+    typeof t.description === "string" && t.description.trim()
+      ? t.description.trim()
+      : userContext.length > title.length
+        ? userContext.slice(0, 2000)
+        : undefined;
+
   const startRaw = typeof t.startDate === "string" ? t.startDate.trim() : "";
   const endDate = typeof t.endDate === "string" ? t.endDate.trim() : undefined;
   const endTime = typeof t.endTime === "string" ? normalizeTeamEndTime(t.endTime) ?? undefined : undefined;
-  const deadlineDate = typeof t.deadlineDate === "string" ? t.deadlineDate.trim() : undefined;
+  let deadlineDate = typeof t.deadlineDate === "string" ? t.deadlineDate.trim() : undefined;
   const deadlineTime =
     typeof t.deadlineTime === "string" ? normalizeTeamEndTime(t.deadlineTime) ?? undefined : undefined;
 
-  const startDate = startRaw ? normalizeTeamStartDate(startRaw) ?? undefined : undefined;
+  if (/no due date|without due/i.test(userContext)) {
+    deadlineDate = undefined;
+  }
+
+  const startDate = startRaw
+    ? normalizeTeamStartDate(startRaw) ?? undefined
+    : /asap|start asap/i.test(userContext)
+      ? "ASAP"
+      : undefined;
+
+  const textPriority = detectPriorityFromText(userContext);
   const priority = normalizeTeamPriority(
-    typeof t.priority === "string" ? t.priority : "HIGH"
+    typeof t.priority === "string" ? t.priority : textPriority ?? "HIGH"
   );
 
   const referenceUrls = Array.isArray(t.referenceUrls)
@@ -128,7 +208,9 @@ const OUTLET_PATTERN =
   /club\s*rogue|gachibowli|kondapur|jubilee|boiler|firefly|c53|komma|kiik|asil|tollywood/i;
 
 const BRIEF_CUE_PATTERN =
-  /asap|deadline|due\s*date|event|ad end|flyer|creative|poster|assign|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i;
+  /asap|deadline|due\s*date|event|ad end|flyer|creative|poster|assign|edit|photo|image|swiggy|zomato|drive\.google|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i;
+
+const CREATE_TASK_COMMAND = /^(create|make|add)\s+(the\s+)?tasks?\.?$/i;
 
 export function looksLikeTaskBrief(text: string): boolean {
   const t = text.trim();
@@ -147,14 +229,21 @@ export function looksLikeTaskBrief(text: string): boolean {
 }
 
 /** Admin: try task parser unless the message is clearly a Q&A request. */
-export function shouldTryTaskParse(text: string, isAdmin: boolean): boolean {
-  if (isSummarizeQuestion(text)) return false;
-  if (!isAdmin) return looksLikeTaskBrief(text);
-  // Admin: be flexible — try to create tasks unless it's clearly just a question
-  if (looksLikeTaskBrief(text)) return true;
-  if (OUTLET_PATTERN.test(text)) return true;
-  if (resolveTeamMemberFromText(text)) return true;
-  if (BRIEF_CUE_PATTERN.test(text) && text.trim().length >= 12) return true;
+export function shouldTryTaskParse(
+  text: string,
+  isAdmin: boolean,
+  conversationContext = ""
+): boolean {
+  const combined = [conversationContext.trim(), text.trim()].filter(Boolean).join("\n");
+
+  if (isSummarizeQuestion(text) && !looksLikeTaskBrief(combined)) return false;
+  if (CREATE_TASK_COMMAND.test(text.trim()) && looksLikeTaskBrief(combined)) return true;
+
+  if (!isAdmin) return looksLikeTaskBrief(combined);
+  if (looksLikeTaskBrief(combined)) return true;
+  if (OUTLET_PATTERN.test(combined)) return true;
+  if (resolveTeamMemberFromText(combined)) return true;
+  if (BRIEF_CUE_PATTERN.test(combined) && combined.trim().length >= 12) return true;
   return false;
 }
 
@@ -212,7 +301,7 @@ export async function parseBriefForTasks(
   const fallbackAssignee = aiDefault && isTeamMemberId(aiDefault) ? aiDefault : defaultTeamMemberId();
 
   const tasks = (Array.isArray(parsed.tasks) ? parsed.tasks : [])
-    .map((t) => normalizeTask(t, fallbackAssignee))
+    .map((t) => normalizeTask(t, fallbackAssignee, fullContext))
     .filter((t): t is CreateTeamAdTaskInput => t !== null);
 
   const reply =

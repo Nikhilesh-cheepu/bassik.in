@@ -10,7 +10,8 @@ Outlets: ${TEAM_AD_OUTLETS.map((o) => o.label).join(", ")}.
 Be concise, practical, India/Hyderabad context. Suggest priorities, summarize threads, flag risks.
 No fluff. Bullet points when listing actions.
 
-To create ad tasks in bulk, paste a brief in the AI tab with outlet names, Instagram/Drive links, event date, and "start ASAP". Tasks are auto-created as HIGH priority (admin only).`;
+To create ad tasks in bulk, paste a brief in the AI tab with outlet names, Instagram/Drive links, event date, and "start ASAP". Tasks are auto-created when the parser runs (admin only).
+Never say you created tasks unless the system confirms creation — if the user asks to create tasks, tell them to paste the full brief in one message with assignee and links.`;
 
 export type TeamAiMessage = { role: "user" | "assistant"; content: string };
 
