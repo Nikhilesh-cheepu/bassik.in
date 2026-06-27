@@ -122,8 +122,8 @@ export default function TeamAiPanel({
   const names = members.map((m) => m.name).join(", ");
 
   return (
-    <div className="flex min-h-[50dvh] flex-col max-xl:pb-0 xl:min-h-[calc(100dvh-12rem)] xl:rounded-2xl xl:border xl:border-white/[0.06] xl:bg-[#0a0a10]/40">
-      <div className="flex items-center justify-between gap-2 border-b border-white/[0.05] px-1 py-2 xl:px-4 xl:py-3">
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden xl:rounded-2xl xl:border xl:border-white/[0.06] xl:bg-[#0a0a10]/40">
+      <div className="shrink-0 flex items-center justify-between gap-2 border-b border-white/[0.05] px-1 py-2 xl:px-4 xl:py-3">
         <button
           type="button"
           onClick={() => setTipsOpen((o) => !o)}
@@ -142,7 +142,7 @@ export default function TeamAiPanel({
       </div>
 
       {tipsOpen ? (
-        <div className="mx-1 mb-2 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2.5 xl:mx-4 xl:mt-3">
+        <div className="mx-1 mb-2 shrink-0 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2.5 xl:mx-4 xl:mt-3">
           <p className="text-xs leading-relaxed text-white/60">
             Paste outlets + links + date. Say{" "}
             <span className="text-white/85">assign to {members[0]?.name ?? "Amit"}</span> — works
@@ -153,7 +153,7 @@ export default function TeamAiPanel({
 
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-0.5 py-2 max-xl:max-h-[min(48dvh,420px)] xl:max-h-none xl:px-4 xl:py-3"
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-0.5 py-2 [-webkit-overflow-scrolling:touch] xl:px-4 xl:py-3"
       >
         {messages.map((m, i) => {
           const isUser = m.role === "user";
@@ -212,7 +212,7 @@ export default function TeamAiPanel({
         </div>
       </div>
 
-      <div className="hidden border-t border-white/[0.06] px-4 py-3 xl:block">
+      <div className="hidden shrink-0 border-t border-white/[0.06] px-4 py-3 xl:block">
         <Composer
           input={input}
           setInput={setInput}
@@ -223,7 +223,11 @@ export default function TeamAiPanel({
         />
       </div>
 
-      <div className="h-[148px] shrink-0 xl:hidden" aria-hidden />
+      <div
+        className="shrink-0 xl:hidden"
+        style={{ height: `calc(${TEAM_DOCK_PADDING} + 7.5rem)` }}
+        aria-hidden
+      />
     </div>
   );
 }

@@ -960,7 +960,7 @@ export default function TeamClient() {
         onLogout={() => void logout()}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col pb-[env(safe-area-inset-bottom)] xl:pb-0">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden pb-[env(safe-area-inset-bottom)] xl:max-h-[100dvh] xl:pb-0">
       <TeamPageHeader
         tab={tab}
         userLabel={userLabel}
@@ -987,7 +987,12 @@ export default function TeamClient() {
         reminderFilters={FILTERS}
       />
 
-      <main className={`${TEAM_PAGE} min-h-[40vh] flex-1 py-3 md:py-4 max-xl:pb-[var(--team-dock-pad)]`} style={{ ["--team-dock-pad" as string]: TEAM_DOCK_PADDING }}>
+      <main
+        className={`${TEAM_PAGE} flex-1 py-3 md:py-4 max-xl:pb-[var(--team-dock-pad)] ${
+          tab === "ai" ? "flex min-h-0 flex-col overflow-hidden" : "min-h-[40vh]"
+        }`}
+        style={{ ["--team-dock-pad" as string]: TEAM_DOCK_PADDING }}
+      >
         {error ? (
           <p className="mb-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
             {error}
