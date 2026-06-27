@@ -21,7 +21,7 @@ import type { TeamTaskPriority } from "@prisma/client";
 import { TEAM_PRIORITY_LABELS, TEAM_PRIORITIES } from "@/lib/team-priority";
 import AdTaskList from "./AdTaskList";
 import ExpandableText from "./ExpandableText";
-import TeamBottomNav, { type TeamTab } from "./TeamBottomNav";
+import TeamBottomNav, { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
 import TeamAiPanel from "./TeamAiPanel";
 import {
   emptyPlanningForm,
@@ -776,110 +776,174 @@ export default function TeamClient() {
     );
   }
 
+  const userLabel =
+    user.role === "admin"
+      ? "Admin"
+      : user.role === "viewer"
+        ? "Viewer · read-only"
+        : memberName(members, user.memberId ?? user.username);
+
+  const desktopPrimaryAction =
+    !isViewer && tab !== "ai" ? (
+      tab === "ads" && user.role === "admin" ? (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={exportExcel}
+            className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/60 hover:bg-white/[0.04]"
+          >
+            Export
+          </button>
+          <button
+            type="button"
+            onClick={openCreateTask}
+            className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white"
+          >
+            + Ad task
+          </button>
+        </div>
+      ) : tab === "planning" ? (
+        <button
+          type="button"
+          onClick={openCreatePlanning}
+          className="rounded-xl bg-sky-500/90 px-4 py-2 text-sm font-semibold text-white"
+        >
+          + Note
+        </button>
+      ) : tab === "reminders" ? (
+        <button
+          type="button"
+          onClick={openCreateReminder}
+          className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white"
+        >
+          + Reminder
+        </button>
+      ) : null
+    ) : null;
+
   return (
-    <div className="min-h-[100dvh] bg-[#06060a] text-white pb-[env(safe-area-inset-bottom)]">
-      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#06060a]">
-        <div className="mx-auto max-w-lg px-3 pt-3">
-          <div className="flex items-start justify-between gap-2">
+    <div className="min-h-[100dvh] bg-[#06060a] text-white xl:flex">
+      <TeamSidebarNav
+        active={tab}
+        onChange={setTab}
+        hideReminders={isViewer}
+        hideAi={isViewer}
+        userLabel={userLabel}
+        onLogout={() => void logout()}
+      />
+
+      <div className="flex min-w-0 flex-1 flex-col pb-[env(safe-area-inset-bottom)] xl:pb-0">
+      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#06060a]/95 backdrop-blur-md xl:static">
+        <div className={TEAM_PAGE}>
+          <div className="flex items-center justify-between gap-3 pt-3 pb-2 xl:pt-5 xl:pb-3">
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300/70">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300/70 xl:hidden">
                 Bassik Team
               </p>
-              <h1 className="truncate text-base font-semibold">{TAB_TITLES[tab]}</h1>
-              <p className="text-[11px] text-white/40">
-                {user.role === "admin"
-                  ? "Admin"
-                  : user.role === "viewer"
-                    ? "Viewer · read-only"
-                    : memberName(members, user.memberId ?? user.username)}
-                {tab === "ads" || tab === "reminders"
-                  ? ` · ${counts.todo} to do · ${counts.done} done`
-                  : null}
+              <h1 className="truncate text-lg font-semibold xl:text-2xl">{TAB_TITLES[tab]}</h1>
+              <p className="text-xs text-white/40">
+                <span className="xl:hidden">{userLabel}</span>
+                {tab === "ads" || tab === "reminders" ? (
+                  <>
+                    <span className="xl:hidden"> · </span>
+                    {counts.todo} to do · {counts.done} done
+                  </>
+                ) : null}
                 {refreshing ? " · …" : ""}
               </p>
+            </div>
+            <div className="hidden shrink-0 items-center gap-3 xl:flex">
+              {desktopPrimaryAction}
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/50 hover:bg-white/[0.04]"
+              >
+                Lock
+              </button>
             </div>
             <button
               type="button"
               onClick={() => void logout()}
-              className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs text-white/50 min-h-[40px]"
+              className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs text-white/50 min-h-[40px] xl:hidden"
             >
               Lock
             </button>
           </div>
 
-          {tab === "ads" ? (
-            <div className={`mt-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}>
-              {FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setFilter(f.id)}
-                  className={chipClass(filter === f.id)}
-                >
-                  {f.label}
-                </button>
-              ))}
-              <select
-                value={outletFilter}
-                onChange={(e) => setOutletFilter(e.target.value)}
-                className="shrink-0 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-white/70"
-              >
-                <option value="">All outlets</option>
-                {TEAM_AD_OUTLETS.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : tab === "planning" ? (
-            <div className="mt-3">
-              <PlanningFilters filter={planningFilter} onFilterChange={setPlanningFilter} />
-            </div>
-          ) : tab === "reminders" ? (
-            <div className="mt-3 flex gap-2">
-              {FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => setFilter(f.id)}
-                  className={chipClass(filter === f.id)}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-2" />
-          )}
+          {(tab === "ads" || tab === "planning" || tab === "reminders") && (
+            <div className="mb-2 rounded-xl bg-white/[0.03] p-2 md:flex md:flex-wrap md:items-center md:gap-2">
+              {tab === "ads" ? (
+                <>
+                  <div className="flex gap-1.5 overflow-x-auto pb-1 md:overflow-visible md:pb-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {FILTERS.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setFilter(f.id)}
+                        className={chipClass(filter === f.id)}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                  <select
+                    value={outletFilter}
+                    onChange={(e) => setOutletFilter(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white/70 md:mt-0 md:w-auto"
+                  >
+                    <option value="">All outlets</option>
+                    {TEAM_AD_OUTLETS.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : tab === "planning" ? (
+                <PlanningFilters filter={planningFilter} onFilterChange={setPlanningFilter} />
+              ) : (
+                <div className="flex gap-1.5">
+                  {FILTERS.map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setFilter(f.id)}
+                      className={chipClass(filter === f.id)}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
-          {showMemberTabs ? (
-            <div className="mt-2 flex gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <button
-                type="button"
-                onClick={() => setMemberTab("all")}
-                className={chipClass(memberTab === "all", "violet")}
-              >
-                All
-              </button>
-              {members.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setMemberTab(m.id)}
-                  className={chipClass(memberTab === m.id, "violet")}
-                >
-                  {m.name}
-                </button>
-              ))}
+              {showMemberTabs ? (
+                <div className="mt-2 flex gap-1.5 overflow-x-auto border-t border-white/[0.05] pt-2 md:mt-0 md:overflow-visible md:border-t-0 md:border-l md:pt-0 md:pl-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setMemberTab("all")}
+                    className={chipClass(memberTab === "all", "violet")}
+                  >
+                    All
+                  </button>
+                  {members.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setMemberTab(m.id)}
+                      className={chipClass(memberTab === m.id, "violet")}
+                    >
+                      {m.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
-          ) : (
-            <div className="h-2" />
           )}
         </div>
       </header>
 
-      <main className="mx-auto max-w-lg px-3 py-3 min-h-[40vh]">
+      <main className={`${TEAM_PAGE} min-h-[40vh] flex-1 py-3 md:py-4`}>
         {error ? (
           <p className="mb-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
             {error}
@@ -1014,9 +1078,9 @@ export default function TeamClient() {
         )}
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#06060a]/98 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#06060a]/98 pb-[max(0.25rem,env(safe-area-inset-bottom))] xl:hidden">
         {!isViewer && tab !== "ai" ? (
-          <div className="mx-auto flex max-w-lg gap-2 px-3 py-2">
+          <div className={`${TEAM_PAGE} flex gap-2 py-2`}>
             {tab === "ads" && user.role === "admin" ? (
               <>
                 <button
@@ -1061,13 +1125,14 @@ export default function TeamClient() {
         />
       </div>
 
-      <div className={tab === "ai" ? "h-[200px]" : "h-[108px]"} />
+      <div className={tab === "ai" ? "h-[200px] xl:h-0" : "h-[108px] xl:h-0"} />
+      </div>
 
       {showTaskForm && user.role === "admin" ? (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/75">
+        <div className={TEAM_SHEET_OVERLAY}>
           <form
             onSubmit={saveTask}
-            className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0c0c12] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            className={TEAM_SHEET_PANEL}
           >
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
             <h2 className="text-lg font-semibold">{editing ? "Edit ad task" : "New ad task"}</h2>
@@ -1282,10 +1347,10 @@ export default function TeamClient() {
       ) : null}
 
       {showReminderForm ? (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/75">
+        <div className={TEAM_SHEET_OVERLAY}>
           <form
             onSubmit={saveReminder}
-            className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0c0c12] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            className={TEAM_SHEET_PANEL}
           >
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
             <h2 className="text-lg font-semibold">

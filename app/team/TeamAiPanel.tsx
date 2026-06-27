@@ -8,13 +8,10 @@ type Member = { id: string; name: string };
 const WELCOME: TeamAiMessage = {
   role: "assistant",
   content:
-    "Paste a brief with outlets, links, and deadlines — I'll create HIGH priority tasks.\n\nTip: say assign to Amit or for Mahesh and I'll assign every task to them.",
+    "Paste a brief with outlets, links, and deadlines — I'll create HIGH priority tasks.\n\nSay assign to Amit or for Mahesh to set who gets the tasks.",
 };
 
-const STARTERS = [
-  "Paste event brief + links",
-  "Summarize open tasks",
-];
+const STARTERS = ["Paste event brief + links", "Summarize open tasks"];
 
 function storageKey(username: string) {
   return `bassik-team-ai:${username}`;
@@ -51,7 +48,7 @@ export default function TeamAiPanel({
   const [hydrated, setHydrated] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [tipsOpen, setTipsOpen] = useState(true);
+  const [tipsOpen, setTipsOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -121,64 +118,41 @@ export default function TeamAiPanel({
     setInput("");
   };
 
-  const memberHint =
-    members.length > 0
-      ? members.map((m) => m.name).join(", ")
-      : "Amit, Jeslyn, Mahesh";
+  const names = members.map((m) => m.name).join(", ");
 
   return (
-    <div className="relative -mx-1 flex min-h-[55dvh] flex-col pb-[168px]">
-      {tipsOpen ? (
-        <div className="mb-3 rounded-xl border border-violet-500/25 bg-violet-500/10 px-3 py-2.5">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-xs leading-relaxed text-white/65">
-              <span className="font-medium text-violet-200">Create tasks:</span> paste outlets +
-              links + date. Say{" "}
-              <span className="text-white/90">assign to {members[0]?.name ?? "Amit"}</span> or{" "}
-              <span className="text-white/90">for {members[2]?.name ?? "Mahesh"}</span> — works for{" "}
-              {memberHint}.
-            </p>
-            <button
-              type="button"
-              onClick={() => setTipsOpen(false)}
-              className="shrink-0 text-sm text-white/40"
-              aria-label="Dismiss tips"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="mb-2 flex items-center justify-between gap-2 px-0.5">
-        <p className="text-[10px] text-white/35">Saved on this device</p>
-        <div className="flex gap-3">
-          {!tipsOpen ? (
-            <button
-              type="button"
-              onClick={() => setTipsOpen(true)}
-              className="text-[10px] text-violet-300/70"
-            >
-              Tips
-            </button>
-          ) : null}
+    <div className="flex min-h-[50dvh] flex-col max-xl:pb-0 xl:min-h-[calc(100dvh-12rem)] xl:rounded-2xl xl:border xl:border-white/[0.06] xl:bg-[#0a0a10]/40">
+      <div className="flex items-center justify-between gap-2 border-b border-white/[0.05] px-1 py-2 xl:px-4 xl:py-3">
+        <button
+          type="button"
+          onClick={() => setTipsOpen((o) => !o)}
+          className="text-xs text-violet-300/80"
+        >
+          {tipsOpen ? "Hide tips" : "How to create tasks"}
+        </button>
+        <div className="flex gap-3 text-[10px] text-white/35">
+          <span className="hidden sm:inline">Saved on device</span>
           {messages.length > 1 ? (
-            <button
-              type="button"
-              onClick={clearChat}
-              disabled={loading}
-              className="text-[10px] text-white/40 disabled:opacity-40"
-            >
+            <button type="button" onClick={clearChat} disabled={loading} className="text-white/45">
               Clear
             </button>
           ) : null}
         </div>
       </div>
 
+      {tipsOpen ? (
+        <div className="mx-1 mb-2 rounded-xl border border-violet-500/20 bg-violet-500/8 px-3 py-2.5 xl:mx-4 xl:mt-3">
+          <p className="text-xs leading-relaxed text-white/60">
+            Paste outlets + links + date. Say{" "}
+            <span className="text-white/85">assign to {members[0]?.name ?? "Amit"}</span> — works
+            for {names || "your team"}.
+          </p>
+        </div>
+      ) : null}
+
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-0.5"
-        style={{ maxHeight: "min(52dvh, 480px)" }}
+        className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-0.5 py-2 max-xl:max-h-[min(48dvh,420px)] xl:max-h-none xl:px-4 xl:py-3"
       >
         {messages.map((m, i) => {
           const isUser = m.role === "user";
@@ -195,10 +169,10 @@ export default function TeamAiPanel({
                 {isUser ? "You" : "AI"}
               </span>
               <div
-                className={`max-w-[95%] rounded-2xl px-3.5 py-2.5 text-[15px] leading-relaxed ${
+                className={`max-w-[92%] rounded-2xl px-3.5 py-2.5 text-[15px] leading-relaxed md:max-w-[85%] xl:max-w-[70%] xl:text-sm ${
                   isUser
-                    ? "rounded-br-md bg-cyan-500/20 text-cyan-50 ring-1 ring-cyan-400/15"
-                    : "rounded-bl-md bg-white/[0.06] text-white/80 ring-1 ring-white/[0.06]"
+                    ? "rounded-br-md bg-cyan-500/18 text-cyan-50"
+                    : "rounded-bl-md bg-white/[0.06] text-white/80"
                 }`}
               >
                 <p className="whitespace-pre-wrap break-words">{m.content}</p>
@@ -207,7 +181,7 @@ export default function TeamAiPanel({
                     type="button"
                     onClick={() => startEdit(i)}
                     disabled={loading}
-                    className="mt-2 min-h-[32px] rounded-lg bg-black/20 px-2.5 py-1 text-xs font-medium text-cyan-100/80 disabled:opacity-40"
+                    className="mt-2 rounded-lg px-2 py-1 text-xs text-cyan-100/70 hover:bg-black/20 disabled:opacity-40"
                   >
                     Edit
                   </button>
@@ -217,51 +191,93 @@ export default function TeamAiPanel({
           );
         })}
         {loading ? (
-          <p className="py-2 text-center text-xs text-violet-300/50">Creating tasks…</p>
+          <p className="py-2 text-center text-xs text-violet-300/50">Working…</p>
         ) : null}
       </div>
 
-      <div className="fixed bottom-[calc(52px+env(safe-area-inset-bottom,0px))] left-0 right-0 z-20 border-t border-white/[0.08] bg-[#06060a]/98 backdrop-blur-sm">
-        <div className="mx-auto max-w-lg px-3 py-2.5">
-          <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {STARTERS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => void send(s)}
-                disabled={loading}
-                className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-white/55 disabled:opacity-40"
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void send(input);
-            }}
-            className="flex items-end gap-2"
-          >
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Brief + assign to Amit…"
-              rows={2}
-              className="min-h-[44px] max-h-[120px] flex-1 resize-none rounded-xl border border-white/12 bg-black/50 px-3 py-2.5 text-[15px] leading-snug text-white placeholder:text-white/30"
-              disabled={loading}
-            />
-            <button
-              type="submit"
-              disabled={loading || !input.trim()}
-              className="min-h-[44px] shrink-0 rounded-xl bg-violet-500 px-4 text-sm font-semibold text-white disabled:opacity-40"
-            >
-              Send
-            </button>
-          </form>
+      <div className="fixed bottom-[calc(52px+env(safe-area-inset-bottom,0px))] left-0 right-0 z-20 border-t border-white/[0.08] bg-[#06060a]/98 backdrop-blur-sm md:bottom-[calc(56px+env(safe-area-inset-bottom,0px))] xl:hidden">
+        <div className="mx-auto w-full max-w-lg px-3 py-2 sm:max-w-xl md:max-w-2xl md:px-4">
+          <Composer
+            input={input}
+            setInput={setInput}
+            loading={loading}
+            onSend={send}
+            starters={STARTERS}
+            textareaRef={textareaRef}
+          />
         </div>
       </div>
+
+      <div className="hidden border-t border-white/[0.06] px-4 py-3 xl:block">
+        <Composer
+          input={input}
+          setInput={setInput}
+          loading={loading}
+          onSend={send}
+          starters={STARTERS}
+          textareaRef={textareaRef}
+        />
+      </div>
+
+      <div className="h-[148px] shrink-0 xl:hidden" aria-hidden />
     </div>
+  );
+}
+
+function Composer({
+  input,
+  setInput,
+  loading,
+  onSend,
+  starters,
+  textareaRef,
+}: {
+  input: string;
+  setInput: (v: string) => void;
+  loading: boolean;
+  onSend: (text: string) => void;
+  starters: string[];
+  textareaRef: React.RefObject<HTMLTextAreaElement>;
+}) {
+  return (
+    <>
+      <div className="mb-2 flex flex-wrap gap-1.5">
+        {starters.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => void onSend(s)}
+            disabled={loading}
+            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-white/55 disabled:opacity-40"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void onSend(input);
+        }}
+        className="flex items-end gap-2"
+      >
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Brief + assign to Amit…"
+          rows={2}
+          className="min-h-[44px] max-h-[140px] flex-1 resize-y rounded-xl border border-white/12 bg-black/50 px-3 py-2.5 text-[15px] leading-snug text-white placeholder:text-white/30 xl:min-h-[52px] xl:text-sm"
+          disabled={loading}
+        />
+        <button
+          type="submit"
+          disabled={loading || !input.trim()}
+          className="min-h-[44px] shrink-0 rounded-xl bg-violet-500 px-5 text-sm font-semibold text-white disabled:opacity-40 xl:min-h-[52px]"
+        >
+          Send
+        </button>
+      </form>
+    </>
   );
 }

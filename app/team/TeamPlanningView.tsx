@@ -9,6 +9,7 @@ import {
 } from "@/lib/team-planning";
 import type { TeamPlanningType } from "@prisma/client";
 import ExpandableText from "./ExpandableText";
+import { TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL } from "./TeamNav";
 
 function typeChip(type: TeamPlanningType): string {
   switch (type) {
@@ -182,11 +183,8 @@ export function PlanningFormSheet({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/75">
-      <form
-        onSubmit={onSubmit}
-        className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0c0c12] p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
-      >
+    <div className={TEAM_SHEET_OVERLAY}>
+      <form onSubmit={onSubmit} className={TEAM_SHEET_PANEL}>
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
         <h2 className="text-lg font-semibold">{editing ? "Edit note" : "New note"}</h2>
         <label className="mt-4 block text-xs text-white/50">Type</label>
