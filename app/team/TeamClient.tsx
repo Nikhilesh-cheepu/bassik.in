@@ -6,6 +6,7 @@ import {
   formatTeamStartDate,
   isAsapStartDate,
   TEAM_START_ASAP,
+  teamTaskCompletedDayKey,
   type TeamTaskDto,
 } from "@/lib/team-tasks";
 import {
@@ -32,8 +33,8 @@ import {
 import { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
 import TeamDock, { TeamActionSheet, TeamMoreSheet } from "./TeamDock";
 import TeamWhatsAppSheet from "./TeamWhatsAppSheet";
-import TeamMemberDoneBanner from "./TeamMemberDoneBanner";
-import TeamMemberDoneSheet from "./TeamMemberDoneSheet";
+import TeamDoneReportBanner from "./TeamDoneReportBanner";
+import TeamDoneReportSheet from "./TeamDoneReportSheet";
 import { TEAM_DOCK_PADDING } from "./TeamIcons";
 import TeamAiPanel from "./TeamAiPanel";
 import { PlanningNoteList } from "./TeamPlanningView";
@@ -252,10 +253,7 @@ export default function TeamClient() {
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [showWhatsAppSheet, setShowWhatsAppSheet] = useState(false);
-  const [showMemberDoneSheet, setShowMemberDoneSheet] = useState(false);
-  const [memberDoneTasks, setMemberDoneTasks] = useState<
-    { id: string; title: string; outletId: string; completedAt: string | null }[]
-  >([]);
+  const [showDoneReportSheet, setShowDoneReportSheet] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const soleMember = members.length === 1 ? members[0] : null;
@@ -323,14 +321,6 @@ export default function TeamClient() {
     },
     [filter, outletFilter, memberTab, canBrowseAllMembers]
   );
-
-  const loadMemberDoneTasks = useCallback(async () => {
-    if (user?.role !== "member") return;
-    const res = await fetch("/api/team/member-done-report");
-    if (!res.ok) return;
-    const data = await readTeamApiJson(res);
-    setMemberDoneTasks(Array.isArray(data.tasks) ? data.tasks : []);
-  }, [user?.role]);
 
   const loadReminders = useCallback(
     async (silent = false) => {
@@ -426,12 +416,7 @@ export default function TeamClient() {
     void loadPlanning(planningReady);
   }, [planningFilter]);
 
-  useEffect(() => {
-    if (!user || user.role !== "member" || tab !== "ads") return;
-    void loadMemberDoneTasks();
-  }, [user, tab, tasks, loadMemberDoneTasks]);
-
-  const shareMemberDone = () => setShowMemberDoneSheet(true);
+  const shareDoneReport = () => setShowDoneReportSheet(true);
 
   useEffect(() => {
     const open =
@@ -442,12 +427,12 @@ export default function TeamClient() {
       showActionSheet ||
       showMoreSheet ||
       showWhatsAppSheet ||
-      showMemberDoneSheet;
+      showDoneReportSheet;
     document.body.style.overflow = open ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
-  }, [showTaskForm, showReminderForm, showPlanningForm, showMemberRecordForm, showActionSheet, showMoreSheet, showWhatsAppSheet, showMemberDoneSheet]);
+  }, [showTaskForm, showReminderForm, showPlanningForm, showMemberRecordForm, showActionSheet, showMoreSheet, showWhatsAppSheet, showDoneReportSheet]);
 
   const uploadBlob = async (file: File, kind: "creative" | "reference") => {
     const fd = new FormData();
@@ -874,24 +859,20 @@ export default function TeamClient() {
             ? planningNotes.length === 0
             : false;
 
-  const memberDoneTodayCount = useMemo(() => {
-    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-    return memberDoneTasks.filter((t) => {
-      if (!t.completedAt) return false;
-      const key = new Date(t.completedAt).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-      return key === today;
-    }).length;
-  }, [memberDoneTasks]);
+  const doneReportDateCount = useMemo(() => {
+    const keys = new Set(
+      tasks.map((t) => teamTaskCompletedDayKey(t.completedAt ?? t.updatedAt))
+    );
+    keys.delete("unknown");
+    return keys.size;
+  }, [tasks]);
 
-  const memberDoneBannerCount =
-    filter === "done" ? tasks.length : memberDoneTodayCount;
-
-  const showMemberDoneBanner =
-    isMember &&
+  const showDoneReportBanner =
+    !isViewer &&
     tab === "ads" &&
+    filter === "done" &&
     listReady &&
-    ((filter === "done" && tasks.length > 0) ||
-      (filter === "todo" && memberDoneTodayCount > 0));
+    tasks.length > 0;
 
   if (booting) {
     return (
@@ -944,6 +925,15 @@ export default function TeamClient() {
     !isViewer && tab !== "ai" ? (
       tab === "ads" && user.role === "admin" ? (
         <div className="flex flex-wrap gap-2">
+          {filter === "done" && tasks.length > 0 ? (
+            <button
+              type="button"
+              onClick={shareDoneReport}
+              className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-900/30"
+            >
+              Send done report
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={shareWhatsApp}
@@ -971,10 +961,10 @@ export default function TeamClient() {
           {filter === "done" && tasks.length > 0 ? (
             <button
               type="button"
-              onClick={shareMemberDone}
+              onClick={shareDoneReport}
               className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-900/30"
             >
-              Send done list
+              Send done report
             </button>
           ) : null}
           <button
@@ -1091,11 +1081,12 @@ export default function TeamClient() {
           </p>
         ) : tab === "ads" ? (
           <>
-            {showMemberDoneBanner ? (
-              <TeamMemberDoneBanner
-                count={memberDoneBannerCount}
-                todayCount={memberDoneTodayCount}
-                onSend={shareMemberDone}
+            {showDoneReportBanner ? (
+              <TeamDoneReportBanner
+                count={tasks.length}
+                dateCount={doneReportDateCount}
+                onSend={shareDoneReport}
+                isMember={isMember}
               />
             ) : null}
             <AdTaskList
@@ -1272,9 +1263,11 @@ export default function TeamClient() {
       />
 
       <TeamWhatsAppSheet open={showWhatsAppSheet} onClose={() => setShowWhatsAppSheet(false)} />
-      <TeamMemberDoneSheet
-        open={showMemberDoneSheet}
-        onClose={() => setShowMemberDoneSheet(false)}
+      <TeamDoneReportSheet
+        open={showDoneReportSheet}
+        onClose={() => setShowDoneReportSheet(false)}
+        assigneeFilter={canBrowseAllMembers ? memberTab : undefined}
+        isMember={isMember}
       />
 
       </div>

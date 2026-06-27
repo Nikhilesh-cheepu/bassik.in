@@ -235,48 +235,140 @@ export function defaultSelectedIds(tasks: TeamAdTask[], mode: WhatsAppReportMode
   return tasks.map((t) => t.id);
 }
 
+/** Done report grouped by completion date (IST). Member = first person; admin = per-member blocks. */
+export function buildDoneReportByDates(
+  tasks: TeamAdTask[],
+  selectedIds: string[],
+  options: { memberAuthorId?: string } = {}
+): string {
+  const selected = tasks.filter((t) => selectedIds.includes(t.id));
+  const lines: string[] = [
+    options.memberAuthorId ? "Bassik Team — work update" : "Bassik Team — done report",
+    headingDate(),
+    "",
+  ];
+
+  if (selected.length === 0) {
+    lines.push("No done tasks selected.");
+    lines.push("");
+    lines.push(teamBoardLink());
+    return lines.join("\n");
+  }
+
+  if (options.memberAuthorId) {
+    lines.push("Hi team,", "", "Here's what was completed:", "");
+  }
+
+  const byDate = new Map<string, TeamAdTask[]>();
+  for (const t of selected) {
+    const key = taskCompletedDayKey(t);
+    const list = byDate.get(key) ?? [];
+    list.push(t);
+    byDate.set(key, list);
+  }
+
+  const dateKeys = [...byDate.keys()].sort((a, b) => {
+    if (a === "unknown") return 1;
+    if (b === "unknown") return -1;
+    return b.localeCompare(a);
+  });
+
+  for (const dateKey of dateKeys) {
+    const dateTasks = byDate.get(dateKey) ?? [];
+    const sample = dateTasks[0]?.completedAt ?? dateTasks[0]?.updatedAt;
+    lines.push(formatCompletedDayLabel(dateKey, sample));
+    lines.push("");
+
+    if (options.memberAuthorId) {
+      dateTasks.forEach((t, i) => {
+        const doneAt = t.completedAt
+          ? ` · Done ${formatTeamRecordDateTime(t.completedAt.toISOString())}`
+          : "";
+        lines.push(`${i + 1}. ${t.title} · ${teamOutletLabel(t.outletId)}${doneAt}`);
+      });
+    } else {
+      for (const [assigneeId, memberTasks] of groupByAssignee(dateTasks)) {
+        lines.push(`${teamMemberName(assigneeId)}:`);
+        memberTasks.forEach((t, i) => {
+          const doneAt = t.completedAt
+            ? ` · Done ${formatTeamRecordDateTime(t.completedAt.toISOString())}`
+            : "";
+          lines.push(`  ${i + 1}. ${t.title} · ${teamOutletLabel(t.outletId)}${doneAt}`);
+        });
+        lines.push("");
+      }
+    }
+    lines.push("");
+  }
+
+  if (options.memberAuthorId) {
+    lines.push("Marked done on the board.");
+    lines.push("");
+  }
+
+  lines.push(teamBoardLink());
+  return lines.join("\n");
+}
+
+function taskCompletedDayKey(t: TeamAdTask): string {
+  const iso = t.completedAt ?? t.updatedAt;
+  if (!iso) return "unknown";
+  return istDayKey(iso);
+}
+
+function formatCompletedDayLabel(dayKey: string, sample?: Date | null): string {
+  if (dayKey === "unknown") return "Earlier";
+  const today = istDayKey(new Date());
+  const yesterday = istDayKey(new Date(Date.now() - 86400000));
+  if (dayKey === today) return "Today";
+  if (dayKey === yesterday) return "Yesterday";
+  if (sample) {
+    return sample.toLocaleDateString("en-IN", {
+      timeZone: TZ,
+      weekday: "long",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }
+  return dayKey;
+}
+
+export function defaultDoneReportDates(tasks: TeamAdTask[]): string[] {
+  const keys = new Set<string>();
+  for (const t of tasks) {
+    if (t.status !== "DONE") continue;
+    keys.add(taskCompletedDayKey(t));
+  }
+  const sorted = [...keys].sort((a, b) => {
+    if (a === "unknown") return 1;
+    if (b === "unknown") return -1;
+    return b.localeCompare(a);
+  });
+  const today = istDayKey(new Date());
+  if (sorted.includes(today)) return [today];
+  return sorted.length ? [sorted[0]!] : [];
+}
+
+export function filterDoneTasksByDates(tasks: TeamAdTask[], dates: string[]): TeamAdTask[] {
+  if (!dates.length) return tasks.filter((t) => t.status === "DONE");
+  const set = new Set(dates);
+  return tasks.filter(
+    (t) => t.status === "DONE" && set.has(taskCompletedDayKey(t))
+  );
+}
+
 /** Member shares their completed work with the team (WhatsApp). */
 export function buildMemberDoneReport(
   assigneeId: string,
   tasks: TeamAdTask[],
   selectedIds: string[]
 ): string {
-  const selected = tasks.filter((t) => selectedIds.includes(t.id));
-  const name = teamMemberName(assigneeId);
-  const lines: string[] = [
-    "Bassik Team — work update",
-    headingDate(),
-    "",
-    "Hi team,",
-    "",
-  ];
-
-  if (selected.length === 0) {
-    lines.push(`${name} has no completed tasks selected.`);
-  } else {
-    lines.push(
-      selected.length === 1
-        ? `I've completed this task:`
-        : `I've completed these ${selected.length} tasks:`
-    );
-    lines.push("");
-    selected.forEach((t, i) => {
-      const doneAt = t.completedAt
-        ? ` · Done ${formatTeamRecordDateTime(t.completedAt.toISOString())}`
-        : "";
-      lines.push(`${i + 1}. ${t.title} · ${teamOutletLabel(t.outletId)}${doneAt}`);
-    });
-    lines.push("");
-    lines.push("All marked done on the board.");
-  }
-
-  lines.push("");
-  lines.push(teamBoardLink());
-  return lines.join("\n");
+  return buildDoneReportByDates(tasks, selectedIds, { memberAuthorId: assigneeId });
 }
 
 export function defaultMemberDoneIds(tasks: TeamAdTask[]): string[] {
-  const doneToday = tasks.filter((t) => t.status === "DONE" && isTodayIST(t.completedAt));
-  if (doneToday.length > 0) return doneToday.map((t) => t.id);
-  return tasks.filter((t) => t.status === "DONE").map((t) => t.id);
+  const dates = defaultDoneReportDates(tasks);
+  if (!dates.length) return [];
+  return filterDoneTasksByDates(tasks, dates).map((t) => t.id);
 }

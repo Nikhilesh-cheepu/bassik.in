@@ -129,6 +129,42 @@ export function primaryCreativeLink(task: Pick<TeamTaskDto, "uploadedUrl" | "cre
   return task.uploadedUrl?.trim() || task.creativeUrl?.trim() || null;
 }
 
+const TZ = "Asia/Kolkata";
+
+export function teamTaskCompletedDayKey(iso: string | Date | null | undefined): string {
+  if (!iso) return "unknown";
+  const d = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(d.getTime())) return "unknown";
+  return d.toLocaleDateString("en-CA", { timeZone: TZ });
+}
+
+export function formatTeamCompletedDayLabel(
+  dayKey: string,
+  sampleIso?: string | Date | null
+): string {
+  if (dayKey === "unknown") return "Earlier";
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: TZ });
+  const yesterday = new Date(Date.now() - 86400000).toLocaleDateString("en-CA", { timeZone: TZ });
+  if (dayKey === today) return "Today";
+  if (dayKey === yesterday) return "Yesterday";
+  const sample =
+    sampleIso != null
+      ? typeof sampleIso === "string"
+        ? new Date(sampleIso)
+        : sampleIso
+      : new Date(`${dayKey}T12:00:00+05:30`);
+  if (Number.isNaN(sample.getTime())) return dayKey;
+  const yearNow = new Date().toLocaleDateString("en-CA", { timeZone: TZ, year: "numeric" });
+  const yearSample = sample.toLocaleDateString("en-CA", { timeZone: TZ, year: "numeric" });
+  return sample.toLocaleDateString("en-IN", {
+    timeZone: TZ,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    ...(yearSample !== yearNow ? { year: "numeric" as const } : {}),
+  });
+}
+
 export function formatTeamRecordDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
