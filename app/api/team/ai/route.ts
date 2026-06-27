@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTeamFromRequest } from "@/lib/team-auth";
-import { looksLikeTaskBrief, parseBriefForTasks } from "@/lib/team-ai-tasks";
+import { looksLikeTaskBrief, parseBriefForTasks, shouldTryTaskParse } from "@/lib/team-ai-tasks";
 import { createTeamAdTasks } from "@/lib/team-task-create";
 import { runTeamAiChat, type TeamAiMessage } from "@/lib/team-ai";
 import { teamOutletLabel } from "@/lib/team-outlets";
@@ -41,10 +41,11 @@ export async function POST(req: NextRequest) {
   const isAdmin = session.role === "admin";
 
   try {
-    if (looksLikeTaskBrief(lastUser)) {
+    if (shouldTryTaskParse(lastUser, isAdmin)) {
       const parsed = await parseBriefForTasks(lastUser, userContext);
+      const willCreate = isAdmin && parsed.tasks.length > 0 && (parsed.shouldCreateTasks || looksLikeTaskBrief(lastUser));
 
-      if (parsed.shouldCreateTasks && isAdmin) {
+      if (willCreate) {
         const { created, errors } = await createTeamAdTasks(parsed.tasks, session.username);
         const lines = created.map(
           (t) =>
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
         );
         let reply = parsed.reply;
         if (created.length) {
-          reply += `\n\n✓ Created ${created.length} high-priority task(s):\n${lines.join("\n")}`;
+          reply += `\n\n✓ Created ${created.length} task(s):\n${lines.join("\n")}`;
         }
         if (errors.length) {
           reply += `\n\n⚠ ${errors.length} could not be created:\n${errors.map((e) => `• ${e}`).join("\n")}`;
@@ -67,7 +68,9 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      return NextResponse.json({ reply: parsed.reply });
+      if (parsed.tasks.length > 0 || looksLikeTaskBrief(lastUser)) {
+        return NextResponse.json({ reply: parsed.reply, previewTasks: parsed.tasks });
+      }
     }
 
     const [openTasks, planningNotes] = await Promise.all([

@@ -89,7 +89,7 @@ export function resolveTeamMemberFromText(text: string): string | undefined {
     const first = name.split(/\s+/)[0] ?? name;
 
     const patterns = [
-      new RegExp(`\\bassign(?:ee)?\\s+(?:to\\s+)?${first}\\b`, "i"),
+      new RegExp(`\\bassign(?:ee)?\\s+(?:to|for)\\s+${first}\\b`, "i"),
       new RegExp(`\\bassign(?:ee)?\\s+(?:to\\s+)?${id}\\b`, "i"),
       new RegExp(`\\b(?:for|to)\\s+${first}\\b`, "i"),
       new RegExp(`\\b(?:for|to)\\s+${id}\\b`, "i"),

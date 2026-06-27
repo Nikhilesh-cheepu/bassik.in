@@ -9,7 +9,7 @@ type Member = { id: string; name: string };
 const WELCOME: TeamAiMessage = {
   role: "assistant",
   content:
-    "Paste a brief with outlets, links, and deadlines — I'll create HIGH priority tasks.\n\nSay assign to Amit or for Mahesh to set who gets the tasks.",
+    "Paste outlets + what to make + due date — I'll create HIGH priority tasks.\n\nExample: monday flyer for c53, boilerroom, firefly — due 27 june assign Jeslyn\n\nLinks optional.",
 };
 
 const STARTERS = ["Paste event brief + links", "Summarize open tasks"];

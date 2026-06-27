@@ -34,7 +34,9 @@ Assignee rules (very important):
 - Only default to amit when NO member is mentioned anywhere in the brief or conversation context
 - assigneeId must be the member id string (amit, jeslyn, mahesh), not the display name
 
-When the user pastes a brief with outlets + links + event/deadline dates, set shouldCreateTasks=true and fill tasks (one per outlet/creative line).
+When the user names outlets + a creative/task (flyer, post, ad, creative) with or without links, set shouldCreateTasks=true.
+Create ONE task per outlet mentioned (comma-separated counts as multiple outlets).
+Links are optional — do not require Instagram/Drive URLs to create tasks.
 Other defaults unless overridden:
 - priority: HIGH
 - startDate: ASAP
@@ -116,14 +118,38 @@ function normalizeTask(
   };
 }
 
+export function isSummarizeQuestion(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return /^(summarize|summary|what|how many|list|show me|tell me|who has|status of|help)\b/.test(t);
+}
+
+const OUTLET_PATTERN =
+  /club\s*rogue|gachibowli|kondapur|jubilee|boiler|firefly|c53|komma|kiik|asil|tollywood/i;
+
+const BRIEF_CUE_PATTERN =
+  /asap|deadline|due\s*date|event|ad end|flyer|creative|poster|assign|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i;
+
 export function looksLikeTaskBrief(text: string): boolean {
   const t = text.trim();
-  if (t.length < 40) return false;
+  if (t.length < 15) return false;
+  if (isSummarizeQuestion(t)) return false;
+
   const hasUrl = /https?:\/\//i.test(t);
-  const hasOutlet =
-    /club\s*rogue|gachibowli|kondapur|jubilee|boiler|firefly|c53|komma|kiik|asil/i.test(t);
-  const hasBriefCue = /asap|deadline|event|ad end|friday|outlet|assign/i.test(t);
-  return hasUrl && (hasOutlet || hasBriefCue || t.split("\n").length >= 3);
+  const hasOutlet = OUTLET_PATTERN.test(t);
+  const hasBriefCue = BRIEF_CUE_PATTERN.test(t);
+  const hasMemberCue = resolveTeamMemberFromText(t) !== undefined;
+  const multipleOutlets = (t.match(/,/g) || []).length >= 1;
+
+  if (hasUrl && (hasOutlet || hasBriefCue || t.split("\n").length >= 2)) return true;
+  if (hasOutlet && (hasBriefCue || hasMemberCue || multipleOutlets)) return true;
+  return false;
+}
+
+/** Admin: try task parser unless the message is clearly a Q&A request. */
+export function shouldTryTaskParse(text: string, isAdmin: boolean): boolean {
+  if (!isAdmin) return looksLikeTaskBrief(text);
+  if (isSummarizeQuestion(text)) return false;
+  return looksLikeTaskBrief(text) || OUTLET_PATTERN.test(text) || resolveTeamMemberFromText(text) !== undefined;
 }
 
 export async function parseBriefForTasks(
