@@ -30,9 +30,21 @@ export async function PATCH(
     if (existing.assigneeId !== mid) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    if (existing.status === "PENDING_APPROVAL") {
+      return NextResponse.json({ error: "Waiting for admin approval" }, { status: 403 });
+    }
   }
 
   const body = await req.json().catch(() => ({}));
+
+  if (body.action === "reject" && session.role === "admin") {
+    if (existing.status !== "PENDING_APPROVAL") {
+      return NextResponse.json({ error: "Not a pending record" }, { status: 400 });
+    }
+    await prisma.teamAdTask.delete({ where: { id: taskId } });
+    return NextResponse.json({ success: true });
+  }
+
   const data: Record<string, unknown> = {};
 
   if (session.role === "admin") {
@@ -102,13 +114,22 @@ export async function PATCH(
   }
 
   if (body.status === "TODO" || body.status === "DONE") {
-    data.status = body.status;
-    if (body.status === "DONE") {
-      data.completedBy = session.username;
+    if (existing.status === "PENDING_APPROVAL" && body.status === "DONE") {
+      if (session.role !== "admin") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      data.status = "DONE";
+      data.completedBy = existing.assigneeId;
       data.completedAt = new Date();
-    } else {
-      data.completedBy = null;
-      data.completedAt = null;
+    } else if (existing.status !== "PENDING_APPROVAL") {
+      data.status = body.status;
+      if (body.status === "DONE") {
+        data.completedBy = session.username;
+        data.completedAt = new Date();
+      } else {
+        data.completedBy = null;
+        data.completedAt = null;
+      }
     }
   }
 

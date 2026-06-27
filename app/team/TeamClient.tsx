@@ -21,6 +21,7 @@ import type { TeamTaskPriority } from "@prisma/client";
 import { TEAM_PRIORITY_LABELS, TEAM_PRIORITIES } from "@/lib/team-priority";
 import AdTaskList from "./AdTaskList";
 import ExpandableText from "./ExpandableText";
+import { emptyMemberRecordForm, MemberRecordSheet, type MemberRecordForm } from "./MemberRecordSheet";
 import TeamBottomNav, { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
 import TeamAiPanel from "./TeamAiPanel";
 import {
@@ -34,7 +35,7 @@ import type { TeamPlanningDto, TeamPlanningFilter } from "@/lib/team-planning";
 
 type TeamUser = { username: string; role: "admin" | "member" | "viewer"; memberId?: string };
 type TeamMember = { id: string; name: string; role?: string };
-type Filter = "all" | "todo" | "done";
+type Filter = "all" | "todo" | "done" | "pending";
 type MemberTab = "all" | string;
 
 const TAB_TITLES: Record<TeamTab, string> = {
@@ -249,6 +250,9 @@ export default function TeamClient() {
   const [reminderForm, setReminderForm] = useState<ReminderForm>(emptyReminderForm);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ fileName: string; siteUrl: string } | null>(null);
+  const [showMemberRecordForm, setShowMemberRecordForm] = useState(false);
+  const [memberRecordForm, setMemberRecordForm] = useState<MemberRecordForm>(emptyMemberRecordForm);
+  const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const soleMember = members.length === 1 ? members[0] : null;
@@ -260,8 +264,20 @@ export default function TeamClient() {
     const list = tab === "ads" ? tasks : tab === "reminders" ? reminders : [];
     const todo = list.filter((t) => t.status === "TODO").length;
     const done = list.filter((t) => t.status === "DONE").length;
-    return { todo, done };
+    const pending = list.filter((t) => t.status === "PENDING_APPROVAL").length;
+    return { todo, done, pending };
   }, [tasks, reminders, tab]);
+
+  const adFilters = useMemo(() => {
+    if (user?.role !== "admin") return FILTERS;
+    return [
+      ...FILTERS,
+      {
+        id: "pending" as const,
+        label: counts.pending > 0 ? `Pending (${counts.pending})` : "Pending",
+      },
+    ];
+  }, [user?.role, counts.pending]);
 
   const loadMembers = useCallback(async () => {
     const res = await fetch("/api/team/members");
@@ -384,12 +400,12 @@ export default function TeamClient() {
   }, [planningFilter]);
 
   useEffect(() => {
-    const open = showTaskForm || showReminderForm || showPlanningForm;
+    const open = showTaskForm || showReminderForm || showPlanningForm || showMemberRecordForm;
     document.body.style.overflow = open ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
-  }, [showTaskForm, showReminderForm, showPlanningForm]);
+  }, [showTaskForm, showReminderForm, showPlanningForm, showMemberRecordForm]);
 
   const uploadBlob = async (file: File, kind: "creative" | "reference") => {
     const fd = new FormData();
@@ -729,6 +745,64 @@ export default function TeamClient() {
     window.open(`/api/team/export?${qs}`, "_blank");
   };
 
+  const shareWhatsApp = async () => {
+    setSharingWhatsApp(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/team/whatsapp-report");
+      const data = await readTeamApiJson(res);
+      if (!res.ok) throw new Error(data.error || "Could not build report");
+      const url = typeof data.shareUrl === "string" ? data.shareUrl : null;
+      if (!url) throw new Error("No share link");
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "WhatsApp share failed");
+    } finally {
+      setSharingWhatsApp(false);
+    }
+  };
+
+  const approveTask = async (task: TeamTaskDto) => {
+    const res = await fetch(`/api/team/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "DONE" }),
+    });
+    if (res.ok) await loadTasks(true);
+  };
+
+  const rejectTask = async (task: TeamTaskDto) => {
+    if (!window.confirm(`Reject "${task.title}"?`)) return;
+    const res = await fetch(`/api/team/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "reject" }),
+    });
+    if (res.ok) await loadTasks(true);
+  };
+
+  const saveMemberRecord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/team/tasks/member-record", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(memberRecordForm),
+      });
+      const data = await readTeamApiJson(res);
+      if (!res.ok) throw new Error(data.error || "Submit failed");
+      setShowMemberRecordForm(false);
+      setMemberRecordForm(emptyMemberRecordForm());
+      await loadTasks(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Submit failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const activeMemberLabel =
     memberTab !== "all" ? memberName(members, memberTab) : null;
   const listReady =
@@ -786,7 +860,15 @@ export default function TeamClient() {
   const desktopPrimaryAction =
     !isViewer && tab !== "ai" ? (
       tab === "ads" && user.role === "admin" ? (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void shareWhatsApp()}
+            disabled={sharingWhatsApp}
+            className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200 disabled:opacity-50"
+          >
+            {sharingWhatsApp ? "…" : "WhatsApp"}
+          </button>
           <button
             type="button"
             onClick={exportExcel}
@@ -802,6 +884,17 @@ export default function TeamClient() {
             + Ad task
           </button>
         </div>
+      ) : tab === "ads" && user.role === "member" ? (
+        <button
+          type="button"
+          onClick={() => {
+            setMemberRecordForm(emptyMemberRecordForm());
+            setShowMemberRecordForm(true);
+          }}
+          className="rounded-xl bg-amber-500/90 px-4 py-2 text-sm font-semibold text-white"
+        >
+          + Log work
+        </button>
       ) : tab === "planning" ? (
         <button
           type="button"
@@ -847,6 +940,9 @@ export default function TeamClient() {
                   <>
                     <span className="xl:hidden"> · </span>
                     {counts.todo} to do · {counts.done} done
+                    {user.role === "admin" && counts.pending > 0
+                      ? ` · ${counts.pending} pending`
+                      : null}
                   </>
                 ) : null}
                 {refreshing ? " · …" : ""}
@@ -876,12 +972,12 @@ export default function TeamClient() {
               {tab === "ads" ? (
                 <>
                   <div className="flex gap-1.5 overflow-x-auto pb-1 md:overflow-visible md:pb-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {FILTERS.map((f) => (
+                    {adFilters.map((f) => (
                       <button
                         key={f.id}
                         type="button"
                         onClick={() => setFilter(f.id)}
-                        className={chipClass(filter === f.id)}
+                        className={chipClass(filter === f.id, f.id === "pending" ? "violet" : "cyan")}
                       >
                         {f.label}
                       </button>
@@ -966,7 +1062,9 @@ export default function TeamClient() {
                 ? activeMemberLabel
                   ? `No tasks for ${activeMemberLabel}.`
                   : "No ad tasks to show."
-                : user.role === "admin"
+                : filter === "pending"
+                  ? "No work waiting for approval."
+                  : user.role === "admin"
                   ? activeMemberLabel
                     ? `No tasks for ${activeMemberLabel}.`
                     : "No ad tasks here yet."
@@ -986,6 +1084,8 @@ export default function TeamClient() {
             isAdmin={user.role === "admin"}
             canDrag={canDragTasks}
             groupDoneByDate={filter === "done"}
+            onApprove={(t) => void approveTask(t)}
+            onReject={(t) => void rejectTask(t)}
             onToggleDone={(t) => void toggleTaskDone(t)}
             onEdit={openEditTask}
             onDelete={(t) => void deleteTask(t)}
@@ -1086,6 +1186,14 @@ export default function TeamClient() {
               <>
                 <button
                   type="button"
+                  onClick={() => void shareWhatsApp()}
+                  disabled={sharingWhatsApp}
+                  className="min-h-[44px] rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 text-xs font-medium text-emerald-200"
+                >
+                  WhatsApp
+                </button>
+                <button
+                  type="button"
                   onClick={exportExcel}
                   className="min-h-[44px] rounded-xl border border-white/10 px-3 text-xs text-white/60"
                 >
@@ -1099,6 +1207,17 @@ export default function TeamClient() {
                   + Ad task
                 </button>
               </>
+            ) : tab === "ads" && user.role === "member" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMemberRecordForm(emptyMemberRecordForm());
+                  setShowMemberRecordForm(true);
+                }}
+                className="min-h-[44px] flex-1 rounded-xl bg-amber-500/85 text-sm font-semibold text-white"
+              >
+                + Log work
+              </button>
             ) : tab === "planning" ? (
               <button
                 type="button"
@@ -1449,6 +1568,15 @@ export default function TeamClient() {
         }}
         onSubmit={savePlanning}
         onUploadImage={(file) => void uploadPlanningImage(file)}
+      />
+
+      <MemberRecordSheet
+        open={showMemberRecordForm}
+        form={memberRecordForm}
+        setForm={setMemberRecordForm}
+        saving={saving}
+        onClose={() => setShowMemberRecordForm(false)}
+        onSubmit={saveMemberRecord}
       />
     </div>
   );

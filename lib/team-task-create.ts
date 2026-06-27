@@ -1,4 +1,4 @@
-import type { TeamTaskPriority } from "@prisma/client";
+import type { TeamTaskPriority, TeamAdTaskStatus } from "@prisma/client";
 import { parseUrlList } from "@/lib/team-planning";
 import { defaultTeamMemberId, isTeamMemberId } from "@/lib/team-members";
 import { normalizeTeamPriority } from "@/lib/team-priority";
@@ -26,6 +26,7 @@ export type CreateTeamAdTaskInput = {
   deadlineDate?: string;
   deadlineTime?: string;
   priority?: TeamTaskPriority | string;
+  status?: TeamAdTaskStatus;
 };
 
 export async function createTeamAdTask(
@@ -45,6 +46,7 @@ export async function createTeamAdTask(
   const deadlineDate = input.deadlineDate?.trim() ?? "";
   const deadlineTime = input.deadlineTime?.trim() ?? "";
   const priority = normalizeTeamPriority(input.priority);
+  const status = input.status ?? "TODO";
 
   if (!isTeamOutletId(outletId)) {
     throw new Error(`Invalid outlet: ${outletId}`);
@@ -83,6 +85,7 @@ export async function createTeamAdTask(
       deadlineDate: /^\d{4}-\d{2}-\d{2}$/.test(deadlineDate) ? deadlineDate : null,
       deadlineTime: normalizeTeamEndTime(deadlineTime),
       createdBy,
+      status,
     },
   });
 

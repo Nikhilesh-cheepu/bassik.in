@@ -1,4 +1,4 @@
-import type { TeamTaskPriority } from "@prisma/client";
+import type { TeamTaskPriority, TeamAdTaskStatus } from "@prisma/client";
 
 export const TEAM_PRIORITIES: TeamTaskPriority[] = ["HIGH", "NORMAL", "LOW"];
 
@@ -25,8 +25,9 @@ export function priorityRank(p: TeamTaskPriority): number {
   }
 }
 
-export function priorityAccentClass(p: TeamTaskPriority, done: boolean): string {
-  if (done) return "bg-emerald-500/70";
+export function priorityAccentClass(p: TeamTaskPriority, status: TeamAdTaskStatus): string {
+  if (status === "DONE") return "bg-emerald-500/70";
+  if (status === "PENDING_APPROVAL") return "bg-amber-500/80";
   switch (p) {
     case "HIGH":
       return "bg-rose-500";

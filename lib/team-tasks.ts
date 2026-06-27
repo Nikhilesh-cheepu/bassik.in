@@ -54,7 +54,7 @@ export function toTeamTaskDto(row: TeamAdTask): TeamTaskDto {
   };
 }
 
-export type TeamTaskFilter = "all" | "todo" | "done";
+export type TeamTaskFilter = "all" | "todo" | "done" | "pending";
 
 export const TEAM_START_ASAP = "ASAP";
 
@@ -78,20 +78,31 @@ export function normalizeTeamStartDate(raw: string): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
 }
 
-export function filterTeamTasks(tasks: TeamAdTask[], filter: TeamTaskFilter): TeamAdTask[] {
+export function filterTeamTasks(
+  tasks: TeamAdTask[],
+  filter: TeamTaskFilter,
+  role?: "admin" | "member" | "viewer"
+): TeamAdTask[] {
   switch (filter) {
     case "todo":
       return tasks.filter((t) => t.status === "TODO");
     case "done":
       return tasks.filter((t) => t.status === "DONE");
+    case "pending":
+      return tasks.filter((t) => t.status === "PENDING_APPROVAL");
     default:
-      return tasks;
+      if (role === "member") return tasks;
+      return tasks.filter((t) => t.status !== "PENDING_APPROVAL");
   }
 }
 
 export function sortTeamTasks(tasks: TeamAdTask[]): TeamAdTask[] {
   return [...tasks].sort((a, b) => {
-    const statusOrder = (s: TeamAdTaskStatus) => (s === "TODO" ? 0 : 1);
+    const statusOrder = (s: TeamAdTaskStatus) => {
+      if (s === "TODO") return 0;
+      if (s === "PENDING_APPROVAL") return 1;
+      return 2;
+    };
     const statusCmp = statusOrder(a.status) - statusOrder(b.status);
     if (statusCmp !== 0) return statusCmp;
     const pri = priorityRank(a.priority) - priorityRank(b.priority);

@@ -66,7 +66,12 @@ function taskMetaLine(
 
 function taskRecordLine(task: TeamTaskDto): string {
   const done = task.status === "DONE";
+  const pending = task.status === "PENDING_APPROVAL";
   const parts: string[] = [];
+  if (pending) {
+    parts.push(`Submitted ${formatTeamRecordDateTime(task.createdAt)} · awaiting approval`);
+    return parts.join(" · ");
+  }
   if (done && task.completedAt) {
     parts.push(`Done ${formatTeamRecordDateTime(task.completedAt)}`);
   }
@@ -84,6 +89,8 @@ type CardProps = {
   onToggleDone: (task: TeamTaskDto) => void;
   onEdit: (task: TeamTaskDto) => void;
   onDelete: (task: TeamTaskDto) => void;
+  onApprove?: (task: TeamTaskDto) => void;
+  onReject?: (task: TeamTaskDto) => void;
   onPriorityChange: (task: TeamTaskDto, priority: TeamTaskPriority) => void;
 };
 
@@ -118,18 +125,21 @@ function AdTaskCard({
   onToggleDone,
   onEdit,
   onDelete,
+  onApprove,
+  onReject,
   onPriorityChange,
   dragHandleProps,
 }: CardProps & { dragHandleProps?: Record<string, unknown> }) {
   const done = task.status === "DONE";
+  const pending = task.status === "PENDING_APPROVAL";
   const link = creativeLink(task);
-  const overdue = !done && isPastDeadline(task.deadlineDate, task.deadlineTime);
-  const accent = priorityAccentClass(task.priority, done);
+  const overdue = !done && !pending && isPastDeadline(task.deadlineDate, task.deadlineTime);
+  const accent = priorityAccentClass(task.priority, task.status);
 
   return (
     <article
       className={`relative overflow-hidden rounded-xl bg-[#0e0e14] ring-1 ring-white/[0.06] ${
-        done ? "opacity-85" : ""
+        done ? "opacity-85" : pending ? "ring-amber-500/20" : ""
       } ${dragHandleProps && canDrag ? "shadow-lg shadow-black/25" : ""}`}
     >
       <div className={`absolute inset-y-0 left-0 w-1 ${accent}`} />
@@ -148,12 +158,16 @@ function AdTaskCard({
           <div className="flex items-start justify-between gap-2">
             <h2
               className={`text-[15px] font-medium leading-snug ${
-                done ? "text-white/55 line-through" : "text-white"
+                done ? "text-white/55 line-through" : pending ? "text-amber-50/95" : "text-white"
               }`}
             >
               {task.title}
             </h2>
-            {isAdmin && !done ? (
+            {pending ? (
+              <span className="shrink-0 rounded-md bg-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+                Pending
+              </span>
+            ) : isAdmin && !done ? (
               <button
                 type="button"
                 onClick={() => onPriorityChange(task, cyclePriority(task.priority))}
@@ -207,6 +221,27 @@ function AdTaskCard({
           ) : null}
           {!isViewer ? (
             <div className="mt-3 flex items-center gap-2 border-t border-white/[0.05] pt-2.5">
+              {pending && isAdmin ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onApprove?.(task)}
+                    className="min-h-[40px] flex-1 rounded-lg bg-emerald-500/20 text-xs font-medium text-emerald-200"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onReject?.(task)}
+                    className="min-h-[40px] rounded-lg px-3 text-xs text-red-300/70"
+                  >
+                    Reject
+                  </button>
+                </>
+              ) : pending ? (
+                <p className="py-2 text-xs text-amber-200/60">Waiting for admin approval</p>
+              ) : (
+                <>
               <button
                 type="button"
                 onClick={() => onToggleDone(task)}
@@ -234,6 +269,8 @@ function AdTaskCard({
                   </button>
                 </>
               ) : null}
+                </>
+              )}
             </div>
           ) : null}
         </div>
@@ -274,6 +311,8 @@ export type AdTaskListProps = {
   onToggleDone: (task: TeamTaskDto) => void;
   onEdit: (task: TeamTaskDto) => void;
   onDelete: (task: TeamTaskDto) => void;
+  onApprove?: (task: TeamTaskDto) => void;
+  onReject?: (task: TeamTaskDto) => void;
   onReorder: (taskIds: string[]) => Promise<void>;
   onPriorityChange: (task: TeamTaskDto, priority: TeamTaskPriority) => Promise<void>;
 };
@@ -289,6 +328,8 @@ export default function AdTaskList({
   onToggleDone,
   onEdit,
   onDelete,
+  onApprove,
+  onReject,
   onReorder,
   onPriorityChange,
 }: AdTaskListProps) {
@@ -326,10 +367,12 @@ export default function AdTaskList({
     isViewer,
     isAdmin,
     canDrag,
-    onToggleDone,
-    onEdit,
-    onDelete,
-    onPriorityChange,
+  onToggleDone,
+  onEdit,
+  onDelete,
+  onApprove,
+  onReject,
+  onPriorityChange,
   };
 
   const renderCard = (task: TeamTaskDto) => (

@@ -12,7 +12,7 @@ import {
 import { prisma } from "@/lib/db";
 import { prismaSchemaErrorResponse } from "@/lib/prisma-schema-error";
 
-const FILTERS = new Set<TeamTaskFilter>(["all", "todo", "done"]);
+const FILTERS = new Set<TeamTaskFilter>(["all", "todo", "done", "pending"]);
 
 export async function GET(req: NextRequest) {
   const session = await getTeamFromRequest(req);
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     });
 
     const safeFilter = FILTERS.has(filter) ? filter : "all";
-    const filtered = sortTeamTasks(filterTeamTasks(rows, safeFilter));
+    const filtered = sortTeamTasks(filterTeamTasks(rows, safeFilter, session.role));
 
     return NextResponse.json({
       tasks: filtered.map(toTeamTaskDto),

@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "TeamAdTaskStatus" ADD VALUE 'PENDING_APPROVAL';

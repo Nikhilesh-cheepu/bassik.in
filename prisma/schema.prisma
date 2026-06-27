@@ -372,6 +372,7 @@ model VenueChatConfig {
 enum TeamAdTaskStatus {
   TODO
   DONE
+  PENDING_APPROVAL
 }
 
 enum TeamTaskPriority {
