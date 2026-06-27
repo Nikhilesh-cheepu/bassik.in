@@ -77,3 +77,45 @@ export function teamMembersForClient(): TeamMember[] {
 export function defaultTeamMemberId(): string {
   return getTeamMemberRoster()[0]?.id ?? "amit";
 }
+
+/** Match member id or first name from free text (e.g. "assign to Mahesh", "for amit"). */
+export function resolveTeamMemberFromText(text: string): string | undefined {
+  const t = text.toLowerCase();
+  const roster = getTeamMemberRoster();
+
+  for (const m of roster) {
+    const id = m.id.toLowerCase();
+    const name = m.name.toLowerCase();
+    const first = name.split(/\s+/)[0] ?? name;
+
+    const patterns = [
+      new RegExp(`\\bassign(?:ee)?\\s+(?:to\\s+)?${first}\\b`, "i"),
+      new RegExp(`\\bassign(?:ee)?\\s+(?:to\\s+)?${id}\\b`, "i"),
+      new RegExp(`\\b(?:for|to)\\s+${first}\\b`, "i"),
+      new RegExp(`\\b(?:for|to)\\s+${id}\\b`, "i"),
+      new RegExp(`\\b${first}\\s+should\\b`, "i"),
+      new RegExp(`\\bgive\\s+(?:it\\s+)?to\\s+${first}\\b`, "i"),
+      new RegExp(`\\bgive\\s+(?:it\\s+)?to\\s+${id}\\b`, "i"),
+      new RegExp(`\\b${first}\\s+(?:will|can)\\s+(?:do|handle)\\b`, "i"),
+    ];
+
+    if (patterns.some((p) => p.test(t))) return m.id;
+  }
+
+  return undefined;
+}
+
+/** Resolve id or display name to a roster member id. */
+export function resolveTeamMemberRef(raw: string | undefined | null): string | undefined {
+  const v = raw?.trim().toLowerCase();
+  if (!v) return undefined;
+  const roster = getTeamMemberRoster();
+  const byId = roster.find((m) => m.id.toLowerCase() === v);
+  if (byId) return byId.id;
+  const byName = roster.find(
+    (m) =>
+      m.name.toLowerCase() === v ||
+      m.name.toLowerCase().split(/\s+/)[0] === v
+  );
+  return byName?.id;
+}

@@ -1,6 +1,12 @@
 import OpenAI from "openai";
 import { TEAM_AD_OUTLETS, isTeamOutletId } from "@/lib/team-outlets";
-import { getTeamMemberRoster, isTeamMemberId } from "@/lib/team-members";
+import {
+  defaultTeamMemberId,
+  getTeamMemberRoster,
+  isTeamMemberId,
+  resolveTeamMemberFromText,
+  resolveTeamMemberRef,
+} from "@/lib/team-members";
 import { normalizeTeamPriority } from "@/lib/team-priority";
 import { normalizeTeamStartDate } from "@/lib/team-tasks";
 import { normalizeTeamEndTime } from "@/lib/team-end-time";
@@ -8,20 +14,32 @@ import type { CreateTeamAdTaskInput } from "@/lib/team-task-create";
 
 const OUTLET_MAP = TEAM_AD_OUTLETS.map((o) => `${o.label} → ${o.id}`).join("\n");
 
-const PARSE_SYSTEM = `You parse Bassik team ad briefs into structured tasks. Today is used to infer year when only day+month given (e.g. "26 June" → 2026-06-26 if June 2026 is upcoming).
+function buildParseSystem() {
+  const memberLines = getTeamMemberRoster()
+    .map((m) => `- ${m.name} (say "${m.name}" or "${m.id}") → assigneeId: "${m.id}"`)
+    .join("\n");
+
+  return `You parse Bassik team ad briefs into structured tasks. Today is used to infer year when only day+month given (e.g. "26 June" → 2026-06-26 if June 2026 is upcoming).
 
 Valid outlet ids (match fuzzy names like "Club Rogue Gachibowli"):
 ${OUTLET_MAP}
 
-Team members: ${getTeamMemberRoster().map((m) => `${m.name} → ${m.id}`).join(", ")}
+Team members — ALWAYS set assigneeId when the user names someone:
+${memberLines}
+
+Assignee rules (very important):
+- Phrases like "assign to Amit", "for Mahesh", "give to Jeslyn", "Amit should do" → set defaultAssigneeId or per-task assigneeId
+- If one person for the whole brief, set defaultAssigneeId AND each task's assigneeId
+- If different people per line, set assigneeId on each task
+- Only default to amit when NO member is mentioned anywhere in the brief or conversation context
+- assigneeId must be the member id string (amit, jeslyn, mahesh), not the display name
 
 When the user pastes a brief with outlets + links + event/deadline dates, set shouldCreateTasks=true and fill tasks (one per outlet/creative line).
-Defaults unless overridden:
+Other defaults unless overridden:
 - priority: HIGH
 - startDate: ASAP
 - endDate + deadlineDate: event date
 - endTime + deadlineTime: "evening" when they say evening/11pm/11
-- assigneeId: amit (SEO) unless specified
 - creativeUrl: Instagram/Drive link on that line
 - title: shared campaign title + outlet/theme suffix when multiple lines
 
@@ -30,12 +48,15 @@ If the message is a normal question (summarize, advice), set shouldCreateTasks=f
 Respond with JSON only:
 {
   "shouldCreateTasks": boolean,
+  "defaultAssigneeId": "member id or omit",
   "tasks": [{ "outletId", "title", "description?", "creativeUrl?", "referenceUrls?", "startDate?", "endDate?", "endTime?", "deadlineDate?", "deadlineTime?", "priority?", "assigneeId?" }],
-  "reply": "short friendly message — list what you created or answer the question"
+  "reply": "short friendly message — mention who tasks are assigned to"
 }`;
+}
 
 type RawParsed = {
   shouldCreateTasks?: boolean;
+  defaultAssigneeId?: string;
   tasks?: unknown[];
   reply?: string;
 };
@@ -46,17 +67,20 @@ export type ParsedBriefResult = {
   reply: string;
 };
 
-function normalizeTask(raw: unknown): CreateTeamAdTaskInput | null {
+function normalizeTask(
+  raw: unknown,
+  fallbackAssigneeId: string
+): CreateTeamAdTaskInput | null {
   if (!raw || typeof raw !== "object") return null;
   const t = raw as Record<string, unknown>;
   const outletId = typeof t.outletId === "string" ? t.outletId.trim() : "";
   const title = typeof t.title === "string" ? t.title.trim() : "";
   if (!outletId || !title || !isTeamOutletId(outletId)) return null;
 
+  const rawAssignee =
+    typeof t.assigneeId === "string" ? resolveTeamMemberRef(t.assigneeId) : undefined;
   const assigneeId =
-    typeof t.assigneeId === "string" && isTeamMemberId(t.assigneeId.trim())
-      ? t.assigneeId.trim()
-      : undefined;
+    rawAssignee && isTeamMemberId(rawAssignee) ? rawAssignee : fallbackAssigneeId;
 
   const creativeUrl = typeof t.creativeUrl === "string" ? t.creativeUrl.trim() : undefined;
   const description = typeof t.description === "string" ? t.description.trim() : undefined;
@@ -98,11 +122,14 @@ export function looksLikeTaskBrief(text: string): boolean {
   const hasUrl = /https?:\/\//i.test(t);
   const hasOutlet =
     /club\s*rogue|gachibowli|kondapur|jubilee|boiler|firefly|c53|komma|kiik|asil/i.test(t);
-  const hasBriefCue = /asap|deadline|event|ad end|friday|outlet/i.test(t);
+  const hasBriefCue = /asap|deadline|event|ad end|friday|outlet|assign/i.test(t);
   return hasUrl && (hasOutlet || hasBriefCue || t.split("\n").length >= 3);
 }
 
-export async function parseBriefForTasks(userText: string): Promise<ParsedBriefResult> {
+export async function parseBriefForTasks(
+  userText: string,
+  conversationContext = ""
+): Promise<ParsedBriefResult> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     return {
@@ -112,8 +139,16 @@ export async function parseBriefForTasks(userText: string): Promise<ParsedBriefR
     };
   }
 
+  const fullContext = [conversationContext.trim(), userText.trim()].filter(Boolean).join("\n\n");
+  const textAssignee = resolveTeamMemberFromText(fullContext);
+
   const client = new OpenAI({ apiKey });
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
+
+  const userPayload =
+    conversationContext.trim() && conversationContext.trim() !== userText.trim()
+      ? `Earlier context from this chat:\n${conversationContext.trim()}\n\nLatest brief:\n${userText}`
+      : userText;
 
   const completion = await client.chat.completions.create({
     model,
@@ -121,8 +156,8 @@ export async function parseBriefForTasks(userText: string): Promise<ParsedBriefR
     max_tokens: 2000,
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: PARSE_SYSTEM },
-      { role: "user", content: userText },
+      { role: "system", content: buildParseSystem() },
+      { role: "user", content: userPayload },
     ],
   });
 
@@ -138,15 +173,21 @@ export async function parseBriefForTasks(userText: string): Promise<ParsedBriefR
     };
   }
 
+  const aiDefault =
+    resolveTeamMemberRef(parsed.defaultAssigneeId) ??
+    resolveTeamMemberFromText(userText) ??
+    textAssignee;
+  const fallbackAssignee = aiDefault && isTeamMemberId(aiDefault) ? aiDefault : defaultTeamMemberId();
+
   const tasks = (Array.isArray(parsed.tasks) ? parsed.tasks : [])
-    .map(normalizeTask)
+    .map((t) => normalizeTask(t, fallbackAssignee))
     .filter((t): t is CreateTeamAdTaskInput => t !== null);
 
   const reply =
     typeof parsed.reply === "string" && parsed.reply.trim()
       ? parsed.reply.trim()
       : tasks.length
-        ? `Parsed ${tasks.length} task(s).`
+        ? `Parsed ${tasks.length} task(s) for ${getTeamMemberRoster().find((m) => m.id === fallbackAssignee)?.name ?? fallbackAssignee}.`
         : "Got it.";
 
   return {

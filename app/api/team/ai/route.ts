@@ -4,6 +4,7 @@ import { looksLikeTaskBrief, parseBriefForTasks } from "@/lib/team-ai-tasks";
 import { createTeamAdTasks } from "@/lib/team-task-create";
 import { runTeamAiChat, type TeamAiMessage } from "@/lib/team-ai";
 import { teamOutletLabel } from "@/lib/team-outlets";
+import { teamMemberName } from "@/lib/team-members";
 import { prisma } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
@@ -32,16 +33,22 @@ export async function POST(req: NextRequest) {
   }
 
   const lastUser = messages[messages.length - 1]!.content;
+  const userContext = messages
+    .filter((m) => m.role === "user")
+    .slice(-4)
+    .map((m) => m.content)
+    .join("\n");
   const isAdmin = session.role === "admin";
 
   try {
     if (looksLikeTaskBrief(lastUser)) {
-      const parsed = await parseBriefForTasks(lastUser);
+      const parsed = await parseBriefForTasks(lastUser, userContext);
 
       if (parsed.shouldCreateTasks && isAdmin) {
         const { created, errors } = await createTeamAdTasks(parsed.tasks, session.username);
         const lines = created.map(
-          (t) => `• ${t.title} — ${teamOutletLabel(t.outletId)} [HIGH]`
+          (t) =>
+            `• ${t.title} — ${teamOutletLabel(t.outletId)} → ${teamMemberName(t.assigneeId)} [HIGH]`
         );
         let reply = parsed.reply;
         if (created.length) {

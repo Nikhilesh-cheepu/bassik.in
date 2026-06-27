@@ -936,7 +936,11 @@ export default function TeamClient() {
             onDelete={(n) => void deletePlanningNote(n)}
           />
         ) : tab === "ai" ? (
-          <TeamAiPanel onTasksCreated={() => void loadTasks(true)} />
+          <TeamAiPanel
+            username={user.username}
+            members={members}
+            onTasksCreated={() => void loadTasks(true)}
+          />
         ) : (
           <div className="space-y-2">
             {reminders.map((r) => {
@@ -1057,7 +1061,7 @@ export default function TeamClient() {
         />
       </div>
 
-      <div className="h-[108px]" />
+      <div className={tab === "ai" ? "h-[200px]" : "h-[108px]"} />
 
       {showTaskForm && user.role === "admin" ? (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/75">
