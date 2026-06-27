@@ -114,3 +114,76 @@ export { formatTeamEndDateTime, normalizeTeamEndTime } from "@/lib/team-end-time
 export function primaryCreativeLink(task: Pick<TeamTaskDto, "uploadedUrl" | "creativeUrl">): string | null {
   return task.uploadedUrl?.trim() || task.creativeUrl?.trim() || null;
 }
+
+export function formatTeamRecordDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const date = d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  const time = d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true });
+  return `${date}, ${time}`;
+}
+
+export function formatTeamRecordDayHeading(iso: string | null | undefined): string {
+  if (!iso) return "Earlier";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "Earlier";
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.round((startOfToday.getTime() - startOfDay.getTime()) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return d.toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: d.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+  });
+}
+
+function completedDayKey(iso: string | null | undefined): string {
+  if (!iso) return "unknown";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "unknown";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export type TeamTaskDayGroup = {
+  key: string;
+  label: string;
+  tasks: TeamTaskDto[];
+};
+
+export function groupTasksByCompletedDay(tasks: TeamTaskDto[]): TeamTaskDayGroup[] {
+  const map = new Map<string, TeamTaskDto[]>();
+  for (const t of tasks) {
+    const key = completedDayKey(t.completedAt ?? t.updatedAt);
+    const list = map.get(key) ?? [];
+    list.push(t);
+    map.set(key, list);
+  }
+
+  const keys = [...map.keys()].sort((a, b) => {
+    if (a === "unknown") return 1;
+    if (b === "unknown") return -1;
+    return b.localeCompare(a);
+  });
+
+  return keys.map((key) => {
+    const groupTasks = (map.get(key) ?? []).sort((a, b) => {
+      const ta = new Date(a.completedAt ?? a.updatedAt).getTime();
+      const tb = new Date(b.completedAt ?? b.updatedAt).getTime();
+      return tb - ta;
+    });
+    const sample = groupTasks[0]?.completedAt ?? groupTasks[0]?.updatedAt;
+    return {
+      key,
+      label: key === "unknown" ? "Earlier" : formatTeamRecordDayHeading(sample),
+      tasks: groupTasks,
+    };
+  });
+}

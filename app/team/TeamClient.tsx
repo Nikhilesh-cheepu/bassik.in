@@ -985,6 +985,7 @@ export default function TeamClient() {
             isViewer={isViewer}
             isAdmin={user.role === "admin"}
             canDrag={canDragTasks}
+            groupDoneByDate={filter === "done"}
             onToggleDone={(t) => void toggleTaskDone(t)}
             onEdit={openEditTask}
             onDelete={(t) => void deleteTask(t)}

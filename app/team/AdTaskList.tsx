@@ -19,7 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { TeamTaskPriority } from "@prisma/client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { teamOutletLabel } from "@/lib/team-outlets";
 import {
   cyclePriority,
@@ -28,7 +28,9 @@ import {
 } from "@/lib/team-priority";
 import {
   formatTeamEndDateTime,
+  formatTeamRecordDateTime,
   formatTeamStartDate,
+  groupTasksByCompletedDay,
   type TeamTaskDto,
 } from "@/lib/team-tasks";
 import { formatTeamEndDateTime as formatDeadline, isPastDeadline } from "@/lib/team-end-time";
@@ -59,6 +61,16 @@ function taskMetaLine(
   } else if (task.startDate) {
     parts.push(`Start ${formatTeamStartDate(task.startDate)}`);
   }
+  return parts.join(" · ");
+}
+
+function taskRecordLine(task: TeamTaskDto): string {
+  const done = task.status === "DONE";
+  const parts: string[] = [];
+  if (done && task.completedAt) {
+    parts.push(`Done ${formatTeamRecordDateTime(task.completedAt)}`);
+  }
+  parts.push(`Created ${formatTeamRecordDateTime(task.createdAt)}`);
   return parts.join(" · ");
 }
 
@@ -117,7 +129,7 @@ function AdTaskCard({
   return (
     <article
       className={`relative overflow-hidden rounded-xl bg-[#0e0e14] ring-1 ring-white/[0.06] ${
-        done ? "opacity-80" : ""
+        done ? "opacity-85" : ""
       } ${dragHandleProps && canDrag ? "shadow-lg shadow-black/25" : ""}`}
     >
       <div className={`absolute inset-y-0 left-0 w-1 ${accent}`} />
@@ -162,6 +174,7 @@ function AdTaskCard({
           <p className={`mt-1 text-xs ${overdue ? "text-red-300/80" : "text-white/38"}`}>
             {taskMetaLine(task, members, showAssignee)}
           </p>
+          <p className="mt-0.5 text-[11px] text-white/28">{taskRecordLine(task)}</p>
           {task.description ? <ExpandableText text={task.description} /> : null}
           {!done && task.endDate ? (
             <p className="mt-1 text-[11px] text-white/30">
@@ -229,6 +242,27 @@ function AdTaskCard({
   );
 }
 
+function DoneDaySection({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center gap-3 py-1">
+        <div className="h-px flex-1 bg-white/[0.08]" />
+        <h3 className="shrink-0 text-[11px] font-medium uppercase tracking-wide text-white/35">
+          {label}
+        </h3>
+        <div className="h-px flex-1 bg-white/[0.08]" />
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export type AdTaskListProps = {
   tasks: TeamTaskDto[];
   members: TeamMember[];
@@ -236,6 +270,7 @@ export type AdTaskListProps = {
   isViewer: boolean;
   isAdmin: boolean;
   canDrag: boolean;
+  groupDoneByDate?: boolean;
   onToggleDone: (task: TeamTaskDto) => void;
   onEdit: (task: TeamTaskDto) => void;
   onDelete: (task: TeamTaskDto) => void;
@@ -250,6 +285,7 @@ export default function AdTaskList({
   isViewer,
   isAdmin,
   canDrag,
+  groupDoneByDate = false,
   onToggleDone,
   onEdit,
   onDelete,
@@ -261,6 +297,11 @@ export default function AdTaskList({
   useEffect(() => {
     setItems(tasks);
   }, [tasks]);
+
+  const doneGroups = useMemo(
+    () => (groupDoneByDate ? groupTasksByCompletedDay(items) : []),
+    [groupDoneByDate, items]
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -290,6 +331,22 @@ export default function AdTaskList({
     onDelete,
     onPriorityChange,
   };
+
+  const renderCard = (task: TeamTaskDto) => (
+    <AdTaskCard key={task.id} task={task} {...cardProps} canDrag={false} />
+  );
+
+  if (groupDoneByDate && doneGroups.length > 0) {
+    return (
+      <div className="space-y-5">
+        {doneGroups.map((group) => (
+          <DoneDaySection key={group.key} label={group.label}>
+            <div className="space-y-2">{group.tasks.map(renderCard)}</div>
+          </DoneDaySection>
+        ))}
+      </div>
+    );
+  }
 
   if (!canDrag) {
     return (
