@@ -9,6 +9,8 @@ import {
 } from "@/lib/team-planning";
 import type { TeamPlanningType } from "@prisma/client";
 import ExpandableText from "./ExpandableText";
+import { PlanningSheetPreview } from "./TeamPlanningSheet";
+import { teamFilterChip } from "./TeamIcons";
 import { TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL } from "./TeamNav";
 
 function typeChip(type: TeamPlanningType): string {
@@ -50,20 +52,18 @@ export function PlanningFilters({
     ...TEAM_PLANNING_TYPES.map((t) => ({ id: t, label: TEAM_PLANNING_LABELS[t] })),
   ];
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <>
       {chips.map((c) => (
         <button
           key={c.id}
           type="button"
           onClick={() => onFilterChange(c.id)}
-          className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium ${
-            filter === c.id ? "bg-white/10 text-white" : "text-white/45"
-          }`}
+          className={teamFilterChip(filter === c.id)}
         >
           {c.label}
         </button>
       ))}
-    </div>
+    </>
   );
 }
 
@@ -119,6 +119,23 @@ export function PlanningNoteList({
               })}
             </p>
             {n.body ? <ExpandableText text={n.body} /> : null}
+            {n.sheetData ? <PlanningSheetPreview data={n.sheetData} /> : null}
+            {n.attachments?.length > 0 ? (
+              <ul className="mt-2 space-y-1">
+                {n.attachments.map((a) => (
+                  <li key={a.url}>
+                    <a
+                      href={a.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-cyan-300/80"
+                    >
+                      {a.fileName}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             {n.imageUrls.length > 0 ? (
               <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
                 {n.imageUrls.map((url) => (

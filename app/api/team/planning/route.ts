@@ -49,7 +49,11 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const parsed = parsePlanningPayload(body);
-  const title = parsed.title || parsed.body?.slice(0, 80) || "Note";
+  const title =
+    parsed.title ||
+    parsed.sheetData?.columns.join(" · ").slice(0, 80) ||
+    parsed.body?.slice(0, 80) ||
+    (parsed.type === "FEEDBACK" ? "Feedback" : "Planning");
   if (title.length > 200) {
     return NextResponse.json({ error: "Title too long" }, { status: 400 });
   }
@@ -62,6 +66,8 @@ export async function POST(req: NextRequest) {
       body: parsed.body,
       outletId: parsed.outletId,
       imageUrls: parsed.imageUrls.length ? parsed.imageUrls : undefined,
+      sheetData: parsed.sheetData ?? undefined,
+      attachmentUrls: parsed.attachments.length ? parsed.attachments : undefined,
       createdBy: session.username,
     },
   });

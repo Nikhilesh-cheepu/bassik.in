@@ -405,7 +405,6 @@ export default function AdTaskList({
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => void handleDragEnd(e)}>
       <SortableContext items={items.map((t) => t.id)} strategy={verticalListSortingStrategy}>
         <div className="space-y-2">
-          <p className="pb-1 text-[11px] text-white/30">Hold ≡ and drag to set order</p>
           {items.map((task) => (
             <SortableAdTaskCard key={task.id} task={task} {...cardProps} />
           ))}

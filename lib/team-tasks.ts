@@ -85,7 +85,10 @@ export function filterTeamTasks(
 ): TeamAdTask[] {
   switch (filter) {
     case "todo":
-      return tasks.filter((t) => t.status === "TODO");
+      return tasks.filter(
+        (t) =>
+          t.status === "TODO" || (role === "member" && t.status === "PENDING_APPROVAL")
+      );
     case "done":
       return tasks.filter((t) => t.status === "DONE");
     case "pending":

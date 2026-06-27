@@ -23,9 +23,23 @@ function resolveMime(file: File): string | null {
     pdf: "application/pdf",
     mp4: "video/mp4",
     mov: "video/quicktime",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    xls: "application/vnd.ms-excel",
+    csv: "text/csv",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   };
   return byExt[ext] ?? null;
 }
+
+const PLANNING_MIMES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "text/csv",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
 
 const ALLOWED_PREFIXES = ["image/", "video/", "application/pdf"];
 
@@ -44,8 +58,9 @@ export async function POST(req: NextRequest) {
   const kindField = formData?.get("kind");
   const outletId = typeof outletField === "string" ? outletField.trim() : "general";
   const isReference = kindField === "reference";
+  const isPlanning = kindField === "planning";
 
-  if (!isReference && session.role !== "admin") {
+  if (!isReference && !isPlanning && session.role !== "admin") {
     return NextResponse.json({ error: "Only admin can upload creatives" }, { status: 403 });
   }
 
@@ -54,7 +69,18 @@ export async function POST(req: NextRequest) {
   }
 
   const mimeType = resolveMime(file);
-  if (isReference) {
+  if (isPlanning) {
+    const ok =
+      mimeType?.startsWith("image/") ||
+      (mimeType && PLANNING_MIMES.has(mimeType)) ||
+      mimeType === "application/pdf";
+    if (!ok) {
+      return NextResponse.json(
+        { error: "Use images, PDF, Excel, Word, or CSV for planning files." },
+        { status: 400 }
+      );
+    }
+  } else if (isReference) {
     if (!mimeType?.startsWith("image/")) {
       return NextResponse.json({ error: "Reference uploads must be images." }, { status: 400 });
     }
@@ -80,14 +106,14 @@ export async function POST(req: NextRequest) {
   const slug = isTeamOutletId(outletId) ? outletId : "general";
   const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
   const safeName = (file.name || `creative.${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
-  const folder = isReference ? "references" : "creatives";
+  const folder = isPlanning ? "planning" : isReference ? "references" : "creatives";
   const pathname = `team/${folder}/${slug}/${Date.now()}-${safeName}`;
 
   try {
     const bytes = Buffer.from(await file.arrayBuffer());
     const blob = await put(pathname, bytes, {
       access: "public",
-      contentType: mimeType,
+      contentType: mimeType ?? undefined,
       addRandomSuffix: false,
     });
 

@@ -40,6 +40,15 @@ export async function PATCH(
   if (body.imageUrls !== undefined) {
     data.imageUrls = parsePlanningPayload({ imageUrls: body.imageUrls }).imageUrls;
   }
+  if (body.sheetData !== undefined) {
+    const sheet = parsePlanningPayload({ sheetData: body.sheetData }).sheetData;
+    data.sheetData = sheet;
+  }
+  if (body.attachmentUrls !== undefined || body.attachments !== undefined) {
+    data.attachmentUrls = parsePlanningPayload({
+      attachmentUrls: body.attachmentUrls ?? body.attachments,
+    }).attachments;
+  }
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });

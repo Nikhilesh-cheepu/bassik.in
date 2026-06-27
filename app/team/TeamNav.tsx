@@ -3,7 +3,7 @@
 export const TEAM_TABS = [
   { id: "ads", label: "Ads", short: "Ads & creatives" },
   { id: "planning", label: "Planning", short: "Planning" },
-  { id: "reminders", label: "Mine", short: "My reminders" },
+  { id: "reminders", label: "Mine", short: "Mine" },
   { id: "ai", label: "AI", short: "AI assistant" },
 ] as const;
 
@@ -14,12 +14,23 @@ type NavProps = {
   onChange: (tab: TeamTab) => void;
   hideReminders?: boolean;
   hideAi?: boolean;
+  hidePlanning?: boolean;
 };
 
-function visibleTabs({ hideReminders, hideAi }: Pick<NavProps, "hideReminders" | "hideAi">) {
+type SidebarNavProps = NavProps & {
+  userLabel?: string;
+  onLogout?: () => void;
+};
+
+function visibleTabs({
+  hideReminders,
+  hideAi,
+  hidePlanning,
+}: Pick<NavProps, "hideReminders" | "hideAi" | "hidePlanning">) {
   return TEAM_TABS.filter((t) => {
     if (hideReminders && t.id === "reminders") return false;
     if (hideAi && t.id === "ai") return false;
+    if (hidePlanning && t.id === "planning") return false;
     return true;
   });
 }
@@ -29,10 +40,11 @@ export function TeamSidebarNav({
   onChange,
   hideReminders,
   hideAi,
+  hidePlanning,
   userLabel,
   onLogout,
-}: NavProps & { userLabel?: string; onLogout?: () => void }) {
-  const tabs = visibleTabs({ hideReminders, hideAi });
+}: SidebarNavProps) {
+  const tabs = visibleTabs({ hideReminders, hideAi, hidePlanning });
 
   return (
     <aside className="sticky top-0 hidden h-[100dvh] w-[220px] shrink-0 flex-col border-r border-white/[0.06] bg-[#08080e] xl:flex xl:w-56">
@@ -76,8 +88,14 @@ export function TeamSidebarNav({
   );
 }
 
-export default function TeamBottomNav({ active, onChange, hideReminders, hideAi }: NavProps) {
-  const tabs = visibleTabs({ hideReminders, hideAi });
+export default function TeamBottomNav({
+  active,
+  onChange,
+  hideReminders,
+  hideAi,
+  hidePlanning,
+}: NavProps) {
+  const tabs = visibleTabs({ hideReminders, hideAi, hidePlanning });
 
   return (
     <nav className="flex border-t border-white/[0.06] bg-[#0a0a10]/98 md:min-h-[56px]">

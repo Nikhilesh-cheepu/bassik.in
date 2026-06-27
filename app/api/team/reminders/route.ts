@@ -41,6 +41,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  if (session.role === "viewer") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const body = await req.json().catch(() => ({}));
   const parsed = parseReminderPayload(body);
   const finalTitle = parsed.title || parsed.description?.slice(0, 80) || "Reminder";
@@ -48,9 +52,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Title too long" }, { status: 400 });
   }
 
+  const ownerId =
+    session.role === "admin" && typeof body.ownerId === "string" && body.ownerId.trim()
+      ? body.ownerId.trim()
+      : teamReminderOwnerId(session);
+
   const row = await prisma.teamReminder.create({
     data: {
-      ownerId: teamReminderOwnerId(session),
+      ownerId,
       title: finalTitle,
       description: parsed.description,
       startDate: parsed.startDate,

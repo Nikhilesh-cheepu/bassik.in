@@ -438,6 +438,8 @@ model TeamPlanningNote {
   body        String?
   outletId    String?
   imageUrls   Json?            // string[]
+  sheetData   Json?            // { columns: string[], rows: string[][] }
+  attachmentUrls Json?         // { url, fileName, mimeType }[]
   createdBy   String
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt

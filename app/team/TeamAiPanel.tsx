@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TeamAiMessage } from "@/lib/team-ai";
+import { TEAM_DOCK_PADDING } from "./TeamIcons";
 
 type Member = { id: string; name: string };
 
@@ -195,7 +196,10 @@ export default function TeamAiPanel({
         ) : null}
       </div>
 
-      <div className="fixed bottom-[calc(52px+env(safe-area-inset-bottom,0px))] left-0 right-0 z-20 border-t border-white/[0.08] bg-[#06060a]/98 backdrop-blur-sm md:bottom-[calc(56px+env(safe-area-inset-bottom,0px))] xl:hidden">
+      <div
+        className="fixed left-0 right-0 z-20 border-t border-white/[0.08] bg-[#06060a]/98 backdrop-blur-sm xl:hidden"
+        style={{ bottom: TEAM_DOCK_PADDING }}
+      >
         <div className="mx-auto w-full max-w-lg px-3 py-2 sm:max-w-xl md:max-w-2xl md:px-4">
           <Composer
             input={input}

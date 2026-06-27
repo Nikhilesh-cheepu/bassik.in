@@ -22,15 +22,19 @@ import { TEAM_PRIORITY_LABELS, TEAM_PRIORITIES } from "@/lib/team-priority";
 import AdTaskList from "./AdTaskList";
 import ExpandableText from "./ExpandableText";
 import { emptyMemberRecordForm, MemberRecordSheet, type MemberRecordForm } from "./MemberRecordSheet";
-import TeamBottomNav, { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
-import TeamAiPanel from "./TeamAiPanel";
+import TeamPageHeader from "./TeamPageHeader";
+import TeamMineView, { type MineSection } from "./TeamMineView";
 import {
-  emptyPlanningForm,
-  PlanningFilters,
-  PlanningFormSheet,
-  PlanningNoteList,
-  type PlanningForm,
-} from "./TeamPlanningView";
+  emptyPlanningSheetForm,
+  PlanningSheetFormSheet,
+  type PlanningSheetForm,
+} from "./TeamPlanningSheet";
+import { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
+import TeamDock, { TeamActionSheet, TeamMoreSheet } from "./TeamDock";
+import TeamWhatsAppSheet from "./TeamWhatsAppSheet";
+import { TEAM_DOCK_PADDING } from "./TeamIcons";
+import TeamAiPanel from "./TeamAiPanel";
+import { PlanningNoteList } from "./TeamPlanningView";
 import type { TeamPlanningDto, TeamPlanningFilter } from "@/lib/team-planning";
 
 type TeamUser = { username: string; role: "admin" | "member" | "viewer"; memberId?: string };
@@ -38,15 +42,13 @@ type TeamMember = { id: string; name: string; role?: string };
 type Filter = "all" | "todo" | "done" | "pending";
 type MemberTab = "all" | string;
 
-const TAB_TITLES: Record<TeamTab, string> = {
-  ads: "Ads & creatives",
-  planning: "Planning & feedback",
-  reminders: "My reminders",
-  ai: "AI assistant",
-};
-
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
+  { id: "todo", label: "To do" },
+  { id: "done", label: "Done" },
+];
+
+const MEMBER_AD_FILTERS: { id: Filter; label: string }[] = [
   { id: "todo", label: "To do" },
   { id: "done", label: "Done" },
 ];
@@ -81,7 +83,19 @@ type ReminderForm = {
   deadlineDate: string;
   deadlineTimeMode: TeamEndTimeMode;
   deadlineTimeCustom: string;
+  ownerId: string;
 };
+
+const emptyReminderForm = (): ReminderForm => ({
+  title: "",
+  description: "",
+  startDate: "",
+  endDate: "",
+  deadlineDate: "",
+  deadlineTimeMode: "none",
+  deadlineTimeCustom: "",
+  ownerId: "",
+});
 
 const emptyTaskForm = (assigneeId = "amit"): TaskForm => ({
   outletId: TEAM_AD_OUTLETS[0].id,
@@ -103,16 +117,6 @@ const emptyTaskForm = (assigneeId = "amit"): TaskForm => ({
   referenceUrls: [],
 });
 
-const emptyReminderForm = (): ReminderForm => ({
-  title: "",
-  description: "",
-  startDate: "",
-  endDate: "",
-  deadlineDate: "",
-  deadlineTimeMode: "none",
-  deadlineTimeCustom: "",
-});
-
 function memberName(members: TeamMember[], id: string): string {
   return members.find((m) => m.id === id)?.name ?? id;
 }
@@ -130,16 +134,6 @@ async function readTeamApiJson(res: Response) {
       res.ok ? "Invalid server response" : `Server error (${res.status}) — try refreshing`
     );
   }
-}
-
-function chipClass(active: boolean, tone: "cyan" | "violet" = "cyan"): string {
-  const on =
-    tone === "violet"
-      ? "bg-violet-500/15 text-violet-100"
-      : "bg-white/10 text-white";
-  return `shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium ${
-    active ? on : "text-white/45"
-  }`;
 }
 
 function formatDateTime(iso: string | null): string {
@@ -235,7 +229,8 @@ export default function TeamClient() {
   const [planningFilter, setPlanningFilter] = useState<TeamPlanningFilter>("all");
   const [showPlanningForm, setShowPlanningForm] = useState(false);
   const [editingPlanning, setEditingPlanning] = useState<TeamPlanningDto | null>(null);
-  const [planningForm, setPlanningForm] = useState<PlanningForm>(emptyPlanningForm);
+  const [planningForm, setPlanningForm] = useState<PlanningSheetForm>(emptyPlanningSheetForm());
+  const [mineSection, setMineSection] = useState<MineSection>("reminders");
   const [refUploading, setRefUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>("todo");
@@ -252,7 +247,9 @@ export default function TeamClient() {
   const [uploadStatus, setUploadStatus] = useState<{ fileName: string; siteUrl: string } | null>(null);
   const [showMemberRecordForm, setShowMemberRecordForm] = useState(false);
   const [memberRecordForm, setMemberRecordForm] = useState<MemberRecordForm>(emptyMemberRecordForm);
-  const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
+  const [showActionSheet, setShowActionSheet] = useState(false);
+  const [showMoreSheet, setShowMoreSheet] = useState(false);
+  const [showWhatsAppSheet, setShowWhatsAppSheet] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const soleMember = members.length === 1 ? members[0] : null;
@@ -268,7 +265,11 @@ export default function TeamClient() {
     return { todo, done, pending };
   }, [tasks, reminders, tab]);
 
+  const isMember = user?.role === "member";
+  const isMemberHub = isMember && tab === "reminders";
+
   const adFilters = useMemo(() => {
+    if (user?.role === "member") return MEMBER_AD_FILTERS;
     if (user?.role !== "admin") return FILTERS;
     return [
       ...FILTERS,
@@ -322,7 +323,9 @@ export default function TeamClient() {
       if (!silent) setRefreshing(true);
       setError(null);
       try {
-        const qs = new URLSearchParams({ filter });
+        const qs = new URLSearchParams({
+          filter: user?.role === "member" ? "all" : filter,
+        });
         const res = await fetch(`/api/team/reminders?${qs}`);
         if (res.status === 401) {
           setUser(null);
@@ -338,7 +341,7 @@ export default function TeamClient() {
         setRefreshing(false);
       }
     },
-    [filter]
+    [filter, user?.role]
   );
 
   const loadPlanning = useCallback(
@@ -389,10 +392,20 @@ export default function TeamClient() {
 
   useEffect(() => {
     if (!user) return;
+    if (isMember && (tab === "planning" || tab === "ai")) {
+      setTab("reminders");
+      if (tab === "planning") setMineSection("planning");
+    }
+  }, [user, tab, isMember]);
+
+  useEffect(() => {
+    if (!user) return;
     if (tab === "ads") void loadTasks(tasksReady);
-    else if (tab === "reminders" && !isViewer) void loadReminders(remindersReady);
-    else if (tab === "planning") void loadPlanning(planningReady);
-  }, [user, tab, loadTasks, loadReminders, loadPlanning, isViewer]);
+    else if (tab === "reminders" && !isViewer) {
+      void loadReminders(remindersReady);
+      if (isMember) void loadPlanning(planningReady);
+    } else if (tab === "planning") void loadPlanning(planningReady);
+  }, [user, tab, loadTasks, loadReminders, loadPlanning, isViewer, isMember]);
 
   useEffect(() => {
     if (!user || tab !== "planning") return;
@@ -400,12 +413,12 @@ export default function TeamClient() {
   }, [planningFilter]);
 
   useEffect(() => {
-    const open = showTaskForm || showReminderForm || showPlanningForm || showMemberRecordForm;
+    const open = showTaskForm || showReminderForm || showPlanningForm || showMemberRecordForm || showActionSheet || showMoreSheet || showWhatsAppSheet;
     document.body.style.overflow = open ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
-  }, [showTaskForm, showReminderForm, showPlanningForm, showMemberRecordForm]);
+  }, [showTaskForm, showReminderForm, showPlanningForm, showMemberRecordForm, showActionSheet, showMoreSheet, showWhatsAppSheet]);
 
   const uploadBlob = async (file: File, kind: "creative" | "reference") => {
     const fd = new FormData();
@@ -489,6 +502,7 @@ export default function TeamClient() {
   const openCreateReminder = () => {
     setEditingReminder(null);
     setReminderForm(emptyReminderForm());
+    if (isMember) setMineSection("reminders");
     setShowReminderForm(true);
   };
 
@@ -503,6 +517,7 @@ export default function TeamClient() {
       deadlineDate: r.deadlineDate ?? "",
       deadlineTimeMode: dl.mode,
       deadlineTimeCustom: dl.customTime,
+      ownerId: "",
     });
     setShowReminderForm(true);
   };
@@ -539,18 +554,24 @@ export default function TeamClient() {
     }
   };
 
-  const uploadPlanningImage = async (file: File) => {
+  const uploadPlanningFile = async (file: File) => {
     setRefUploading(true);
     setError(null);
     try {
       const fd = new FormData();
       fd.append("file", file);
-      fd.append("outletId", planningForm.outletId || taskForm.outletId);
-      fd.append("kind", "reference");
+      fd.append("outletId", planningForm.outletId || "general");
+      fd.append("kind", "planning");
       const res = await fetch("/api/team/upload", { method: "POST", body: fd });
       const data = await readTeamApiJson(res);
       if (!res.ok) throw new Error(data.error || "Upload failed");
-      setPlanningForm((f) => ({ ...f, imageUrls: [...f.imageUrls, data.url] }));
+      setPlanningForm((f) => ({
+        ...f,
+        attachments: [
+          ...f.attachments,
+          { url: data.url, fileName: data.fileName ?? file.name, mimeType: data.mimeType ?? file.type },
+        ],
+      }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -558,9 +579,9 @@ export default function TeamClient() {
     }
   };
 
-  const openCreatePlanning = () => {
+  const openCreatePlanning = (type: "PLANNING" | "FEEDBACK" = "PLANNING") => {
     setEditingPlanning(null);
-    setPlanningForm(emptyPlanningForm());
+    setPlanningForm(emptyPlanningSheetForm(type));
     setShowPlanningForm(true);
   };
 
@@ -569,9 +590,9 @@ export default function TeamClient() {
     setPlanningForm({
       type: n.type,
       title: n.title,
-      body: n.body ?? "",
       outletId: n.outletId ?? "",
-      imageUrls: n.imageUrls,
+      sheetData: n.sheetData ?? emptyPlanningSheetForm(n.type).sheetData,
+      attachments: n.attachments ?? [],
     });
     setShowPlanningForm(true);
   };
@@ -584,9 +605,9 @@ export default function TeamClient() {
       const payload = {
         type: planningForm.type,
         title: planningForm.title.trim(),
-        body: planningForm.body.trim(),
         outletId: planningForm.outletId,
-        imageUrls: planningForm.imageUrls,
+        sheetData: planningForm.sheetData,
+        attachmentUrls: planningForm.attachments,
       };
       const url = editingPlanning
         ? `/api/team/planning/${editingPlanning.id}`
@@ -657,7 +678,7 @@ export default function TeamClient() {
     setSaving(true);
     setError(null);
     try {
-      const payload = {
+      const payload: Record<string, string> = {
         title: reminderForm.title.trim(),
         description: reminderForm.description.trim(),
         startDate: reminderForm.startDate,
@@ -668,6 +689,9 @@ export default function TeamClient() {
           reminderForm.deadlineTimeCustom
         ),
       };
+      if (user?.role === "admin" && reminderForm.ownerId && !editingReminder) {
+        payload.ownerId = reminderForm.ownerId;
+      }
       const url = editingReminder
         ? `/api/team/reminders/${editingReminder.id}`
         : "/api/team/reminders";
@@ -745,22 +769,7 @@ export default function TeamClient() {
     window.open(`/api/team/export?${qs}`, "_blank");
   };
 
-  const shareWhatsApp = async () => {
-    setSharingWhatsApp(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/team/whatsapp-report");
-      const data = await readTeamApiJson(res);
-      if (!res.ok) throw new Error(data.error || "Could not build report");
-      const url = typeof data.shareUrl === "string" ? data.shareUrl : null;
-      if (!url) throw new Error("No share link");
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "WhatsApp share failed");
-    } finally {
-      setSharingWhatsApp(false);
-    }
-  };
+  const shareWhatsApp = () => setShowWhatsAppSheet(true);
 
   const approveTask = async (task: TeamTaskDto) => {
     const res = await fetch(`/api/team/tasks/${task.id}`, {
@@ -803,12 +812,38 @@ export default function TeamClient() {
     }
   };
 
+  const openMemberSheet = (type: "PLANNING" | "FEEDBACK") => {
+    if (isMember) {
+      setTab("reminders");
+      setMineSection(type === "FEEDBACK" ? "feedback" : "planning");
+    }
+    openCreatePlanning(type);
+  };
+
   const activeMemberLabel =
     memberTab !== "all" ? memberName(members, memberTab) : null;
   const listReady =
-    tab === "ads" ? tasksReady : tab === "reminders" ? remindersReady : tab === "planning" ? planningReady : true;
+    tab === "ads"
+      ? tasksReady
+      : isMemberHub
+        ? mineSection === "reminders"
+          ? remindersReady
+          : planningReady
+        : tab === "reminders"
+          ? remindersReady
+          : tab === "planning"
+            ? planningReady
+            : true;
   const listEmpty =
-    tab === "ads" ? tasks.length === 0 : tab === "reminders" ? reminders.length === 0 : tab === "planning" ? planningNotes.length === 0 : false;
+    tab === "ads"
+      ? tasks.length === 0
+      : isMemberHub
+        ? false
+        : tab === "reminders"
+          ? reminders.length === 0
+          : tab === "planning"
+            ? planningNotes.length === 0
+            : false;
 
   if (booting) {
     return (
@@ -863,11 +898,10 @@ export default function TeamClient() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => void shareWhatsApp()}
-            disabled={sharingWhatsApp}
-            className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200 disabled:opacity-50"
+            onClick={shareWhatsApp}
+            className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200"
           >
-            {sharingWhatsApp ? "…" : "WhatsApp"}
+            WhatsApp
           </button>
           <button
             type="button"
@@ -898,12 +932,12 @@ export default function TeamClient() {
       ) : tab === "planning" ? (
         <button
           type="button"
-          onClick={openCreatePlanning}
+          onClick={() => openCreatePlanning("PLANNING")}
           className="rounded-xl bg-sky-500/90 px-4 py-2 text-sm font-semibold text-white"
         >
-          + Note
+          + Planning
         </button>
-      ) : tab === "reminders" ? (
+      ) : tab === "reminders" && user.role === "admin" ? (
         <button
           type="button"
           onClick={openCreateReminder}
@@ -920,126 +954,40 @@ export default function TeamClient() {
         active={tab}
         onChange={setTab}
         hideReminders={isViewer}
-        hideAi={isViewer}
+        hideAi={isViewer || isMember}
+        hidePlanning={isMember}
         userLabel={userLabel}
         onLogout={() => void logout()}
       />
 
       <div className="flex min-w-0 flex-1 flex-col pb-[env(safe-area-inset-bottom)] xl:pb-0">
-      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#06060a]/95 backdrop-blur-md xl:static">
-        <div className={TEAM_PAGE}>
-          <div className="flex items-center justify-between gap-3 pt-3 pb-2 xl:pt-5 xl:pb-3">
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300/70 xl:hidden">
-                Bassik Team
-              </p>
-              <h1 className="truncate text-lg font-semibold xl:text-2xl">{TAB_TITLES[tab]}</h1>
-              <p className="text-xs text-white/40">
-                <span className="xl:hidden">{userLabel}</span>
-                {tab === "ads" || tab === "reminders" ? (
-                  <>
-                    <span className="xl:hidden"> · </span>
-                    {counts.todo} to do · {counts.done} done
-                    {user.role === "admin" && counts.pending > 0
-                      ? ` · ${counts.pending} pending`
-                      : null}
-                  </>
-                ) : null}
-                {refreshing ? " · …" : ""}
-              </p>
-            </div>
-            <div className="hidden shrink-0 items-center gap-3 xl:flex">
-              {desktopPrimaryAction}
-              <button
-                type="button"
-                onClick={() => void logout()}
-                className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/50 hover:bg-white/[0.04]"
-              >
-                Lock
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs text-white/50 min-h-[40px] xl:hidden"
-            >
-              Lock
-            </button>
-          </div>
+      <TeamPageHeader
+        tab={tab}
+        userLabel={userLabel}
+        counts={counts}
+        refreshing={refreshing}
+        showStats={tab === "ads" || (tab === "reminders" && !isMember)}
+        isMemberHub={isMemberHub}
+        mineSection={mineSection}
+        onMineSectionChange={setMineSection}
+        desktopAction={desktopPrimaryAction}
+        onLogout={() => void logout()}
+        filter={filter}
+        onFilterChange={setFilter}
+        adFilters={adFilters}
+        showOutletFilter={user.role !== "member"}
+        outletFilter={outletFilter}
+        onOutletFilterChange={setOutletFilter}
+        showMemberTabs={showMemberTabs}
+        members={members}
+        memberTab={memberTab}
+        onMemberTabChange={setMemberTab}
+        planningFilter={planningFilter}
+        onPlanningFilterChange={setPlanningFilter}
+        reminderFilters={FILTERS}
+      />
 
-          {(tab === "ads" || tab === "planning" || tab === "reminders") && (
-            <div className="mb-2 rounded-xl bg-white/[0.03] p-2 md:flex md:flex-wrap md:items-center md:gap-2">
-              {tab === "ads" ? (
-                <>
-                  <div className="flex gap-1.5 overflow-x-auto pb-1 md:overflow-visible md:pb-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {adFilters.map((f) => (
-                      <button
-                        key={f.id}
-                        type="button"
-                        onClick={() => setFilter(f.id)}
-                        className={chipClass(filter === f.id, f.id === "pending" ? "violet" : "cyan")}
-                      >
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
-                  <select
-                    value={outletFilter}
-                    onChange={(e) => setOutletFilter(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white/70 md:mt-0 md:w-auto"
-                  >
-                    <option value="">All outlets</option>
-                    {TEAM_AD_OUTLETS.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </>
-              ) : tab === "planning" ? (
-                <PlanningFilters filter={planningFilter} onFilterChange={setPlanningFilter} />
-              ) : (
-                <div className="flex gap-1.5">
-                  {FILTERS.map((f) => (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => setFilter(f.id)}
-                      className={chipClass(filter === f.id)}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {showMemberTabs ? (
-                <div className="mt-2 flex gap-1.5 overflow-x-auto border-t border-white/[0.05] pt-2 md:mt-0 md:overflow-visible md:border-t-0 md:border-l md:pt-0 md:pl-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  <button
-                    type="button"
-                    onClick={() => setMemberTab("all")}
-                    className={chipClass(memberTab === "all", "violet")}
-                  >
-                    All
-                  </button>
-                  {members.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => setMemberTab(m.id)}
-                      className={chipClass(memberTab === m.id, "violet")}
-                    >
-                      {m.name}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          )}
-        </div>
-      </header>
-
-      <main className={`${TEAM_PAGE} min-h-[40vh] flex-1 py-3 md:py-4`}>
+      <main className={`${TEAM_PAGE} min-h-[40vh] flex-1 py-3 md:py-4 max-xl:pb-[var(--team-dock-pad)]`} style={{ ["--team-dock-pad" as string]: TEAM_DOCK_PADDING }}>
         {error ? (
           <p className="mb-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
             {error}
@@ -1100,13 +1048,30 @@ export default function TeamClient() {
             onEdit={openEditPlanning}
             onDelete={(n) => void deletePlanningNote(n)}
           />
-        ) : tab === "ai" ? (
+        ) : tab === "ai" && user.role === "admin" ? (
           <TeamAiPanel
             username={user.username}
             members={members}
             onTasksCreated={() => void loadTasks(true)}
           />
-        ) : (
+        ) : isMemberHub ? (
+          <TeamMineView
+            section={mineSection}
+            reminders={reminders}
+            remindersReady={remindersReady}
+            planningNotes={planningNotes}
+            planningReady={planningReady}
+            readOnlyReminders={false}
+            username={user.username}
+            onEditPlanning={openEditPlanning}
+            onDeletePlanning={(n) => void deletePlanningNote(n)}
+            onNewPlanning={() => openCreatePlanning("PLANNING")}
+            onNewFeedback={() => openCreatePlanning("FEEDBACK")}
+            onEditReminder={openEditReminder}
+            onToggleReminderDone={(r) => void toggleReminderDone(r)}
+            onDeleteReminder={(r) => void deleteReminder(r)}
+          />
+        ) : tab === "reminders" ? (
           <div className="space-y-2">
             {reminders.map((r) => {
               const done = r.status === "DONE";
@@ -1176,76 +1141,63 @@ export default function TeamClient() {
               );
             })}
           </div>
-        )}
+        ) : null}
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#06060a]/98 pb-[max(0.25rem,env(safe-area-inset-bottom))] xl:hidden">
-        {!isViewer && tab !== "ai" ? (
-          <div className={`${TEAM_PAGE} flex gap-2 py-2`}>
-            {tab === "ads" && user.role === "admin" ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => void shareWhatsApp()}
-                  disabled={sharingWhatsApp}
-                  className="min-h-[44px] rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 text-xs font-medium text-emerald-200"
-                >
-                  WhatsApp
-                </button>
-                <button
-                  type="button"
-                  onClick={exportExcel}
-                  className="min-h-[44px] rounded-xl border border-white/10 px-3 text-xs text-white/60"
-                >
-                  Export
-                </button>
-                <button
-                  type="button"
-                  onClick={openCreateTask}
-                  className="min-h-[44px] flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-sm font-semibold text-white"
-                >
-                  + Ad task
-                </button>
-              </>
-            ) : tab === "ads" && user.role === "member" ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setMemberRecordForm(emptyMemberRecordForm());
-                  setShowMemberRecordForm(true);
-                }}
-                className="min-h-[44px] flex-1 rounded-xl bg-amber-500/85 text-sm font-semibold text-white"
-              >
-                + Log work
-              </button>
-            ) : tab === "planning" ? (
-              <button
-                type="button"
-                onClick={openCreatePlanning}
-                className="min-h-[44px] flex-1 rounded-xl bg-sky-500/80 text-sm font-semibold text-white"
-              >
-                + Note
-              </button>
-            ) : tab === "reminders" ? (
-              <button
-                type="button"
-                onClick={openCreateReminder}
-                className="min-h-[44px] flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-sm font-semibold text-white"
-              >
-                + Reminder
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-        <TeamBottomNav
-          active={tab}
-          onChange={setTab}
-          hideReminders={isViewer}
-          hideAi={isViewer}
-        />
-      </div>
+      <TeamDock
+        tab={tab}
+        onTab={setTab}
+        isAdmin={user.role === "admin"}
+        isMember={user.role === "member"}
+        isViewer={isViewer}
+        onAdd={() => setShowActionSheet(true)}
+        onWhatsApp={user.role === "admin" ? shareWhatsApp : undefined}
+        onMore={() => setShowMoreSheet(true)}
+      />
 
-      <div className={tab === "ai" ? "h-[200px] xl:h-0" : "h-[108px] xl:h-0"} />
+      <TeamActionSheet
+        open={showActionSheet}
+        onClose={() => setShowActionSheet(false)}
+        actions={[
+          ...(user.role === "admin"
+            ? [
+                { label: "New ad task", onClick: openCreateTask, tone: "accent" as const },
+                { label: "Planning sheet", onClick: () => openCreatePlanning("PLANNING") },
+                { label: "Reminder", onClick: openCreateReminder },
+              ]
+            : []),
+          ...(user.role === "member" && tab === "ads"
+            ? [
+                {
+                  label: "Log work done",
+                  onClick: () => {
+                    setMemberRecordForm(emptyMemberRecordForm());
+                    setShowMemberRecordForm(true);
+                  },
+                  tone: "accent" as const,
+                },
+              ]
+            : []),
+          ...(user.role === "member" && tab === "reminders"
+            ? [
+                { label: "Reminder", onClick: openCreateReminder, tone: "accent" as const },
+                { label: "Planning sheet", onClick: () => openMemberSheet("PLANNING") },
+                { label: "Share feedback", onClick: () => openMemberSheet("FEEDBACK") },
+              ]
+            : []),
+        ]}
+      />
+
+      <TeamMoreSheet
+        open={showMoreSheet}
+        onClose={() => setShowMoreSheet(false)}
+        onReminders={() => setTab("reminders")}
+        onAi={() => setTab("ai")}
+        onExport={exportExcel}
+      />
+
+      <TeamWhatsAppSheet open={showWhatsAppSheet} onClose={() => setShowWhatsAppSheet(false)} />
+
       </div>
 
       {showTaskForm && user.role === "admin" ? (
@@ -1477,8 +1429,28 @@ export default function TeamClient() {
               {editingReminder ? "Edit reminder" : "New reminder"}
             </h2>
             <p className="mt-1 text-xs text-white/40">
-              Personal notes — not shared ad work. Set a deadline to stay on track.
+              {user.role === "admin"
+                ? "Assign to a team member — they see it in Mine."
+                : "Your personal reminder — shows in Mine."}
             </p>
+
+            {user.role === "admin" && !editingReminder ? (
+              <>
+                <label className="mt-4 block text-xs font-medium text-white/50">For</label>
+                <select
+                  value={reminderForm.ownerId}
+                  onChange={(e) => setReminderForm((f) => ({ ...f, ownerId: e.target.value }))}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
+                >
+                  <option value="">Me (admin)</option>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : null}
 
             <label className="mt-4 block text-xs font-medium text-white/50">Title</label>
             <input
@@ -1555,11 +1527,11 @@ export default function TeamClient() {
         </div>
       ) : null}
 
-      <PlanningFormSheet
+      <PlanningSheetFormSheet
         open={showPlanningForm}
         form={planningForm}
         setForm={setPlanningForm}
-        editing={editingPlanning}
+        editing={Boolean(editingPlanning)}
         saving={saving}
         uploading={refUploading}
         onClose={() => {
@@ -1567,7 +1539,7 @@ export default function TeamClient() {
           setEditingPlanning(null);
         }}
         onSubmit={savePlanning}
-        onUploadImage={(file) => void uploadPlanningImage(file)}
+        onUploadFile={(file) => void uploadPlanningFile(file)}
       />
 
       <MemberRecordSheet
