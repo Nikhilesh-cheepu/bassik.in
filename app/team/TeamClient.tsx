@@ -949,7 +949,7 @@ export default function TeamClient() {
     ) : null;
 
   return (
-    <div className="min-h-[100dvh] bg-[#06060a] text-white xl:flex">
+    <div className="min-h-[100dvh] bg-[#06060a] text-white xl:flex xl:h-[100dvh]">
       <TeamSidebarNav
         active={tab}
         onChange={setTab}
@@ -960,7 +960,7 @@ export default function TeamClient() {
         onLogout={() => void logout()}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden pb-[env(safe-area-inset-bottom)] xl:max-h-[100dvh] xl:pb-0">
+      <div className="flex h-[100dvh] min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-[env(safe-area-inset-bottom)] xl:max-h-[100dvh] xl:pb-0">
       <TeamPageHeader
         tab={tab}
         userLabel={userLabel}
@@ -988,8 +988,10 @@ export default function TeamClient() {
       />
 
       <main
-        className={`${TEAM_PAGE} flex-1 py-3 md:py-4 max-xl:pb-[var(--team-dock-pad)] ${
-          tab === "ai" ? "flex min-h-0 flex-col overflow-hidden" : "min-h-[40vh]"
+        className={`${TEAM_PAGE} min-h-0 flex-1 py-3 md:py-4 max-xl:pb-[var(--team-dock-pad)] ${
+          tab === "ai"
+            ? "flex flex-col overflow-hidden"
+            : "overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
         }`}
         style={{ ["--team-dock-pad" as string]: TEAM_DOCK_PADDING }}
       >
