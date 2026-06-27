@@ -1,4 +1,5 @@
 import type { TeamAdTask } from "@prisma/client";
+import { getFullPhoneNumber } from "@/lib/outlet-contacts";
 import { getTeamMemberRoster, teamMemberName } from "@/lib/team-members";
 import { teamOutletLabel } from "@/lib/team-outlets";
 import { formatTeamEndDateTime, formatTeamRecordDateTime } from "@/lib/team-tasks";
@@ -172,11 +173,24 @@ export function buildTeamWhatsAppReport(tasks: TeamAdTask[]): string {
   return lines.join("\n");
 }
 
+/** WhatsApp URL length limit — keep headroom for encoding. */
+const MAX_WA_MESSAGE_CHARS = 3200;
+
+function clipWhatsAppMessage(text: string): string {
+  if (text.length <= MAX_WA_MESSAGE_CHARS) return text;
+  return `${text.slice(0, MAX_WA_MESSAGE_CHARS - 48)}\n\n(message shortened for WhatsApp)`;
+}
+
 export function whatsAppShareUrl(text: string, phoneDigits?: string | null): string {
-  const encoded = encodeURIComponent(text);
-  const phone = phoneDigits?.replace(/\D/g, "");
-  if (phone) return `https://wa.me/${phone}?text=${encoded}`;
-  return `https://wa.me/?text=${encoded}`;
+  const message = clipWhatsAppMessage(text);
+  const encoded = encodeURIComponent(message);
+  const raw = phoneDigits?.trim();
+  if (raw) {
+    const phone = getFullPhoneNumber(raw);
+    // api.whatsapp.com works on mobile web + desktop; wa.me/?text= without a number does not.
+    return `https://api.whatsapp.com/send?phone=${phone}&text=${encoded}`;
+  }
+  return `https://api.whatsapp.com/send?text=${encoded}`;
 }
 
 export type WhatsAppReportMode = "reminder" | "assigned" | "full";
@@ -219,4 +233,50 @@ export function defaultSelectedIds(tasks: TeamAdTask[], mode: WhatsAppReportMode
     return tasks.filter((t) => t.status === "TODO").map((t) => t.id);
   }
   return tasks.map((t) => t.id);
+}
+
+/** Member shares their completed work with the team (WhatsApp). */
+export function buildMemberDoneReport(
+  assigneeId: string,
+  tasks: TeamAdTask[],
+  selectedIds: string[]
+): string {
+  const selected = tasks.filter((t) => selectedIds.includes(t.id));
+  const name = teamMemberName(assigneeId);
+  const lines: string[] = [
+    "Bassik Team — work update",
+    headingDate(),
+    "",
+    "Hi team,",
+    "",
+  ];
+
+  if (selected.length === 0) {
+    lines.push(`${name} has no completed tasks selected.`);
+  } else {
+    lines.push(
+      selected.length === 1
+        ? `I've completed this task:`
+        : `I've completed these ${selected.length} tasks:`
+    );
+    lines.push("");
+    selected.forEach((t, i) => {
+      const doneAt = t.completedAt
+        ? ` · Done ${formatTeamRecordDateTime(t.completedAt.toISOString())}`
+        : "";
+      lines.push(`${i + 1}. ${t.title} · ${teamOutletLabel(t.outletId)}${doneAt}`);
+    });
+    lines.push("");
+    lines.push("All marked done on the board.");
+  }
+
+  lines.push("");
+  lines.push(teamBoardLink());
+  return lines.join("\n");
+}
+
+export function defaultMemberDoneIds(tasks: TeamAdTask[]): string[] {
+  const doneToday = tasks.filter((t) => t.status === "DONE" && isTodayIST(t.completedAt));
+  if (doneToday.length > 0) return doneToday.map((t) => t.id);
+  return tasks.filter((t) => t.status === "DONE").map((t) => t.id);
 }

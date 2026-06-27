@@ -32,6 +32,8 @@ import {
 import { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
 import TeamDock, { TeamActionSheet, TeamMoreSheet } from "./TeamDock";
 import TeamWhatsAppSheet from "./TeamWhatsAppSheet";
+import TeamMemberDoneBanner from "./TeamMemberDoneBanner";
+import TeamMemberDoneSheet from "./TeamMemberDoneSheet";
 import { TEAM_DOCK_PADDING } from "./TeamIcons";
 import TeamAiPanel from "./TeamAiPanel";
 import { PlanningNoteList } from "./TeamPlanningView";
@@ -250,6 +252,10 @@ export default function TeamClient() {
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [showWhatsAppSheet, setShowWhatsAppSheet] = useState(false);
+  const [showMemberDoneSheet, setShowMemberDoneSheet] = useState(false);
+  const [memberDoneTasks, setMemberDoneTasks] = useState<
+    { id: string; title: string; outletId: string; completedAt: string | null }[]
+  >([]);
   const [saving, setSaving] = useState(false);
 
   const soleMember = members.length === 1 ? members[0] : null;
@@ -317,6 +323,14 @@ export default function TeamClient() {
     },
     [filter, outletFilter, memberTab, canBrowseAllMembers]
   );
+
+  const loadMemberDoneTasks = useCallback(async () => {
+    if (user?.role !== "member") return;
+    const res = await fetch("/api/team/member-done-report");
+    if (!res.ok) return;
+    const data = await readTeamApiJson(res);
+    setMemberDoneTasks(Array.isArray(data.tasks) ? data.tasks : []);
+  }, [user?.role]);
 
   const loadReminders = useCallback(
     async (silent = false) => {
@@ -413,12 +427,27 @@ export default function TeamClient() {
   }, [planningFilter]);
 
   useEffect(() => {
-    const open = showTaskForm || showReminderForm || showPlanningForm || showMemberRecordForm || showActionSheet || showMoreSheet || showWhatsAppSheet;
+    if (!user || user.role !== "member" || tab !== "ads") return;
+    void loadMemberDoneTasks();
+  }, [user, tab, tasks, loadMemberDoneTasks]);
+
+  const shareMemberDone = () => setShowMemberDoneSheet(true);
+
+  useEffect(() => {
+    const open =
+      showTaskForm ||
+      showReminderForm ||
+      showPlanningForm ||
+      showMemberRecordForm ||
+      showActionSheet ||
+      showMoreSheet ||
+      showWhatsAppSheet ||
+      showMemberDoneSheet;
     document.body.style.overflow = open ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
-  }, [showTaskForm, showReminderForm, showPlanningForm, showMemberRecordForm, showActionSheet, showMoreSheet, showWhatsAppSheet]);
+  }, [showTaskForm, showReminderForm, showPlanningForm, showMemberRecordForm, showActionSheet, showMoreSheet, showWhatsAppSheet, showMemberDoneSheet]);
 
   const uploadBlob = async (file: File, kind: "creative" | "reference") => {
     const fd = new FormData();
@@ -845,6 +874,25 @@ export default function TeamClient() {
             ? planningNotes.length === 0
             : false;
 
+  const memberDoneTodayCount = useMemo(() => {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    return memberDoneTasks.filter((t) => {
+      if (!t.completedAt) return false;
+      const key = new Date(t.completedAt).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      return key === today;
+    }).length;
+  }, [memberDoneTasks]);
+
+  const memberDoneBannerCount =
+    filter === "done" ? tasks.length : memberDoneTodayCount;
+
+  const showMemberDoneBanner =
+    isMember &&
+    tab === "ads" &&
+    listReady &&
+    ((filter === "done" && tasks.length > 0) ||
+      (filter === "todo" && memberDoneTodayCount > 0));
+
   if (booting) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-[#06060a] text-white/50">
@@ -919,16 +967,27 @@ export default function TeamClient() {
           </button>
         </div>
       ) : tab === "ads" && user.role === "member" ? (
-        <button
-          type="button"
-          onClick={() => {
-            setMemberRecordForm(emptyMemberRecordForm());
-            setShowMemberRecordForm(true);
-          }}
-          className="rounded-xl bg-amber-500/90 px-4 py-2 text-sm font-semibold text-white"
-        >
-          + Log work
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {filter === "done" && tasks.length > 0 ? (
+            <button
+              type="button"
+              onClick={shareMemberDone}
+              className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-900/30"
+            >
+              Send done list
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              setMemberRecordForm(emptyMemberRecordForm());
+              setShowMemberRecordForm(true);
+            }}
+            className="rounded-xl bg-amber-500/90 px-4 py-2 text-sm font-semibold text-white"
+          >
+            + Log work
+          </button>
+        </div>
       ) : tab === "planning" ? (
         <button
           type="button"
@@ -1031,7 +1090,15 @@ export default function TeamClient() {
                 : "No reminders yet. Tap + below to add one."}
           </p>
         ) : tab === "ads" ? (
-          <AdTaskList
+          <>
+            {showMemberDoneBanner ? (
+              <TeamMemberDoneBanner
+                count={memberDoneBannerCount}
+                todayCount={memberDoneTodayCount}
+                onSend={shareMemberDone}
+              />
+            ) : null}
+            <AdTaskList
             tasks={tasks}
             members={members}
             showAssignee={showMemberTabs && memberTab === "all"}
@@ -1047,6 +1114,7 @@ export default function TeamClient() {
             onReorder={reorderTasks}
             onPriorityChange={changeTaskPriority}
           />
+          </>
         ) : tab === "planning" ? (
           <PlanningNoteList
             notes={planningNotes}
@@ -1204,6 +1272,10 @@ export default function TeamClient() {
       />
 
       <TeamWhatsAppSheet open={showWhatsAppSheet} onClose={() => setShowWhatsAppSheet(false)} />
+      <TeamMemberDoneSheet
+        open={showMemberDoneSheet}
+        onClose={() => setShowMemberDoneSheet(false)}
+      />
 
       </div>
 

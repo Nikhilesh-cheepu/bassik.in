@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { teamMemberName } from "@/lib/team-members";
 import { teamOutletLabel } from "@/lib/team-outlets";
 import type { WhatsAppReportMode } from "@/lib/team-whatsapp-report";
@@ -30,9 +31,13 @@ export default function TeamWhatsAppSheet({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    setError(null);
+    setFallbackUrl(null);
     setLoading(true);
     void fetch("/api/team/whatsapp-report")
       .then((r) => r.json())
@@ -86,6 +91,8 @@ export default function TeamWhatsAppSheet({
 
   const send = async () => {
     setSending(true);
+    setError(null);
+    setFallbackUrl(null);
     try {
       const res = await fetch("/api/team/whatsapp-report", {
         method: "POST",
@@ -93,10 +100,23 @@ export default function TeamWhatsAppSheet({
         body: JSON.stringify({ mode, taskIds: [...selected] }),
       });
       const data = await res.json();
-      if (data.shareUrl) {
-        window.open(data.shareUrl, "_blank", "noopener,noreferrer");
-        onClose();
+      if (!res.ok) {
+        setError(typeof data.error === "string" ? data.error : "Could not prepare message");
+        return;
       }
+      if (!data.shareUrl || typeof data.shareUrl !== "string") {
+        setError("No WhatsApp link returned — try again.");
+        return;
+      }
+      setFallbackUrl(data.shareUrl);
+      const result = openWhatsAppShareUrl(data.shareUrl);
+      if (result === "popup") {
+        onClose();
+      } else if (result === "popup-blocked") {
+        setError("Tap the green link below to open WhatsApp.");
+      }
+    } catch {
+      setError("Network error — check connection and try again.");
     } finally {
       setSending(false);
     }
@@ -183,7 +203,23 @@ export default function TeamWhatsAppSheet({
           <p className="mt-4 text-xs text-white/40">Full update includes today&apos;s summary automatically.</p>
         )}
 
-        <div className="mt-4 flex gap-2 border-t border-white/[0.06] pt-4">
+        <div className="mt-4 border-t border-white/[0.06] pt-4">
+          {error ? (
+            <p className="mb-3 rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+              {error}
+            </p>
+          ) : null}
+          {fallbackUrl ? (
+            <a
+              href={fallbackUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mb-3 flex min-h-[48px] items-center justify-center rounded-xl border border-emerald-500/35 bg-emerald-500/15 px-3 text-sm font-semibold text-emerald-200"
+            >
+              Tap here to open WhatsApp
+            </a>
+          ) : null}
+          <div className="flex gap-2">
           <button
             type="button"
             onClick={onClose}
@@ -199,6 +235,7 @@ export default function TeamWhatsAppSheet({
           >
             {sending ? "Opening…" : "Send WhatsApp"}
           </button>
+          </div>
         </div>
       </div>
     </div>
