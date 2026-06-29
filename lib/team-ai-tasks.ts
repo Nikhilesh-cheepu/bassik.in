@@ -104,6 +104,8 @@ export function resolveOutletId(raw: string, context = ""): string {
     [/club\s*rogue.*jubilee|jubilee.*clubrogue/i, "clubrogue-jubilee-hills"],
     [/club\s*rogue.*kondapur|kondapur.*clubrogue/i, "clubrogue-kondapur"],
     [/club\s*rogue.*gachibowli|gachibowli.*clubrogue/i, "clubrogue-gachibowli"],
+    [/club\s*rogue\s*general|clubrogue\s*general/i, "clubrogue-general"],
+    [/\bbassik\b/i, "bassik"],
     [/gachibowli/i, "clubrogue-gachibowli"],
     [/kondapur/i, "clubrogue-kondapur"],
     [/jubilee/i, "clubrogue-jubilee-hills"],

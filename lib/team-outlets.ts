@@ -9,6 +9,8 @@ export const TEAM_AD_OUTLETS = [
   { id: "clubrogue-jubilee-hills", label: "Jubilee Hills Clubrogue" },
   { id: "clubrogue-kondapur", label: "Kondapur Clubrogue" },
   { id: "clubrogue-gachibowli", label: "Gachibowli Clubrogue" },
+  { id: "clubrogue-general", label: "Club Rogue General" },
+  { id: "bassik", label: "Bassik" },
 ] as const;
 
 export type TeamOutletId = (typeof TEAM_AD_OUTLETS)[number]["id"];
