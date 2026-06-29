@@ -8,6 +8,7 @@ import {
   CLUB_ROGUE_GACHIBOWLI_ID,
   isClubRogueBrand,
 } from "@/lib/club-rogue";
+import { localYmdTimeMs } from "@/lib/local-date";
 
 export const runtime = "nodejs";
 
@@ -131,6 +132,15 @@ export async function POST(request: NextRequest) {
     if (!valid10Digit) {
       return NextResponse.json(
         { error: "Please provide a valid 10-digit contact number." },
+        { status: 400 }
+      );
+    }
+
+    const timeToValidate = String(timeSlot || time || "").trim();
+    const slotMs = localYmdTimeMs(String(date), timeToValidate);
+    if (!timeToValidate || Number.isNaN(slotMs) || slotMs < Date.now()) {
+      return NextResponse.json(
+        { error: "Please choose a date and time in the future." },
         { status: 400 }
       );
     }

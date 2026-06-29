@@ -19,6 +19,12 @@ import {
 } from "@/lib/outlet-contacts";
 import { getVenueUniquenessLine } from "@/lib/venue-uniqueness";
 import { guestEventDateLine } from "@/lib/event-date-display";
+import {
+  eventSlotLabel,
+  getAvailableEventSlots,
+  isEventSlotInPast,
+  resolveEventBookDateTime,
+} from "@/lib/event-booking-slots";
 import EventsOffersHero from "@/components/EventsOffersHero";
 import VenueContactBottomSheet from "@/components/VenueContactBottomSheet";
 import OutletBottomActionBar from "@/components/OutletBottomActionBar";
@@ -85,8 +91,8 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
   const [eventBookName, setEventBookName] = useState("");
   const [eventBookPhone, setEventBookPhone] = useState("");
   const [eventBookPeople, setEventBookPeople] = useState(2);
-  const [eventBookDate, setEventBookDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [eventBookTime, setEventBookTime] = useState("20:00");
+  const [eventBookDate, setEventBookDate] = useState(() => resolveEventBookDateTime(null).date);
+  const [eventBookTime, setEventBookTime] = useState(() => resolveEventBookDateTime(null).time);
   const [eventBookSubmitting, setEventBookSubmitting] = useState(false);
   const [eventBookError, setEventBookError] = useState<string | null>(null);
   const [eventClubRogueCoverAcknowledged, setEventClubRogueCoverAcknowledged] = useState(false);
@@ -248,13 +254,9 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
   const openEventQuickBook = (offerId: string) => {
     const selected = venueOffers.find((o) => o.id === offerId) ?? null;
     setSelectedEventId(offerId);
-    if (selected?.eventDate) {
-      const d = new Date(selected.eventDate);
-      if (!Number.isNaN(d.getTime())) {
-        setEventBookDate(d.toISOString().slice(0, 10));
-        setEventBookTime(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
-      }
-    }
+    const { date, time } = resolveEventBookDateTime(selected?.eventDate ?? null);
+    setEventBookDate(date);
+    setEventBookTime(time);
     setEventBookError(null);
     setEventClubRogueCoverAcknowledged(false);
     setEventBookingNightGenre("");
@@ -285,6 +287,10 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
     }
     if (!eventBookDate || !eventBookTime) {
       setEventBookError("Please select date and time.");
+      return;
+    }
+    if (isEventSlotInPast(eventBookDate, eventBookTime)) {
+      setEventBookError("Please choose a time slot in the future.");
       return;
     }
 
@@ -872,21 +878,27 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  {(["20:00", "21:00", "22:00", "23:00"] as const).map((slot) => {
+                  {getAvailableEventSlots(eventBookDate).map((slot) => {
                     const selected = eventBookTime === slot;
-                    const label = slot === "20:00" ? "8 PM" : slot === "21:00" ? "9 PM" : slot === "22:00" ? "10 PM" : "11 PM";
                     return (
                       <button
                         key={slot}
                         type="button"
-                        onClick={() => setEventBookTime(slot)}
+                        onClick={() => {
+                          if (isEventSlotInPast(eventBookDate, slot)) {
+                            setEventBookError("Cannot select a past time slot.");
+                            return;
+                          }
+                          setEventBookError(null);
+                          setEventBookTime(slot);
+                        }}
                         className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
                           selected
                             ? "border-white/60 bg-white/15 text-white"
                             : "border-white/20 bg-white/[0.04] text-white/80"
                         }`}
                       >
-                        {label}
+                        {eventSlotLabel(slot)}
                       </button>
                     );
                   })}

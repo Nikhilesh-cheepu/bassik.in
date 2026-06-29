@@ -10,6 +10,12 @@ import {
   isClubRogueBrand,
 } from "@/lib/club-rogue";
 import { guestEventDateLine } from "@/lib/event-date-display";
+import {
+  eventSlotLabel,
+  getAvailableEventSlots,
+  isEventSlotInPast,
+  resolveEventBookDateTime,
+} from "@/lib/event-booking-slots";
 
 export type EventQuickBookOffer = {
   id: string;
@@ -49,8 +55,8 @@ export default function EventQuickBookSheet({
   const [eventBookName, setEventBookName] = useState(initialName);
   const [eventBookPhone, setEventBookPhone] = useState(initialPhone);
   const [eventBookPeople, setEventBookPeople] = useState(2);
-  const [eventBookDate, setEventBookDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [eventBookTime, setEventBookTime] = useState("20:00");
+  const [eventBookDate, setEventBookDate] = useState(() => resolveEventBookDateTime(null).date);
+  const [eventBookTime, setEventBookTime] = useState(() => resolveEventBookDateTime(null).time);
   const [eventBookSubmitting, setEventBookSubmitting] = useState(false);
   const [eventBookError, setEventBookError] = useState<string | null>(null);
   const [eventClubRogueCoverAcknowledged, setEventClubRogueCoverAcknowledged] = useState(false);
@@ -63,13 +69,9 @@ export default function EventQuickBookSheet({
     setEventBookName(initialName);
     setEventBookPhone(initialPhone.replace(/\D/g, "").slice(0, 10));
     setEventBookError(null);
-    if (selectedEvent?.eventDate) {
-      const d = new Date(selectedEvent.eventDate);
-      if (!Number.isNaN(d.getTime())) {
-        setEventBookDate(d.toISOString().slice(0, 10));
-        setEventBookTime(`${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
-      }
-    }
+    const { date, time } = resolveEventBookDateTime(selectedEvent?.eventDate ?? null);
+    setEventBookDate(date);
+    setEventBookTime(time);
   }, [isOpen, eventId, initialName, initialPhone, selectedEvent?.eventDate]);
 
   useEffect(
@@ -103,6 +105,10 @@ export default function EventQuickBookSheet({
         setEventBookError("Please select Tollywood or Bollywood night.");
         return;
       }
+    }
+    if (isEventSlotInPast(eventBookDate, eventBookTime)) {
+      setEventBookError("Please choose a time slot in the future.");
+      return;
     }
 
     setEventBookSubmitting(true);
@@ -269,24 +275,27 @@ export default function EventQuickBookSheet({
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  {(["20:00", "21:00", "22:00", "23:00"] as const).map((slot) => {
-                    const label =
-                      slot === "20:00" ? "8 PM" : slot === "21:00" ? "9 PM" : slot === "22:00" ? "10 PM" : "11 PM";
-                    return (
-                      <button
-                        key={slot}
-                        type="button"
-                        onClick={() => setEventBookTime(slot)}
-                        className={`rounded-xl border px-3 py-2.5 text-sm font-medium ${
-                          eventBookTime === slot
-                            ? "border-white/60 bg-white/15 text-white"
-                            : "border-white/20 bg-white/[0.04] text-white/80"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
+                  {getAvailableEventSlots(eventBookDate).map((slot) => (
+                    <button
+                      key={slot}
+                      type="button"
+                      onClick={() => {
+                        if (isEventSlotInPast(eventBookDate, slot)) {
+                          setEventBookError("Cannot select a past time slot.");
+                          return;
+                        }
+                        setEventBookError(null);
+                        setEventBookTime(slot);
+                      }}
+                      className={`rounded-xl border px-3 py-2.5 text-sm font-medium ${
+                        eventBookTime === slot
+                          ? "border-white/60 bg-white/15 text-white"
+                          : "border-white/20 bg-white/[0.04] text-white/80"
+                      }`}
+                    >
+                      {eventSlotLabel(slot)}
+                    </button>
+                  ))}
                 </div>
               </div>
               {eventBookError ? <p className="mt-2 text-xs text-red-300">{eventBookError}</p> : null}
