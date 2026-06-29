@@ -34,7 +34,7 @@ function teamAccounts(): { username: string; password: string; role: TeamRole; m
     ...members,
     {
       username: "admin",
-      password: process.env.TEAM_ADMIN_PASSWORD?.trim() || "9154858528",
+      password: process.env.TEAM_ADMIN_PASSWORD?.trim() || "522529",
       role: "admin",
     },
     {
