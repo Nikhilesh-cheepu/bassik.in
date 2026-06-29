@@ -1,16 +1,28 @@
 /** Team member roster for /team — extend via TEAM_MEMBERS_JSON in env. */
 
+export type TeamMemberKind = "default" | "poc";
+
 export type TeamMember = {
   id: string;
   name: string;
   /** e.g. SEO, Designer — shown in forms, not on admin tabs */
   role?: string;
+  /** poc = admin assistant (e.g. Shravya) — can assign tasks to delegateAssignees */
+  kind?: TeamMemberKind;
+  delegateAssignees?: string[];
 };
 
 const DEFAULT_ROSTER: TeamMember[] = [
   { id: "amit", name: "Amit", role: "SEO" },
   { id: "jeslyn", name: "Jeslyn", role: "Designer 1" },
   { id: "mahesh", name: "Mahesh", role: "Designer 2" },
+  {
+    id: "shravya",
+    name: "Shravya",
+    role: "POC",
+    kind: "poc",
+    delegateAssignees: ["mahesh"],
+  },
 ];
 
 function normalizeMember(raw: unknown): TeamMember | null {
@@ -21,7 +33,19 @@ function normalizeMember(raw: unknown): TeamMember | null {
   const name = m.name.trim();
   if (!id || !name) return null;
   const role = typeof m.role === "string" && m.role.trim() ? m.role.trim() : undefined;
-  return { id, name, ...(role ? { role } : {}) };
+  const kind = m.kind === "poc" ? ("poc" as const) : undefined;
+  const delegateAssignees = Array.isArray(m.delegateAssignees)
+    ? m.delegateAssignees
+        .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+        .map((id) => id.trim())
+    : undefined;
+  return {
+    id,
+    name,
+    ...(role ? { role } : {}),
+    ...(kind ? { kind } : {}),
+    ...(delegateAssignees?.length ? { delegateAssignees } : {}),
+  };
 }
 
 export function getTeamMemberRoster(): TeamMember[] {
@@ -43,6 +67,7 @@ const DEFAULT_PASSWORDS: Record<string, string> = {
   amit: "amit01",
   jeslyn: "jeslyn01",
   mahesh: "mahesh01",
+  shravya: "shravya2026",
 };
 
 /** Passwords per member id — TEAM_MEMBER_PASSWORDS='{"amit":"amit01","jeslyn":"jeslyn01"}' */
@@ -59,6 +84,25 @@ export function getTeamMemberPasswords(): Record<string, string> {
   const legacy = process.env.TEAM_MEMBER_PASSWORD?.trim();
   if (legacy) return { amit: legacy, jeslyn: "jeslyn01", mahesh: "mahesh01" };
   return DEFAULT_PASSWORDS;
+}
+
+export function getTeamMember(id: string): TeamMember | undefined {
+  return getTeamMemberRoster().find((m) => m.id === id);
+}
+
+export function isTeamPocMember(id: string): boolean {
+  return getTeamMember(id)?.kind === "poc";
+}
+
+/** Members a POC can assign ad tasks to (e.g. Mahesh for Shravya). */
+export function pocDelegateAssigneeIds(pocId: string): string[] {
+  const m = getTeamMember(pocId);
+  if (!m || m.kind !== "poc") return [];
+  return (m.delegateAssignees ?? []).filter((id) => isTeamMemberId(id));
+}
+
+export function canPocAssignTo(pocId: string, assigneeId: string): boolean {
+  return pocDelegateAssigneeIds(pocId).includes(assigneeId);
 }
 
 export function isTeamMemberId(id: string): boolean {

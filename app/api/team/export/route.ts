@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const assigneeParam = sp.get("assignee");
 
   let assigneeId: string | undefined;
-  if (session.role === "member") {
+  if (session.role === "member" || session.role === "poc") {
     assigneeId = session.memberId ?? session.username;
   } else if (assigneeParam && assigneeParam !== "all") {
     assigneeId = assigneeParam;

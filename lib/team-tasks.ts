@@ -81,20 +81,20 @@ export function normalizeTeamStartDate(raw: string): string | null {
 export function filterTeamTasks(
   tasks: TeamAdTask[],
   filter: TeamTaskFilter,
-  role?: "admin" | "member" | "viewer"
+  role?: "admin" | "member" | "viewer" | "poc"
 ): TeamAdTask[] {
+  const memberLike = role === "member" || role === "poc";
   switch (filter) {
     case "todo":
       return tasks.filter(
-        (t) =>
-          t.status === "TODO" || (role === "member" && t.status === "PENDING_APPROVAL")
+        (t) => t.status === "TODO" || (memberLike && t.status === "PENDING_APPROVAL")
       );
     case "done":
       return tasks.filter((t) => t.status === "DONE");
     case "pending":
       return tasks.filter((t) => t.status === "PENDING_APPROVAL");
     default:
-      if (role === "member") return tasks;
+      if (memberLike) return tasks;
       return tasks.filter((t) => t.status !== "PENDING_APPROVAL");
   }
 }

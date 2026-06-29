@@ -25,7 +25,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  if (session.role === "member") {
+  if (session.role === "member" || session.role === "poc") {
     const mid = session.memberId ?? session.username;
     if (existing.assigneeId !== mid) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });

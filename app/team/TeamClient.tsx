@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TEAM_AD_OUTLETS } from "@/lib/team-outlets";
+import { pocDelegateAssigneeIds } from "@/lib/team-members";
 import {
   formatTeamStartDate,
   isAsapStartDate,
@@ -40,7 +41,7 @@ import TeamAiPanel from "./TeamAiPanel";
 import { PlanningNoteList } from "./TeamPlanningView";
 import type { TeamPlanningDto, TeamPlanningFilter } from "@/lib/team-planning";
 
-type TeamUser = { username: string; role: "admin" | "member" | "viewer"; memberId?: string };
+type TeamUser = { username: string; role: "admin" | "member" | "viewer" | "poc"; memberId?: string };
 type TeamMember = { id: string; name: string; role?: string };
 type Filter = "all" | "todo" | "done" | "pending";
 type MemberTab = "all" | string;
@@ -270,10 +271,12 @@ export default function TeamClient() {
   }, [tasks, reminders, tab]);
 
   const isMember = user?.role === "member";
-  const isMemberHub = isMember && tab === "reminders";
+  const isPoc = user?.role === "poc";
+  const isMemberLike = isMember || isPoc;
+  const isMemberHub = isMemberLike && tab === "reminders";
 
   const adFilters = useMemo(() => {
-    if (user?.role === "member") return MEMBER_AD_FILTERS;
+    if (user?.role === "member" || user?.role === "poc") return MEMBER_AD_FILTERS;
     if (user?.role !== "admin") return FILTERS;
     return [
       ...FILTERS,
@@ -328,7 +331,7 @@ export default function TeamClient() {
       setError(null);
       try {
         const qs = new URLSearchParams({
-          filter: user?.role === "member" ? "all" : filter,
+          filter: user?.role === "member" || user?.role === "poc" ? "all" : filter,
         });
         const res = await fetch(`/api/team/reminders?${qs}`);
         if (res.status === 401) {
@@ -396,11 +399,11 @@ export default function TeamClient() {
 
   useEffect(() => {
     if (!user) return;
-    if (isMember && (tab === "planning" || tab === "ai")) {
+    if (isMemberLike && (tab === "planning" || tab === "ai")) {
       setTab("reminders");
       if (tab === "planning") setMineSection("planning");
     }
-  }, [user, tab, isMember]);
+  }, [user, tab, isMemberLike]);
 
   useEffect(() => {
     if (!user) return;
@@ -409,7 +412,7 @@ export default function TeamClient() {
       void loadReminders(remindersReady);
       if (isMember) void loadPlanning(planningReady);
     } else if (tab === "planning") void loadPlanning(planningReady);
-  }, [user, tab, loadTasks, loadReminders, loadPlanning, isViewer, isMember]);
+  }, [user, tab, loadTasks, loadReminders, loadPlanning, isViewer, isMemberLike]);
 
   useEffect(() => {
     if (!user || tab !== "planning") return;
@@ -482,6 +485,14 @@ export default function TeamClient() {
   const openCreateTask = () => {
     setEditing(null);
     setTaskForm(emptyTaskForm(resolveAssigneeId()));
+    setUploadStatus(null);
+    setShowTaskForm(true);
+  };
+
+  const openPocAssignTask = () => {
+    const delegates = user?.memberId ? pocDelegateAssigneeIds(user.memberId) : ["mahesh"];
+    setEditing(null);
+    setTaskForm(emptyTaskForm(delegates[0] ?? "mahesh"));
     setUploadStatus(null);
     setShowTaskForm(true);
   };
@@ -919,7 +930,9 @@ export default function TeamClient() {
       ? "Admin"
       : user.role === "viewer"
         ? "Viewer · read-only"
-        : memberName(members, user.memberId ?? user.username);
+        : user.role === "poc"
+          ? `${memberName(members, user.memberId ?? user.username)} · POC`
+          : memberName(members, user.memberId ?? user.username);
 
   const desktopPrimaryAction =
     !isViewer && tab !== "ai" ? (
@@ -956,6 +969,14 @@ export default function TeamClient() {
             + Ad task
           </button>
         </div>
+      ) : tab === "ads" && isPoc ? (
+        <button
+          type="button"
+          onClick={openPocAssignTask}
+          className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white"
+        >
+          + Assign to Mahesh
+        </button>
       ) : tab === "ads" && user.role === "member" ? (
         <div className="flex flex-wrap gap-2">
           {filter === "done" && tasks.length > 0 ? (
@@ -1003,8 +1024,8 @@ export default function TeamClient() {
         active={tab}
         onChange={setTab}
         hideReminders={isViewer}
-        hideAi={isViewer || isMember}
-        hidePlanning={isMember}
+        hideAi={isViewer || isMemberLike}
+        hidePlanning={isMemberLike}
         userLabel={userLabel}
         onLogout={() => void logout()}
       />
@@ -1015,7 +1036,7 @@ export default function TeamClient() {
         userLabel={userLabel}
         counts={counts}
         refreshing={refreshing}
-        showStats={tab === "ads" || (tab === "reminders" && !isMember)}
+        showStats={tab === "ads" || (tab === "reminders" && !isMemberLike)}
         isMemberHub={isMemberHub}
         mineSection={mineSection}
         onMineSectionChange={setMineSection}
@@ -1024,7 +1045,7 @@ export default function TeamClient() {
         filter={filter}
         onFilterChange={setFilter}
         adFilters={adFilters}
-        showOutletFilter={user.role !== "member"}
+        showOutletFilter={user.role !== "member" && !isPoc}
         outletFilter={outletFilter}
         onOutletFilterChange={setOutletFilter}
         showMemberTabs={showMemberTabs}
@@ -1086,7 +1107,7 @@ export default function TeamClient() {
                 count={tasks.length}
                 dateCount={doneReportDateCount}
                 onSend={shareDoneReport}
-                isMember={isMember}
+                isMember={isMemberLike}
               />
             ) : null}
             <AdTaskList
@@ -1214,7 +1235,7 @@ export default function TeamClient() {
         tab={tab}
         onTab={setTab}
         isAdmin={user.role === "admin"}
-        isMember={user.role === "member"}
+        isMember={isMemberLike}
         isViewer={isViewer}
         onAdd={() => setShowActionSheet(true)}
         onWhatsApp={user.role === "admin" ? shareWhatsApp : undefined}
@@ -1232,6 +1253,15 @@ export default function TeamClient() {
                 { label: "Reminder", onClick: openCreateReminder },
               ]
             : []),
+          ...(isPoc && tab === "ads"
+            ? [
+                {
+                  label: "Assign to Mahesh",
+                  onClick: openPocAssignTask,
+                  tone: "accent" as const,
+                },
+              ]
+            : []),
           ...(user.role === "member" && tab === "ads"
             ? [
                 {
@@ -1244,7 +1274,7 @@ export default function TeamClient() {
                 },
               ]
             : []),
-          ...(user.role === "member" && tab === "reminders"
+          ...(isMemberLike && tab === "reminders"
             ? [
                 { label: "Reminder", onClick: openCreateReminder, tone: "accent" as const },
                 { label: "Planning sheet", onClick: () => openMemberSheet("PLANNING") },
@@ -1272,16 +1302,23 @@ export default function TeamClient() {
 
       </div>
 
-      {showTaskForm && user.role === "admin" ? (
+      {showTaskForm && (user.role === "admin" || (isPoc && !editing)) ? (
         <div className={TEAM_SHEET_OVERLAY}>
           <form
             onSubmit={saveTask}
             className={TEAM_SHEET_PANEL}
           >
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
-            <h2 className="text-lg font-semibold">{editing ? "Edit ad task" : "New ad task"}</h2>
+            <h2 className="text-lg font-semibold">
+              {editing ? "Edit ad task" : isPoc ? "Assign task to Mahesh" : "New ad task"}
+            </h2>
 
-            {showMemberTabs ? (
+            {isPoc ? (
+              <p className="mt-3 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 py-2.5 text-sm text-cyan-50/90">
+                This task will be assigned to{" "}
+                <strong>{memberName(members, taskForm.assigneeId)}</strong> for creative work.
+              </p>
+            ) : showMemberTabs ? (
               <>
                 <label className="mt-4 block text-xs font-medium text-white/50">Assign to</label>
                 <select

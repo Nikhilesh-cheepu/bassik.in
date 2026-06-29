@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 
 export const TEAM_COOKIE = "team_session";
 
-export type TeamRole = "admin" | "member" | "viewer";
+export type TeamRole = "admin" | "member" | "viewer" | "poc";
 
 export type TeamSession = {
   username: string;
@@ -25,7 +25,7 @@ function teamAccounts(): { username: string; password: string; role: TeamRole; m
     .map((m) => ({
       username: m.id,
       password: passwords[m.id]?.trim() ?? "",
-      role: "member" as const,
+      role: (m.kind === "poc" ? "poc" : "member") as TeamRole,
       memberId: m.id,
     }))
     .filter((m) => m.password);
@@ -77,13 +77,15 @@ export async function verifyTeamSession(token: string): Promise<TeamSession | nu
         ? "admin"
         : payload.role === "viewer"
           ? "viewer"
-          : "member";
+          : payload.role === "poc"
+            ? "poc"
+            : "member";
     if (!username) return null;
     if (role === "viewer") return { username, role };
     const memberId =
       typeof payload.memberId === "string" && isTeamMemberId(payload.memberId)
         ? payload.memberId
-        : role === "member" && isTeamMemberId(username)
+        : (role === "member" || role === "poc") && isTeamMemberId(username)
           ? username
           : undefined;
     return { username, role, memberId };
@@ -103,4 +105,8 @@ export async function getTeamFromCookies(): Promise<TeamSession | null> {
   const token = jar.get(TEAM_COOKIE)?.value;
   if (!token) return null;
   return verifyTeamSession(token);
+}
+
+export function isMemberLikeRole(role: TeamRole): boolean {
+  return role === "member" || role === "poc";
 }

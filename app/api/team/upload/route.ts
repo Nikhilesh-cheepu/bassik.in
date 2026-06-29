@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   const isReference = kindField === "reference";
   const isPlanning = kindField === "planning";
 
-  if (!isReference && !isPlanning && session.role !== "admin") {
+  if (!isReference && !isPlanning && session.role !== "admin" && session.role !== "poc") {
     return NextResponse.json({ error: "Only admin can upload creatives" }, { status: 403 });
   }
 

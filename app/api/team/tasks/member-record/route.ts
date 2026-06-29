@@ -5,7 +5,7 @@ import { isTeamMemberId } from "@/lib/team-members";
 
 export async function POST(req: NextRequest) {
   const session = await getTeamFromRequest(req);
-  if (!session || session.role !== "member") {
+  if (!session || (session.role !== "member" && session.role !== "poc")) {
     return NextResponse.json({ error: "Only team members can log work" }, { status: 403 });
   }
 

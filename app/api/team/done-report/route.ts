@@ -33,7 +33,7 @@ function mapTaskRow(t: {
 async function loadDoneRows(session: NonNullable<Awaited<ReturnType<typeof getTeamFromRequest>>>, assigneeParam: string | null) {
   const where: { status: "DONE"; assigneeId?: string } = { status: "DONE" };
 
-  if (session.role === "member") {
+  if (session.role === "member" || session.role === "poc") {
     const mid = session.memberId ?? session.username;
     if (!isTeamMemberId(mid)) return null;
     where.assigneeId = mid;
@@ -133,7 +133,9 @@ export async function POST(req: NextRequest) {
     }
 
     const memberAuthorId =
-      session.role === "member" ? (session.memberId ?? session.username) : undefined;
+      session.role === "member" || session.role === "poc"
+        ? (session.memberId ?? session.username)
+        : undefined;
 
     const text = buildDoneReportByDates(rows, ids, {
       ...(memberAuthorId && isTeamMemberId(memberAuthorId)

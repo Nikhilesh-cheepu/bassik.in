@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import { createTeamAdTask } from "@/lib/team-task-create";
-import { isTeamMemberId } from "@/lib/team-members";
+import { canPocAssignTo, isTeamMemberId } from "@/lib/team-members";
 import { isTeamOutletId } from "@/lib/team-outlets";
 import {
   filterTeamTasks,
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   const assigneeParam = sp.get("assignee");
 
   let assigneeId: string | undefined;
-  if (session.role === "member") {
+  if (session.role === "member" || session.role === "poc") {
     const mid = session.memberId ?? session.username;
     if (!isTeamMemberId(mid)) {
       return NextResponse.json({ error: "Invalid member session" }, { status: 403 });
@@ -66,35 +66,46 @@ export async function POST(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.role !== "admin") {
-    return NextResponse.json({ error: "Only admin can create tasks" }, { status: 403 });
+  if (session.role === "admin" || session.role === "poc") {
+    const body = await req.json().catch(() => ({}));
+    const assigneeId = typeof body.assigneeId === "string" ? body.assigneeId.trim() : "";
+
+    if (session.role === "poc") {
+      const pocId = session.memberId ?? session.username;
+      if (!assigneeId || !canPocAssignTo(pocId, assigneeId)) {
+        return NextResponse.json(
+          { error: "You can only assign tasks to your delegate list (e.g. Mahesh)" },
+          { status: 403 }
+        );
+      }
+    }
+
+    try {
+      const task = await createTeamAdTask(
+        {
+          outletId: typeof body.outletId === "string" ? body.outletId : "",
+          assigneeId: assigneeId || undefined,
+          title: typeof body.title === "string" ? body.title : "",
+          description: typeof body.description === "string" ? body.description : undefined,
+          creativeUrl: typeof body.creativeUrl === "string" ? body.creativeUrl : undefined,
+          uploadedUrl: typeof body.uploadedUrl === "string" ? body.uploadedUrl : undefined,
+          referenceUrls: body.referenceUrls,
+          startDate: typeof body.startDate === "string" ? body.startDate : undefined,
+          endDate: typeof body.endDate === "string" ? body.endDate : undefined,
+          endTime: typeof body.endTime === "string" ? body.endTime : undefined,
+          deadlineDate: typeof body.deadlineDate === "string" ? body.deadlineDate : undefined,
+          deadlineTime: typeof body.deadlineTime === "string" ? body.deadlineTime : undefined,
+          priority: typeof body.priority === "string" ? body.priority : undefined,
+        },
+        session.username
+      );
+      return NextResponse.json({ task });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Create failed";
+      const status = message.includes("Invalid") || message.includes("long") ? 400 : 500;
+      return NextResponse.json({ error: message }, { status });
+    }
   }
 
-  const body = await req.json().catch(() => ({}));
-
-  try {
-    const task = await createTeamAdTask(
-      {
-        outletId: typeof body.outletId === "string" ? body.outletId : "",
-        assigneeId: typeof body.assigneeId === "string" ? body.assigneeId : undefined,
-        title: typeof body.title === "string" ? body.title : "",
-        description: typeof body.description === "string" ? body.description : undefined,
-        creativeUrl: typeof body.creativeUrl === "string" ? body.creativeUrl : undefined,
-        uploadedUrl: typeof body.uploadedUrl === "string" ? body.uploadedUrl : undefined,
-        referenceUrls: body.referenceUrls,
-        startDate: typeof body.startDate === "string" ? body.startDate : undefined,
-        endDate: typeof body.endDate === "string" ? body.endDate : undefined,
-        endTime: typeof body.endTime === "string" ? body.endTime : undefined,
-        deadlineDate: typeof body.deadlineDate === "string" ? body.deadlineDate : undefined,
-        deadlineTime: typeof body.deadlineTime === "string" ? body.deadlineTime : undefined,
-        priority: typeof body.priority === "string" ? body.priority : undefined,
-      },
-      session.username
-    );
-    return NextResponse.json({ task });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Create failed";
-    const status = message.includes("Invalid") || message.includes("long") ? 400 : 500;
-    return NextResponse.json({ error: message }, { status });
-  }
+  return NextResponse.json({ error: "Only admin can create tasks" }, { status: 403 });
 }
