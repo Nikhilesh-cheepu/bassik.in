@@ -469,3 +469,15 @@ model TeamReminder {
   @@index([deadlineDate])
   @@index([createdAt])
 }
+
+/// Simple personal notes on /team Mine tab (type & save with timestamp).
+model TeamPersonalNote {
+  id        String   @id @default(cuid())
+  ownerId   String
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([createdAt])
+}

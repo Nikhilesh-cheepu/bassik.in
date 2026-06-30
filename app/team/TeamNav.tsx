@@ -3,7 +3,7 @@
 export const TEAM_TABS = [
   { id: "ads", label: "Ads", short: "Ads & creatives" },
   { id: "planning", label: "Planning", short: "Planning" },
-  { id: "reminders", label: "Mine", short: "Mine" },
+  { id: "reminders", label: "Notes", short: "Notes" },
   { id: "ai", label: "AI", short: "AI assistant" },
 ] as const;
 

@@ -3,7 +3,6 @@
 import type { ReactNode } from "react";
 import { TEAM_AD_OUTLETS } from "@/lib/team-outlets";
 import { IconChevronDown, IconLock, teamFilterChip } from "./TeamIcons";
-import type { MineSection } from "./TeamMineView";
 import { TEAM_PAGE, type TeamTab } from "./TeamNav";
 import { PlanningFilters } from "./TeamPlanningView";
 import type { TeamPlanningFilter } from "@/lib/team-planning";
@@ -18,7 +17,7 @@ const TAB_TITLES: Record<TeamTab, string> = {
 const MOBILE_TITLES: Record<TeamTab, string> = {
   ads: "Tasks",
   planning: "Planning",
-  reminders: "Mine",
+  reminders: "Notes",
   ai: "AI",
 };
 
@@ -28,12 +27,6 @@ type MemberTab = "all" | string;
 const SCROLL_ROW =
   "-mx-3 flex items-center gap-1 overflow-x-auto px-3 pb-2.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:mx-0 xl:px-0";
 
-const MINE_SECTIONS: { id: MineSection; label: string }[] = [
-  { id: "reminders", label: "Reminders" },
-  { id: "planning", label: "Planning" },
-  { id: "feedback", label: "Feedback" },
-];
-
 export default function TeamPageHeader({
   tab,
   userLabel,
@@ -41,8 +34,6 @@ export default function TeamPageHeader({
   refreshing,
   showStats,
   isMemberHub,
-  mineSection,
-  onMineSectionChange,
   desktopAction,
   onLogout,
   filter,
@@ -57,7 +48,6 @@ export default function TeamPageHeader({
   onMemberTabChange,
   planningFilter,
   onPlanningFilterChange,
-  reminderFilters,
 }: {
   tab: TeamTab;
   userLabel: string;
@@ -65,8 +55,6 @@ export default function TeamPageHeader({
   refreshing: boolean;
   showStats: boolean;
   isMemberHub?: boolean;
-  mineSection?: MineSection;
-  onMineSectionChange?: (s: MineSection) => void;
   desktopAction?: ReactNode;
   onLogout: () => void;
   filter: Filter;
@@ -81,13 +69,12 @@ export default function TeamPageHeader({
   onMemberTabChange: (id: MemberTab) => void;
   planningFilter: TeamPlanningFilter;
   onPlanningFilterChange: (f: TeamPlanningFilter) => void;
-  reminderFilters: { id: Filter; label: string }[];
 }) {
   const outletLabel =
     TEAM_AD_OUTLETS.find((o) => o.id === outletFilter)?.label ?? "All outlets";
 
-  const mobileTitle = isMemberHub ? "Mine" : MOBILE_TITLES[tab];
-  const desktopTitle = isMemberHub ? "Mine — planning & feedback" : TAB_TITLES[tab];
+  const mobileTitle = isMemberHub || tab === "reminders" ? "Notes" : MOBILE_TITLES[tab];
+  const desktopTitle = isMemberHub || tab === "reminders" ? "Mine — notes" : TAB_TITLES[tab];
 
   const statsLine = showStats ? (
     <p className="mt-0.5 truncate text-[11px] text-white/35">
@@ -102,10 +89,10 @@ export default function TeamPageHeader({
         {refreshing ? " · …" : ""}
       </span>
     </p>
-  ) : tab !== "ai" && !isMemberHub ? (
+  ) : tab !== "ai" && !isMemberHub && tab !== "reminders" ? (
     <p className="mt-0.5 text-[11px] text-white/35 xl:hidden">{userLabel}</p>
-  ) : isMemberHub ? (
-    <p className="mt-0.5 text-[11px] text-white/35">Reminders, planning & feedback</p>
+  ) : isMemberHub || tab === "reminders" ? (
+    <p className="mt-0.5 text-[11px] text-white/35">Type and save — timestamp added automatically</p>
   ) : null;
 
   return (
@@ -121,17 +108,14 @@ export default function TeamPageHeader({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            {desktopAction ? (
-              <div className="hidden items-center gap-2 xl:flex">{desktopAction}</div>
-            ) : null}
+            {desktopAction ? <div className="hidden xl:block">{desktopAction}</div> : null}
             <button
               type="button"
               onClick={onLogout}
+              className="hidden rounded-xl border border-white/10 p-2 text-white/45 hover:bg-white/[0.04] xl:flex"
               aria-label="Lock"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-white/45 hover:bg-white/[0.04] xl:h-auto xl:w-auto xl:rounded-xl xl:px-3 xl:py-2 xl:text-sm"
             >
-              <IconLock className="h-[18px] w-[18px] xl:hidden" />
-              <span className="hidden xl:inline">Lock</span>
+              <IconLock className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -195,35 +179,9 @@ export default function TeamPageHeader({
               </>
             ) : null}
           </div>
-        ) : isMemberHub && mineSection && onMineSectionChange ? (
-          <div className={SCROLL_ROW}>
-            {MINE_SECTIONS.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => onMineSectionChange(s.id)}
-                className={teamFilterChip(mineSection === s.id, s.id === "feedback" ? "violet" : "default")}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
         ) : tab === "planning" ? (
           <div className={SCROLL_ROW}>
             <PlanningFilters filter={planningFilter} onFilterChange={onPlanningFilterChange} />
-          </div>
-        ) : tab === "reminders" && !isMemberHub ? (
-          <div className={SCROLL_ROW}>
-            {reminderFilters.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => onFilterChange(f.id)}
-                className={teamFilterChip(filter === f.id)}
-              >
-                {f.label}
-              </button>
-            ))}
           </div>
         ) : null}
       </div>

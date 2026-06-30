@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TEAM_AD_OUTLETS } from "@/lib/team-outlets";
 import { pocDelegateAssigneeIds } from "@/lib/team-members";
 import {
-  formatTeamStartDate,
   isAsapStartDate,
   TEAM_START_ASAP,
   teamTaskCompletedDayKey,
@@ -12,20 +11,17 @@ import {
 } from "@/lib/team-tasks";
 import {
   endTimeModeFromTask,
-  formatTeamEndDateTime as formatDeadline,
-  isPastDeadline,
   resolveEndTimeForSave,
   TEAM_END_TIME_PRESETS,
   type TeamEndTimeMode,
 } from "@/lib/team-end-time";
-import type { TeamReminderDto } from "@/lib/team-reminders";
+import type { TeamPersonalNoteDto } from "@/lib/team-personal-notes";
 import type { TeamTaskPriority } from "@prisma/client";
 import { TEAM_PRIORITY_LABELS, TEAM_PRIORITIES } from "@/lib/team-priority";
 import AdTaskList from "./AdTaskList";
-import ExpandableText from "./ExpandableText";
 import { emptyMemberRecordForm, MemberRecordSheet, type MemberRecordForm } from "./MemberRecordSheet";
 import TeamPageHeader from "./TeamPageHeader";
-import TeamMineView, { type MineSection } from "./TeamMineView";
+import TeamNotesView from "./TeamNotesView";
 import {
   emptyPlanningSheetForm,
   PlanningSheetFormSheet,
@@ -78,28 +74,6 @@ type TaskForm = {
   priority: TeamTaskPriority;
   referenceUrls: string[];
 };
-
-type ReminderForm = {
-  title: string;
-  description: string;
-  startDate: string;
-  endDate: string;
-  deadlineDate: string;
-  deadlineTimeMode: TeamEndTimeMode;
-  deadlineTimeCustom: string;
-  ownerId: string;
-};
-
-const emptyReminderForm = (): ReminderForm => ({
-  title: "",
-  description: "",
-  startDate: "",
-  endDate: "",
-  deadlineDate: "",
-  deadlineTimeMode: "none",
-  deadlineTimeCustom: "",
-  ownerId: "",
-});
 
 const emptyTaskForm = (assigneeId = "amit"): TaskForm => ({
   outletId: TEAM_AD_OUTLETS[0].id,
@@ -225,16 +199,17 @@ export default function TeamClient() {
   const [loginError, setLoginError] = useState<string | null>(null);
   const [tab, setTab] = useState<TeamTab>("ads");
   const [tasks, setTasks] = useState<TeamTaskDto[]>([]);
-  const [reminders, setReminders] = useState<TeamReminderDto[]>([]);
+  const [personalNotes, setPersonalNotes] = useState<TeamPersonalNoteDto[]>([]);
   const [planningNotes, setPlanningNotes] = useState<TeamPlanningDto[]>([]);
   const [tasksReady, setTasksReady] = useState(false);
-  const [remindersReady, setRemindersReady] = useState(false);
+  const [notesReady, setNotesReady] = useState(false);
   const [planningReady, setPlanningReady] = useState(false);
+  const [noteDraft, setNoteDraft] = useState("");
+  const noteComposerRef = useRef<HTMLTextAreaElement>(null);
   const [planningFilter, setPlanningFilter] = useState<TeamPlanningFilter>("all");
   const [showPlanningForm, setShowPlanningForm] = useState(false);
   const [editingPlanning, setEditingPlanning] = useState<TeamPlanningDto | null>(null);
   const [planningForm, setPlanningForm] = useState<PlanningSheetForm>(emptyPlanningSheetForm());
-  const [mineSection, setMineSection] = useState<MineSection>("reminders");
   const [refUploading, setRefUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>("todo");
@@ -242,11 +217,8 @@ export default function TeamClient() {
   const [outletFilter, setOutletFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [showTaskForm, setShowTaskForm] = useState(false);
-  const [showReminderForm, setShowReminderForm] = useState(false);
   const [editing, setEditing] = useState<TeamTaskDto | null>(null);
-  const [editingReminder, setEditingReminder] = useState<TeamReminderDto | null>(null);
   const [taskForm, setTaskForm] = useState<TaskForm>(emptyTaskForm);
-  const [reminderForm, setReminderForm] = useState<ReminderForm>(emptyReminderForm);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ fileName: string; siteUrl: string } | null>(null);
   const [showMemberRecordForm, setShowMemberRecordForm] = useState(false);
@@ -263,12 +235,11 @@ export default function TeamClient() {
   const showMemberTabs = canBrowseAllMembers && members.length > 1 && tab === "ads";
 
   const counts = useMemo(() => {
-    const list = tab === "ads" ? tasks : tab === "reminders" ? reminders : [];
-    const todo = list.filter((t) => t.status === "TODO").length;
-    const done = list.filter((t) => t.status === "DONE").length;
-    const pending = list.filter((t) => t.status === "PENDING_APPROVAL").length;
+    const todo = tasks.filter((t) => t.status === "TODO").length;
+    const done = tasks.filter((t) => t.status === "DONE").length;
+    const pending = tasks.filter((t) => t.status === "PENDING_APPROVAL").length;
     return { todo, done, pending };
-  }, [tasks, reminders, tab]);
+  }, [tasks]);
 
   const isMember = user?.role === "member";
   const isPoc = user?.role === "poc";
@@ -325,31 +296,25 @@ export default function TeamClient() {
     [filter, outletFilter, memberTab, canBrowseAllMembers]
   );
 
-  const loadReminders = useCallback(
-    async (silent = false) => {
-      if (!silent) setRefreshing(true);
-      setError(null);
-      try {
-        const qs = new URLSearchParams({
-          filter: user?.role === "member" || user?.role === "poc" ? "all" : filter,
-        });
-        const res = await fetch(`/api/team/reminders?${qs}`);
-        if (res.status === 401) {
-          setUser(null);
-          return;
-        }
-        const data = await readTeamApiJson(res);
-        if (!res.ok) throw new Error(data.error || "Could not load reminders");
-        setReminders(data.reminders ?? []);
-        setRemindersReady(true);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Load failed");
-      } finally {
-        setRefreshing(false);
+  const loadPersonalNotes = useCallback(async (silent = false) => {
+    if (!silent) setRefreshing(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/team/notes");
+      if (res.status === 401) {
+        setUser(null);
+        return;
       }
-    },
-    [filter, user?.role]
-  );
+      const data = await readTeamApiJson(res);
+      if (!res.ok) throw new Error(data.error || "Could not load notes");
+      setPersonalNotes(data.notes ?? []);
+      setNotesReady(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Load failed");
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
 
   const loadPlanning = useCallback(
     async (silent = false) => {
@@ -401,18 +366,15 @@ export default function TeamClient() {
     if (!user) return;
     if (isMemberLike && (tab === "planning" || tab === "ai")) {
       setTab("reminders");
-      if (tab === "planning") setMineSection("planning");
     }
   }, [user, tab, isMemberLike]);
 
   useEffect(() => {
     if (!user) return;
     if (tab === "ads") void loadTasks(tasksReady);
-    else if (tab === "reminders" && !isViewer) {
-      void loadReminders(remindersReady);
-      if (isMember) void loadPlanning(planningReady);
-    } else if (tab === "planning") void loadPlanning(planningReady);
-  }, [user, tab, loadTasks, loadReminders, loadPlanning, isViewer, isMemberLike]);
+    else if (tab === "reminders" && !isViewer) void loadPersonalNotes(notesReady);
+    else if (tab === "planning") void loadPlanning(planningReady);
+  }, [user, tab, loadTasks, loadPersonalNotes, loadPlanning, isViewer, isMemberLike]);
 
   useEffect(() => {
     if (!user || tab !== "planning") return;
@@ -424,7 +386,6 @@ export default function TeamClient() {
   useEffect(() => {
     const open =
       showTaskForm ||
-      showReminderForm ||
       showPlanningForm ||
       showMemberRecordForm ||
       showActionSheet ||
@@ -435,7 +396,7 @@ export default function TeamClient() {
     return () => {
       document.body.style.overflow = "";
     };
-  }, [showTaskForm, showReminderForm, showPlanningForm, showMemberRecordForm, showActionSheet, showMoreSheet, showWhatsAppSheet, showDoneReportSheet]);
+  }, [showTaskForm, showPlanningForm, showMemberRecordForm, showActionSheet, showMoreSheet, showWhatsAppSheet, showDoneReportSheet]);
 
   const uploadBlob = async (file: File, kind: "creative" | "reference") => {
     const fd = new FormData();
@@ -472,11 +433,12 @@ export default function TeamClient() {
     setMemberTab("all");
     setTab("ads");
     setTasks([]);
-    setReminders([]);
+    setPersonalNotes([]);
     setPlanningNotes([]);
     setTasksReady(false);
-    setRemindersReady(false);
+    setNotesReady(false);
     setPlanningReady(false);
+    setNoteDraft("");
   };
 
   const resolveAssigneeId = () =>
@@ -524,27 +486,37 @@ export default function TeamClient() {
     setShowTaskForm(true);
   };
 
-  const openCreateReminder = () => {
-    setEditingReminder(null);
-    setReminderForm(emptyReminderForm());
-    if (isMember) setMineSection("reminders");
-    setShowReminderForm(true);
+  const focusNoteComposer = () => {
+    noteComposerRef.current?.focus();
+    noteComposerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
-  const openEditReminder = (r: TeamReminderDto) => {
-    const dl = endTimeModeFromTask(r.deadlineTime);
-    setEditingReminder(r);
-    setReminderForm({
-      title: r.title,
-      description: r.description ?? "",
-      startDate: r.startDate ?? "",
-      endDate: r.endDate ?? "",
-      deadlineDate: r.deadlineDate ?? "",
-      deadlineTimeMode: dl.mode,
-      deadlineTimeCustom: dl.customTime,
-      ownerId: "",
-    });
-    setShowReminderForm(true);
+  const savePersonalNote = async () => {
+    const body = noteDraft.trim();
+    if (!body) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/team/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body }),
+      });
+      const data = await readTeamApiJson(res);
+      if (!res.ok) throw new Error(data.error || "Save failed");
+      setNoteDraft("");
+      await loadPersonalNotes(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deletePersonalNote = async (note: TeamPersonalNoteDto) => {
+    if (!window.confirm("Delete this note?")) return;
+    const res = await fetch(`/api/team/notes/${note.id}`, { method: "DELETE" });
+    if (res.ok) await loadPersonalNotes(true);
   };
 
   const uploadFile = async (file: File) => {
@@ -698,45 +670,6 @@ export default function TeamClient() {
     }
   };
 
-  const saveReminder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      const payload: Record<string, string> = {
-        title: reminderForm.title.trim(),
-        description: reminderForm.description.trim(),
-        startDate: reminderForm.startDate,
-        endDate: reminderForm.endDate,
-        deadlineDate: reminderForm.deadlineDate,
-        deadlineTime: resolveEndTimeForSave(
-          reminderForm.deadlineTimeMode,
-          reminderForm.deadlineTimeCustom
-        ),
-      };
-      if (user?.role === "admin" && reminderForm.ownerId && !editingReminder) {
-        payload.ownerId = reminderForm.ownerId;
-      }
-      const url = editingReminder
-        ? `/api/team/reminders/${editingReminder.id}`
-        : "/api/team/reminders";
-      const res = await fetch(url, {
-        method: editingReminder ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await readTeamApiJson(res);
-      if (!res.ok) throw new Error(data.error || "Save failed");
-      setShowReminderForm(false);
-      setEditingReminder(null);
-      await loadReminders(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const toggleTaskDone = async (task: TeamTaskDto) => {
     const res = await fetch(`/api/team/tasks/${task.id}`, {
       method: "PATCH",
@@ -744,15 +677,6 @@ export default function TeamClient() {
       body: JSON.stringify({ status: task.status === "DONE" ? "TODO" : "DONE" }),
     });
     if (res.ok) await loadTasks(true);
-  };
-
-  const toggleReminderDone = async (r: TeamReminderDto) => {
-    const res = await fetch(`/api/team/reminders/${r.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: r.status === "DONE" ? "TODO" : "DONE" }),
-    });
-    if (res.ok) await loadReminders(true);
   };
 
   const deleteTask = async (task: TeamTaskDto) => {
@@ -780,12 +704,6 @@ export default function TeamClient() {
   };
 
   const canDragTasks = user?.role === "admin" && filter === "todo" && tab === "ads";
-
-  const deleteReminder = async (r: TeamReminderDto) => {
-    if (!window.confirm(`Delete "${r.title}"?`)) return;
-    const res = await fetch(`/api/team/reminders/${r.id}`, { method: "DELETE" });
-    if (res.ok) await loadReminders(true);
-  };
 
   const exportExcel = () => {
     const qs = new URLSearchParams({ filter });
@@ -837,38 +755,16 @@ export default function TeamClient() {
     }
   };
 
-  const openMemberSheet = (type: "PLANNING" | "FEEDBACK") => {
-    if (isMember) {
-      setTab("reminders");
-      setMineSection(type === "FEEDBACK" ? "feedback" : "planning");
-    }
-    openCreatePlanning(type);
-  };
-
   const activeMemberLabel =
     memberTab !== "all" ? memberName(members, memberTab) : null;
   const listReady =
-    tab === "ads"
-      ? tasksReady
-      : isMemberHub
-        ? mineSection === "reminders"
-          ? remindersReady
-          : planningReady
-        : tab === "reminders"
-          ? remindersReady
-          : tab === "planning"
-            ? planningReady
-            : true;
+    tab === "ads" ? tasksReady : tab === "reminders" ? notesReady : tab === "planning" ? planningReady : true;
   const listEmpty =
     tab === "ads"
       ? tasks.length === 0
-      : isMemberHub
-        ? false
-        : tab === "reminders"
-          ? reminders.length === 0
-          : tab === "planning"
-            ? planningNotes.length === 0
-            : false;
+      : tab === "planning"
+        ? planningNotes.length === 0
+        : false;
 
   const doneReportDateCount = useMemo(() => {
     const keys = new Set(
@@ -1007,13 +903,13 @@ export default function TeamClient() {
         >
           + Planning
         </button>
-      ) : tab === "reminders" && user.role === "admin" ? (
+      ) : tab === "reminders" ? (
         <button
           type="button"
-          onClick={openCreateReminder}
-          className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white"
+          onClick={focusNoteComposer}
+          className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white"
         >
-          + Reminder
+          + Note
         </button>
       ) : null
     ) : null;
@@ -1036,10 +932,8 @@ export default function TeamClient() {
         userLabel={userLabel}
         counts={counts}
         refreshing={refreshing}
-        showStats={tab === "ads" || (tab === "reminders" && !isMemberLike)}
+        showStats={tab === "ads"}
         isMemberHub={isMemberHub}
-        mineSection={mineSection}
-        onMineSectionChange={setMineSection}
         desktopAction={desktopPrimaryAction}
         onLogout={() => void logout()}
         filter={filter}
@@ -1054,7 +948,6 @@ export default function TeamClient() {
         onMemberTabChange={setMemberTab}
         planningFilter={planningFilter}
         onPlanningFilterChange={setPlanningFilter}
-        reminderFilters={FILTERS}
       />
 
       <main
@@ -1098,7 +991,7 @@ export default function TeamClient() {
                 ? isViewer
                   ? "No planning notes yet."
                   : "No notes yet. Tap + below to add one."
-                : "No reminders yet. Tap + below to add one."}
+                : null}
           </p>
         ) : tab === "ads" ? (
           <>
@@ -1141,93 +1034,17 @@ export default function TeamClient() {
             members={members}
             onTasksCreated={() => void loadTasks(true)}
           />
-        ) : isMemberHub ? (
-          <TeamMineView
-            section={mineSection}
-            reminders={reminders}
-            remindersReady={remindersReady}
-            planningNotes={planningNotes}
-            planningReady={planningReady}
-            readOnlyReminders={false}
-            username={user.username}
-            onEditPlanning={openEditPlanning}
-            onDeletePlanning={(n) => void deletePlanningNote(n)}
-            onNewPlanning={() => openCreatePlanning("PLANNING")}
-            onNewFeedback={() => openCreatePlanning("FEEDBACK")}
-            onEditReminder={openEditReminder}
-            onToggleReminderDone={(r) => void toggleReminderDone(r)}
-            onDeleteReminder={(r) => void deleteReminder(r)}
-          />
         ) : tab === "reminders" ? (
-          <div className="space-y-2">
-            {reminders.map((r) => {
-              const done = r.status === "DONE";
-              const overdue = !done && isPastDeadline(r.deadlineDate, r.deadlineTime);
-              const meta = [
-                r.startDate ? `From ${formatTeamStartDate(r.startDate)}` : null,
-                r.endDate ? `Until ${formatTeamStartDate(r.endDate)}` : null,
-                r.deadlineDate
-                  ? `${overdue ? "Overdue" : "Due"} ${formatDeadline(r.deadlineDate, r.deadlineTime)}`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(" · ");
-              return (
-                <article
-                  key={r.id}
-                  className={`relative overflow-hidden rounded-xl bg-[#0e0e14] ring-1 ring-white/[0.06] ${
-                    done ? "opacity-80" : ""
-                  }`}
-                >
-                  <div
-                    className={`absolute inset-y-0 left-0 w-1 ${
-                      done ? "bg-emerald-500/70" : overdue ? "bg-red-500" : "bg-amber-500/60"
-                    }`}
-                  />
-                  <div className="py-3 pl-3.5 pr-3">
-                    <h2
-                      className={`text-[15px] font-medium leading-snug ${
-                        done ? "text-white/55 line-through" : "text-white"
-                      }`}
-                    >
-                      {r.title}
-                    </h2>
-                    {meta ? (
-                      <p className={`mt-1 text-xs ${overdue ? "text-red-300/80" : "text-white/38"}`}>
-                        {meta}
-                      </p>
-                    ) : null}
-                    {r.description ? <ExpandableText text={r.description} /> : null}
-                    <div className="mt-3 flex items-center gap-2 border-t border-white/[0.05] pt-2.5">
-                      <button
-                        type="button"
-                        onClick={() => void toggleReminderDone(r)}
-                        className={`min-h-[40px] flex-1 rounded-lg text-xs font-medium ${
-                          done ? "text-white/45" : "bg-white/[0.06] text-emerald-200/90"
-                        }`}
-                      >
-                        {done ? "Reopen" : "Done"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openEditReminder(r)}
-                        className="min-h-[40px] rounded-lg px-3 text-xs text-white/50"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void deleteReminder(r)}
-                        className="min-h-[40px] rounded-lg px-2 text-xs text-red-300/60"
-                      >
-                        Del
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+          <TeamNotesView
+            notes={personalNotes}
+            ready={notesReady}
+            draft={noteDraft}
+            onDraftChange={setNoteDraft}
+            onSave={() => void savePersonalNote()}
+            saving={saving}
+            onDelete={(n) => void deletePersonalNote(n)}
+            composerRef={noteComposerRef}
+          />
         ) : null}
       </main>
 
@@ -1237,7 +1054,13 @@ export default function TeamClient() {
         isAdmin={user.role === "admin"}
         isMember={isMemberLike}
         isViewer={isViewer}
-        onAdd={() => setShowActionSheet(true)}
+        onAdd={() => {
+          if (isMemberLike && tab === "reminders") {
+            focusNoteComposer();
+            return;
+          }
+          setShowActionSheet(true);
+        }}
         onWhatsApp={user.role === "admin" ? shareWhatsApp : undefined}
         onMore={() => setShowMoreSheet(true)}
       />
@@ -1250,7 +1073,6 @@ export default function TeamClient() {
             ? [
                 { label: "New ad task", onClick: openCreateTask, tone: "accent" as const },
                 { label: "Planning sheet", onClick: () => openCreatePlanning("PLANNING") },
-                { label: "Reminder", onClick: openCreateReminder },
               ]
             : []),
           ...(isPoc && tab === "ads"
@@ -1272,13 +1094,6 @@ export default function TeamClient() {
                   },
                   tone: "accent" as const,
                 },
-              ]
-            : []),
-          ...(isMemberLike && tab === "reminders"
-            ? [
-                { label: "Reminder", onClick: openCreateReminder, tone: "accent" as const },
-                { label: "Planning sheet", onClick: () => openMemberSheet("PLANNING") },
-                { label: "Share feedback", onClick: () => openMemberSheet("FEEDBACK") },
               ]
             : []),
         ]}
@@ -1521,115 +1336,6 @@ export default function TeamClient() {
                 className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-sm font-semibold disabled:opacity-50"
               >
                 {saving ? "Saving…" : editing ? "Save" : "Create"}
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
-
-      {showReminderForm ? (
-        <div className={TEAM_SHEET_OVERLAY}>
-          <form
-            onSubmit={saveReminder}
-            className={TEAM_SHEET_PANEL}
-          >
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
-            <h2 className="text-lg font-semibold">
-              {editingReminder ? "Edit reminder" : "New reminder"}
-            </h2>
-            <p className="mt-1 text-xs text-white/40">
-              {user.role === "admin"
-                ? "Assign to a team member — they see it in Mine."
-                : "Your personal reminder — shows in Mine."}
-            </p>
-
-            {user.role === "admin" && !editingReminder ? (
-              <>
-                <label className="mt-4 block text-xs font-medium text-white/50">For</label>
-                <select
-                  value={reminderForm.ownerId}
-                  onChange={(e) => setReminderForm((f) => ({ ...f, ownerId: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-                >
-                  <option value="">Me (admin)</option>
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </>
-            ) : null}
-
-            <label className="mt-4 block text-xs font-medium text-white/50">Title</label>
-            <input
-              value={reminderForm.title}
-              onChange={(e) => setReminderForm((f) => ({ ...f, title: e.target.value }))}
-              placeholder="e.g. Follow up with outlet"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-            />
-
-            <label className="mt-3 block text-xs font-medium text-white/50">Notes</label>
-            <textarea
-              value={reminderForm.description}
-              onChange={(e) => setReminderForm((f) => ({ ...f, description: e.target.value }))}
-              rows={3}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-            />
-
-            <div className="mt-4 grid grid-cols-1 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-white/50">Start date (optional)</label>
-                <input
-                  type="date"
-                  value={reminderForm.startDate}
-                  onChange={(e) => setReminderForm((f) => ({ ...f, startDate: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-white/50">End date (optional)</label>
-                <input
-                  type="date"
-                  value={reminderForm.endDate}
-                  onChange={(e) => setReminderForm((f) => ({ ...f, endDate: e.target.value }))}
-                  className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-                />
-              </div>
-              <DateFields
-                label="Deadline"
-                dateValue={reminderForm.deadlineDate}
-                onDateChange={(v) => setReminderForm((f) => ({ ...f, deadlineDate: v }))}
-                timeMode={reminderForm.deadlineTimeMode}
-                onTimeModeChange={(v) =>
-                  setReminderForm((f) => ({
-                    ...f,
-                    deadlineTimeMode: v,
-                    deadlineTimeCustom: v === "custom" ? f.deadlineTimeCustom : "",
-                  }))
-                }
-                timeCustom={reminderForm.deadlineTimeCustom}
-                onTimeCustomChange={(v) => setReminderForm((f) => ({ ...f, deadlineTimeCustom: v }))}
-              />
-            </div>
-
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowReminderForm(false);
-                  setEditingReminder(null);
-                }}
-                className="min-h-[48px] flex-1 rounded-xl border border-white/10 text-sm text-white/60"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-sm font-semibold disabled:opacity-50"
-              >
-                {saving ? "Saving…" : editingReminder ? "Save" : "Add"}
               </button>
             </div>
           </form>

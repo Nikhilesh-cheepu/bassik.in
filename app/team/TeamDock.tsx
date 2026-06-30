@@ -63,7 +63,6 @@ export default function TeamDock({
   }
 
   if (isMember) {
-    const mineActive = tab === "reminders" || tab === "planning";
     return (
       <nav
         className={navClass}
@@ -84,9 +83,9 @@ export default function TeamDock({
               <IconPlus className="h-6 w-6" />
             </span>
           </button>
-          <button type="button" onClick={() => onTab("reminders")} className={dockItem(mineActive)}>
+          <button type="button" onClick={() => onTab("reminders")} className={dockItem(tab === "reminders")}>
             <IconBell className="h-[22px] w-[22px]" />
-            Mine
+            Notes
           </button>
         </div>
       </nav>
@@ -204,7 +203,7 @@ export function TeamMoreSheet({
         <p className="mb-2 px-1 text-xs text-white/40">More</p>
         <div className="space-y-1">
           {[
-            { label: "My reminders", icon: IconBell, onClick: onReminders },
+            { label: "My notes", icon: IconBell, onClick: onReminders },
             { label: "AI assistant", icon: IconAi, onClick: onAi },
             { label: "Export Excel", icon: IconTasks, onClick: onExport },
           ].map(({ label, icon: Icon, onClick }) => (
