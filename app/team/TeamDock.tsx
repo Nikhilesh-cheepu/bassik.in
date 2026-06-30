@@ -5,7 +5,6 @@ import {
   IconAi,
   IconBell,
   IconMore,
-  IconPlan,
   IconPlus,
   IconTasks,
   IconWhatsApp,
@@ -53,10 +52,6 @@ export default function TeamDock({
             <IconTasks className="h-[22px] w-[22px]" />
             Tasks
           </button>
-          <button type="button" onClick={() => onTab("planning")} className={dockItem(tab === "planning")}>
-            <IconPlan className="h-[22px] w-[22px]" />
-            Plan
-          </button>
         </div>
       </nav>
     );
@@ -102,9 +97,9 @@ export default function TeamDock({
           <IconTasks className="h-[22px] w-[22px]" />
           Tasks
         </button>
-        <button type="button" onClick={() => onTab("planning")} className={dockItem(tab === "planning")}>
-          <IconPlan className="h-[22px] w-[22px]" />
-          Plan
+        <button type="button" onClick={() => onTab("reminders")} className={dockItem(tab === "reminders")}>
+          <IconBell className="h-[22px] w-[22px]" />
+          Notes
         </button>
 
         <button
@@ -128,7 +123,7 @@ export default function TeamDock({
         <button
           type="button"
           onClick={onMore}
-          className={dockItem(tab === "reminders" || tab === "ai")}
+          className={dockItem(tab === "ai")}
         >
           <IconMore className="h-[22px] w-[22px]" />
           More

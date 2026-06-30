@@ -99,19 +99,26 @@ function memberName(members: TeamMember[], id: string): string {
   return members.find((m) => m.id === id)?.name ?? id;
 }
 
-async function readTeamApiJson(res: Response) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function readTeamApiJson(res: Response): Promise<any> {
   const text = await res.text();
   if (!text) {
     if (!res.ok) throw new Error(`Request failed (${res.status})`);
     return {};
   }
+  let data: Record<string, unknown>;
   try {
-    return JSON.parse(text);
+    data = JSON.parse(text) as Record<string, unknown>;
   } catch {
     throw new Error(
       res.ok ? "Invalid server response" : `Server error (${res.status}) — try refreshing`
     );
   }
+  if (!res.ok) {
+    const msg = typeof data.error === "string" ? data.error : `Request failed (${res.status})`;
+    throw new Error(msg);
+  }
+  return data;
 }
 
 function formatDateTime(iso: string | null): string {
@@ -364,7 +371,7 @@ export default function TeamClient() {
 
   useEffect(() => {
     if (!user) return;
-    if (isMemberLike && (tab === "planning" || tab === "ai")) {
+    if (tab === "planning" || (isMemberLike && tab === "ai")) {
       setTab("reminders");
     }
   }, [user, tab, isMemberLike]);
@@ -895,14 +902,6 @@ export default function TeamClient() {
             + Log work
           </button>
         </div>
-      ) : tab === "planning" ? (
-        <button
-          type="button"
-          onClick={() => openCreatePlanning("PLANNING")}
-          className="rounded-xl bg-sky-500/90 px-4 py-2 text-sm font-semibold text-white"
-        >
-          + Planning
-        </button>
       ) : tab === "reminders" ? (
         <button
           type="button"
@@ -921,7 +920,7 @@ export default function TeamClient() {
         onChange={setTab}
         hideReminders={isViewer}
         hideAi={isViewer || isMemberLike}
-        hidePlanning={isMemberLike}
+        hidePlanning
         userLabel={userLabel}
         onLogout={() => void logout()}
       />
@@ -1055,7 +1054,7 @@ export default function TeamClient() {
         isMember={isMemberLike}
         isViewer={isViewer}
         onAdd={() => {
-          if (isMemberLike && tab === "reminders") {
+          if (tab === "reminders" && !isViewer) {
             focusNoteComposer();
             return;
           }
@@ -1070,10 +1069,7 @@ export default function TeamClient() {
         onClose={() => setShowActionSheet(false)}
         actions={[
           ...(user.role === "admin"
-            ? [
-                { label: "New ad task", onClick: openCreateTask, tone: "accent" as const },
-                { label: "Planning sheet", onClick: () => openCreatePlanning("PLANNING") },
-              ]
+            ? [{ label: "New ad task", onClick: openCreateTask, tone: "accent" as const }]
             : []),
           ...(isPoc && tab === "ads"
             ? [
