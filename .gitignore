@@ -42,10 +42,20 @@ prisma/dev.db-journal
 *.tsbuildinfo
 next-env.d.ts
 
-
-
-
-
 /lib/generated/prisma
 .env.local
 .env
+
+# Mobile app specific
+team-mobile-app/node_modules
+team-mobile-app/.expo
+team-mobile-app/.env
+team-mobile-app/dist
+team-mobile-app/android
+team-mobile-app/ios
+team-mobile-app/*.jks
+team-mobile-app/*.p8
+team-mobile-app/*.p12
+team-mobile-app/*.mobileprovision
+team-mobile-app/google-play-service-account.json
+
