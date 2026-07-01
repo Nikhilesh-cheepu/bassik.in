@@ -16,7 +16,7 @@ function mapTaskRow(t: {
   id: string;
   title: string;
   status: string;
-  outletId: string;
+  outletId: string | null;
   assigneeId: string;
   completedAt: Date | null;
 }) {

@@ -79,7 +79,7 @@ type TaskForm = {
 const emptyCreativeLink = (): TeamCreativeLink => ({ title: "", url: "" });
 
 const emptyTaskForm = (assigneeId = "amit"): TaskForm => ({
-  outletId: TEAM_AD_OUTLETS[0].id,
+  outletId: "",
   assigneeId,
   title: "",
   description: "",
@@ -167,7 +167,7 @@ function taskToForm(task: TeamTaskDto): TaskForm {
   const end = endTimeModeFromTask(task.endTime);
   const dl = endTimeModeFromTask(task.deadlineTime);
   return {
-    outletId: task.outletId,
+    outletId: task.outletId ?? "",
     assigneeId: task.assigneeId,
     title: task.title,
     description: task.description ?? "",
@@ -486,7 +486,7 @@ export default function TeamClient() {
   const uploadBlob = async (file: File, kind: "creative" | "reference") => {
     const fd = new FormData();
     fd.append("file", file);
-    fd.append("outletId", taskForm.outletId);
+    fd.append("outletId", taskForm.outletId || "general");
     fd.append("kind", kind);
     const res = await fetch("/api/team/upload", { method: "POST", body: fd });
     const data = await readTeamApiJson(res);
@@ -803,7 +803,7 @@ export default function TeamClient() {
     setError(null);
     try {
       const payload = {
-        outletId: taskForm.outletId,
+        outletId: taskForm.outletId.trim() || undefined,
         assigneeId: soleMember?.id ?? taskForm.assigneeId,
         title: taskForm.title.trim(),
         description: taskForm.description.trim(),
@@ -1376,6 +1376,7 @@ export default function TeamClient() {
               onChange={(e) => setTaskForm((f) => ({ ...f, outletId: e.target.value }))}
               className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
             >
+              <option value="">General</option>
               {TEAM_AD_OUTLETS.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.label}

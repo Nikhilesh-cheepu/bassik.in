@@ -16,8 +16,15 @@ export const TEAM_AD_OUTLETS = [
 
 export type TeamOutletId = (typeof TEAM_AD_OUTLETS)[number]["id"];
 
-export function teamOutletLabel(outletId: string): string {
+export function teamOutletLabel(outletId: string | null | undefined): string {
+  if (!outletId?.trim()) return "General";
   return TEAM_AD_OUTLETS.find((o) => o.id === outletId)?.label ?? outletId;
+}
+
+export function parseTaskOutletId(raw: unknown): string | null {
+  const id = typeof raw === "string" ? raw.trim() : "";
+  if (!id) return null;
+  return isTeamOutletId(id) ? id : null;
 }
 
 export function isTeamOutletId(id: string): id is TeamOutletId {

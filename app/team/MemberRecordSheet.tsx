@@ -15,7 +15,7 @@ export type MemberRecordForm = {
 export const emptyMemberRecordForm = (): MemberRecordForm => ({
   title: "",
   description: "",
-  outletId: TEAM_AD_OUTLETS[0].id,
+  outletId: "",
   creativeUrl: "",
   deadlineDate: "",
 });
@@ -59,6 +59,7 @@ export function MemberRecordSheet({
           onChange={(e) => setForm((f) => ({ ...f, outletId: e.target.value }))}
           className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
         >
+          <option value="">General</option>
           {TEAM_AD_OUTLETS.map((o) => (
             <option key={o.id} value={o.id}>
               {o.label}

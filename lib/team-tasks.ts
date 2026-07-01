@@ -9,7 +9,7 @@ export type TeamCreativeLink = {
 
 export type TeamTaskDto = {
   id: string;
-  outletId: string;
+  outletId: string | null;
   title: string;
   description: string | null;
   creativeUrl: string | null;

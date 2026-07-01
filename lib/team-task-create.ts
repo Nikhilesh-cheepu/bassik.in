@@ -2,7 +2,7 @@ import type { TeamTaskPriority, TeamAdTaskStatus } from "@prisma/client";
 import { parseUrlList } from "@/lib/team-planning";
 import { defaultTeamMemberId, isTeamMemberId } from "@/lib/team-members";
 import { normalizeTeamPriority } from "@/lib/team-priority";
-import { isTeamOutletId } from "@/lib/team-outlets";
+import { parseTaskOutletId } from "@/lib/team-outlets";
 import {
   applyCreativeLinksFields,
   normalizeTeamStartDate,
@@ -15,7 +15,7 @@ import {
 import { prisma } from "@/lib/db";
 
 export type CreateTeamAdTaskInput = {
-  outletId: string;
+  outletId?: string;
   assigneeId?: string;
   title: string;
   description?: string;
@@ -36,7 +36,7 @@ export async function createTeamAdTask(
   input: CreateTeamAdTaskInput,
   createdBy: string
 ): Promise<TeamTaskDto> {
-  const outletId = input.outletId.trim();
+  const outletId = parseTaskOutletId(input.outletId);
   const assigneeId = (input.assigneeId?.trim() || defaultTeamMemberId()).trim();
   const title = input.title.trim();
   const description = input.description?.trim() ?? "";
@@ -52,14 +52,11 @@ export async function createTeamAdTask(
   const priority = normalizeTeamPriority(input.priority);
   const status = input.status ?? "TODO";
 
-  if (!isTeamOutletId(outletId)) {
-    throw new Error(`Invalid outlet: ${outletId}`);
-  }
   if (!isTeamMemberId(assigneeId)) {
     throw new Error(`Invalid assignee: ${assigneeId}`);
   }
 
-  const finalTitle = title || description.slice(0, 80) || `Ad — ${outletId}`;
+  const finalTitle = title || description.slice(0, 80) || (outletId ? `Ad — ${outletId}` : "Ad task");
   if (finalTitle.length > 200) {
     throw new Error("Title too long");
   }

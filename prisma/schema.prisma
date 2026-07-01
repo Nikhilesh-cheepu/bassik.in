@@ -468,7 +468,7 @@ model TeamCalendarShareMember {
 /// SEO & performance marketing ad/creative tasks (internal /team board).
 model TeamAdTask {
   id              String              @id @default(cuid())
-  outletId        String
+  outletId        String?
   title           String
   description     String?
   creativeUrl     String?

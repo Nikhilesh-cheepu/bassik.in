@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTeamFromRequest } from "@/lib/team-auth";
-import { isTeamOutletId } from "@/lib/team-outlets";
+import { parseTaskOutletId } from "@/lib/team-outlets";
 import { isTeamMemberId } from "@/lib/team-members";
 import { normalizeTeamPriority } from "@/lib/team-priority";
 import { parseUrlList } from "@/lib/team-planning";
@@ -54,8 +54,8 @@ export async function PATCH(
   const data: Record<string, unknown> = {};
 
   if (session.role === "admin") {
-    if (typeof body.outletId === "string" && isTeamOutletId(body.outletId.trim())) {
-      data.outletId = body.outletId.trim();
+    if (body.outletId !== undefined) {
+      data.outletId = parseTaskOutletId(body.outletId);
     }
     if (typeof body.title === "string" && body.title.trim()) {
       data.title = body.title.trim().slice(0, 200);
