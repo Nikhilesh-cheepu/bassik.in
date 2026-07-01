@@ -70,19 +70,8 @@ const DEFAULT_PASSWORDS: Record<string, string> = {
   shravya: "shravya2026",
 };
 
-/** Passwords per member id — TEAM_MEMBER_PASSWORDS='{"amit":"amit01","jeslyn":"jeslyn01"}' */
+/** Member login passwords — defined in repo (not env). */
 export function getTeamMemberPasswords(): Record<string, string> {
-  const raw = process.env.TEAM_MEMBER_PASSWORDS?.trim();
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as Record<string, string>;
-      if (parsed && typeof parsed === "object") return parsed;
-    } catch {
-      /* fallback */
-    }
-  }
-  const legacy = process.env.TEAM_MEMBER_PASSWORD?.trim();
-  if (legacy) return { amit: legacy, jeslyn: "jeslyn01", mahesh: "mahesh01" };
   return DEFAULT_PASSWORDS;
 }
 

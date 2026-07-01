@@ -19,6 +19,9 @@ const JWT_SECRET = new TextEncoder().encode(
     "dev-team-secret-change-in-production"
 );
 
+const TEAM_ADMIN_PASSWORD = "522529";
+const TEAM_VIEWER_PASSWORD = "view01";
+
 function teamAccounts(): { username: string; password: string; role: TeamRole; memberId?: string }[] {
   const passwords = getTeamMemberPasswords();
   const members = getTeamMemberRoster()
@@ -34,12 +37,12 @@ function teamAccounts(): { username: string; password: string; role: TeamRole; m
     ...members,
     {
       username: "admin",
-      password: process.env.TEAM_ADMIN_PASSWORD?.trim() || "522529",
+      password: TEAM_ADMIN_PASSWORD,
       role: "admin",
     },
     {
       username: "viewer",
-      password: process.env.TEAM_VIEWER_PASSWORD?.trim() || "view01",
+      password: TEAM_VIEWER_PASSWORD,
       role: "viewer",
     },
   ];
