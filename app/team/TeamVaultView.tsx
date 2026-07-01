@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { TEAM_AD_OUTLETS } from "@/lib/team-outlets";
+import { TEAM_AD_OUTLETS, teamOutletLabel } from "@/lib/team-outlets";
 import type { TeamVaultEntryDto, VaultListScope } from "@/lib/team-vault";
 import { formatVaultListDate, vaultDisplayTitle, vaultPreviewText } from "@/lib/team-vault";
 import { linkDisplayLabel } from "@/lib/team-personal-notes";
@@ -31,6 +31,7 @@ export const emptyVaultForm = (): VaultForm => ({
 });
 
 type Member = { id: string; name: string };
+type PanelMode = "empty" | "view" | "edit" | "create";
 
 function IconKey({ className = "h-5 w-5" }: { className?: string }) {
   return (
@@ -47,6 +48,14 @@ function IconSearch({ className = "h-3.5 w-3.5" }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="11" cy="11" r="7" />
       <path d="M20 20l-3-3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconPlus({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25">
+      <path d="M12 5v14M5 12h14" strokeLinecap="round" />
     </svg>
   );
 }
@@ -196,7 +205,7 @@ function VaultListItem({
       type="button"
       onClick={onClick}
       className={`flex w-full items-center gap-3 border-b border-white/[0.06] px-4 py-3.5 text-left active:bg-white/[0.04] ${
-        selected ? "bg-white/[0.05]" : ""
+        selected ? "bg-white/[0.06]" : ""
       }`}
     >
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-600/10 text-amber-300/90 ring-1 ring-amber-400/15">
@@ -236,13 +245,147 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   );
 }
 
+function FieldRow({
+  label,
+  value,
+  secret,
+  href,
+}: {
+  label: string;
+  value: string;
+  secret?: boolean;
+  href?: string;
+}) {
+  const [show, setShow] = useState(false);
+  const [copied, setCopied] = useState(false);
+  if (!value) return null;
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-white/30">{label}</p>
+      <div className="mt-1.5 flex gap-2">
+        <div className="min-w-0 flex-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3">
+          <p className={`break-all text-[15px] text-white/90 ${secret && !show ? "font-mono tracking-widest" : ""}`}>
+            {secret && !show ? "••••••••••••" : value}
+          </p>
+        </div>
+        {secret ? (
+          <button
+            type="button"
+            onClick={() => setShow((v) => !v)}
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-white/50"
+            aria-label={show ? "Hide" : "Show"}
+          >
+            <IconEye />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => {
+            void copyToClipboard(value).then((ok) => {
+              if (ok) {
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1500);
+              }
+            });
+          }}
+          className="flex min-h-[48px] shrink-0 items-center gap-1.5 rounded-xl bg-amber-500/15 px-3 text-[13px] font-semibold text-amber-200"
+        >
+          <IconCopy />
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      {href ? (
+        <a href={href} target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[12px] text-cyan-400/80">
+          Open {linkDisplayLabel(value)}
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+function VaultDetailView({
+  entry,
+  password,
+  loading,
+  onEdit,
+  onBack,
+  showBack,
+}: {
+  entry: TeamVaultEntryDto;
+  password: string;
+  loading: boolean;
+  onEdit?: () => void;
+  onBack?: () => void;
+  showBack?: boolean;
+}) {
+  const title = vaultDisplayTitle(entry);
+  const url = entry.url ?? "";
+  const href = url ? (url.startsWith("http") ? url : `https://${url}`) : undefined;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-2.5 xl:px-6">
+        <div className="flex min-w-0 items-center gap-1">
+          {showBack && onBack ? (
+            <button type="button" onClick={onBack} className="-ml-1 flex min-h-[44px] items-center gap-0.5 text-amber-400 xl:hidden">
+              <IconChevronLeft className="h-5 w-5" />
+              <span className="text-[17px]">Passwords</span>
+            </button>
+          ) : null}
+          {!entry.isOwner && entry.sharedByLabel ? (
+            <span className="text-[11px] text-sky-300/60">Shared by {entry.sharedByLabel}</span>
+          ) : null}
+        </div>
+        {entry.isOwner && onEdit ? (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="min-h-[44px] rounded-lg px-4 text-[15px] font-semibold text-amber-400 xl:text-[13px]"
+          >
+            Edit
+          </button>
+        ) : null}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 xl:px-8">
+        <h2 className="text-[22px] font-bold text-white xl:text-xl">{title}</h2>
+        {entry.category ? <p className="mt-1 text-[12px] text-white/35">{entry.category}</p> : null}
+        {entry.outletId ? (
+          <p className="mt-1 text-[12px] text-amber-200/60">{teamOutletLabel(entry.outletId)}</p>
+        ) : null}
+
+        {loading ? (
+          <p className="mt-8 text-sm text-white/35">Loading credentials…</p>
+        ) : (
+          <div className="mt-6 space-y-4">
+            <FieldRow label="Website" value={url} href={href} />
+            <FieldRow label="Username" value={entry.username ?? ""} />
+            <FieldRow label="Password" value={password} secret />
+            {entry.notes ? (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-white/30">Notes</p>
+                <p className="mt-1.5 whitespace-pre-wrap text-[14px] leading-relaxed text-white/55">{entry.notes}</p>
+              </div>
+            ) : null}
+            {entry.sharedWithLabels.length > 0 ? (
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-white/30">Shared with</p>
+                <p className="mt-1 text-[13px] text-white/45">{entry.sharedWithLabels.join(", ")}</p>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function VaultEditor({
   form,
   editingId,
-  readOnly,
   saving,
   onFormChange,
   onSave,
+  onCancel,
   onDelete,
   onBack,
   shareTargets,
@@ -250,28 +393,29 @@ function VaultEditor({
 }: {
   form: VaultForm;
   editingId: string | null;
-  readOnly: boolean;
   saving: boolean;
   onFormChange: (f: VaultForm) => void;
   onSave: () => void;
+  onCancel: () => void;
   onDelete?: () => void;
   onBack?: () => void;
   shareTargets: Member[];
   showBack?: boolean;
 }) {
-  const [showPassword, setShowPassword] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<{ title: string; category: string } | null>(null);
   const formRef = useRef(form);
   formRef.current = form;
 
-  const canSave = Boolean(form.password.trim()) && !saving && !readOnly;
+  const canSave = Boolean(form.password.trim()) && !saving;
+  const isNew = !editingId;
 
   const runAiTitle = useCallback(async () => {
     const f = formRef.current;
     if (!f.url.trim() && !f.username.trim() && f.notes.trim().length < 8) return;
     setAiLoading(true);
+    setAiSuggestion(null);
     try {
       const res = await fetch("/api/team/vault/ai", {
         method: "POST",
@@ -285,11 +429,14 @@ function VaultEditor({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "AI failed");
-      onFormChange({
-        ...formRef.current,
-        title: data.title || formRef.current.title,
-        category: data.category || formRef.current.category,
-      });
+      const suggestion = {
+        title: typeof data.title === "string" ? data.title.trim() : "",
+        category: typeof data.category === "string" ? data.category.trim() : "",
+      };
+      setAiSuggestion(suggestion);
+      if (!f.title.trim() && suggestion.title) {
+        onFormChange({ ...formRef.current, title: suggestion.title, category: suggestion.category || f.category });
+      }
     } catch {
       /* ignore */
     } finally {
@@ -297,212 +444,143 @@ function VaultEditor({
     }
   }, [onFormChange]);
 
-  useEffect(() => {
-    if (readOnly) return;
-    const f = form;
-    if (!f.url.trim() && !f.username.trim()) return;
-    if (f.title.trim()) return;
-    const t = window.setTimeout(() => void runAiTitle(), 1200);
-    return () => window.clearTimeout(t);
-  }, [form.url, form.username, form.notes, form.outletId, form.title, readOnly, runAiTitle]);
-
-  useEffect(() => {
-    setShowPassword(false);
-  }, [editingId]);
-
-  const copyField = (field: string, text: string) => {
-    void copyToClipboard(text).then((ok) => {
-      if (ok) {
-        setCopiedField(field);
-        window.setTimeout(() => setCopiedField(null), 1500);
-      }
-    });
-  };
-
   return (
     <>
       <div className="flex h-full min-h-0 flex-col">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] xl:px-6">
           <div className="flex min-w-0 items-center gap-1">
             {showBack && onBack ? (
-              <button
-                type="button"
-                onClick={onBack}
-                className="-ml-1 flex min-h-[44px] items-center gap-0.5 text-amber-400 xl:hidden"
-              >
+              <button type="button" onClick={onBack} className="-ml-1 flex min-h-[44px] items-center gap-0.5 text-amber-400 xl:hidden">
                 <IconChevronLeft className="h-5 w-5" />
                 <span className="text-[17px]">Passwords</span>
               </button>
-            ) : null}
-            {readOnly ? <span className="text-[11px] text-sky-300/60">Shared · view & copy</span> : null}
+            ) : (
+              <span className="text-[13px] font-medium text-white/50">{isNew ? "New password" : "Edit password"}</span>
+            )}
           </div>
           <div className="flex items-center gap-1">
-            {!readOnly ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setShareOpen(true)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-white/50"
-                  aria-label="Share"
-                >
-                  <IconShare />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void runAiTitle()}
-                  disabled={aiLoading}
-                  className="hidden h-9 items-center gap-1 rounded-lg px-2 text-[11px] text-white/45 sm:flex"
-                >
-                  <IconSparkle className={aiLoading ? "animate-pulse" : ""} />
-                  AI title
-                </button>
-                {editingId && onDelete ? (
-                  <button
-                    type="button"
-                    onClick={onDelete}
-                    className="hidden h-9 px-2 text-[11px] text-red-300/80 xl:inline"
-                  >
-                    Delete
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={onSave}
-                  disabled={!canSave}
-                  className="min-h-[44px] px-3 text-[17px] font-semibold text-amber-400 disabled:opacity-35 xl:text-[11px] xl:font-medium xl:text-white/90"
-                >
-                  {saving ? "Saving…" : "Done"}
-                </button>
-              </>
+            <button type="button" onClick={onCancel} className="min-h-[44px] px-2 text-[14px] text-white/45 xl:text-[12px]">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => setShareOpen(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-white/50"
+              aria-label="Share"
+            >
+              <IconShare />
+            </button>
+            {editingId && onDelete ? (
+              <button type="button" onClick={onDelete} className="hidden px-2 text-[11px] text-red-300/80 sm:inline">
+                Delete
+              </button>
             ) : null}
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={!canSave}
+              className="min-h-[44px] px-3 text-[17px] font-semibold text-amber-400 disabled:opacity-35 xl:text-[13px]"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
           </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 xl:px-8">
-          <input
-            value={form.title}
-            readOnly={readOnly}
-            onChange={(e) => onFormChange({ ...form, title: e.target.value })}
-            placeholder="Title"
-            className="w-full bg-transparent text-[22px] font-bold text-white placeholder:text-white/22 outline-none xl:text-xl"
-          />
-          {form.category ? (
-            <p className="mt-1 text-[12px] text-white/35">{form.category}</p>
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-white/30">Title</label>
+          <div className="mt-1.5 flex flex-wrap items-start gap-2">
+            <input
+              value={form.title}
+              onChange={(e) => onFormChange({ ...form, title: e.target.value })}
+              placeholder="e.g. Instagram — Club Rogue"
+              className="min-w-0 flex-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3 text-[17px] font-semibold text-white outline-none xl:text-[15px]"
+            />
+            <button
+              type="button"
+              onClick={() => void runAiTitle()}
+              disabled={aiLoading}
+              className="flex min-h-[48px] items-center gap-1.5 rounded-xl bg-violet-500/10 px-3 text-[12px] font-medium text-violet-200/90 ring-1 ring-violet-400/20 disabled:opacity-40"
+            >
+              <IconSparkle className={aiLoading ? "animate-pulse" : ""} />
+              {aiLoading ? "Suggesting…" : "AI suggest"}
+            </button>
+          </div>
+          {aiSuggestion?.title && aiSuggestion.title !== form.title.trim() ? (
+            <button
+              type="button"
+              onClick={() =>
+                onFormChange({
+                  ...form,
+                  title: aiSuggestion.title,
+                  category: aiSuggestion.category || form.category,
+                })
+              }
+              className="mt-2 rounded-lg bg-violet-500/10 px-2.5 py-1.5 text-[11px] text-violet-200/85 ring-1 ring-violet-400/15"
+            >
+              Use AI title: “{aiSuggestion.title}”
+            </button>
           ) : null}
+          {form.category ? <p className="mt-2 text-[12px] text-white/35">{form.category}</p> : null}
 
           <div className="mt-6 space-y-4">
             <div>
               <label className="text-[11px] font-semibold uppercase tracking-wider text-white/30">Website</label>
-              <div className="mt-1.5 flex gap-2">
-                <input
-                  value={form.url}
-                  readOnly={readOnly}
-                  onChange={(e) => onFormChange({ ...form, url: e.target.value })}
-                  placeholder="https://…"
-                  className="min-w-0 flex-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3 text-[15px] text-white outline-none"
-                />
-                {form.url ? (
-                  <CopyButton value={form.url} label="Copy" />
-                ) : null}
-              </div>
-              {form.url ? (
-                <a
-                  href={form.url.startsWith("http") ? form.url : `https://${form.url}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-1.5 inline-block text-[12px] text-cyan-400/80"
-                >
-                  Open {linkDisplayLabel(form.url)}
-                </a>
-              ) : null}
+              <input
+                value={form.url}
+                onChange={(e) => onFormChange({ ...form, url: e.target.value })}
+                placeholder="https://…"
+                className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3 text-[15px] text-white outline-none"
+              />
             </div>
-
             <div>
               <label className="text-[11px] font-semibold uppercase tracking-wider text-white/30">Username</label>
-              <div className="mt-1.5 flex gap-2">
-                <input
-                  value={form.username}
-                  readOnly={readOnly}
-                  onChange={(e) => onFormChange({ ...form, username: e.target.value })}
-                  placeholder="Email or username"
-                  autoComplete="off"
-                  className="min-w-0 flex-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3 text-[15px] text-white outline-none"
-                />
-                <CopyButton value={form.username} label="Copy" />
-              </div>
+              <input
+                value={form.username}
+                onChange={(e) => onFormChange({ ...form, username: e.target.value })}
+                placeholder="Email or username"
+                autoComplete="off"
+                className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3 text-[15px] text-white outline-none"
+              />
             </div>
-
             <div>
               <label className="text-[11px] font-semibold uppercase tracking-wider text-white/30">Password</label>
-              <div className="mt-1.5 flex gap-2">
-                <div className="relative min-w-0 flex-1">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={form.password}
-                    readOnly={readOnly}
-                    onChange={(e) => onFormChange({ ...form, password: e.target.value })}
-                    placeholder="••••••••"
-                    autoComplete="new-password"
-                    className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3 pr-11 text-[15px] text-white outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-white/40"
-                    aria-label={showPassword ? "Hide" : "Show"}
-                  >
-                    <IconEye />
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => copyField("pw", form.password)}
-                  disabled={!form.password}
-                  className="flex min-h-[48px] items-center gap-1.5 rounded-xl bg-amber-500/15 px-3 text-[13px] font-semibold text-amber-200 disabled:opacity-30"
-                >
-                  <IconCopy />
-                  {copiedField === "pw" ? "Copied" : "Copy"}
-                </button>
-              </div>
+              <input
+                type="text"
+                value={form.password}
+                onChange={(e) => onFormChange({ ...form, password: e.target.value })}
+                placeholder="Required"
+                autoComplete="new-password"
+                className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3 font-mono text-[15px] text-white outline-none"
+              />
             </div>
-
-            {!readOnly ? (
-              <>
-                <div>
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-white/30">Outlet</label>
-                  <label className="relative mt-1.5 block">
-                    <select
-                      value={form.outletId}
-                      onChange={(e) => onFormChange({ ...form, outletId: e.target.value })}
-                      className="w-full appearance-none rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3 text-[15px] text-white outline-none"
-                    >
-                      <option value="">Direct / general</option>
-                      {TEAM_AD_OUTLETS.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                    <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-                  </label>
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-white/30">Notes</label>
-                  <textarea
-                    value={form.notes}
-                    onChange={(e) => onFormChange({ ...form, notes: e.target.value })}
-                    placeholder="Security questions, 2FA backup, etc."
-                    rows={3}
-                    className="mt-1.5 w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3 text-[15px] text-white outline-none"
-                  />
-                </div>
-              </>
-            ) : form.notes ? (
-              <div>
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-white/30">Notes</label>
-                <p className="mt-1.5 text-[14px] leading-relaxed text-white/55">{form.notes}</p>
-              </div>
-            ) : null}
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-white/30">Outlet</label>
+              <label className="relative mt-1.5 block">
+                <select
+                  value={form.outletId}
+                  onChange={(e) => onFormChange({ ...form, outletId: e.target.value })}
+                  className="w-full appearance-none rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3 text-[15px] text-white outline-none"
+                >
+                  <option value="">Direct / general</option>
+                  {TEAM_AD_OUTLETS.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <IconChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+              </label>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-white/30">Notes</label>
+              <textarea
+                value={form.notes}
+                onChange={(e) => onFormChange({ ...form, notes: e.target.value })}
+                placeholder="Security questions, 2FA backup, etc."
+                rows={3}
+                className="mt-1.5 w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3 text-[15px] text-white outline-none"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -518,10 +596,34 @@ function VaultEditor({
   );
 }
 
+function EmptyPanel({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+      <IconKey className="h-12 w-12 text-white/15" />
+      <p className="mt-4 text-[15px] text-white/40">Select a password on the left</p>
+      <p className="mt-1 text-[13px] text-white/28">or create a new one</p>
+      <button
+        type="button"
+        onClick={onCreate}
+        className="mt-6 rounded-full bg-amber-500/20 px-6 py-2.5 text-[15px] font-medium text-amber-200 active:bg-amber-500/30"
+      >
+        + New password
+      </button>
+    </div>
+  );
+}
+
 function shareTargetsFor(viewerId: string, members: Member[]): Member[] {
   const list = [...members];
   if (viewerId !== "admin") list.push({ id: "admin", name: "Admin" });
   return list.filter((m) => m.id !== viewerId);
+}
+
+async function fetchPassword(entryId: string): Promise<string> {
+  const res = await fetch(`/api/team/vault/${entryId}/reveal`);
+  const data = await res.json();
+  if (!res.ok || typeof data.password !== "string") return "";
+  return data.password;
 }
 
 export default function TeamVaultView({
@@ -530,6 +632,7 @@ export default function TeamVaultView({
   form,
   editingId,
   composeKey,
+  savedEntryId,
   search,
   onSearchChange,
   scope,
@@ -540,8 +643,9 @@ export default function TeamVaultView({
   onSave,
   onCancelEdit,
   onNewEntry,
+  onClearSavedEntry,
   saving,
-  onEdit,
+  onLoadForEdit,
   onDelete,
 }: {
   entries: TeamVaultEntryDto[];
@@ -549,6 +653,7 @@ export default function TeamVaultView({
   form: VaultForm;
   editingId: string | null;
   composeKey?: number;
+  savedEntryId?: string | null;
   search: string;
   onSearchChange: (v: string) => void;
   scope: VaultListScope;
@@ -559,100 +664,156 @@ export default function TeamVaultView({
   onSave: () => void;
   onCancelEdit: () => void;
   onNewEntry: () => void;
+  onClearSavedEntry?: () => void;
   saving: boolean;
-  onEdit: (entry: TeamVaultEntryDto) => void;
+  onLoadForEdit: (entry: TeamVaultEntryDto) => Promise<void>;
   onDelete: (entry: TeamVaultEntryDto) => void;
 }) {
-  const [mobileEditor, setMobileEditor] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(false);
-
-  const activeEntry = editingId ? entries.find((e) => e.id === editingId) : null;
-  const readOnly = Boolean(activeEntry && !activeEntry.isOwner);
-  const isComposing = Boolean(editingId || form.title || form.password);
-  const showEditor = mobileEditor || isComposing || (isDesktop && Boolean(editingId));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [panelMode, setPanelMode] = useState<PanelMode>("empty");
+  const [viewPassword, setViewPassword] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState(false);
   const shareTargets = shareTargetsFor(viewerId, members);
 
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1280px)");
-    const update = () => setIsDesktop(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
+  const activeEntry = selectedId ? entries.find((e) => e.id === selectedId) : null;
+
+  const loadViewPassword = useCallback(async (entryId: string) => {
+    setPasswordLoading(true);
+    setViewPassword("");
+    try {
+      setViewPassword(await fetchPassword(entryId));
+    } finally {
+      setPasswordLoading(false);
+    }
   }, []);
 
-  useEffect(() => {
-    if (!ready || entries.length === 0 || composeKey) return;
-    if (!isDesktop || isComposing) return;
-    if (editingId && entries.some((e) => e.id === editingId)) return;
-    onEdit(entries[0]!);
-  }, [ready, entries, editingId, composeKey, isComposing, isDesktop, onEdit]);
+  const selectEntry = useCallback(
+    async (entry: TeamVaultEntryDto) => {
+      setSelectedId(entry.id);
+      setPanelMode("view");
+      setMobilePanel(true);
+      onCancelEdit();
+      await loadViewPassword(entry.id);
+    },
+    [loadViewPassword, onCancelEdit]
+  );
 
-  useEffect(() => {
-    if (composeKey) setMobileEditor(true);
-  }, [composeKey]);
+  const startCreate = () => {
+    setSelectedId(null);
+    setPanelMode("create");
+    setMobilePanel(true);
+    onNewEntry();
+  };
 
-  useEffect(() => {
-    if (editingId) setMobileEditor(true);
-  }, [editingId]);
+  const startEdit = async () => {
+    if (!activeEntry) return;
+    setPanelMode("edit");
+    await onLoadForEdit(activeEntry);
+  };
 
-  const handleBack = () => {
-    setMobileEditor(false);
+  const cancelEdit = () => {
+    onCancelEdit();
+    if (activeEntry) {
+      setPanelMode("view");
+      void loadViewPassword(activeEntry.id);
+    } else {
+      setPanelMode("empty");
+      setMobilePanel(false);
+    }
+  };
+
+  const handleBackMobile = () => {
+    setMobilePanel(false);
+    setPanelMode("empty");
+    setSelectedId(null);
     onCancelEdit();
   };
 
-  const handleSelect = (entry: TeamVaultEntryDto) => {
-    void onEdit(entry);
-  };
+  useEffect(() => {
+    if (composeKey) startCreate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [composeKey]);
 
-  const editorPane = showEditor ? (
-    <VaultEditor
-      form={form}
-      editingId={editingId}
-      readOnly={readOnly}
-      saving={saving}
-      onFormChange={onFormChange}
-      onSave={onSave}
-      onDelete={activeEntry?.isOwner ? () => onDelete(activeEntry) : undefined}
-      onBack={handleBack}
-      shareTargets={shareTargets}
-      showBack
-    />
-  ) : (
-    <div className="hidden h-full flex-col items-center justify-center px-8 text-center xl:flex">
-      <IconKey className="h-10 w-10 text-white/20" />
-      <p className="mt-3 text-sm text-white/35">Select a saved password</p>
-      <button
-        type="button"
-        onClick={() => {
-          onNewEntry();
-          setMobileEditor(true);
-        }}
-        className="mt-4 rounded-full bg-amber-500/20 px-4 py-2 text-[13px] text-amber-200"
-      >
-        Add password
-      </button>
-    </div>
-  );
+  useEffect(() => {
+    if (!savedEntryId) return;
+    const entry = entries.find((e) => e.id === savedEntryId);
+    if (entry) {
+      void selectEntry(entry);
+      onClearSavedEntry?.();
+    }
+  }, [savedEntryId, entries, selectEntry, onClearSavedEntry]);
 
-  const mobileFullscreenEditor = showEditor && mobileEditor && !isDesktop;
+  useEffect(() => {
+    if (selectedId && !entries.some((e) => e.id === selectedId)) {
+      setSelectedId(null);
+      setPanelMode("empty");
+      setMobilePanel(false);
+    }
+  }, [entries, selectedId]);
+
+  const rightPane = (() => {
+    if (panelMode === "empty") return <EmptyPanel onCreate={startCreate} />;
+    if (panelMode === "view" && activeEntry) {
+      return (
+        <VaultDetailView
+          entry={activeEntry}
+          password={viewPassword}
+          loading={passwordLoading}
+          onEdit={activeEntry.isOwner ? () => void startEdit() : undefined}
+          onBack={handleBackMobile}
+          showBack
+        />
+      );
+    }
+    if (panelMode === "edit" || panelMode === "create") {
+      return (
+        <VaultEditor
+          form={form}
+          editingId={editingId}
+          saving={saving}
+          onFormChange={onFormChange}
+          onSave={onSave}
+          onCancel={cancelEdit}
+          onDelete={activeEntry?.isOwner ? () => onDelete(activeEntry) : undefined}
+          onBack={handleBackMobile}
+          shareTargets={shareTargets}
+          showBack
+        />
+      );
+    }
+    return <EmptyPanel onCreate={startCreate} />;
+  })();
+
+  const showMobileOverlay = mobilePanel && panelMode !== "empty";
 
   return (
     <>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:rounded-xl xl:border xl:border-white/[0.05] xl:bg-[#07070b]">
         <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(260px,300px)_1fr]">
-          <div className={`flex min-h-0 flex-col bg-[#06060a] xl:border-r xl:border-white/[0.05] ${showEditor ? "hidden xl:flex" : "flex"}`}>
+          <div className={`flex min-h-0 flex-col bg-[#06060a] xl:border-r xl:border-white/[0.05] ${showMobileOverlay ? "hidden xl:flex" : "flex"}`}>
             <div className="shrink-0 space-y-2.5 border-b border-white/[0.06] px-4 py-3">
-              <div className="relative">
-                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-white/30">
-                  <IconSearch />
-                </span>
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => onSearchChange(e.target.value)}
-                  placeholder="Search passwords"
-                  className="h-9 w-full rounded-[10px] bg-white/[0.08] py-0 pl-9 pr-3 text-[15px] text-white outline-none placeholder:text-white/30"
-                />
+              <div className="flex items-center gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-white/30">
+                    <IconSearch />
+                  </span>
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => onSearchChange(e.target.value)}
+                    placeholder="Search passwords"
+                    className="h-9 w-full rounded-[10px] bg-white/[0.08] py-0 pl-9 pr-3 text-[15px] text-white outline-none placeholder:text-white/30"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={startCreate}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/20"
+                  aria-label="New password"
+                >
+                  <IconPlus />
+                </button>
               </div>
               <SegmentedControl value={scope} onChange={onScopeChange} />
             </div>
@@ -669,10 +830,7 @@ export default function TeamVaultView({
                   <p className="mt-3 text-[15px] text-white/40">No passwords saved</p>
                   <button
                     type="button"
-                    onClick={() => {
-                      onNewEntry();
-                      setMobileEditor(true);
-                    }}
+                    onClick={startCreate}
                     className="mt-4 rounded-full bg-amber-500/20 px-5 py-2.5 text-[15px] font-medium text-amber-200"
                   >
                     Add Password
@@ -683,20 +841,18 @@ export default function TeamVaultView({
                   <VaultListItem
                     key={entry.id}
                     entry={entry}
-                    selected={editingId === entry.id}
-                    onClick={() => handleSelect(entry)}
+                    selected={selectedId === entry.id}
+                    onClick={() => void selectEntry(entry)}
                   />
                 ))
               )}
             </div>
           </div>
-          <div className={`hidden min-h-0 bg-[#0b0b10] xl:flex xl:flex-col ${showEditor ? "xl:flex" : ""}`}>
-            {editorPane}
-          </div>
+          <div className="hidden min-h-0 bg-[#0b0b10] xl:flex xl:flex-col">{rightPane}</div>
         </div>
       </div>
-      {mobileFullscreenEditor ? (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0b10] xl:hidden">{editorPane}</div>
+      {showMobileOverlay ? (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0b10] xl:hidden">{rightPane}</div>
       ) : null}
     </>
   );

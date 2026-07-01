@@ -236,6 +236,7 @@ export default function TeamClient() {
   const [vaultSearch, setVaultSearch] = useState("");
   const [vaultScope, setVaultScope] = useState<VaultListScope>("all");
   const [vaultComposeKey, setVaultComposeKey] = useState(0);
+  const [vaultSavedEntryId, setVaultSavedEntryId] = useState<string | null>(null);
   const [refUploading, setRefUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>("todo");
@@ -643,7 +644,7 @@ export default function TeamClient() {
 
   const focusVaultComposer = () => startNewVaultEntry();
 
-  const openEditVault = useCallback(async (entry: TeamVaultEntryDto) => {
+  const loadVaultForEdit = useCallback(async (entry: TeamVaultEntryDto) => {
     setEditingVaultId(entry.id);
     let password = "";
     try {
@@ -692,9 +693,11 @@ export default function TeamClient() {
       );
       const data = await readTeamApiJson(res);
       if (!res.ok) throw new Error(teamApiError(data, "Save failed"));
+      const saved = data.entry as TeamVaultEntryDto | undefined;
       setVaultForm(emptyVaultForm());
       setEditingVaultId(null);
       setVaultComposeKey(0);
+      if (saved?.id) setVaultSavedEntryId(saved.id);
       await loadVaultEntries(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
@@ -1182,6 +1185,7 @@ export default function TeamClient() {
             form={vaultForm}
             editingId={editingVaultId}
             composeKey={vaultComposeKey}
+            savedEntryId={vaultSavedEntryId}
             search={vaultSearch}
             onSearchChange={setVaultSearch}
             scope={vaultScope}
@@ -1192,8 +1196,9 @@ export default function TeamClient() {
             onSave={() => void saveVaultEntry()}
             onCancelEdit={cancelVaultEdit}
             onNewEntry={startNewVaultEntry}
+            onClearSavedEntry={() => setVaultSavedEntryId(null)}
             saving={saving}
-            onEdit={openEditVault}
+            onLoadForEdit={loadVaultForEdit}
             onDelete={(e) => void deleteVaultEntry(e)}
           />
         ) : null}
