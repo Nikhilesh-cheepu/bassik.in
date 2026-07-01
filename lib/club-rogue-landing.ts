@@ -30,7 +30,7 @@ export const CLUB_ROGUE_EMOTIONAL_HOOKS = [
   "Flying solo? The dance floor still loves you. Book ahead.",
   "Saturday night and no plan? Fix that — book a table.",
   "Came to drink, dance, and forget Monday? Book your table.",
-  "Birthday, anniversary, or just because — reserve your table.",
+  "Birthday, anniversary, or no reason at all — book your table and celebrate.",
   "The night is young. Your table should be booked already.",
   "One tap. One table. One story for tomorrow morning.",
 ] as const;
