@@ -2,6 +2,11 @@ import type { TeamAdTask, TeamAdTaskStatus, TeamTaskPriority } from "@prisma/cli
 import { parseUrlList } from "@/lib/team-planning";
 import { priorityRank } from "@/lib/team-priority";
 
+export type TeamCreativeLink = {
+  title: string;
+  url: string;
+};
+
 export type TeamTaskDto = {
   id: string;
   outletId: string;
@@ -9,6 +14,7 @@ export type TeamTaskDto = {
   description: string | null;
   creativeUrl: string | null;
   creativeSource: string;
+  creativeLinks: TeamCreativeLink[];
   uploadedUrl: string | null;
   referenceUrls: string[];
   startDate: string | null;
@@ -27,6 +33,58 @@ export type TeamTaskDto = {
   updatedAt: string;
 };
 
+export function parseCreativeLinks(raw: unknown): TeamCreativeLink[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    .map((item) => ({
+      title: typeof item.title === "string" ? item.title.trim().slice(0, 120) : "",
+      url: typeof item.url === "string" ? item.url.trim() : "",
+    }))
+    .filter((l) => l.url)
+    .slice(0, 20);
+}
+
+export function creativeLinksFromRow(row: Pick<TeamAdTask, "creativeLinks" | "creativeUrl">): TeamCreativeLink[] {
+  const parsed = parseCreativeLinks(row.creativeLinks);
+  if (parsed.length) return parsed;
+  const legacy = row.creativeUrl?.trim();
+  if (legacy) return [{ title: "Creative link", url: legacy }];
+  return [];
+}
+
+export function applyCreativeLinksFields(
+  links: TeamCreativeLink[],
+  uploadedUrl?: string | null
+): {
+  creativeLinks: TeamCreativeLink[];
+  creativeUrl: string | null;
+  creativeSource: "DRIVE_LINK" | "INSTAGRAM" | "UPLOAD" | "NONE";
+} {
+  const normalized = links
+    .map((l) => ({
+      title: l.title.trim() || "Link",
+      url: l.url.trim(),
+    }))
+    .filter((l) => l.url)
+    .slice(0, 20);
+
+  if (uploadedUrl?.trim()) {
+    return {
+      creativeLinks: normalized,
+      creativeUrl: normalized[0]?.url ?? null,
+      creativeSource: "UPLOAD",
+    };
+  }
+
+  const first = normalized[0]?.url ?? null;
+  return {
+    creativeLinks: normalized,
+    creativeUrl: first,
+    creativeSource: first ? detectCreativeSource(first) : "NONE",
+  };
+}
+
 export function toTeamTaskDto(row: TeamAdTask): TeamTaskDto {
   return {
     id: row.id,
@@ -35,6 +93,7 @@ export function toTeamTaskDto(row: TeamAdTask): TeamTaskDto {
     description: row.description,
     creativeUrl: row.creativeUrl,
     creativeSource: row.creativeSource,
+    creativeLinks: creativeLinksFromRow(row),
     uploadedUrl: row.uploadedUrl,
     referenceUrls: parseUrlList(row.referenceUrls),
     startDate: row.startDate,

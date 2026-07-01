@@ -4,10 +4,12 @@ import { defaultTeamMemberId, isTeamMemberId } from "@/lib/team-members";
 import { normalizeTeamPriority } from "@/lib/team-priority";
 import { isTeamOutletId } from "@/lib/team-outlets";
 import {
-  detectCreativeSource,
+  applyCreativeLinksFields,
   normalizeTeamStartDate,
   normalizeTeamEndTime,
+  parseCreativeLinks,
   toTeamTaskDto,
+  type TeamCreativeLink,
   type TeamTaskDto,
 } from "@/lib/team-tasks";
 import { prisma } from "@/lib/db";
@@ -18,6 +20,7 @@ export type CreateTeamAdTaskInput = {
   title: string;
   description?: string;
   creativeUrl?: string;
+  creativeLinks?: TeamCreativeLink[];
   uploadedUrl?: string;
   referenceUrls?: string[];
   startDate?: string;
@@ -38,6 +41,7 @@ export async function createTeamAdTask(
   const title = input.title.trim();
   const description = input.description?.trim() ?? "";
   const creativeUrl = input.creativeUrl?.trim() ?? "";
+  const creativeLinksInput = parseCreativeLinks(input.creativeLinks);
   const uploadedUrl = input.uploadedUrl?.trim() ?? "";
   const referenceUrls = parseUrlList(input.referenceUrls);
   const startDate = input.startDate?.trim() ?? "";
@@ -63,9 +67,14 @@ export async function createTeamAdTask(
   const maxSort = await prisma.teamAdTask.aggregate({ _max: { sortOrder: true } });
   const sortOrder = (maxSort._max.sortOrder ?? 0) + 1000;
 
-  let creativeSource: "DRIVE_LINK" | "INSTAGRAM" | "UPLOAD" | "NONE" = "NONE";
-  if (uploadedUrl) creativeSource = "UPLOAD";
-  else if (creativeUrl) creativeSource = detectCreativeSource(creativeUrl);
+  const creativeFields = applyCreativeLinksFields(
+    creativeLinksInput.length
+      ? creativeLinksInput
+      : creativeUrl
+        ? [{ title: "Creative link", url: creativeUrl }]
+        : [],
+    uploadedUrl || null
+  );
 
   const row = await prisma.teamAdTask.create({
     data: {
@@ -75,8 +84,9 @@ export async function createTeamAdTask(
       sortOrder,
       title: finalTitle,
       description: description || null,
-      creativeUrl: creativeUrl || null,
-      creativeSource,
+      creativeUrl: creativeFields.creativeUrl,
+      creativeSource: creativeFields.creativeSource,
+      creativeLinks: creativeFields.creativeLinks.length ? creativeFields.creativeLinks : undefined,
       uploadedUrl: uploadedUrl || null,
       referenceUrls: referenceUrls.length ? referenceUrls : undefined,
       startDate: normalizeTeamStartDate(startDate),

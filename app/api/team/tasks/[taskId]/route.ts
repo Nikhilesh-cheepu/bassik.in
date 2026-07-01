@@ -4,7 +4,13 @@ import { isTeamOutletId } from "@/lib/team-outlets";
 import { isTeamMemberId } from "@/lib/team-members";
 import { normalizeTeamPriority } from "@/lib/team-priority";
 import { parseUrlList } from "@/lib/team-planning";
-import { detectCreativeSource, normalizeTeamEndTime, normalizeTeamStartDate, toTeamTaskDto } from "@/lib/team-tasks";
+import {
+  applyCreativeLinksFields,
+  normalizeTeamEndTime,
+  normalizeTeamStartDate,
+  parseCreativeLinks,
+  toTeamTaskDto,
+} from "@/lib/team-tasks";
 import { prisma } from "@/lib/db";
 
 export async function PATCH(
@@ -60,17 +66,59 @@ export async function PATCH(
           ? body.description.trim().slice(0, 2000)
           : null;
     }
-    if (body.creativeUrl !== undefined) {
+    if (body.creativeLinks !== undefined) {
+      const links = parseCreativeLinks(body.creativeLinks);
+      const uploaded =
+        body.uploadedUrl !== undefined
+          ? typeof body.uploadedUrl === "string"
+            ? body.uploadedUrl.trim()
+            : ""
+          : existing.uploadedUrl;
+      const fields = applyCreativeLinksFields(links, uploaded);
+      data.creativeLinks = fields.creativeLinks;
+      data.creativeUrl = fields.creativeUrl;
+      data.creativeSource = fields.creativeSource;
+    } else if (body.creativeUrl !== undefined) {
       const url = typeof body.creativeUrl === "string" ? body.creativeUrl.trim() : "";
-      data.creativeUrl = url || null;
-      if (url && !body.uploadedUrl) {
-        data.creativeSource = detectCreativeSource(url);
-      }
+      const links = url ? [{ title: "Creative link", url }] : [];
+      const uploaded =
+        body.uploadedUrl !== undefined
+          ? typeof body.uploadedUrl === "string"
+            ? body.uploadedUrl.trim()
+            : ""
+          : existing.uploadedUrl;
+      const fields = applyCreativeLinksFields(links, uploaded);
+      data.creativeLinks = fields.creativeLinks;
+      data.creativeUrl = fields.creativeUrl;
+      data.creativeSource = fields.creativeSource;
     }
     if (body.uploadedUrl !== undefined) {
       const url = typeof body.uploadedUrl === "string" ? body.uploadedUrl.trim() : "";
       data.uploadedUrl = url || null;
-      if (url) data.creativeSource = "UPLOAD";
+      if (url) {
+        const links =
+          body.creativeLinks !== undefined
+            ? parseCreativeLinks(body.creativeLinks)
+            : body.creativeUrl !== undefined
+              ? typeof body.creativeUrl === "string" && body.creativeUrl.trim()
+                ? [{ title: "Creative link", url: body.creativeUrl.trim() }]
+                : []
+              : parseCreativeLinks(existing.creativeLinks).length
+                ? parseCreativeLinks(existing.creativeLinks)
+                : existing.creativeUrl?.trim()
+                  ? [{ title: "Creative link", url: existing.creativeUrl.trim() }]
+                  : [];
+        const fields = applyCreativeLinksFields(links, url);
+        data.creativeSource = fields.creativeSource;
+      } else if (body.creativeLinks === undefined && body.creativeUrl === undefined) {
+        const links = parseCreativeLinks(existing.creativeLinks).length
+          ? parseCreativeLinks(existing.creativeLinks)
+          : existing.creativeUrl?.trim()
+            ? [{ title: "Creative link", url: existing.creativeUrl.trim() }]
+            : [];
+        const fields = applyCreativeLinksFields(links, null);
+        data.creativeSource = fields.creativeSource;
+      }
     }
     if (body.referenceUrls !== undefined) {
       const urls = parseUrlList(body.referenceUrls);

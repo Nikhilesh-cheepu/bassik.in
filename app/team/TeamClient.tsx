@@ -7,6 +7,7 @@ import {
   isAsapStartDate,
   TEAM_START_ASAP,
   teamTaskCompletedDayKey,
+  type TeamCreativeLink,
   type TeamTaskDto,
 } from "@/lib/team-tasks";
 import {
@@ -28,6 +29,7 @@ import TeamCalendarView from "./TeamCalendarView";
 import { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
 import TeamDock, { TeamActionSheet, TeamMoreSheet } from "./TeamDock";
 import TeamWhatsAppSheet from "./TeamWhatsAppSheet";
+import { TeamDatePicker, TeamTimePicker } from "./TeamDatePicker";
 import TeamDoneReportBanner from "./TeamDoneReportBanner";
 import TeamDoneReportSheet from "./TeamDoneReportSheet";
 import { TEAM_DOCK_PADDING } from "./TeamIcons";
@@ -57,7 +59,7 @@ type TaskForm = {
   assigneeId: string;
   title: string;
   description: string;
-  creativeUrl: string;
+  creativeLinks: TeamCreativeLink[];
   uploadedUrl: string;
   uploadedName: string;
   startTiming: StartTiming;
@@ -72,12 +74,14 @@ type TaskForm = {
   referenceUrls: string[];
 };
 
+const emptyCreativeLink = (): TeamCreativeLink => ({ title: "", url: "" });
+
 const emptyTaskForm = (assigneeId = "amit"): TaskForm => ({
   outletId: TEAM_AD_OUTLETS[0].id,
   assigneeId,
   title: "",
   description: "",
-  creativeUrl: "",
+  creativeLinks: [emptyCreativeLink()],
   uploadedUrl: "",
   uploadedName: "",
   startTiming: "asap",
@@ -178,11 +182,11 @@ function DateFields({
   return (
     <div className="space-y-2">
       <label className="block text-xs font-medium text-white/50">{label}</label>
-      <input
-        type="date"
+      <TeamDatePicker
         value={dateValue}
-        onChange={(e) => onDateChange(e.target.value)}
-        className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base text-white"
+        onChange={onDateChange}
+        placeholder="Select date"
+        clearable
       />
       <label className="block text-xs font-medium text-white/50">{timeLabel}</label>
       <select
@@ -199,12 +203,7 @@ function DateFields({
         <option value="custom">Exact time</option>
       </select>
       {timeMode === "custom" ? (
-        <input
-          type="time"
-          value={timeCustom}
-          onChange={(e) => onTimeCustomChange(e.target.value)}
-          className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base text-white"
-        />
+        <TeamTimePicker value={timeCustom} onChange={onTimeCustomChange} />
       ) : null}
     </div>
   );
@@ -512,7 +511,10 @@ export default function TeamClient() {
       assigneeId: task.assigneeId,
       title: task.title,
       description: task.description ?? "",
-      creativeUrl: task.creativeUrl ?? "",
+      creativeLinks:
+        task.creativeLinks.length > 0
+          ? task.creativeLinks.map((l) => ({ ...l }))
+          : [emptyCreativeLink()],
       uploadedUrl: task.uploadedUrl ?? "",
       uploadedName: task.uploadedUrl ? "Uploaded file" : "",
       startTiming: timing,
@@ -765,7 +767,9 @@ export default function TeamClient() {
         assigneeId: soleMember?.id ?? taskForm.assigneeId,
         title: taskForm.title.trim(),
         description: taskForm.description.trim(),
-        creativeUrl: taskForm.creativeUrl.trim(),
+        creativeLinks: taskForm.creativeLinks
+          .map((l) => ({ title: l.title.trim(), url: l.url.trim() }))
+          .filter((l) => l.url),
         uploadedUrl: taskForm.uploadedUrl.trim(),
         startDate: resolveStartDateForSave(taskForm),
         endDate: taskForm.endDate,
@@ -1360,13 +1364,77 @@ export default function TeamClient() {
               className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
             />
 
-            <label className="mt-3 block text-xs font-medium text-white/50">Creative link</label>
-            <input
-              value={taskForm.creativeUrl}
-              onChange={(e) => setTaskForm((f) => ({ ...f, creativeUrl: e.target.value }))}
-              placeholder="Drive or Instagram URL"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-            />
+            <div className="mt-3">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-medium text-white/50">Creative links</label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTaskForm((f) => ({
+                      ...f,
+                      creativeLinks: [...f.creativeLinks, emptyCreativeLink()],
+                    }))
+                  }
+                  className="text-xs font-medium text-cyan-400/90"
+                >
+                  + Add link
+                </button>
+              </div>
+              <div className="mt-2 space-y-3">
+                {taskForm.creativeLinks.map((link, index) => (
+                  <div
+                    key={index}
+                    className="rounded-xl border border-white/10 bg-black/30 p-3 space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-medium text-white/35">
+                        Link {index + 1}
+                      </span>
+                      {taskForm.creativeLinks.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTaskForm((f) => ({
+                              ...f,
+                              creativeLinks: f.creativeLinks.filter((_, i) => i !== index),
+                            }))
+                          }
+                          className="text-[11px] text-red-300/80"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                    <input
+                      value={link.title}
+                      onChange={(e) =>
+                        setTaskForm((f) => ({
+                          ...f,
+                          creativeLinks: f.creativeLinks.map((l, i) =>
+                            i === index ? { ...l, title: e.target.value } : l
+                          ),
+                        }))
+                      }
+                      placeholder="Title (e.g. Main drive, IG reel)"
+                      className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-base"
+                    />
+                    <input
+                      value={link.url}
+                      onChange={(e) =>
+                        setTaskForm((f) => ({
+                          ...f,
+                          creativeLinks: f.creativeLinks.map((l, i) =>
+                            i === index ? { ...l, url: e.target.value } : l
+                          ),
+                        }))
+                      }
+                      placeholder="Drive or Instagram URL"
+                      className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-base"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <label className="mt-3 block cursor-pointer text-xs font-medium text-white/50">
               Attach file
@@ -1444,12 +1512,13 @@ export default function TeamClient() {
                   <option value="none">No start</option>
                 </select>
                 {taskForm.startTiming === "date" ? (
-                  <input
-                    type="date"
-                    value={taskForm.startDate}
-                    onChange={(e) => setTaskForm((f) => ({ ...f, startDate: e.target.value }))}
-                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-                  />
+                  <div className="mt-2">
+                    <TeamDatePicker
+                      value={taskForm.startDate}
+                      onChange={(v) => setTaskForm((f) => ({ ...f, startDate: v }))}
+                      placeholder="Select start date"
+                    />
+                  </div>
                 ) : null}
               </div>
               <DateFields

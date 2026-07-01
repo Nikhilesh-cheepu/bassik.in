@@ -2,6 +2,7 @@
 
 import { TEAM_AD_OUTLETS } from "@/lib/team-outlets";
 import { TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL } from "./TeamNav";
+import { TeamDatePicker } from "./TeamDatePicker";
 
 export type MemberRecordForm = {
   title: string;
@@ -82,12 +83,14 @@ export function MemberRecordSheet({
         />
 
         <label className="mt-3 block text-xs font-medium text-white/50">When was it due? (optional)</label>
-        <input
-          type="date"
-          value={form.deadlineDate}
-          onChange={(e) => setForm((f) => ({ ...f, deadlineDate: e.target.value }))}
-          className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-        />
+        <div className="mt-1">
+          <TeamDatePicker
+            value={form.deadlineDate}
+            onChange={(v) => setForm((f) => ({ ...f, deadlineDate: v }))}
+            placeholder="Select due date"
+            clearable
+          />
+        </div>
 
         <div className="mt-5 flex gap-2">
           <button

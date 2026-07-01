@@ -473,6 +473,7 @@ model TeamAdTask {
   description     String?
   creativeUrl     String?
   creativeSource  TeamCreativeSource  @default(NONE)
+  creativeLinks   Json?               // { title, url }[] — Drive / Instagram / etc.
   uploadedUrl     String?
   referenceUrls   Json?               // string[] — moodboards / refs in Blob
   startDate       String?             // YYYY-MM-DD or ASAP

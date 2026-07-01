@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
           title: typeof body.title === "string" ? body.title : "",
           description: typeof body.description === "string" ? body.description : undefined,
           creativeUrl: typeof body.creativeUrl === "string" ? body.creativeUrl : undefined,
+          creativeLinks: body.creativeLinks,
           uploadedUrl: typeof body.uploadedUrl === "string" ? body.uploadedUrl : undefined,
           referenceUrls: body.referenceUrls,
           startDate: typeof body.startDate === "string" ? body.startDate : undefined,

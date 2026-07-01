@@ -16,6 +16,7 @@ import {
 } from "@/lib/team-calendar";
 import { TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL } from "./TeamNav";
 import { IconChevronDown, teamFilterChip, TEAM_DOCK_PADDING } from "./TeamIcons";
+import { TeamDatePicker } from "./TeamDatePicker";
 
 type Member = { id: string; name: string };
 
@@ -343,25 +344,27 @@ function EventFormSheet({
             </option>
           ))}
         </select>
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="block text-xs font-medium text-white/50">Date</label>
-            <input
-              type="date"
-              value={form.date}
-              onChange={(e) => onChange({ ...form, date: e.target.value })}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base text-white"
-              required
-            />
+            <div className="mt-1">
+              <TeamDatePicker
+                value={form.date}
+                onChange={(v) => onChange({ ...form, date: v })}
+                placeholder="Select date"
+              />
+            </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-white/50">End (optional)</label>
-            <input
-              type="date"
-              value={form.endDate}
-              onChange={(e) => onChange({ ...form, endDate: e.target.value })}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base text-white"
-            />
+            <div className="mt-1">
+              <TeamDatePicker
+                value={form.endDate}
+                onChange={(v) => onChange({ ...form, endDate: v })}
+                placeholder="Select end date"
+                clearable
+              />
+            </div>
           </div>
         </div>
         <label className="mt-3 block text-xs font-medium text-white/50">Notes</label>

@@ -31,6 +31,7 @@ import {
   formatTeamRecordDateTime,
   formatTeamStartDate,
   groupTasksByCompletedDay,
+  type TeamCreativeLink,
   type TeamTaskDto,
 } from "@/lib/team-tasks";
 import { formatTeamEndDateTime as formatDeadline, isPastDeadline } from "@/lib/team-end-time";
@@ -42,8 +43,10 @@ function memberName(members: TeamMember[], id: string): string {
   return members.find((m) => m.id === id)?.name ?? id;
 }
 
-function creativeLink(task: TeamTaskDto): string | null {
-  return task.uploadedUrl?.trim() || task.creativeUrl?.trim() || null;
+function creativeLinksForDisplay(task: TeamTaskDto): TeamCreativeLink[] {
+  if (task.creativeLinks.length) return task.creativeLinks;
+  const legacy = task.creativeUrl?.trim();
+  return legacy ? [{ title: "Creative link", url: legacy }] : [];
 }
 
 function taskMetaLine(
@@ -132,7 +135,8 @@ function AdTaskCard({
 }: CardProps & { dragHandleProps?: Record<string, unknown> }) {
   const done = task.status === "DONE";
   const pending = task.status === "PENDING_APPROVAL";
-  const link = creativeLink(task);
+  const links = creativeLinksForDisplay(task);
+  const uploaded = task.uploadedUrl?.trim() || null;
   const overdue = !done && !pending && isPastDeadline(task.deadlineDate, task.deadlineTime);
   const accent = priorityAccentClass(task.priority, task.status);
 
@@ -195,15 +199,30 @@ function AdTaskCard({
               Runs until {formatTeamEndDateTime(task.endDate, task.endTime)}
             </p>
           ) : null}
-          {link ? (
-            <a
-              href={link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-block text-xs font-medium text-cyan-400/90"
-            >
-              View creative
-            </a>
+          {uploaded || links.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+              {uploaded ? (
+                <a
+                  href={uploaded}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-cyan-400/90"
+                >
+                  View upload
+                </a>
+              ) : null}
+              {links.map((item) => (
+                <a
+                  key={`${item.title}-${item.url}`}
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium text-cyan-400/90"
+                >
+                  {item.title}
+                </a>
+              ))}
+            </div>
           ) : null}
           {task.referenceUrls.length > 0 ? (
             <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
