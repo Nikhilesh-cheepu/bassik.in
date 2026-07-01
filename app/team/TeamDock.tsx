@@ -5,6 +5,7 @@ import {
   IconAi,
   IconBell,
   IconCalendar,
+  IconKey,
   IconMore,
   IconPlus,
   IconTasks,
@@ -86,6 +87,10 @@ export default function TeamDock({
           <button type="button" onClick={() => onTab("reminders")} className={dockItem(tab === "reminders")}>
             <IconBell className="h-[22px] w-[22px]" />
             Notes
+          </button>
+          <button type="button" onClick={() => onTab("vault")} className={dockItem(tab === "vault")}>
+            <IconKey className="h-[22px] w-[22px]" />
+            Passwords
           </button>
         </div>
       </nav>
@@ -188,6 +193,7 @@ export function TeamMoreSheet({
   open,
   onClose,
   onReminders,
+  onVault,
   onCalendar,
   onAi,
   onExport,
@@ -196,6 +202,7 @@ export function TeamMoreSheet({
   open: boolean;
   onClose: () => void;
   onReminders: () => void;
+  onVault?: () => void;
   onCalendar?: () => void;
   onAi: () => void;
   onExport: () => void;
@@ -205,6 +212,7 @@ export function TeamMoreSheet({
   const items = [
     ...(onCalendar ? [{ label: "Calendar", icon: IconCalendar, onClick: onCalendar }] : []),
     { label: "My notes", icon: IconBell, onClick: onReminders },
+    ...(onVault ? [{ label: "Passwords", icon: IconKey, onClick: onVault }] : []),
     { label: "AI assistant", icon: IconAi, onClick: onAi },
     ...(onWhatsApp ? [{ label: "WhatsApp report", icon: IconWhatsApp, onClick: onWhatsApp }] : []),
     { label: "Export Excel", icon: IconTasks, onClick: onExport },

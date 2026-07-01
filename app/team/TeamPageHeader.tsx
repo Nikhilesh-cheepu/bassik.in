@@ -9,6 +9,7 @@ const TAB_TITLES: Record<TeamTab, string> = {
   ads: "Ads & creatives",
   calendar: "Team calendar",
   reminders: "Notes",
+  vault: "Passwords",
   ai: "AI assistant",
 };
 
@@ -16,6 +17,7 @@ const MOBILE_TITLES: Record<TeamTab, string> = {
   ads: "Tasks",
   calendar: "Calendar",
   reminders: "Notes",
+  vault: "Passwords",
   ai: "AI",
 };
 
@@ -116,6 +118,8 @@ export default function TeamPageHeader({
     <p className="mt-0.5 text-[11px] text-white/35 xl:hidden">{userLabel}</p>
   ) : isMemberHub || tab === "reminders" ? (
     <p className="mt-0.5 hidden text-[11px] text-white/35 xl:block">Personal workspace — tag outlets or keep Direct</p>
+  ) : tab === "vault" ? (
+    <p className="mt-0.5 hidden text-[11px] text-white/35 xl:block">Encrypted logins — share with teammates, copy anytime</p>
   ) : tab === "calendar" ? (
     <p className="mt-0.5 hidden text-[11px] text-white/35 xl:block">Tasks, shoots, plans — share selected dates with the team</p>
   ) : null;
@@ -125,7 +129,7 @@ export default function TeamPageHeader({
       <div className={TEAM_PAGE}>
         <div className="flex items-center justify-between gap-2 pt-2 pb-1 xl:items-start xl:pt-5 xl:pb-2">
           <div className="min-w-0 flex-1">
-            <h1 className={`truncate font-semibold tracking-tight ${tab === "reminders" || tab === "calendar" ? "text-[28px] font-bold xl:text-2xl xl:font-semibold" : "text-base xl:text-2xl"}`}>
+            <h1 className={`truncate font-semibold tracking-tight ${tab === "reminders" || tab === "calendar" || tab === "vault" ? "text-[28px] font-bold xl:text-2xl xl:font-semibold" : "text-base xl:text-2xl"}`}>
               <span className="xl:hidden">{mobileTitle}</span>
               <span className="hidden xl:inline">{desktopTitle}</span>
             </h1>

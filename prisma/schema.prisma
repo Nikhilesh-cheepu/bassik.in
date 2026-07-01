@@ -574,3 +574,37 @@ model TeamNoteShare {
   @@index([memberId])
   @@index([noteId])
 }
+
+/// Team password vault — encrypted credentials with sharing.
+model TeamVaultEntry {
+  id          String   @id @default(cuid())
+  ownerId     String
+  title       String?
+  username    String?
+  passwordEnc String
+  url         String?
+  notes       String?
+  outletId    String?
+  category    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  shares      TeamVaultShare[]
+
+  @@index([ownerId])
+  @@index([outletId])
+  @@index([category])
+  @@index([createdAt])
+}
+
+model TeamVaultShare {
+  id        String         @id @default(cuid())
+  entryId   String
+  memberId  String
+  sharedBy  String
+  createdAt DateTime       @default(now())
+  entry     TeamVaultEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, memberId])
+  @@index([memberId])
+  @@index([entryId])
+}

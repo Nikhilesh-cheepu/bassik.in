@@ -70,6 +70,16 @@ export function IconWhatsApp({ className = "h-6 w-6" }: { className?: string }) 
   );
 }
 
+export function IconKey({ className = "h-6 w-6" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+      <circle cx="8" cy="15" r="4" />
+      <path d="M12 15h8M16 11l4 4" strokeLinecap="round" />
+      <path d="M14 5a3 3 0 00-3 3v2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function IconMore({ className = "h-6 w-6" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">

@@ -4,6 +4,7 @@ export const TEAM_TABS = [
   { id: "ads", label: "Ads", short: "Ads & creatives" },
   { id: "calendar", label: "Calendar", short: "Calendar" },
   { id: "reminders", label: "Notes", short: "Notes" },
+  { id: "vault", label: "Passwords", short: "Passwords" },
   { id: "ai", label: "AI", short: "AI assistant" },
 ] as const;
 
@@ -13,6 +14,7 @@ type NavProps = {
   active: TeamTab;
   onChange: (tab: TeamTab) => void;
   hideReminders?: boolean;
+  hideVault?: boolean;
   hideAi?: boolean;
   hideCalendar?: boolean;
 };
@@ -24,11 +26,13 @@ type SidebarNavProps = NavProps & {
 
 function visibleTabs({
   hideReminders,
+  hideVault,
   hideAi,
   hideCalendar,
-}: Pick<NavProps, "hideReminders" | "hideAi" | "hideCalendar">) {
+}: Pick<NavProps, "hideReminders" | "hideVault" | "hideAi" | "hideCalendar">) {
   return TEAM_TABS.filter((t) => {
     if (hideReminders && t.id === "reminders") return false;
+    if (hideVault && t.id === "vault") return false;
     if (hideAi && t.id === "ai") return false;
     if (hideCalendar && t.id === "calendar") return false;
     return true;
@@ -39,12 +43,13 @@ export function TeamSidebarNav({
   active,
   onChange,
   hideReminders,
+  hideVault,
   hideAi,
   hideCalendar,
   userLabel,
   onLogout,
 }: SidebarNavProps) {
-  const tabs = visibleTabs({ hideReminders, hideAi, hideCalendar });
+  const tabs = visibleTabs({ hideReminders, hideVault, hideAi, hideCalendar });
 
   return (
     <aside className="sticky top-0 hidden h-[100dvh] w-[220px] shrink-0 flex-col border-r border-white/[0.06] bg-[#08080e] xl:flex xl:w-56">
@@ -92,10 +97,11 @@ export default function TeamBottomNav({
   active,
   onChange,
   hideReminders,
+  hideVault,
   hideAi,
   hideCalendar,
 }: NavProps) {
-  const tabs = visibleTabs({ hideReminders, hideAi, hideCalendar });
+  const tabs = visibleTabs({ hideReminders, hideVault, hideAi, hideCalendar });
 
   return (
     <nav className="flex border-t border-white/[0.06] bg-[#0a0a10]/98 md:min-h-[56px]">

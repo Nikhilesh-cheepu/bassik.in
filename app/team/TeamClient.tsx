@@ -16,12 +16,14 @@ import {
   type TeamEndTimeMode,
 } from "@/lib/team-end-time";
 import type { TeamPersonalNoteDto, NoteListScope } from "@/lib/team-personal-notes";
+import type { TeamVaultEntryDto, VaultListScope } from "@/lib/team-vault";
 import type { TeamTaskPriority } from "@prisma/client";
 import { TEAM_PRIORITY_LABELS, TEAM_PRIORITIES } from "@/lib/team-priority";
 import AdTaskList from "./AdTaskList";
 import { emptyMemberRecordForm, MemberRecordSheet, type MemberRecordForm } from "./MemberRecordSheet";
 import TeamPageHeader from "./TeamPageHeader";
 import TeamNotesView, { emptyNoteForm, type NoteForm } from "./TeamNotesView";
+import TeamVaultView, { emptyVaultForm, type VaultForm } from "./TeamVaultView";
 import TeamCalendarView from "./TeamCalendarView";
 import { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
 import TeamDock, { TeamActionSheet, TeamMoreSheet } from "./TeamDock";
@@ -227,6 +229,13 @@ export default function TeamClient() {
   const [notesScope, setNotesScope] = useState<NoteListScope>("all");
   const [noteUploading, setNoteUploading] = useState(false);
   const [noteComposeKey, setNoteComposeKey] = useState(0);
+  const [vaultEntries, setVaultEntries] = useState<TeamVaultEntryDto[]>([]);
+  const [vaultReady, setVaultReady] = useState(false);
+  const [vaultForm, setVaultForm] = useState<VaultForm>(emptyVaultForm());
+  const [editingVaultId, setEditingVaultId] = useState<string | null>(null);
+  const [vaultSearch, setVaultSearch] = useState("");
+  const [vaultScope, setVaultScope] = useState<VaultListScope>("all");
+  const [vaultComposeKey, setVaultComposeKey] = useState(0);
   const [refUploading, setRefUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>("todo");
@@ -337,6 +346,29 @@ export default function TeamClient() {
     }
   }, [notesSearch, notesOutletFilter, notesScope]);
 
+  const loadVaultEntries = useCallback(async (silent = false) => {
+    if (!silent) setRefreshing(true);
+    setError(null);
+    try {
+      const qs = new URLSearchParams();
+      if (vaultSearch.trim()) qs.set("q", vaultSearch.trim());
+      if (vaultScope !== "all") qs.set("scope", vaultScope);
+      const res = await fetch(`/api/team/vault?${qs}`);
+      if (res.status === 401) {
+        setUser(null);
+        return;
+      }
+      const data = await readTeamApiJson(res);
+      if (!res.ok) throw new Error(teamApiError(data, "Could not load passwords"));
+      setVaultEntries(teamApiArray<TeamVaultEntryDto>(data, "entries"));
+      setVaultReady(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Load failed");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [vaultSearch, vaultScope]);
+
   const probeSession = useCallback(async () => {
     try {
       const res = await fetch("/api/team/auth");
@@ -363,7 +395,7 @@ export default function TeamClient() {
     if (isMemberLike && tab === "ai") {
       setTab("reminders");
     }
-    if (isViewer && (tab === "calendar" || tab === "reminders" || tab === "ai")) {
+    if (isViewer && (tab === "calendar" || tab === "reminders" || tab === "vault" || tab === "ai")) {
       setTab("ads");
     }
   }, [user, tab, isMemberLike, isViewer]);
@@ -372,12 +404,18 @@ export default function TeamClient() {
     if (!user) return;
     if (tab === "ads") void loadTasks(tasksReady);
     else if (tab === "reminders" && !isViewer) void loadPersonalNotes(notesReady);
-  }, [user, tab, loadTasks, loadPersonalNotes, isViewer, isMemberLike]);
+    else if (tab === "vault" && !isViewer) void loadVaultEntries(vaultReady);
+  }, [user, tab, loadTasks, loadPersonalNotes, loadVaultEntries, isViewer, isMemberLike, notesReady, vaultReady, tasksReady]);
 
   useEffect(() => {
     if (!user || tab !== "reminders" || isViewer) return;
     void loadPersonalNotes(notesReady);
   }, [notesSearch, notesOutletFilter, notesScope]);
+
+  useEffect(() => {
+    if (!user || tab !== "vault" || isViewer) return;
+    void loadVaultEntries(vaultReady);
+  }, [vaultSearch, vaultScope]);
 
   const shareDoneReport = () => setShowDoneReportSheet(true);
 
@@ -593,6 +631,91 @@ export default function TeamClient() {
     }
   };
 
+  const startNewVaultEntry = () => {
+    setEditingVaultId(null);
+    setVaultForm(emptyVaultForm());
+    setVaultComposeKey((k) => k + 1);
+  };
+
+  const focusVaultComposer = () => startNewVaultEntry();
+
+  const openEditVault = useCallback(async (entry: TeamVaultEntryDto) => {
+    setEditingVaultId(entry.id);
+    let password = "";
+    try {
+      const res = await fetch(`/api/team/vault/${entry.id}/reveal`);
+      const data = await res.json();
+      if (res.ok && typeof data.password === "string") password = data.password;
+    } catch {
+      /* ignore */
+    }
+    setVaultForm({
+      title: entry.title ?? "",
+      username: entry.username ?? "",
+      password,
+      url: entry.url ?? "",
+      notes: entry.notes ?? "",
+      outletId: entry.outletId ?? "",
+      category: entry.category ?? "",
+      sharedWith: entry.sharedWith ?? [],
+    });
+  }, []);
+
+  const saveVaultEntry = async () => {
+    if (!vaultForm.password.trim()) return;
+    const active = editingVaultId ? vaultEntries.find((e) => e.id === editingVaultId) : null;
+    if (active && !active.isOwner) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = {
+        title: vaultForm.title.trim() || undefined,
+        username: vaultForm.username.trim() || undefined,
+        password: vaultForm.password,
+        url: vaultForm.url.trim() || undefined,
+        notes: vaultForm.notes.trim() || undefined,
+        outletId: vaultForm.outletId || undefined,
+        category: vaultForm.category.trim() || undefined,
+        sharedWith: vaultForm.sharedWith,
+      };
+      const res = await fetch(
+        editingVaultId ? `/api/team/vault/${editingVaultId}` : "/api/team/vault",
+        {
+          method: editingVaultId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+      const data = await readTeamApiJson(res);
+      if (!res.ok) throw new Error(teamApiError(data, "Save failed"));
+      setVaultForm(emptyVaultForm());
+      setEditingVaultId(null);
+      setVaultComposeKey(0);
+      await loadVaultEntries(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancelVaultEdit = () => {
+    setEditingVaultId(null);
+    setVaultForm(emptyVaultForm());
+  };
+
+  const deleteVaultEntry = async (entry: TeamVaultEntryDto) => {
+    if (!window.confirm("Delete this saved password?")) return;
+    const res = await fetch(`/api/team/vault/${entry.id}`, { method: "DELETE" });
+    if (res.ok) {
+      if (editingVaultId === entry.id) {
+        setEditingVaultId(null);
+        setVaultForm(emptyVaultForm());
+      }
+      await loadVaultEntries(true);
+    }
+  };
+
   const uploadFile = async (file: File) => {
     setUploading(true);
     setError(null);
@@ -751,7 +874,8 @@ export default function TeamClient() {
   const activeMemberLabel =
     memberTab !== "all" ? memberName(members, memberTab) : null;
 
-  const listReady = tab === "ads" ? tasksReady : tab === "reminders" ? notesReady : true;
+  const listReady =
+    tab === "ads" ? tasksReady : tab === "reminders" ? notesReady : tab === "vault" ? vaultReady : true;
   const listEmpty =
     tab === "ads"
       ? tasks.length === 0
@@ -916,6 +1040,7 @@ export default function TeamClient() {
         active={tab}
         onChange={setTab}
         hideReminders={isViewer}
+        hideVault={isViewer}
         hideAi={isViewer || isMemberLike}
         hideCalendar={isViewer}
         userLabel={userLabel}
@@ -946,7 +1071,7 @@ export default function TeamClient() {
 
       <main
         className={`${TEAM_PAGE} min-h-0 flex-1 max-xl:pb-[var(--team-dock-pad)] ${
-          tab === "ai" || tab === "reminders" || tab === "calendar"
+          tab === "ai" || tab === "reminders" || tab === "calendar" || tab === "vault"
             ? "flex flex-col overflow-hidden py-0 md:py-4"
             : "overflow-y-auto overscroll-contain py-3 [-webkit-overflow-scrolling:touch] md:py-4"
         }`}
@@ -1046,6 +1171,27 @@ export default function TeamClient() {
             onEdit={openEditNote}
             onDelete={(n) => void deletePersonalNote(n)}
           />
+        ) : tab === "vault" && !isViewer ? (
+          <TeamVaultView
+            entries={vaultEntries}
+            ready={vaultReady}
+            form={vaultForm}
+            editingId={editingVaultId}
+            composeKey={vaultComposeKey}
+            search={vaultSearch}
+            onSearchChange={setVaultSearch}
+            scope={vaultScope}
+            onScopeChange={setVaultScope}
+            viewerId={notesViewerId}
+            members={members}
+            onFormChange={setVaultForm}
+            onSave={() => void saveVaultEntry()}
+            onCancelEdit={cancelVaultEdit}
+            onNewEntry={startNewVaultEntry}
+            saving={saving}
+            onEdit={openEditVault}
+            onDelete={(e) => void deleteVaultEntry(e)}
+          />
         ) : null}
       </main>
 
@@ -1058,6 +1204,10 @@ export default function TeamClient() {
         onAdd={() => {
           if (tab === "reminders" && !isViewer) {
             focusNoteComposer();
+            return;
+          }
+          if (tab === "vault" && !isViewer) {
+            focusVaultComposer();
             return;
           }
           if (tab === "calendar" && user.role === "admin") {
@@ -1108,6 +1258,7 @@ export default function TeamClient() {
         open={showMoreSheet}
         onClose={() => setShowMoreSheet(false)}
         onReminders={() => setTab("reminders")}
+        onVault={!isViewer ? () => setTab("vault") : undefined}
         onCalendar={!isViewer ? () => setTab("calendar") : undefined}
         onAi={() => setTab("ai")}
         onExport={exportExcel}
