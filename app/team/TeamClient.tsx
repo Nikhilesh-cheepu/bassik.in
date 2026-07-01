@@ -100,7 +100,23 @@ function memberName(members: TeamMember[], id: string): string {
   return members.find((m) => m.id === id)?.name ?? id;
 }
 
-async function readTeamApiJson(res: Response): Promise<any> {
+type TeamApiJson = Record<string, unknown>;
+
+function teamApiError(data: TeamApiJson, fallback: string): string {
+  return typeof data.error === "string" ? data.error : fallback;
+}
+
+function teamApiArray<T>(data: TeamApiJson, key: string): T[] {
+  const value = data[key];
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function teamApiString(data: TeamApiJson, key: string): string | undefined {
+  const value = data[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+async function readTeamApiJson(res: Response): Promise<TeamApiJson> {
   const text = await res.text();
   if (!text) {
     if (!res.ok) throw new Error(`Request failed (${res.status})`);
@@ -280,7 +296,7 @@ export default function TeamClient() {
     }
     if (res.ok) {
       const data = await readTeamApiJson(res);
-      setMembers(data.members ?? []);
+      setMembers(teamApiArray<TeamMember>(data, "members"));
     }
   }, []);
 
@@ -298,8 +314,8 @@ export default function TeamClient() {
           return;
         }
         const data = await readTeamApiJson(res);
-        if (!res.ok) throw new Error(data.error || "Could not load tasks");
-        setTasks(data.tasks ?? []);
+        if (!res.ok) throw new Error(teamApiError(data, "Could not load tasks"));
+        setTasks(teamApiArray<TeamTaskDto>(data, "tasks"));
         setTasksReady(true);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Load failed");
@@ -324,8 +340,8 @@ export default function TeamClient() {
         return;
       }
       const data = await readTeamApiJson(res);
-      if (!res.ok) throw new Error(data.error || "Could not load notes");
-      setPersonalNotes(data.notes ?? []);
+      if (!res.ok) throw new Error(teamApiError(data, "Could not load notes"));
+      setPersonalNotes(teamApiArray<TeamPersonalNoteDto>(data, "notes"));
       setNotesReady(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
@@ -347,8 +363,8 @@ export default function TeamClient() {
           return;
         }
         const data = await readTeamApiJson(res);
-        if (!res.ok) throw new Error(data.error || "Could not load planning");
-        setPlanningNotes(data.notes ?? []);
+        if (!res.ok) throw new Error(teamApiError(data, "Could not load planning"));
+        setPlanningNotes(teamApiArray<TeamPlanningDto>(data, "notes"));
         setPlanningReady(true);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Load failed");
@@ -364,7 +380,7 @@ export default function TeamClient() {
       const res = await fetch("/api/team/auth");
       if (res.ok) {
         const data = await readTeamApiJson(res);
-        setUser(data.user ?? null);
+        setUser((data.user as TeamUser | null | undefined) ?? null);
       } else setUser(null);
     } finally {
       setBooting(false);
@@ -428,8 +444,10 @@ export default function TeamClient() {
     fd.append("kind", kind);
     const res = await fetch("/api/team/upload", { method: "POST", body: fd });
     const data = await readTeamApiJson(res);
-    if (!res.ok) throw new Error(data.error || "Upload failed");
-    return data.url as string;
+    if (!res.ok) throw new Error(teamApiError(data, "Upload failed"));
+    const url = teamApiString(data, "url");
+    if (!url) throw new Error("Upload failed");
+    return url;
   };
 
   const login = async (e: React.FormEvent) => {
@@ -442,10 +460,10 @@ export default function TeamClient() {
     });
     const data = await readTeamApiJson(res);
     if (!res.ok) {
-      setLoginError(data.error || "Invalid password");
+      setLoginError(teamApiError(data, "Invalid password"));
       return;
     }
-    setUser(data.user);
+    setUser(data.user as TeamUser);
     setPassword("");
   };
 
@@ -550,7 +568,7 @@ export default function TeamClient() {
         }
       );
       const data = await readTeamApiJson(res);
-      if (!res.ok) throw new Error(data.error || "Save failed");
+      if (!res.ok) throw new Error(teamApiError(data, "Save failed"));
       setNoteForm(emptyNoteForm());
       setEditingNoteId(null);
       setNoteComposeKey(0);
@@ -590,15 +608,15 @@ export default function TeamClient() {
       fd.append("kind", "note");
       const res = await fetch("/api/team/upload", { method: "POST", body: fd });
       const data = await readTeamApiJson(res);
-      if (!res.ok) throw new Error(data.error || "Upload failed");
+      if (!res.ok) throw new Error(teamApiError(data, "Upload failed"));
       setNoteForm((f) => ({
         ...f,
         attachments: [
           ...f.attachments,
           {
-            url: data.url as string,
-            fileName: (data.fileName as string) ?? file.name,
-            mimeType: (data.mimeType as string) ?? file.type,
+            url: teamApiString(data, "url") ?? "",
+            fileName: teamApiString(data, "fileName") ?? file.name,
+            mimeType: teamApiString(data, "mimeType") ?? file.type,
           },
         ],
       }));
@@ -663,12 +681,12 @@ export default function TeamClient() {
       fd.append("kind", "planning");
       const res = await fetch("/api/team/upload", { method: "POST", body: fd });
       const data = await readTeamApiJson(res);
-      if (!res.ok) throw new Error(data.error || "Upload failed");
+      if (!res.ok) throw new Error(teamApiError(data, "Upload failed"));
       setPlanningForm((f) => ({
         ...f,
         attachments: [
           ...f.attachments,
-          { url: data.url, fileName: data.fileName ?? file.name, mimeType: data.mimeType ?? file.type },
+          { url: teamApiString(data, "url") ?? "", fileName: teamApiString(data, "fileName") ?? file.name, mimeType: teamApiString(data, "mimeType") ?? file.type },
         ],
       }));
     } catch (e) {
@@ -717,7 +735,7 @@ export default function TeamClient() {
         body: JSON.stringify(payload),
       });
       const data = await readTeamApiJson(res);
-      if (!res.ok) throw new Error(data.error || "Save failed");
+      if (!res.ok) throw new Error(teamApiError(data, "Save failed"));
       setShowPlanningForm(false);
       setEditingPlanning(null);
       await loadPlanning(true);
@@ -761,7 +779,7 @@ export default function TeamClient() {
         body: JSON.stringify(payload),
       });
       const data = await readTeamApiJson(res);
-      if (!res.ok) throw new Error(data.error || "Save failed");
+      if (!res.ok) throw new Error(teamApiError(data, "Save failed"));
       setShowTaskForm(false);
       setEditing(null);
       await loadTasks(true);
@@ -846,7 +864,7 @@ export default function TeamClient() {
         body: JSON.stringify(memberRecordForm),
       });
       const data = await readTeamApiJson(res);
-      if (!res.ok) throw new Error(data.error || "Submit failed");
+      if (!res.ok) throw new Error(teamApiError(data, "Submit failed"));
       setShowMemberRecordForm(false);
       setMemberRecordForm(emptyMemberRecordForm());
       await loadTasks(true);
