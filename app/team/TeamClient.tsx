@@ -100,7 +100,6 @@ function memberName(members: TeamMember[], id: string): string {
   return members.find((m) => m.id === id)?.name ?? id;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function readTeamApiJson(res: Response): Promise<any> {
   const text = await res.text();
   if (!text) {
