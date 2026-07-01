@@ -203,6 +203,23 @@ model Reservation {
   @@index([guestId])
 }
 
+/// Razorpay reservation fee (Club Rogue Meta ads flow).
+model ReservationPayment {
+  id                String   @id @default(cuid())
+  brandId           String
+  razorpayOrderId   String   @unique
+  razorpayPaymentId String?
+  amountPaise       Int
+  status            String   @default("CREATED")
+  bookingDraft      Json
+  reservationId     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([brandId])
+  @@index([status])
+}
+
 enum ReservationStatus {
   PENDING
   CONFIRMED
@@ -470,14 +487,36 @@ model TeamReminder {
   @@index([createdAt])
 }
 
-/// Simple personal notes on /team Mine tab (type & save with timestamp).
+/// Personal notes on /team Notes tab — title, outlet, sharing, attachments.
 model TeamPersonalNote {
-  id        String   @id @default(cuid())
-  ownerId   String
-  body      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  ownerId     String
+  title       String?
+  outletId    String?
+  category    String?
+  body        String
+  aiSummary   String?
+  attachments Json?    // { url, fileName, mimeType }[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  shares      TeamNoteShare[]
 
   @@index([ownerId])
+  @@index([outletId])
+  @@index([category])
   @@index([createdAt])
+}
+
+/// Note shared with a teammate (read access in their Notes list).
+model TeamNoteShare {
+  id        String           @id @default(cuid())
+  noteId    String
+  memberId  String
+  sharedBy  String
+  createdAt DateTime         @default(now())
+  note      TeamPersonalNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@unique([noteId, memberId])
+  @@index([memberId])
+  @@index([noteId])
 }

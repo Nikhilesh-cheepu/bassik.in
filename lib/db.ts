@@ -60,11 +60,22 @@ const pool = new Pool({
 // Create Prisma adapter
 const adapter = new PrismaPg(pool);
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
+function createPrismaClient() {
+  return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
+}
+
+function prismaClientIsStale(client: PrismaClient | undefined): boolean {
+  if (!client) return false;
+  return typeof (client as PrismaClient & { teamNoteShare?: unknown }).teamNoteShare === "undefined";
+}
+
+if (process.env.NODE_ENV !== "production" && prismaClientIsStale(globalForPrisma.prisma)) {
+  globalForPrisma.prisma = undefined;
+}
+
+export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;

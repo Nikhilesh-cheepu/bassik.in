@@ -35,6 +35,7 @@ import type { VenuePayload } from "@/lib/venue-data";
 const MenuModal = dynamic(() => import("@/components/MenuModal"));
 const GalleryModal = dynamic(() => import("@/components/GalleryModal"));
 const VenuePhotosSection = dynamic(() => import("@/components/VenuePhotosSection"));
+const ClubRogueOutletPage = dynamic(() => import("@/components/club-rogue/ClubRogueOutletPage"));
 
 const DEFAULT_MAP = "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6";
 
@@ -390,6 +391,16 @@ export default function OutletPageClient({ outletSlug, initialVenueData, initial
       setReviewSubmitting(false);
     }
   };
+
+  if (isClubRogueBrand(selectedBrandId)) {
+    return (
+      <ClubRogueOutletPage
+        outletSlug={outletSlug}
+        initialVenueData={initialVenueData}
+        initialEventId={initialEventId}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black w-full max-w-full overflow-x-hidden">

@@ -5,6 +5,7 @@ import {
   IconAi,
   IconBell,
   IconMore,
+  IconPlan,
   IconPlus,
   IconTasks,
   IconWhatsApp,
@@ -92,7 +93,7 @@ export default function TeamDock({
       className={navClass}
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", minHeight: TEAM_DOCK_HEIGHT }}
     >
-      <div className="mx-auto flex h-14 max-w-lg items-end px-1">
+      <div className="mx-auto flex h-14 max-w-lg items-end px-0.5">
         <button type="button" onClick={() => onTab("ads")} className={dockItem(tab === "ads")}>
           <IconTasks className="h-[22px] w-[22px]" />
           Tasks
@@ -105,7 +106,7 @@ export default function TeamDock({
         <button
           type="button"
           onClick={onAdd}
-          className="relative -top-3 flex w-14 shrink-0 flex-col items-center justify-center"
+          className="relative -top-3 flex w-12 shrink-0 flex-col items-center justify-center"
           aria-label="Create"
         >
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-violet-500 text-white shadow-lg shadow-violet-500/30">
@@ -113,10 +114,10 @@ export default function TeamDock({
           </span>
         </button>
 
-        {isAdmin && onWhatsApp ? (
-          <button type="button" onClick={onWhatsApp} className={dockItem(false)}>
-            <IconWhatsApp className="h-[22px] w-[22px] text-emerald-400" />
-            WA
+        {isAdmin ? (
+          <button type="button" onClick={() => onTab("planning")} className={dockItem(tab === "planning")}>
+            <IconPlan className="h-[22px] w-[22px]" />
+            Plan
           </button>
         ) : null}
 
@@ -178,16 +179,27 @@ export function TeamMoreSheet({
   open,
   onClose,
   onReminders,
+  onPlanning,
   onAi,
   onExport,
+  onWhatsApp,
 }: {
   open: boolean;
   onClose: () => void;
   onReminders: () => void;
+  onPlanning?: () => void;
   onAi: () => void;
   onExport: () => void;
+  onWhatsApp?: () => void;
 }) {
   if (!open) return null;
+  const items = [
+    ...(onPlanning ? [{ label: "Planning", icon: IconPlan, onClick: onPlanning }] : []),
+    { label: "My notes", icon: IconBell, onClick: onReminders },
+    { label: "AI assistant", icon: IconAi, onClick: onAi },
+    ...(onWhatsApp ? [{ label: "WhatsApp report", icon: IconWhatsApp, onClick: onWhatsApp }] : []),
+    { label: "Export Excel", icon: IconTasks, onClick: onExport },
+  ];
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/70 xl:hidden" onClick={onClose}>
       <div
@@ -197,11 +209,7 @@ export function TeamMoreSheet({
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
         <p className="mb-2 px-1 text-xs text-white/40">More</p>
         <div className="space-y-1">
-          {[
-            { label: "My notes", icon: IconBell, onClick: onReminders },
-            { label: "AI assistant", icon: IconAi, onClick: onAi },
-            { label: "Export Excel", icon: IconTasks, onClick: onExport },
-          ].map(({ label, icon: Icon, onClick }) => (
+          {items.map(({ label, icon: Icon, onClick }) => (
             <button
               key={label}
               type="button"

@@ -6,6 +6,7 @@ export const TEAM_AD_OUTLETS = [
   { id: "komma", label: "Komma" },
   { id: "kiik69", label: "KIIK 69" },
   { id: "asilmandi", label: "Asil Mandi" },
+  { id: "antervedi", label: "Antervedi" },
   { id: "clubrogue-jubilee-hills", label: "Jubilee Hills Clubrogue" },
   { id: "clubrogue-kondapur", label: "Kondapur Clubrogue" },
   { id: "clubrogue-gachibowli", label: "Gachibowli Clubrogue" },

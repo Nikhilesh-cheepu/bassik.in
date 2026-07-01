@@ -6,9 +6,11 @@ import { getDiscountLabel } from "@/lib/reservation-discounts";
 import { getOutletLabelForReservation } from "@/lib/brands";
 import {
   CLUB_ROGUE_GACHIBOWLI_ID,
+  CLUB_ROGUE_RESERVATION_FEE_INR,
   isClubRogueBrand,
 } from "@/lib/club-rogue";
 import { localYmdTimeMs } from "@/lib/local-date";
+import { clubRogueBookingRequiresPayment } from "@/lib/razorpay";
 
 export const runtime = "nodejs";
 
@@ -143,6 +145,41 @@ export async function POST(request: NextRequest) {
         { error: "Please choose a date and time in the future." },
         { status: 400 }
       );
+    }
+
+    const clubRoguePaymentOrderId =
+      typeof body.clubRoguePaymentOrderId === "string"
+        ? body.clubRoguePaymentOrderId.trim()
+        : "";
+
+    if (isClubRogueBrand(String(brandId))) {
+      if (clubRogueBookingRequiresPayment()) {
+        if (!clubRoguePaymentOrderId) {
+          return NextResponse.json(
+            {
+              error: `Please pay the ₹${CLUB_ROGUE_RESERVATION_FEE_INR} confirmation fee to complete your Club Rogue booking.`,
+              code: "PAYMENT_REQUIRED",
+            },
+            { status: 402 }
+          );
+        }
+        const paid = await prisma.reservationPayment.findUnique({
+          where: { razorpayOrderId: clubRoguePaymentOrderId },
+        });
+        if (!paid || paid.status !== "PAID" || paid.brandId !== brandId) {
+          return NextResponse.json(
+            { error: "Payment not verified. Please complete payment and try again.", code: "PAYMENT_REQUIRED" },
+            { status: 402 }
+          );
+        }
+        if (paid.reservationId) {
+          return NextResponse.json({
+            success: true,
+            message: "Reservation already confirmed",
+            reservationId: paid.reservationId,
+          });
+        }
+      }
     }
 
     const guest = await getGuestFromRequest(request);
@@ -383,6 +420,13 @@ export async function POST(request: NextRequest) {
         { error: "Failed to create reservation. Please try again." },
         { status: 500 }
       );
+    }
+
+    if (clubRoguePaymentOrderId && !existingReservation) {
+      await prisma.reservationPayment.updateMany({
+        where: { razorpayOrderId: clubRoguePaymentOrderId, reservationId: null },
+        data: { reservationId },
+      });
     }
 
     const shouldTriggerInterakt = !existingReservation;

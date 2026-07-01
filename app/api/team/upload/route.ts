@@ -59,8 +59,9 @@ export async function POST(req: NextRequest) {
   const outletId = typeof outletField === "string" ? outletField.trim() : "general";
   const isReference = kindField === "reference";
   const isPlanning = kindField === "planning";
+  const isNote = kindField === "note";
 
-  if (!isReference && !isPlanning && session.role !== "admin" && session.role !== "poc") {
+  if (!isReference && !isPlanning && !isNote && session.role !== "admin" && session.role !== "poc") {
     return NextResponse.json({ error: "Only admin can upload creatives" }, { status: 403 });
   }
 
@@ -69,14 +70,14 @@ export async function POST(req: NextRequest) {
   }
 
   const mimeType = resolveMime(file);
-  if (isPlanning) {
+  if (isPlanning || isNote) {
     const ok =
       mimeType?.startsWith("image/") ||
       (mimeType && PLANNING_MIMES.has(mimeType)) ||
       mimeType === "application/pdf";
     if (!ok) {
       return NextResponse.json(
-        { error: "Use images, PDF, Excel, Word, or CSV for planning files." },
+        { error: "Use images, PDF, Excel, Word, or CSV for note files." },
         { status: 400 }
       );
     }
@@ -106,7 +107,7 @@ export async function POST(req: NextRequest) {
   const slug = isTeamOutletId(outletId) ? outletId : "general";
   const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
   const safeName = (file.name || `creative.${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
-  const folder = isPlanning ? "planning" : isReference ? "references" : "creatives";
+  const folder = isPlanning ? "planning" : isNote ? "notes" : isReference ? "references" : "creatives";
   const pathname = `team/${folder}/${slug}/${Date.now()}-${safeName}`;
 
   try {

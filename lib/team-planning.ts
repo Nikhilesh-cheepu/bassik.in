@@ -103,6 +103,26 @@ export function filterPlanningNotes(
   return rows.filter((r) => r.type === filter);
 }
 
+export function searchPlanningNotes(
+  rows: TeamPlanningDto[],
+  opts: { q?: string; outletId?: string }
+): TeamPlanningDto[] {
+  let list = rows;
+  const outletId = opts.outletId?.trim();
+  if (outletId) {
+    list = list.filter((n) => n.outletId === outletId);
+  }
+  const q = opts.q?.trim().toLowerCase();
+  if (!q) return list;
+  return list.filter((n) => {
+    const hay = [n.title, n.body, n.outletId, n.createdBy]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(q);
+  });
+}
+
 export function normalizePlanningType(raw: string | null | undefined): TeamPlanningType {
   const v = raw?.trim().toUpperCase();
   if (v === "PLANNING" || v === "DISCUSSION" || v === "FEEDBACK") return v;

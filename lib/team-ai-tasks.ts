@@ -41,8 +41,7 @@ Task creation rules (default: CREATE tasks):
 - If user mentions outlet(s) + any work (flyer, post, ad, creative, story, reel, banner, event, edit photos) → shouldCreateTasks=true
 - ONE task per outlet when multiple real outlets are named (c53, boiler, firefly…)
 - Swiggy and Zomato are platforms — NOT outlets. For "edit for swiggy and zomato" create ONE task with a valid outletId from the list (pick c53 if unsure) and mention swiggy/zomato in title/description
-- Brand names not in the outlet list (e.g. Antervedi) → ONE task, use outletId "c53" (or closest match), put brand name in title
-- outletId MUST be exactly one of the valid ids from the list above — never invent ids like "antervedi" or "swiggy"
+- outletId MUST be exactly one of the valid ids from the list above — never invent ids like "swiggy"
 - Links: put Google Drive / Instagram URLs in creativeUrl
 - priority: NORMAL when user says normal/not high priority; LOW when they say low; else HIGH
 - startDate: ASAP when user says asap/start asap/no due date
@@ -114,6 +113,7 @@ export function resolveOutletId(raw: string, context = ""): string {
     [/komma/i, "komma"],
     [/kiik/i, "kiik69"],
     [/asil/i, "asilmandi"],
+    [/antervedi/i, "antervedi"],
   ];
 
   for (const [re, id] of rules) {

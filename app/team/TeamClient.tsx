@@ -15,13 +15,13 @@ import {
   TEAM_END_TIME_PRESETS,
   type TeamEndTimeMode,
 } from "@/lib/team-end-time";
-import type { TeamPersonalNoteDto } from "@/lib/team-personal-notes";
+import type { TeamPersonalNoteDto, NoteListScope } from "@/lib/team-personal-notes";
 import type { TeamTaskPriority } from "@prisma/client";
 import { TEAM_PRIORITY_LABELS, TEAM_PRIORITIES } from "@/lib/team-priority";
 import AdTaskList from "./AdTaskList";
 import { emptyMemberRecordForm, MemberRecordSheet, type MemberRecordForm } from "./MemberRecordSheet";
 import TeamPageHeader from "./TeamPageHeader";
-import TeamNotesView from "./TeamNotesView";
+import TeamNotesView, { emptyNoteForm, type NoteForm } from "./TeamNotesView";
 import {
   emptyPlanningSheetForm,
   PlanningSheetFormSheet,
@@ -36,6 +36,7 @@ import { TEAM_DOCK_PADDING } from "./TeamIcons";
 import TeamAiPanel from "./TeamAiPanel";
 import { PlanningNoteList } from "./TeamPlanningView";
 import type { TeamPlanningDto, TeamPlanningFilter } from "@/lib/team-planning";
+import { searchPlanningNotes } from "@/lib/team-planning";
 
 type TeamUser = { username: string; role: "admin" | "member" | "viewer" | "poc"; memberId?: string };
 type TeamMember = { id: string; name: string; role?: string };
@@ -211,8 +212,15 @@ export default function TeamClient() {
   const [tasksReady, setTasksReady] = useState(false);
   const [notesReady, setNotesReady] = useState(false);
   const [planningReady, setPlanningReady] = useState(false);
-  const [noteDraft, setNoteDraft] = useState("");
-  const noteComposerRef = useRef<HTMLTextAreaElement>(null);
+  const [noteForm, setNoteForm] = useState<NoteForm>(emptyNoteForm());
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [notesSearch, setNotesSearch] = useState("");
+  const [notesOutletFilter, setNotesOutletFilter] = useState("");
+  const [notesScope, setNotesScope] = useState<NoteListScope>("all");
+  const [noteUploading, setNoteUploading] = useState(false);
+  const [planningSearch, setPlanningSearch] = useState("");
+  const [planningOutletFilter, setPlanningOutletFilter] = useState("");
+  const [noteComposeKey, setNoteComposeKey] = useState(0);
   const [planningFilter, setPlanningFilter] = useState<TeamPlanningFilter>("all");
   const [showPlanningForm, setShowPlanningForm] = useState(false);
   const [editingPlanning, setEditingPlanning] = useState<TeamPlanningDto | null>(null);
@@ -307,7 +315,11 @@ export default function TeamClient() {
     if (!silent) setRefreshing(true);
     setError(null);
     try {
-      const res = await fetch("/api/team/notes");
+      const qs = new URLSearchParams();
+      if (notesSearch.trim()) qs.set("q", notesSearch.trim());
+      if (notesOutletFilter) qs.set("outletId", notesOutletFilter);
+      if (notesScope !== "all") qs.set("scope", notesScope);
+      const res = await fetch(`/api/team/notes?${qs}`);
       if (res.status === 401) {
         setUser(null);
         return;
@@ -321,7 +333,7 @@ export default function TeamClient() {
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [notesSearch, notesOutletFilter, notesScope]);
 
   const loadPlanning = useCallback(
     async (silent = false) => {
@@ -371,7 +383,7 @@ export default function TeamClient() {
 
   useEffect(() => {
     if (!user) return;
-    if (tab === "planning" || (isMemberLike && tab === "ai")) {
+    if (isMemberLike && (tab === "planning" || tab === "ai")) {
       setTab("reminders");
     }
   }, [user, tab, isMemberLike]);
@@ -382,6 +394,11 @@ export default function TeamClient() {
     else if (tab === "reminders" && !isViewer) void loadPersonalNotes(notesReady);
     else if (tab === "planning") void loadPlanning(planningReady);
   }, [user, tab, loadTasks, loadPersonalNotes, loadPlanning, isViewer, isMemberLike]);
+
+  useEffect(() => {
+    if (!user || tab !== "reminders" || isViewer) return;
+    void loadPersonalNotes(notesReady);
+  }, [notesSearch, notesOutletFilter, notesScope]);
 
   useEffect(() => {
     if (!user || tab !== "planning") return;
@@ -445,7 +462,12 @@ export default function TeamClient() {
     setTasksReady(false);
     setNotesReady(false);
     setPlanningReady(false);
-    setNoteDraft("");
+    setNoteForm(emptyNoteForm());
+    setEditingNoteId(null);
+    setNotesSearch("");
+    setNotesOutletFilter("");
+    setPlanningSearch("");
+    setPlanningOutletFilter("");
   };
 
   const resolveAssigneeId = () =>
@@ -493,25 +515,46 @@ export default function TeamClient() {
     setShowTaskForm(true);
   };
 
+  const startNewNote = () => {
+    setEditingNoteId(null);
+    setNoteForm(emptyNoteForm());
+    setNoteComposeKey((k) => k + 1);
+  };
+
   const focusNoteComposer = () => {
-    noteComposerRef.current?.focus();
-    noteComposerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    startNewNote();
   };
 
   const savePersonalNote = async () => {
-    const body = noteDraft.trim();
-    if (!body) return;
+    const body = noteForm.body.trim();
+    if (!body && noteForm.attachments.length === 0) return;
+    const active = editingNoteId ? personalNotes.find((n) => n.id === editingNoteId) : null;
+    if (active && !active.isOwner) return;
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch("/api/team/notes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body }),
-      });
+      const payload = {
+        title: noteForm.title.trim() || undefined,
+        body: body || "See attached files.",
+        outletId: noteForm.outletId || undefined,
+        category: noteForm.category.trim() || undefined,
+        aiSummary: noteForm.aiSummary.trim() || undefined,
+        attachments: noteForm.attachments,
+        sharedWith: noteForm.sharedWith,
+      };
+      const res = await fetch(
+        editingNoteId ? `/api/team/notes/${editingNoteId}` : "/api/team/notes",
+        {
+          method: editingNoteId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
       const data = await readTeamApiJson(res);
       if (!res.ok) throw new Error(data.error || "Save failed");
-      setNoteDraft("");
+      setNoteForm(emptyNoteForm());
+      setEditingNoteId(null);
+      setNoteComposeKey(0);
       await loadPersonalNotes(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
@@ -520,10 +563,63 @@ export default function TeamClient() {
     }
   };
 
+  const cancelNoteEdit = () => {
+    setEditingNoteId(null);
+    setNoteForm(emptyNoteForm());
+  };
+
+  const openEditNote = useCallback((note: TeamPersonalNoteDto) => {
+    setEditingNoteId(note.id);
+    setNoteForm({
+      title: note.title ?? "",
+      body: note.body,
+      outletId: note.outletId ?? "",
+      category: note.category ?? "",
+      aiSummary: note.aiSummary ?? "",
+      attachments: note.attachments ?? [],
+      sharedWith: note.sharedWith ?? [],
+    });
+  }, []);
+
+  const uploadNoteFile = async (file: File) => {
+    setNoteUploading(true);
+    setError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("outletId", noteForm.outletId || "general");
+      fd.append("kind", "note");
+      const res = await fetch("/api/team/upload", { method: "POST", body: fd });
+      const data = await readTeamApiJson(res);
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setNoteForm((f) => ({
+        ...f,
+        attachments: [
+          ...f.attachments,
+          {
+            url: data.url as string,
+            fileName: (data.fileName as string) ?? file.name,
+            mimeType: (data.mimeType as string) ?? file.type,
+          },
+        ],
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      setNoteUploading(false);
+    }
+  };
+
   const deletePersonalNote = async (note: TeamPersonalNoteDto) => {
     if (!window.confirm("Delete this note?")) return;
     const res = await fetch(`/api/team/notes/${note.id}`, { method: "DELETE" });
-    if (res.ok) await loadPersonalNotes(true);
+    if (res.ok) {
+      if (editingNoteId === note.id) {
+        setEditingNoteId(null);
+        setNoteForm(emptyNoteForm());
+      }
+      await loadPersonalNotes(true);
+    }
   };
 
   const uploadFile = async (file: File) => {
@@ -764,14 +860,22 @@ export default function TeamClient() {
 
   const activeMemberLabel =
     memberTab !== "all" ? memberName(members, memberTab) : null;
+
+  const filteredPlanningNotes = useMemo(
+    () => searchPlanningNotes(planningNotes, { q: planningSearch, outletId: planningOutletFilter }),
+    [planningNotes, planningSearch, planningOutletFilter]
+  );
+
   const listReady =
     tab === "ads" ? tasksReady : tab === "reminders" ? notesReady : tab === "planning" ? planningReady : true;
   const listEmpty =
     tab === "ads"
       ? tasks.length === 0
       : tab === "planning"
-        ? planningNotes.length === 0
-        : false;
+        ? filteredPlanningNotes.length === 0 && !planningSearch && !planningOutletFilter
+        : tab === "reminders"
+          ? personalNotes.length === 0 && !notesSearch && !notesOutletFilter
+          : false;
 
   const doneReportDateCount = useMemo(() => {
     const keys = new Set(
@@ -836,6 +940,9 @@ export default function TeamClient() {
         : user.role === "poc"
           ? `${memberName(members, user.memberId ?? user.username)} · POC`
           : memberName(members, user.memberId ?? user.username);
+
+  const notesViewerId =
+    user.role === "admin" ? "admin" : (user.memberId ?? user.username);
 
   const desktopPrimaryAction =
     !isViewer && tab !== "ai" ? (
@@ -906,9 +1013,17 @@ export default function TeamClient() {
         <button
           type="button"
           onClick={focusNoteComposer}
-          className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white"
+          className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white xl:hidden"
         >
           + Note
+        </button>
+      ) : tab === "planning" && user.role === "admin" ? (
+        <button
+          type="button"
+          onClick={() => openCreatePlanning()}
+          className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white"
+        >
+          + Planning
         </button>
       ) : null
     ) : null;
@@ -920,7 +1035,7 @@ export default function TeamClient() {
         onChange={setTab}
         hideReminders={isViewer}
         hideAi={isViewer || isMemberLike}
-        hidePlanning
+        hidePlanning={isViewer || isMemberLike}
         userLabel={userLabel}
         onLogout={() => void logout()}
       />
@@ -947,6 +1062,14 @@ export default function TeamClient() {
         onMemberTabChange={setMemberTab}
         planningFilter={planningFilter}
         onPlanningFilterChange={setPlanningFilter}
+        notesSearch={notesSearch}
+        onNotesSearchChange={setNotesSearch}
+        notesOutletFilter={notesOutletFilter}
+        onNotesOutletFilterChange={setNotesOutletFilter}
+        planningSearch={planningSearch}
+        onPlanningSearchChange={setPlanningSearch}
+        planningOutletFilter={planningOutletFilter}
+        onPlanningOutletFilterChange={setPlanningOutletFilter}
       />
 
       <main
@@ -972,25 +1095,19 @@ export default function TeamClient() {
               />
             ))}
           </div>
-        ) : listEmpty && tab !== "ai" ? (
+        ) : listEmpty && tab === "ads" ? (
           <p className="py-16 text-center text-sm text-white/40">
-            {tab === "ads"
-              ? isViewer
-                ? activeMemberLabel
-                  ? `No tasks for ${activeMemberLabel}.`
-                  : "No ad tasks to show."
-                : filter === "pending"
-                  ? "No work waiting for approval."
-                  : user.role === "admin"
+            {isViewer
+              ? activeMemberLabel
+                ? `No tasks for ${activeMemberLabel}.`
+                : "No ad tasks to show."
+              : filter === "pending"
+                ? "No work waiting for approval."
+                : user.role === "admin"
                   ? activeMemberLabel
                     ? `No tasks for ${activeMemberLabel}.`
                     : "No ad tasks here yet."
-                  : "No tasks assigned to you yet."
-              : tab === "planning"
-                ? isViewer
-                  ? "No planning notes yet."
-                  : "No notes yet. Tap + below to add one."
-                : null}
+                  : "No tasks assigned to you yet."}
           </p>
         ) : tab === "ads" ? (
           <>
@@ -1021,7 +1138,7 @@ export default function TeamClient() {
           </>
         ) : tab === "planning" ? (
           <PlanningNoteList
-            notes={planningNotes}
+            notes={filteredPlanningNotes}
             ready={planningReady}
             isViewer={isViewer}
             onEdit={openEditPlanning}
@@ -1037,12 +1154,26 @@ export default function TeamClient() {
           <TeamNotesView
             notes={personalNotes}
             ready={notesReady}
-            draft={noteDraft}
-            onDraftChange={setNoteDraft}
+            form={noteForm}
+            editingId={editingNoteId}
+            composeKey={noteComposeKey}
+            search={notesSearch}
+            onSearchChange={setNotesSearch}
+            outletFilter={notesOutletFilter}
+            onOutletFilterChange={setNotesOutletFilter}
+            scope={notesScope}
+            onScopeChange={setNotesScope}
+            viewerId={notesViewerId}
+            members={members}
+            onFormChange={setNoteForm}
             onSave={() => void savePersonalNote()}
+            onCancelEdit={cancelNoteEdit}
+            onNewNote={startNewNote}
             saving={saving}
+            uploading={noteUploading}
+            onUploadFile={(file) => void uploadNoteFile(file)}
+            onEdit={openEditNote}
             onDelete={(n) => void deletePersonalNote(n)}
-            composerRef={noteComposerRef}
           />
         ) : null}
       </main>
@@ -1058,6 +1189,10 @@ export default function TeamClient() {
             focusNoteComposer();
             return;
           }
+          if (tab === "planning" && user.role === "admin") {
+            openCreatePlanning();
+            return;
+          }
           setShowActionSheet(true);
         }}
         onWhatsApp={user.role === "admin" ? shareWhatsApp : undefined}
@@ -1070,6 +1205,9 @@ export default function TeamClient() {
         actions={[
           ...(user.role === "admin"
             ? [{ label: "New ad task", onClick: openCreateTask, tone: "accent" as const }]
+            : []),
+          ...(user.role === "admin"
+            ? [{ label: "New planning sheet", onClick: () => openCreatePlanning(), tone: "default" as const }]
             : []),
           ...(isPoc && tab === "ads"
             ? [
@@ -1099,8 +1237,10 @@ export default function TeamClient() {
         open={showMoreSheet}
         onClose={() => setShowMoreSheet(false)}
         onReminders={() => setTab("reminders")}
+        onPlanning={user.role === "admin" ? () => setTab("planning") : undefined}
         onAi={() => setTab("ai")}
         onExport={exportExcel}
+        onWhatsApp={user.role === "admin" ? shareWhatsApp : undefined}
       />
 
       <TeamWhatsAppSheet open={showWhatsAppSheet} onClose={() => setShowWhatsAppSheet(false)} />

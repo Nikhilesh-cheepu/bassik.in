@@ -36,6 +36,15 @@ export const CLUB_ROGUE_COVER_CHARGE_SUMMARY =
 export const CLUB_ROGUE_COVER_CHAT_LINE =
   "There's a ₹2,000 cover per person at the venue — fully redeemable on food and drinks.";
 
+/** Online table confirmation (Club Rogue Meta ads landing). See `lib/club-rogue-fees.ts`. */
+export {
+  CLUB_ROGUE_CONFIRMATION_FEE_INR,
+  CLUB_ROGUE_FEE_BREAKDOWN_LABELS,
+  CLUB_ROGUE_GST_HANDLING_INR,
+  CLUB_ROGUE_RESERVATION_FEE_INR,
+  CLUB_ROGUE_RESERVATION_FEE_PAISE,
+} from "@/lib/club-rogue-fees";
+
 /** Rotating input hints in guest chat — Club Rogue outlets. */
 export const CLUB_ROGUE_CHAT_HINTS = [
   "Can I book a table for this weekend?",

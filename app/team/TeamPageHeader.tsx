@@ -10,7 +10,7 @@ import type { TeamPlanningFilter } from "@/lib/team-planning";
 const TAB_TITLES: Record<TeamTab, string> = {
   ads: "Ads & creatives",
   planning: "Planning & feedback",
-  reminders: "Mine",
+  reminders: "Notes",
   ai: "AI assistant",
 };
 
@@ -26,6 +26,55 @@ type MemberTab = "all" | string;
 
 const SCROLL_ROW =
   "-mx-3 flex items-center gap-1 overflow-x-auto px-3 pb-2.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:mx-0 xl:px-0";
+
+function OutletSelect({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <label className="relative shrink-0">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={ariaLabel}
+        className="h-7 max-w-[7.5rem] appearance-none truncate rounded-full bg-white/[0.05] py-1 pl-2.5 pr-6 text-[11px] font-medium text-white/55 outline-none ring-1 ring-white/[0.08] focus:ring-white/20"
+      >
+        <option value="">All outlets</option>
+        {TEAM_AD_OUTLETS.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <IconChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-white/30" />
+    </label>
+  );
+}
+
+function SearchInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <input
+      type="search"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="h-7 min-w-[7rem] flex-1 rounded-full bg-white/[0.05] px-3 text-[11px] text-white/70 outline-none ring-1 ring-white/[0.08] placeholder:text-white/30 focus:ring-white/20 sm:max-w-[12rem]"
+    />
+  );
+}
 
 export default function TeamPageHeader({
   tab,
@@ -48,6 +97,14 @@ export default function TeamPageHeader({
   onMemberTabChange,
   planningFilter,
   onPlanningFilterChange,
+  notesSearch,
+  onNotesSearchChange,
+  notesOutletFilter,
+  onNotesOutletFilterChange,
+  planningSearch,
+  onPlanningSearchChange,
+  planningOutletFilter,
+  onPlanningOutletFilterChange,
 }: {
   tab: TeamTab;
   userLabel: string;
@@ -69,12 +126,20 @@ export default function TeamPageHeader({
   onMemberTabChange: (id: MemberTab) => void;
   planningFilter: TeamPlanningFilter;
   onPlanningFilterChange: (f: TeamPlanningFilter) => void;
+  notesSearch: string;
+  onNotesSearchChange: (v: string) => void;
+  notesOutletFilter: string;
+  onNotesOutletFilterChange: (v: string) => void;
+  planningSearch: string;
+  onPlanningSearchChange: (v: string) => void;
+  planningOutletFilter: string;
+  onPlanningOutletFilterChange: (v: string) => void;
 }) {
   const outletLabel =
     TEAM_AD_OUTLETS.find((o) => o.id === outletFilter)?.label ?? "All outlets";
 
   const mobileTitle = isMemberHub || tab === "reminders" ? "Notes" : MOBILE_TITLES[tab];
-  const desktopTitle = isMemberHub || tab === "reminders" ? "Mine — notes" : TAB_TITLES[tab];
+  const desktopTitle = isMemberHub || tab === "reminders" ? "Notes" : TAB_TITLES[tab];
 
   const statsLine = showStats ? (
     <p className="mt-0.5 truncate text-[11px] text-white/35">
@@ -89,10 +154,12 @@ export default function TeamPageHeader({
         {refreshing ? " · …" : ""}
       </span>
     </p>
-  ) : tab !== "ai" && !isMemberHub && tab !== "reminders" ? (
+  ) : tab !== "ai" && !isMemberHub && tab !== "reminders" && tab !== "planning" ? (
     <p className="mt-0.5 text-[11px] text-white/35 xl:hidden">{userLabel}</p>
   ) : isMemberHub || tab === "reminders" ? (
-    <p className="mt-0.5 text-[11px] text-white/35">Type and save — timestamp added automatically</p>
+    <p className="mt-0.5 text-[11px] text-white/35">Personal workspace — tag outlets or keep Direct</p>
+  ) : tab === "planning" ? (
+    <p className="mt-0.5 text-[11px] text-white/35">Shared calendars, sheets & team feedback</p>
   ) : null;
 
   return (
@@ -136,23 +203,12 @@ export default function TeamPageHeader({
             {showOutletFilter ? (
               <>
                 <span className="mx-0.5 h-3.5 w-px shrink-0 bg-white/10" aria-hidden />
-                <label className="relative shrink-0">
-                  <select
-                    value={outletFilter}
-                    onChange={(e) => onOutletFilterChange(e.target.value)}
-                    aria-label="Filter by outlet"
-                    className="h-7 max-w-[7.5rem] appearance-none truncate rounded-full bg-white/[0.05] py-1 pl-2.5 pr-6 text-[11px] font-medium text-white/55 outline-none ring-1 ring-white/[0.08] focus:ring-white/20"
-                  >
-                    <option value="">All outlets</option>
-                    {TEAM_AD_OUTLETS.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                  <IconChevronDown className="pointer-events-none absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-white/30" />
-                  <span className="sr-only">{outletLabel}</span>
-                </label>
+                <OutletSelect
+                  value={outletFilter}
+                  onChange={onOutletFilterChange}
+                  ariaLabel="Filter tasks by outlet"
+                />
+                <span className="sr-only">{outletLabel}</span>
               </>
             ) : null}
 
@@ -180,8 +236,19 @@ export default function TeamPageHeader({
             ) : null}
           </div>
         ) : tab === "planning" ? (
-          <div className={SCROLL_ROW}>
+          <div className={`${SCROLL_ROW} gap-2`}>
             <PlanningFilters filter={planningFilter} onFilterChange={onPlanningFilterChange} />
+            <span className="mx-0.5 h-3.5 w-px shrink-0 bg-white/10" aria-hidden />
+            <OutletSelect
+              value={planningOutletFilter}
+              onChange={onPlanningOutletFilterChange}
+              ariaLabel="Filter planning by outlet"
+            />
+            <SearchInput
+              value={planningSearch}
+              onChange={onPlanningSearchChange}
+              placeholder="Search planning…"
+            />
           </div>
         ) : null}
       </div>
