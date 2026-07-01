@@ -731,8 +731,10 @@ export default function TeamVaultView({
   };
 
   useEffect(() => {
-    if (composeKey) startCreate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!composeKey) return;
+    setSelectedId(null);
+    setPanelMode("create");
+    setMobilePanel(true);
   }, [composeKey]);
 
   useEffect(() => {
