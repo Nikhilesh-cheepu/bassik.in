@@ -107,6 +107,32 @@ export function IconChevronDown({ className = "h-6 w-6" }: { className?: string 
   );
 }
 
+export function IconEdit({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+      <path d="M4 20h4l10.5-10.5a2.12 2.12 0 00-3-3L5 17v3z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M13.5 6.5l3 3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconDuplicate({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+      <rect x="8" y="8" width="12" height="12" rx="2" />
+      <path d="M4 16V6a2 2 0 012-2h10" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function IconTrash({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+      <path d="M4 7h16M9 7V5h6v2M10 11v6M14 11v6M6 7l1 12h10l1-12" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 /** Compact pill for filter rows in the team header */
 export function teamFilterChip(active: boolean, tone: "default" | "violet" = "default"): string {
   const on =

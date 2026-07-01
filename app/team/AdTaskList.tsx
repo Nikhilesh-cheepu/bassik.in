@@ -36,6 +36,7 @@ import {
 } from "@/lib/team-tasks";
 import { formatTeamEndDateTime as formatDeadline, isPastDeadline } from "@/lib/team-end-time";
 import ExpandableText from "./ExpandableText";
+import { IconDuplicate, IconEdit, IconTrash } from "./TeamIcons";
 
 type TeamMember = { id: string; name: string };
 
@@ -91,12 +92,38 @@ type CardProps = {
   canDrag: boolean;
   onToggleDone: (task: TeamTaskDto) => void;
   onEdit: (task: TeamTaskDto) => void;
-  onDuplicate?: (task: TeamTaskDto) => void;
+  onDuplicate: (task: TeamTaskDto) => void;
   onDelete: (task: TeamTaskDto) => void;
   onApprove?: (task: TeamTaskDto) => void;
   onReject?: (task: TeamTaskDto) => void;
   onPriorityChange: (task: TeamTaskDto, priority: TeamTaskPriority) => void;
 };
+
+function TaskActionIconButton({
+  label,
+  onClick,
+  children,
+  tone = "neutral",
+}: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+  tone?: "neutral" | "danger";
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg active:bg-white/[0.06] ${
+        tone === "danger" ? "text-red-300/70" : "text-white/50"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
 
 function SortableAdTaskCard(props: CardProps) {
   const { task, canDrag } = props;
@@ -241,7 +268,7 @@ function AdTaskCard({
             </div>
           ) : null}
           {!isViewer ? (
-            <div className="mt-3 flex items-center gap-2 border-t border-white/[0.05] pt-2.5">
+            <div className="mt-3 flex min-w-0 items-center gap-2 border-t border-white/[0.05] pt-2.5">
               {pending && isAdmin ? (
                 <>
                   <button
@@ -266,38 +293,24 @@ function AdTaskCard({
               <button
                 type="button"
                 onClick={() => onToggleDone(task)}
-                className={`min-h-[40px] flex-1 rounded-lg text-xs font-medium ${
+                className={`min-h-[40px] min-w-0 flex-1 rounded-lg text-xs font-medium ${
                   done ? "text-white/45" : "bg-white/[0.06] text-emerald-200/90"
                 }`}
               >
                 {done ? "Reopen" : "Done"}
               </button>
               {isAdmin ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => onEdit(task)}
-                    className="min-h-[40px] rounded-lg px-3 text-xs text-white/50"
-                  >
-                    Edit
-                  </button>
-                  {onDuplicate ? (
-                    <button
-                      type="button"
-                      onClick={() => onDuplicate(task)}
-                      className="min-h-[40px] rounded-lg px-3 text-xs text-white/50"
-                    >
-                      Copy
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => onDelete(task)}
-                    className="min-h-[40px] rounded-lg px-2 text-xs text-red-300/60"
-                  >
-                    Del
-                  </button>
-                </>
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <TaskActionIconButton label="Edit task" onClick={() => onEdit(task)}>
+                    <IconEdit />
+                  </TaskActionIconButton>
+                  <TaskActionIconButton label="Duplicate task" onClick={() => onDuplicate(task)}>
+                    <IconDuplicate />
+                  </TaskActionIconButton>
+                  <TaskActionIconButton label="Delete task" tone="danger" onClick={() => onDelete(task)}>
+                    <IconTrash />
+                  </TaskActionIconButton>
+                </div>
               ) : null}
                 </>
               )}
@@ -340,7 +353,7 @@ export type AdTaskListProps = {
   groupDoneByDate?: boolean;
   onToggleDone: (task: TeamTaskDto) => void;
   onEdit: (task: TeamTaskDto) => void;
-  onDuplicate?: (task: TeamTaskDto) => void;
+  onDuplicate: (task: TeamTaskDto) => void;
   onDelete: (task: TeamTaskDto) => void;
   onApprove?: (task: TeamTaskDto) => void;
   onReject?: (task: TeamTaskDto) => void;
