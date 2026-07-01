@@ -115,17 +115,17 @@ export default function TeamPageHeader({
   ) : tab !== "ai" && !isMemberHub && tab !== "reminders" && tab !== "calendar" ? (
     <p className="mt-0.5 text-[11px] text-white/35 xl:hidden">{userLabel}</p>
   ) : isMemberHub || tab === "reminders" ? (
-    <p className="mt-0.5 text-[11px] text-white/35">Personal workspace — tag outlets or keep Direct</p>
+    <p className="mt-0.5 hidden text-[11px] text-white/35 xl:block">Personal workspace — tag outlets or keep Direct</p>
   ) : tab === "calendar" ? (
-    <p className="mt-0.5 text-[11px] text-white/35">Tasks, shoots, plans — share selected dates with the team</p>
+    <p className="mt-0.5 hidden text-[11px] text-white/35 xl:block">Tasks, shoots, plans — share selected dates with the team</p>
   ) : null;
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#06060a]/95 backdrop-blur-md xl:static">
       <div className={TEAM_PAGE}>
-        <div className="flex items-center justify-between gap-2 pt-2.5 pb-1 xl:items-start xl:pt-5 xl:pb-2">
+        <div className="flex items-center justify-between gap-2 pt-2 pb-1 xl:items-start xl:pt-5 xl:pb-2">
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-semibold tracking-tight xl:text-2xl">
+            <h1 className={`truncate font-semibold tracking-tight ${tab === "reminders" || tab === "calendar" ? "text-[28px] font-bold xl:text-2xl xl:font-semibold" : "text-base xl:text-2xl"}`}>
               <span className="xl:hidden">{mobileTitle}</span>
               <span className="hidden xl:inline">{desktopTitle}</span>
             </h1>

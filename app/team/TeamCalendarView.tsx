@@ -15,7 +15,7 @@ import {
   type TeamCalendarShareDto,
 } from "@/lib/team-calendar";
 import { TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL } from "./TeamNav";
-import { IconChevronDown, teamFilterChip } from "./TeamIcons";
+import { IconChevronDown, teamFilterChip, TEAM_DOCK_PADDING } from "./TeamIcons";
 
 type Member = { id: string; name: string };
 
@@ -74,6 +74,82 @@ function outletLabel(id: string | null): string | null {
   return TEAM_AD_OUTLETS.find((o) => o.id === id)?.label ?? id;
 }
 
+function DayAgendaSheet({
+  open,
+  dateKey,
+  entries,
+  ready,
+  isAdmin,
+  onClose,
+  onAdd,
+  onEdit,
+}: {
+  open: boolean;
+  dateKey: string;
+  entries: TeamCalendarEntryDto[];
+  ready: boolean;
+  isAdmin: boolean;
+  onClose: () => void;
+  onAdd: () => void;
+  onEdit: (entry: TeamCalendarEntryDto) => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className={TEAM_SHEET_OVERLAY} onClick={onClose}>
+      <div
+        className={`${TEAM_SHEET_PANEL} max-h-[75dvh] xl:hidden`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[13px] font-medium text-white/40">{formatDayLabel(dateKey)}</p>
+            <h2 className="mt-0.5 text-[20px] font-bold text-white">
+              {parseInt(dateKey.slice(8), 10)}{" "}
+              {new Date(
+                parseInt(dateKey.slice(0, 4), 10),
+                parseInt(dateKey.slice(5, 7), 10) - 1,
+                1
+              ).toLocaleDateString("en-IN", { month: "long" })}
+            </h2>
+          </div>
+          {isAdmin ? (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onAdd();
+              }}
+              className="shrink-0 rounded-full bg-cyan-500/20 px-3.5 py-2 text-[13px] font-semibold text-cyan-100"
+            >
+              + Event
+            </button>
+          ) : null}
+        </div>
+
+        {!ready ? (
+          <div className="mt-5 space-y-2">
+            {[1, 2].map((i) => (
+              <div key={i} className="h-14 animate-pulse rounded-xl bg-white/[0.04]" />
+            ))}
+          </div>
+        ) : entries.length === 0 ? (
+          <p className="mt-10 py-6 text-center text-[15px] text-white/35">Nothing scheduled</p>
+        ) : (
+          <ul className="mt-4 max-h-[50dvh] space-y-2 overflow-y-auto overscroll-contain">
+            {entries.map((entry) => (
+              <EntryRow
+                key={entry.id}
+                entry={entry}
+                onEdit={isAdmin && entry.source === "event" ? () => onEdit(entry) : undefined}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function EntryRow({
   entry,
   onEdit,
@@ -104,7 +180,7 @@ function EntryRow({
     </div>
   );
   return (
-    <li className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
+    <li className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-3 xl:px-3 xl:py-2.5">
       {onEdit ? (
         <button type="button" onClick={onEdit} className="w-full text-left">
           {content}
@@ -361,6 +437,7 @@ export default function TeamCalendarView({
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [eventSaving, setEventSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mobileDaySheet, setMobileDaySheet] = useState(false);
 
   const bounds = useMemo(() => monthBounds(viewYear, viewMonth), [viewYear, viewMonth]);
   const cells = useMemo(() => calendarMonthCells(viewYear, viewMonth), [viewYear, viewMonth]);
@@ -538,8 +615,15 @@ export default function TeamCalendarView({
   const selectedEntries = selectedDate ? byDate[selectedDate] ?? [] : [];
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
+  const selectDay = (dateKey: string) => {
+    setSelectedDate(dateKey);
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1279px)").matches && !shareMode) {
+      setMobileDaySheet(true);
+    }
+  };
+
   return (
-    <div className="pb-4">
+    <div className="flex min-h-0 flex-1 flex-col pb-2 xl:pb-4">
       {error ? (
         <p className="mb-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
           {error}
@@ -556,23 +640,39 @@ export default function TeamCalendarView({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 rounded-xl bg-white/[0.04] p-1 ring-1 ring-white/[0.06]">
+      <div className="flex items-center justify-between gap-2 xl:flex-wrap">
+        <div className="flex min-w-0 flex-1 items-center justify-center gap-1 xl:flex-none xl:rounded-xl xl:bg-white/[0.04] xl:p-1 xl:ring-1 xl:ring-white/[0.06]">
           <button
             type="button"
             onClick={() => goMonth(-1)}
-            className="rounded-lg px-2.5 py-1.5 text-sm text-white/60 hover:bg-white/[0.06]"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-lg text-white/60 active:bg-white/[0.06] xl:h-auto xl:w-auto xl:rounded-lg xl:px-2.5 xl:py-1.5 xl:text-sm"
             aria-label="Previous month"
           >
             ‹
           </button>
-          <span className="min-w-[9rem] text-center text-sm font-semibold text-white/90">
-            {formatMonthLabel(viewYear, viewMonth)}
-          </span>
+          <button
+            type="button"
+            onClick={() => {
+              const n = new Date();
+              setViewYear(n.getFullYear());
+              setViewMonth(n.getMonth() + 1);
+              selectDay(
+                `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`
+              );
+            }}
+            className="min-w-0 flex-1 truncate text-center xl:min-w-[9rem] xl:flex-none"
+          >
+            <span className="block text-[11px] font-medium uppercase tracking-wide text-white/35 xl:hidden">
+              {new Date(viewYear, viewMonth - 1, 1).toLocaleDateString("en-IN", { year: "numeric" })}
+            </span>
+            <span className="block text-[20px] font-bold text-white xl:text-sm xl:font-semibold xl:text-white/90">
+              {formatMonthLabel(viewYear, viewMonth)}
+            </span>
+          </button>
           <button
             type="button"
             onClick={() => goMonth(1)}
-            className="rounded-lg px-2.5 py-1.5 text-sm text-white/60 hover:bg-white/[0.06]"
+            className="flex h-10 w-10 items-center justify-center rounded-full text-lg text-white/60 active:bg-white/[0.06] xl:h-auto xl:w-auto xl:rounded-lg xl:px-2.5 xl:py-1.5 xl:text-sm"
             aria-label="Next month"
           >
             ›
@@ -585,23 +685,24 @@ export default function TeamCalendarView({
             setViewYear(n.getFullYear());
             setViewMonth(n.getMonth() + 1);
             const key = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
-            setSelectedDate(key);
+            selectDay(key);
           }}
-          className="rounded-full bg-white/[0.06] px-3 py-1.5 text-[11px] font-medium text-white/55 ring-1 ring-white/[0.08]"
+          className="hidden rounded-full bg-white/[0.06] px-3 py-1.5 text-[11px] font-medium text-white/55 ring-1 ring-white/[0.08] xl:inline-flex"
         >
           Today
         </button>
         {isAdmin ? (
-          <>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
             <button
               type="button"
               onClick={() => {
                 setShareMode((v) => !v);
                 setSharePick([]);
+                setMobileDaySheet(false);
               }}
               className={teamFilterChip(shareMode, "violet")}
             >
-              {shareMode ? `Pick dates (${sharePick.length})` : "Share dates"}
+              {shareMode ? `Pick (${sharePick.length})` : "Share"}
             </button>
             {shareMode && sharePick.length > 0 ? (
               <button
@@ -609,19 +710,19 @@ export default function TeamCalendarView({
                 onClick={() => setShareOpen(true)}
                 className="rounded-full bg-violet-500/20 px-3 py-1.5 text-[11px] font-semibold text-violet-100 ring-1 ring-violet-400/25"
               >
-                Send {sharePick.length} date{sharePick.length === 1 ? "" : "s"}
+                Send
               </button>
             ) : null}
             <button
               type="button"
               onClick={() => openAddEvent()}
-              className="ml-auto hidden rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-3 py-1.5 text-[11px] font-semibold text-white xl:inline-flex"
+              className="hidden rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-3 py-1.5 text-[11px] font-semibold text-white xl:inline-flex"
             >
               + Event
             </button>
-          </>
+          </div>
         ) : null}
-        {loading ? <span className="text-[10px] text-white/30">Updating…</span> : null}
+        {loading ? <span className="hidden text-[10px] text-white/30 xl:inline">Updating…</span> : null}
       </div>
 
       <div className="-mx-1 mt-2 flex gap-1 overflow-x-auto px-1 pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -654,29 +755,30 @@ export default function TeamCalendarView({
         </label>
       </div>
 
-      <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] xl:gap-6">
-        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-2 sm:p-3">
-          <div className="mb-1 grid grid-cols-7 gap-0.5 sm:gap-1">
+      <div className="mt-1 min-h-0 flex-1 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] xl:gap-6">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-1.5 sm:p-3 xl:p-3">
+          <div className="mb-0.5 grid grid-cols-7">
             {weekdays.map((w) => (
               <div
                 key={w}
-                className="py-1 text-center text-[9px] font-semibold uppercase tracking-wide text-white/30 sm:text-[10px]"
+                className="py-1.5 text-center text-[11px] font-semibold uppercase text-white/28 sm:text-[10px]"
               >
-                {w}
+                {w.slice(0, 3)}
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
+          <div className="grid grid-cols-7 gap-y-0.5">
             {cells.map((dateKey, i) => {
               if (!dateKey) {
-                return <div key={`pad-${i}`} className="aspect-square min-h-[2.5rem] sm:min-h-[3rem]" />;
+                return <div key={`pad-${i}`} className="aspect-square min-h-[2.75rem] sm:min-h-[3rem]" />;
               }
               const dayEntries = byDate[dateKey] ?? [];
               const isToday = dateKey === todayKey;
               const isSelected = dateKey === selectedDate;
               const isSharePicked = sharePick.includes(dateKey);
               const isShared = sharedDateKeys.includes(dateKey);
-              const kinds = [...new Set(dayEntries.map((e) => e.kind))].slice(0, 4);
+              const hasEvents = dayEntries.length > 0;
+              const dayNum = parseInt(dateKey.slice(8), 10);
 
               return (
                 <button
@@ -687,32 +789,39 @@ export default function TeamCalendarView({
                       toggleShareDate(dateKey);
                       return;
                     }
-                    setSelectedDate(dateKey);
+                    selectDay(dateKey);
                   }}
-                  className={`relative flex aspect-square min-h-[2.5rem] flex-col items-center rounded-lg border p-0.5 transition sm:min-h-[3.25rem] sm:rounded-xl sm:p-1 ${
-                    isSharePicked
-                      ? "border-violet-400/50 bg-violet-500/15 ring-1 ring-violet-400/30"
-                      : isSelected
-                        ? "border-cyan-400/40 bg-cyan-500/10 ring-1 ring-cyan-400/25"
-                        : isToday
-                          ? "border-white/15 bg-white/[0.04]"
-                          : "border-transparent hover:border-white/10 hover:bg-white/[0.03]"
+                  className={`relative flex aspect-square min-h-[2.75rem] flex-col items-center justify-start pt-1 transition sm:min-h-[3.25rem] ${
+                    isSharePicked ? "opacity-100" : ""
                   }`}
                 >
                   <span
-                    className={`text-[11px] font-semibold sm:text-xs ${
-                      isToday ? "text-cyan-300" : "text-white/75"
+                    className={`flex h-8 w-8 items-center justify-center rounded-full text-[15px] font-medium sm:text-sm ${
+                      isSharePicked
+                        ? "bg-violet-500 text-white"
+                        : isToday
+                          ? "bg-cyan-500 text-white"
+                          : isSelected
+                            ? "bg-white/15 text-white"
+                            : "text-white/80"
                     }`}
                   >
-                    {parseInt(dateKey.slice(8), 10)}
+                    {dayNum}
                   </span>
-                  <div className="mt-auto flex w-full flex-wrap justify-center gap-0.5 px-0.5 pb-0.5">
-                    {kinds.map((k) => (
-                      <span key={k} className={`h-1 w-1 rounded-full sm:h-1.5 sm:w-1.5 ${CALENDAR_KIND_COLORS[k]}`} />
-                    ))}
+                  <div className="mt-0.5 flex h-1.5 items-center justify-center gap-0.5">
+                    {hasEvents ? (
+                      <>
+                        {dayEntries.slice(0, 3).map((e) => (
+                          <span
+                            key={e.id}
+                            className={`h-1 w-1 rounded-full ${CALENDAR_KIND_COLORS[e.kind]}`}
+                          />
+                        ))}
+                      </>
+                    ) : null}
                   </div>
                   {isShared && !isAdmin ? (
-                    <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-violet-400" />
+                    <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-violet-400" />
                   ) : null}
                 </button>
               );
@@ -720,7 +829,7 @@ export default function TeamCalendarView({
           </div>
         </div>
 
-        <div className="mt-4 xl:mt-0">
+        <div className="mt-4 hidden xl:mt-0 xl:block">
           <div className="sticky top-0 rounded-2xl border border-white/[0.06] bg-[#0a0a10]/90 p-3 backdrop-blur-md xl:static">
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -733,7 +842,7 @@ export default function TeamCalendarView({
                 <button
                   type="button"
                   onClick={() => openAddEvent(selectedDate)}
-                  className="shrink-0 rounded-lg bg-white/[0.08] px-2.5 py-1.5 text-[11px] font-medium text-white/80 ring-1 ring-white/10 xl:hidden"
+                  className="shrink-0 rounded-lg bg-white/[0.08] px-2.5 py-1.5 text-[11px] font-medium text-white/80 ring-1 ring-white/10"
                 >
                   + Add
                 </button>
@@ -767,6 +876,23 @@ export default function TeamCalendarView({
         </div>
       </div>
 
+      <DayAgendaSheet
+        open={mobileDaySheet && !shareMode}
+        dateKey={selectedDate}
+        entries={selectedEntries}
+        ready={ready}
+        isAdmin={isAdmin}
+        onClose={() => setMobileDaySheet(false)}
+        onAdd={() => {
+          setMobileDaySheet(false);
+          openAddEvent(selectedDate);
+        }}
+        onEdit={(entry) => {
+          setMobileDaySheet(false);
+          openEditEvent(entry);
+        }}
+      />
+
       <ShareSheet
         open={shareOpen}
         dates={sharePick}
@@ -796,6 +922,29 @@ export default function TeamCalendarView({
           onSubmit={(e) => void saveEvent(e)}
           onDelete={editingEventId ? () => void deleteEvent() : undefined}
         />
+      ) : null}
+
+      {selectedDate && !mobileDaySheet && !shareMode ? (
+        <button
+          type="button"
+          onClick={() => setMobileDaySheet(true)}
+          className="fixed left-3 right-3 z-20 flex items-center justify-between rounded-2xl border border-white/[0.08] bg-[#12121a]/95 px-4 py-3 text-left shadow-lg backdrop-blur-md xl:hidden"
+          style={{ bottom: `calc(${TEAM_DOCK_PADDING} + 0.5rem)` }}
+        >
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-semibold text-white">
+              {formatDayLabel(selectedDate)}
+            </p>
+            <p className="text-[12px] text-white/40">
+              {ready
+                ? selectedEntries.length === 0
+                  ? "Nothing scheduled"
+                  : `${selectedEntries.length} item${selectedEntries.length === 1 ? "" : "s"}`
+                : "Loading…"}
+            </p>
+          </div>
+          <span className="shrink-0 text-[13px] font-medium text-cyan-400">View</span>
+        </button>
       ) : null}
     </div>
   );

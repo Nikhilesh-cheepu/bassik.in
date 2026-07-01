@@ -895,7 +895,7 @@ export default function TeamClient() {
         <button
           type="button"
           onClick={focusNoteComposer}
-          className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white xl:hidden"
+          className="hidden rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white"
         >
           + Note
         </button>
@@ -945,10 +945,10 @@ export default function TeamClient() {
       />
 
       <main
-        className={`${TEAM_PAGE} min-h-0 flex-1 py-3 md:py-4 max-xl:pb-[var(--team-dock-pad)] ${
-          tab === "ai"
-            ? "flex flex-col overflow-hidden"
-            : "overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]"
+        className={`${TEAM_PAGE} min-h-0 flex-1 max-xl:pb-[var(--team-dock-pad)] ${
+          tab === "ai" || tab === "reminders" || tab === "calendar"
+            ? "flex flex-col overflow-hidden py-0 md:py-4"
+            : "overflow-y-auto overscroll-contain py-3 [-webkit-overflow-scrolling:touch] md:py-4"
         }`}
         style={{ ["--team-dock-pad" as string]: TEAM_DOCK_PADDING }}
       >

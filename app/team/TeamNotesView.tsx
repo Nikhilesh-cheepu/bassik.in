@@ -212,6 +212,86 @@ function AttachmentList({
   );
 }
 
+function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { id: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex rounded-[10px] bg-white/[0.07] p-0.5" role="tablist">
+      {options.map((o) => {
+        const on = value === o.id;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            onClick={() => onChange(o.id)}
+            className={`min-h-[32px] flex-1 rounded-[8px] px-2 text-[13px] font-medium transition ${
+              on ? "bg-white/[0.14] text-white shadow-sm" : "text-white/45 active:text-white/65"
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function OutletFilterSheet({
+  open,
+  value,
+  onChange,
+  onClose,
+}: {
+  open: boolean;
+  value: string;
+  onChange: (v: string) => void;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+  const options = [
+    { id: "", label: "All outlets" },
+    { id: "__direct__", label: "Direct" },
+    ...TEAM_AD_OUTLETS.map((o) => ({ id: o.id, label: o.label })),
+  ];
+  return (
+    <div className={TEAM_SHEET_OVERLAY} onClick={onClose}>
+      <div className={`${TEAM_SHEET_PANEL} max-w-md`} onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-[17px] font-semibold text-white">Filter by outlet</h2>
+        <ul className="mt-3 space-y-0.5">
+          {options.map((o) => {
+            const on = value === o.id;
+            return (
+              <li key={o.id || "all"}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(o.id);
+                    onClose();
+                  }}
+                  className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-[15px] ${
+                    on ? "bg-amber-500/12 text-amber-100" : "text-white/75 active:bg-white/[0.04]"
+                  }`}
+                >
+                  {o.label}
+                  {on ? <span className="text-amber-400">✓</span> : null}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function NoteListItem({
   note,
   selected,
@@ -223,29 +303,39 @@ function NoteListItem({
 }) {
   const title = noteDisplayTitle(note);
   const preview = notePreviewText(note);
+  const shared = !note.isOwner && note.sharedByLabel;
+  const hasMeta = note.outletId || note.category || shared || (note.isOwner && note.sharedWith.length > 0);
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`w-full border-b border-white/[0.04] px-3.5 py-2.5 text-left transition last:border-0 ${
-        selected ? "bg-white/[0.06]" : "hover:bg-white/[0.025]"
+      className={`w-full border-b border-white/[0.06] px-4 py-3.5 text-left transition active:bg-white/[0.04] xl:px-3.5 xl:py-2.5 ${
+        selected ? "bg-white/[0.05] xl:bg-white/[0.06]" : ""
       }`}
     >
-      <div className="flex items-baseline justify-between gap-2">
-        <p className={`min-w-0 flex-1 truncate text-[13px] font-medium ${selected ? "text-white" : "text-white/88"}`}>
-          {title}
-        </p>
-        <span className="shrink-0 text-[10px] tabular-nums text-white/28">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className={`truncate text-[15px] font-semibold leading-tight xl:text-[13px] xl:font-medium ${selected ? "text-white" : "text-white/92"}`}>
+            {title}
+          </p>
+          {preview ? (
+            <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-white/38 xl:mt-0.5 xl:line-clamp-1 xl:text-[11px] xl:text-white/32">
+              {preview}
+            </p>
+          ) : null}
+          {hasMeta ? (
+            <div className="mt-1.5 hidden flex-wrap items-center gap-1 xl:flex">
+              <OutletTag outletId={note.outletId} compact />
+              {note.category ? (
+                <span className="rounded-md bg-white/[0.04] px-1.5 py-0.5 text-[9px] text-white/35">{note.category}</span>
+              ) : null}
+              <SharedBadge note={note} />
+            </div>
+          ) : null}
+        </div>
+        <span className="shrink-0 pt-0.5 text-[12px] tabular-nums text-white/32 xl:text-[10px] xl:text-white/28">
           {formatNoteListDate(note.updatedAt || note.createdAt)}
         </span>
-      </div>
-      <p className="mt-0.5 line-clamp-1 text-[11px] text-white/32">{preview}</p>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1">
-        <OutletTag outletId={note.outletId} compact />
-        {note.category ? (
-          <span className="rounded-md bg-white/[0.04] px-1.5 py-0.5 text-[9px] text-white/35">{note.category}</span>
-        ) : null}
-        <SharedBadge note={note} />
       </div>
     </button>
   );
@@ -487,21 +577,31 @@ function NoteEditor({
   const showSuggestedTitle =
     !readOnly && ai.suggestedTitle && ai.suggestedTitle.trim() !== form.title.trim() && !ai.loading;
 
+  const [moreOpen, setMoreOpen] = useState(false);
+
   return (
     <>
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.05] px-3 py-2 xl:px-6">
-          <div className="flex min-w-0 items-center gap-2">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.06] px-3 py-2.5 pt-[max(0.5rem,env(safe-area-inset-top))] xl:border-white/[0.05] xl:px-6 xl:py-2 xl:pt-2">
+          <div className="flex min-w-0 items-center gap-1 xl:gap-2">
             {showBack && onBack ? (
-              <button type="button" onClick={onBack} className="flex h-7 w-7 items-center justify-center rounded-lg text-white/45 xl:hidden" aria-label="Back">
-                <IconChevronLeft />
+              <button
+                type="button"
+                onClick={onBack}
+                className="-ml-1 flex min-h-[44px] items-center gap-0.5 rounded-lg pr-2 text-amber-400 active:opacity-70 xl:hidden"
+                aria-label="Back to notes"
+              >
+                <IconChevronLeft className="h-5 w-5" />
+                <span className="text-[17px]">Notes</span>
               </button>
             ) : null}
-            <OutletSelect value={form.outletId} onChange={(outletId) => onFormChange({ ...form, outletId })} disabled={readOnly} />
-            {form.category ? (
-              <span className="hidden truncate text-[10px] text-white/30 sm:inline">{form.category}</span>
-            ) : null}
-            {readOnly ? <span className="text-[10px] text-sky-300/60">View only</span> : null}
+            <div className="hidden items-center gap-2 xl:flex">
+              <OutletSelect value={form.outletId} onChange={(outletId) => onFormChange({ ...form, outletId })} disabled={readOnly} />
+              {form.category ? (
+                <span className="hidden truncate text-[10px] text-white/30 sm:inline">{form.category}</span>
+              ) : null}
+              {readOnly ? <span className="text-[10px] text-sky-300/60">View only</span> : null}
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {!readOnly ? (
@@ -509,7 +609,7 @@ function NoteEditor({
                 <button
                   type="button"
                   onClick={() => setShareOpen(true)}
-                  className="flex h-7 items-center gap-1 rounded-lg px-2 text-[10px] text-white/40 hover:bg-white/[0.05]"
+                  className="hidden h-7 items-center gap-1 rounded-lg px-2 text-[10px] text-white/40 hover:bg-white/[0.05] sm:flex"
                   title="Share"
                 >
                   <IconShare />
@@ -519,18 +619,36 @@ function NoteEditor({
                   type="button"
                   onClick={() => void runAi("organize", true)}
                   disabled={ai.loading || form.body.trim().length < 12}
-                  className="flex h-7 items-center gap-1 rounded-lg px-2 text-[10px] text-white/40 hover:bg-white/[0.05] disabled:opacity-30"
+                  className="hidden h-7 items-center gap-1 rounded-lg px-2 text-[10px] text-white/40 hover:bg-white/[0.05] disabled:opacity-30 md:flex"
                   title="Organize with AI"
                 >
                   <IconSparkle className={ai.loading ? "animate-pulse" : ""} />
                   <span className="hidden sm:inline">Organize</span>
                 </button>
                 {editingId && onDelete ? (
-                  <button type="button" onClick={onDelete} className="flex h-7 w-7 items-center justify-center rounded-lg text-white/30 hover:bg-red-500/10 hover:text-red-300/75" aria-label="Delete">
+                  <button
+                    type="button"
+                    onClick={onDelete}
+                    className="hidden h-7 w-7 items-center justify-center rounded-lg text-white/30 hover:bg-red-500/10 hover:text-red-300/75 xl:flex"
+                    aria-label="Delete"
+                  >
                     <IconTrash />
                   </button>
                 ) : null}
-                <button type="button" onClick={onSave} disabled={!canSave} className="rounded-lg bg-white/[0.09] px-3 py-1.5 text-[11px] font-medium text-white/90 ring-1 ring-white/10 disabled:opacity-35">
+                <button
+                  type="button"
+                  onClick={() => setMoreOpen(true)}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-white/50 active:bg-white/[0.06] xl:hidden"
+                  aria-label="More options"
+                >
+                  <span className="text-lg leading-none">···</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onSave}
+                  disabled={!canSave}
+                  className="min-h-[44px] rounded-lg px-3 text-[17px] font-semibold text-amber-400 disabled:opacity-35 xl:min-h-0 xl:bg-white/[0.09] xl:py-1.5 xl:text-[11px] xl:font-medium xl:text-white/90 xl:ring-1 xl:ring-white/10"
+                >
                   {saving ? "Saving…" : "Done"}
                 </button>
               </>
@@ -538,8 +656,12 @@ function NoteEditor({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="px-3 py-4 xl:px-8 xl:py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
+          <div className="px-4 py-3 xl:px-8 xl:py-5">
+            <div className="mb-3 flex flex-wrap items-center gap-2 xl:hidden">
+              <OutletSelect value={form.outletId} onChange={(outletId) => onFormChange({ ...form, outletId })} disabled={readOnly} />
+              {readOnly ? <span className="text-[11px] text-sky-300/60">View only</span> : null}
+            </div>
             <div className="flex items-start gap-2">
               <input
                 ref={titleRef}
@@ -547,7 +669,7 @@ function NoteEditor({
                 readOnly={readOnly}
                 onChange={(e) => onFormChange({ ...form, title: e.target.value })}
                 placeholder="Title"
-                className="min-w-0 flex-1 bg-transparent text-xl font-semibold tracking-tight text-white placeholder:text-white/18 outline-none disabled:opacity-90 xl:text-[1.65rem]"
+                className="min-w-0 flex-1 bg-transparent text-[22px] font-bold tracking-tight text-white placeholder:text-white/22 outline-none disabled:opacity-90 xl:text-[1.65rem] xl:font-semibold"
               />
               {showSuggestedTitle ? (
                 <button type="button" onClick={() => onFormChange({ ...form, title: ai.suggestedTitle })} className="mt-1 shrink-0 rounded-md bg-violet-500/10 px-2 py-1 text-[10px] text-violet-200/85 ring-1 ring-violet-400/20">
@@ -573,7 +695,7 @@ function NoteEditor({
               readOnly={readOnly}
               onChange={(e) => onFormChange({ ...form, body: e.target.value })}
               placeholder="Start writing, or paste a link…"
-              className="mt-3 min-h-[180px] w-full resize-none bg-transparent text-[15px] leading-[1.65] text-white/78 placeholder:text-white/18 outline-none xl:min-h-[240px]"
+              className="mt-3 min-h-[50dvh] w-full resize-none bg-transparent text-[17px] leading-[1.55] text-white/82 placeholder:text-white/22 outline-none xl:min-h-[240px] xl:text-[15px] xl:leading-[1.65] xl:text-white/78"
             />
 
             {!readOnly ? (
@@ -655,6 +777,58 @@ function NoteEditor({
         onChange={(sharedWith) => onFormChange({ ...form, sharedWith })}
         onClose={() => setShareOpen(false)}
       />
+
+      {moreOpen ? (
+        <div className={TEAM_SHEET_OVERLAY} onClick={() => setMoreOpen(false)}>
+          <div className={`${TEAM_SHEET_PANEL} max-w-md`} onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-[17px] font-semibold text-white">Note options</h2>
+            <ul className="mt-3 space-y-0.5">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoreOpen(false);
+                    setShareOpen(true);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left text-[15px] text-white/80 active:bg-white/[0.04]"
+                >
+                  <IconShare />
+                  Share note
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  disabled={ai.loading || form.body.trim().length < 12}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    void runAi("organize", true);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left text-[15px] text-white/80 active:bg-white/[0.04] disabled:opacity-35"
+                >
+                  <IconSparkle />
+                  Organize with AI
+                </button>
+              </li>
+              {editingId && onDelete ? (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onDelete();
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-left text-[15px] text-red-300 active:bg-red-500/10"
+                  >
+                    <IconTrash />
+                    Delete note
+                  </button>
+                </li>
+              ) : null}
+            </ul>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -716,6 +890,7 @@ export default function TeamNotesView({
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const [mobileEditor, setMobileEditor] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [outletSheetOpen, setOutletSheetOpen] = useState(false);
 
   const activeNote = editingId ? notes.find((n) => n.id === editingId) : null;
   const readOnly = Boolean(activeNote && !activeNote.isOwner);
@@ -769,13 +944,19 @@ export default function TeamNotesView({
     onCancelEdit();
   };
 
+  const outletFilterLabel = outletFilter
+    ? outletFilter === "__direct__"
+      ? "Direct"
+      : TEAM_AD_OUTLETS.find((o) => o.id === outletFilter)?.label ?? "Outlet"
+    : null;
+
   const listPane = (
-    <div className="flex h-full min-h-0 flex-col bg-[#09090e]">
-      <div className="shrink-0 space-y-2 border-b border-white/[0.05] px-3 py-2.5">
+    <div className="flex h-full min-h-0 flex-col bg-[#06060a] xl:bg-[#09090e]">
+      <div className="shrink-0 space-y-2.5 border-b border-white/[0.06] px-4 py-3 xl:border-white/[0.05] xl:px-3 xl:py-2.5">
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
-            <span className="pointer-events-none absolute inset-y-0 left-2.5 flex w-3.5 items-center justify-center text-white/28">
-              <IconSearch className="h-3.5 w-3.5 shrink-0" />
+            <span className="pointer-events-none absolute inset-y-0 left-3 flex w-4 items-center justify-center text-white/30">
+              <IconSearch />
             </span>
             <input
               type="text"
@@ -783,19 +964,41 @@ export default function TeamNotesView({
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Search"
-              className="h-8 w-full rounded-lg bg-white/[0.035] py-0 pl-8 pr-3 text-[12px] text-white/75 outline-none ring-1 ring-white/[0.06] placeholder:text-white/22 focus:ring-white/12"
+              className="h-9 w-full rounded-[10px] bg-white/[0.08] py-0 pl-9 pr-3 text-[15px] text-white/85 outline-none placeholder:text-white/30 xl:h-8 xl:rounded-lg xl:bg-white/[0.035] xl:text-[12px] xl:ring-1 xl:ring-white/[0.06] xl:placeholder:text-white/22"
             />
           </div>
-          <button type="button" onClick={handleNew} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.07] text-white/65 ring-1 ring-white/[0.08]" aria-label="New note">
+          <button
+            type="button"
+            onClick={() => setOutletSheetOpen(true)}
+            className={`flex h-9 shrink-0 items-center gap-1 rounded-[10px] px-2.5 text-[13px] font-medium xl:hidden ${
+              outletFilter
+                ? "bg-amber-500/15 text-amber-200"
+                : "bg-white/[0.08] text-white/55"
+            }`}
+            aria-label="Filter by outlet"
+          >
+            <IconTag className="h-3.5 w-3.5" />
+            {outletFilterLabel ? <span className="max-w-[4rem] truncate">{outletFilterLabel}</span> : null}
+          </button>
+          <button
+            type="button"
+            onClick={handleNew}
+            className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.07] text-white/65 ring-1 ring-white/[0.08] xl:flex"
+            aria-label="New note"
+          >
             <IconPlusSmall />
           </button>
         </div>
-        <div className="flex gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <FilterChip active={scope === "all"} onClick={() => onScopeChange("all")}>All</FilterChip>
-          <FilterChip active={scope === "mine"} onClick={() => onScopeChange("mine")}>Mine</FilterChip>
-          <FilterChip active={scope === "shared"} onClick={() => onScopeChange("shared")} tone="sky">Shared</FilterChip>
-        </div>
-        <div className="flex gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <SegmentedControl
+          options={[
+            { id: "all" as const, label: "All" },
+            { id: "mine" as const, label: "Mine" },
+            { id: "shared" as const, label: "Shared" },
+          ]}
+          value={scope}
+          onChange={onScopeChange}
+        />
+        <div className="hidden gap-1 overflow-x-auto pb-0.5 xl:flex [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <FilterChip active={!outletFilter} onClick={() => onOutletFilterChange("")}>All outlets</FilterChip>
           <FilterChip active={outletFilter === "__direct__"} onClick={() => onOutletFilterChange("__direct__")}>Direct</FilterChip>
           {TEAM_AD_OUTLETS.map((o) => (
@@ -806,15 +1009,24 @@ export default function TeamNotesView({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
         {!ready ? (
           <div className="space-y-px p-2">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 animate-pulse rounded-lg bg-white/[0.03]" />
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="mx-2 h-[72px] animate-pulse rounded-lg bg-white/[0.03]" />
             ))}
           </div>
         ) : notes.length === 0 ? (
-          <div className="px-6 py-14 text-center text-sm text-white/32">No notes here</div>
+          <div className="flex flex-col items-center justify-center px-8 py-20 text-center">
+            <p className="text-[15px] text-white/40">No notes here</p>
+            <button
+              type="button"
+              onClick={handleNew}
+              className="mt-4 rounded-full bg-amber-500/20 px-5 py-2.5 text-[15px] font-medium text-amber-200 active:bg-amber-500/30 xl:hidden"
+            >
+              New Note
+            </button>
+          </div>
         ) : (
           notes.map((note) => (
             <NoteListItem key={note.id} note={note} selected={editingId === note.id} onClick={() => handleSelect(note)} />
@@ -822,9 +1034,16 @@ export default function TeamNotesView({
         )}
       </div>
 
-      <p className="shrink-0 border-t border-white/[0.04] px-3 py-1.5 text-center text-[10px] text-white/18">
+      <p className="hidden shrink-0 border-t border-white/[0.04] px-3 py-1.5 text-center text-[10px] text-white/18 xl:block">
         {notes.length} note{notes.length === 1 ? "" : "s"}
       </p>
+
+      <OutletFilterSheet
+        open={outletSheetOpen}
+        value={outletFilter}
+        onChange={onOutletFilterChange}
+        onClose={() => setOutletSheetOpen(false)}
+      />
     </div>
   );
 
@@ -857,16 +1076,26 @@ export default function TeamNotesView({
     </div>
   );
 
+  const mobileFullscreenEditor = showEditor && mobileEditor && !isDesktop;
+
   return (
-    <div className="overflow-hidden rounded-xl border border-white/[0.05] bg-[#07070b] xl:min-h-[calc(100dvh-10.5rem)]">
-      <div className="grid min-h-[min(70dvh,600px)] xl:min-h-[calc(100dvh-10.5rem)] xl:grid-cols-[minmax(248px,280px)_1fr]">
-        <div className={`min-h-0 xl:border-r xl:border-white/[0.05] ${showEditor ? "hidden xl:flex xl:flex-col" : "flex flex-col"}`}>
-          {listPane}
-        </div>
-        <div className={`min-h-0 bg-[#0b0b10] ${showEditor ? "flex flex-col" : "hidden xl:flex xl:flex-col"}`}>
-          {editorPane}
+    <>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:rounded-xl xl:border xl:border-white/[0.05] xl:bg-[#07070b] xl:min-h-[calc(100dvh-10.5rem)]">
+        <div className="grid min-h-0 flex-1 xl:min-h-[calc(100dvh-10.5rem)] xl:grid-cols-[minmax(248px,280px)_1fr]">
+          <div className={`min-h-0 xl:border-r xl:border-white/[0.05] ${showEditor ? "hidden xl:flex xl:flex-col" : "flex flex-col"}`}>
+            {listPane}
+          </div>
+          <div className={`hidden min-h-0 bg-[#0b0b10] xl:flex xl:flex-col ${showEditor ? "xl:flex" : ""}`}>
+            {editorPane}
+          </div>
         </div>
       </div>
-    </div>
+
+      {mobileFullscreenEditor ? (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0b10] xl:hidden">
+          {editorPane}
+        </div>
+      ) : null}
+    </>
   );
 }
