@@ -28,9 +28,12 @@ export function clubRogueChatVenueName(brandId: string): string | null {
   return CLUB_ROGUE_CHAT_VENUE_NAMES[brandId as (typeof CLUB_ROGUE_BRAND_IDS)[number]] ?? null;
 }
 
-/** Shown during booking forms — venue policy wording. */
-export const CLUB_ROGUE_COVER_CHARGE_SUMMARY =
-  "A mandatory ₹2,000 cover charge applies at the venue. It is fully redeemable against food and beverage.";
+/** Checkbox in payment confirmation popup. */
+export const CLUB_ROGUE_COVER_CHARGE_ACK =
+  "I understand ₹2,000 cover per person is paid at entry (not online) and is redeemable on food & drinks.";
+
+/** @deprecated Use CLUB_ROGUE_COVER_CHARGE_ACK */
+export const CLUB_ROGUE_COVER_CHARGE_SUMMARY = CLUB_ROGUE_COVER_CHARGE_ACK;
 
 /** Short line for chat — pay at venue, not online. */
 export const CLUB_ROGUE_COVER_CHAT_LINE =
@@ -43,6 +46,8 @@ export {
   CLUB_ROGUE_GST_HANDLING_INR,
   CLUB_ROGUE_RESERVATION_FEE_INR,
   CLUB_ROGUE_RESERVATION_FEE_PAISE,
+  getClubRogueCustomerFeeBreakdown,
+  type ClubRogueCustomerFeeBreakdown,
 } from "@/lib/club-rogue-fees";
 
 /** Rotating input hints in guest chat — Club Rogue outlets. */

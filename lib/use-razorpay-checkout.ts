@@ -55,6 +55,13 @@ export function useRazorpayCheckout() {
         if (!window.Razorpay) throw new Error("Razorpay unavailable");
 
         await new Promise<void>((resolve, reject) => {
+          let settled = false;
+          const finish = (fn: () => void) => {
+            if (settled) return;
+            settled = true;
+            fn();
+          };
+
           const rzp = new window.Razorpay!({
             key: input.keyId,
             amount: input.amountPaise,
@@ -71,13 +78,13 @@ export function useRazorpayCheckout() {
             }) => {
               try {
                 await onSuccess(response);
-                resolve();
+                finish(resolve);
               } catch (e) {
-                reject(e);
+                finish(() => reject(e));
               }
             },
             modal: {
-              ondismiss: () => reject(new Error("Payment cancelled")),
+              ondismiss: () => finish(() => reject(new Error("Payment cancelled"))),
             },
           });
           rzp.open();

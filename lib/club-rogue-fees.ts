@@ -67,3 +67,37 @@ export function clubRogueFeeInternals() {
     estimatedSettlementInr: settlement,
   };
 }
+
+/** Resolved customer total in INR (env `CLUB_ROGUE_RESERVATION_FEE_PAISE` or default ₹50). */
+export function clubRogueReservationFeeInr(): number {
+  const raw = process.env.CLUB_ROGUE_RESERVATION_FEE_PAISE?.trim();
+  if (raw && /^\d+$/.test(raw)) return Math.max(1, parseInt(raw, 10) / 100);
+  return CLUB_ROGUE_RESERVATION_FEE_INR;
+}
+
+export type ClubRogueCustomerFeeBreakdown = {
+  totalInr: number;
+  confirmationInr: number;
+  gstHandlingInr: number;
+  /** Full ₹41 + ₹9 split — hidden for low test amounts (e.g. ₹2). */
+  showDetailedGst: boolean;
+};
+
+/** Guest-facing fee lines for the booking card and payment status API. */
+export function getClubRogueCustomerFeeBreakdown(): ClubRogueCustomerFeeBreakdown {
+  const totalInr = clubRogueReservationFeeInr();
+  if (totalInr <= 10) {
+    return {
+      totalInr,
+      confirmationInr: totalInr,
+      gstHandlingInr: 0,
+      showDetailedGst: false,
+    };
+  }
+  return {
+    totalInr,
+    confirmationInr: CLUB_ROGUE_CONFIRMATION_FEE_INR,
+    gstHandlingInr: round2(totalInr - CLUB_ROGUE_CONFIRMATION_FEE_INR),
+    showDetailedGst: true,
+  };
+}

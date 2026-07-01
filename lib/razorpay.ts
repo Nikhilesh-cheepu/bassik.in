@@ -44,6 +44,14 @@ export function verifyRazorpayPaymentSignature(params: {
   return expected === params.signature;
 }
 
+/** Razorpay dashboard webhook — verify `x-razorpay-signature` against raw body. */
+export function verifyRazorpayWebhookSignature(rawBody: string, signature: string): boolean {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
+  if (!secret || !signature) return false;
+  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+  return expected === signature;
+}
+
 export function razorpayEnabledForBrand(brandId: string): boolean {
   return isClubRogueBrand(brandId) && isRazorpayConfigured();
 }

@@ -7,14 +7,11 @@ import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import { BRANDS } from "@/lib/brands";
 import {
-  CLUB_ROGUE_COVER_CHARGE_SUMMARY,
-  CLUB_ROGUE_CONFIRMATION_FEE_INR,
-  CLUB_ROGUE_FEE_BREAKDOWN_LABELS,
+  CLUB_ROGUE_COVER_CHARGE_ACK,
   CLUB_ROGUE_GACHIBOWLI_ID,
-  CLUB_ROGUE_GST_HANDLING_INR,
-  CLUB_ROGUE_RESERVATION_FEE_INR,
   CLUB_ROGUE_BRAND_IDS,
   clubRogueChatVenueName,
+  type ClubRogueCustomerFeeBreakdown,
 } from "@/lib/club-rogue";
 import {
   CLUB_ROGUE_THEME,
@@ -37,7 +34,14 @@ const GalleryModal = dynamic(() => import("@/components/GalleryModal"));
 
 const LOGO = "/logos/club-rogue.png";
 const DEFAULT_MAP = "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6";
-const HOOK_ROTATE_MS = 4200;
+const HOOK_ROTATE_MS = 9000;
+
+const DEFAULT_FEE: ClubRogueCustomerFeeBreakdown = {
+  totalInr: 50,
+  confirmationInr: 41,
+  gstHandlingInr: 9,
+  showDetailedGst: true,
+};
 
 type Offer = {
   id: string;
@@ -86,7 +90,6 @@ export default function ClubRogueOutletPage({
       : CLUB_ROGUE_GACHIBOWLI_ID
   );
   const brand = BRANDS.find((b) => b.id === brandId) ?? BRANDS[0];
-  const landing = getClubRogueLanding(brandId);
   const emotionalHooks = useMemo(() => getClubRogueHooks(brandId), [brandId]);
   const venueName = clubRogueChatVenueName(brandId) ?? brand.shortName;
 
@@ -103,11 +106,14 @@ export default function ClubRogueOutletPage({
   const [nightGenre, setNightGenre] = useState<"" | "tollywood" | "bollywood">("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [paymentConfigured, setPaymentConfigured] = useState<boolean | null>(null);
+  const [fee, setFee] = useState<ClubRogueCustomerFeeBreakdown>(DEFAULT_FEE);
   const [hookIndex, setHookIndex] = useState(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const selectedEvent = venue.offers.find((o) => o.id === selectedEventId) ?? null;
   const slots = getAvailableEventSlots(bookDate);
@@ -115,6 +121,23 @@ export default function ClubRogueOutletPage({
   const waUrl = `https://wa.me/${waPhone}?text=${encodeURIComponent(
     venue.whatsappMessage || getWhatsAppMessageForBrand(brandId, venueName)
   )}`;
+
+  const resetForm = useCallback(() => {
+    setName("");
+    setPhone("");
+    setPeople(2);
+    setCoverAck(false);
+    setNightGenre("");
+    setShowTimePicker(false);
+    setError(null);
+    setConfirmError(null);
+  }, []);
+
+  const closeConfirm = useCallback(() => {
+    setConfirmOpen(false);
+    setConfirmError(null);
+    setCoverAck(false);
+  }, []);
 
   const loadVenue = useCallback(async (id: string) => {
     setLoading(true);
@@ -139,7 +162,17 @@ export default function ClubRogueOutletPage({
   useEffect(() => {
     void fetch("/api/payments/razorpay/status")
       .then((r) => r.json())
-      .then((d) => setPaymentConfigured(Boolean(d.configured)))
+      .then((d) => {
+        setPaymentConfigured(Boolean(d.configured));
+        if (typeof d.totalInr === "number") {
+          setFee({
+            totalInr: d.totalInr,
+            confirmationInr: d.confirmationInr ?? d.totalInr,
+            gstHandlingInr: d.gstHandlingInr ?? 0,
+            showDetailedGst: Boolean(d.showDetailedGst),
+          });
+        }
+      })
       .catch(() => setPaymentConfigured(false));
   }, []);
 
@@ -176,6 +209,19 @@ export default function ClubRogueOutletPage({
     }
   }, [bookDate, bookTime]);
 
+  useEffect(() => {
+    if (!confirmOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !submitting) closeConfirm();
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [confirmOpen, submitting, closeConfirm]);
+
   const selectEvent = (id: string) => {
     const ev = venue.offers.find((o) => o.id === id);
     setSelectedEventId(id);
@@ -185,7 +231,19 @@ export default function ClubRogueOutletPage({
     setError(null);
   };
 
-  const buildPayload = () => {
+  const validateForm = (): string | null => {
+    const normalizedPhone = phone.replace(/\D/g, "").slice(0, 10);
+    if (!name.trim()) return "Add your name.";
+    if (!/^\d{10}$/.test(normalizedPhone)) return "Enter a 10-digit mobile number.";
+    if (brandId === CLUB_ROGUE_GACHIBOWLI_ID && nightGenre !== "tollywood" && nightGenre !== "bollywood") {
+      return "Pick Tollywood or Bollywood.";
+    }
+    if (isEventSlotInPast(bookDate, bookTime)) return "That slot's gone — pick another time.";
+    if (paymentConfigured === false) return "Online booking isn't live yet — WhatsApp us below.";
+    return null;
+  };
+
+  const buildPayload = (acknowledged: boolean) => {
     const normalizedPhone = phone.replace(/\D/g, "").slice(0, 10);
     const eventId = selectedEventId;
     return {
@@ -204,41 +262,32 @@ export default function ClubRogueOutletPage({
       selectedDiscounts: [],
       brandId,
       brandName: brand.name,
-      coverChargeAcknowledged: coverAck,
+      coverChargeAcknowledged: acknowledged,
       ...(brandId === CLUB_ROGUE_GACHIBOWLI_ID && nightGenre ? { bookingNightGenre: nightGenre } : {}),
     };
   };
 
-  const handleBook = async () => {
-    const normalizedPhone = phone.replace(/\D/g, "").slice(0, 10);
-    if (!name.trim()) {
-      setError("Your name — that's all we need to start.");
+  const handlePayClick = () => {
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
       return;
     }
-    if (!/^\d{10}$/.test(normalizedPhone)) {
-      setError("10-digit mobile number, please.");
-      return;
-    }
+    setError(null);
+    setConfirmError(null);
+    setCoverAck(false);
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmPayment = async () => {
     if (!coverAck) {
-      setError("Quick tick on the cover charge — then you're in.");
-      return;
-    }
-    if (brandId === CLUB_ROGUE_GACHIBOWLI_ID && nightGenre !== "tollywood" && nightGenre !== "bollywood") {
-      setError("Tollywood or Bollywood — pick your vibe.");
-      return;
-    }
-    if (isEventSlotInPast(bookDate, bookTime)) {
-      setError("That slot's gone. Pick another time.");
-      return;
-    }
-    if (paymentConfigured === false) {
-      setError("Online booking opens soon — WhatsApp us below for now.");
+      setConfirmError("Please confirm you understand the cover charge.");
       return;
     }
 
     setSubmitting(true);
-    setError(null);
-    const payload = buildPayload();
+    setConfirmError(null);
+    const payload = buildPayload(true);
 
     try {
       const orderRes = await fetch("/api/payments/razorpay/create-order", {
@@ -247,7 +296,7 @@ export default function ClubRogueOutletPage({
         body: JSON.stringify(payload),
       });
       const orderData = await orderRes.json().catch(() => ({}));
-      if (!orderRes.ok) throw new Error(orderData.error || "Could not start booking");
+      if (!orderRes.ok) throw new Error(orderData.error || "Could not start payment");
 
       await openCheckout(
         {
@@ -255,7 +304,7 @@ export default function ClubRogueOutletPage({
           orderId: orderData.orderId,
           amountPaise: orderData.amountPaise,
           name: venueName,
-          description: `Table confirmation · ₹${CLUB_ROGUE_RESERVATION_FEE_INR}`,
+          description: `Table confirmation · ₹${fee.totalInr}`,
           prefill: orderData.prefill,
         },
         async (payment) => {
@@ -266,16 +315,15 @@ export default function ClubRogueOutletPage({
           });
           const verifyData = await verifyRes.json().catch(() => ({}));
           if (!verifyRes.ok) throw new Error(verifyData.error || "Payment verification failed");
+
+          setConfirmOpen(false);
           setSuccess(true);
-          setName("");
-          setPhone("");
-          setCoverAck(false);
-          setNightGenre("");
+          resetForm();
         }
       );
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Booking failed";
-      if (msg !== "Payment cancelled") setError(msg);
+      const msg = e instanceof Error ? e.message : "Payment failed";
+      if (msg !== "Payment cancelled") setConfirmError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -292,28 +340,27 @@ export default function ClubRogueOutletPage({
 
   const activeHook = emotionalHooks[hookIndex % emotionalHooks.length] ?? emotionalHooks[0];
 
+  const fieldClass =
+    "w-full bg-transparent px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/30";
+
   return (
     <div
-      className="min-h-screen w-full overflow-x-hidden text-white"
-      style={{ backgroundColor: CLUB_ROGUE_THEME.bg }}
+      className="min-h-screen w-full overflow-x-hidden"
+      style={{
+        background: `linear-gradient(180deg, ${CLUB_ROGUE_THEME.bgMid} 0%, ${CLUB_ROGUE_THEME.bg} 45%, #0a0706 100%)`,
+        color: CLUB_ROGUE_THEME.text,
+      }}
     >
       <div
-        className="pointer-events-none fixed inset-x-0 top-0 h-[520px]"
+        className="pointer-events-none fixed inset-x-0 top-0 h-[55vh]"
         style={{
-          background: `radial-gradient(ellipse 90% 55% at 50% -5%, ${CLUB_ROGUE_THEME.glow}, transparent 72%)`,
-        }}
-      />
-      <div
-        className="pointer-events-none fixed inset-0 opacity-[0.04]"
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+          background: `radial-gradient(ellipse 70% 50% at 50% -10%, ${CLUB_ROGUE_THEME.glow}, transparent 65%)`,
         }}
       />
 
-      <div className="relative mx-auto max-w-lg px-4 pb-10 pt-5">
+      <div className="relative mx-auto max-w-[22rem] px-4 pb-12 pt-6">
         {/* Location */}
-        <div className="mb-6 flex justify-center gap-1.5">
+        <div className="flex justify-center gap-1">
           {locationTabs.map((tab) => {
             const active = tab.id === brandId;
             return (
@@ -325,10 +372,11 @@ export default function ClubRogueOutletPage({
                   router.replace(`/${tab.id}`);
                   void loadVenue(tab.id);
                 }}
-                className="rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wider transition-all"
+                className="rounded-full px-3 py-1.5 text-[10px] font-medium uppercase tracking-widest transition-all"
                 style={{
-                  backgroundColor: active ? CLUB_ROGUE_THEME.orange : "rgba(255,255,255,0.06)",
-                  color: active ? "#0c0604" : "rgba(255,255,255,0.5)",
+                  backgroundColor: active ? CLUB_ROGUE_THEME.orange : "transparent",
+                  color: active ? "#0c0604" : CLUB_ROGUE_THEME.textDim,
+                  border: active ? "none" : `1px solid ${CLUB_ROGUE_THEME.borderSubtle}`,
                 }}
               >
                 {tab.label}
@@ -337,226 +385,215 @@ export default function ClubRogueOutletPage({
           })}
         </div>
 
-        {/* Hero — emotion first */}
-        <header className="text-center">
-          <div className="relative mx-auto mb-3 h-12 w-12 opacity-90">
-            <Image src={LOGO} alt="Club Rogue" fill className="object-contain" priority />
+        {/* Hero */}
+        <header className="mt-8 text-center">
+          <div className="relative mx-auto mb-4 h-[3.25rem] w-[3.25rem]">
+            <Image src={LOGO} alt="Club Rogue" fill className="object-contain drop-shadow-lg" priority />
           </div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/40">
-            {venueName} · {landing.tagline}
+          <p className="text-[10px] font-medium uppercase tracking-[0.35em]" style={{ color: CLUB_ROGUE_THEME.textDim }}>
+            {venueName}
           </p>
 
-          <div className="relative mx-auto mt-5 min-h-[5.5rem] max-w-md sm:min-h-[6rem]">
+          <div className="relative mx-auto mt-5 min-h-[4.25rem] px-1">
             <AnimatePresence mode="wait">
-              <motion.h1
+              <motion.p
                 key={`${brandId}-${hookIndex}`}
-                initial={{ opacity: 0, y: 14, filter: "blur(6px)" }}
-                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                exit={{ opacity: 0, y: -10, filter: "blur(4px)" }}
-                transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                className="text-[1.65rem] font-extrabold leading-[1.15] tracking-tight sm:text-[1.85rem]"
-                style={{
-                  background: `linear-gradient(135deg, #fff 0%, ${CLUB_ROGUE_THEME.orangeLight} 55%, ${CLUB_ROGUE_THEME.orange} 100%)`,
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  textShadow: `0 0 40px ${CLUB_ROGUE_THEME.glow}`,
-                }}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.4 }}
+                className="text-[1.15rem] font-semibold leading-snug tracking-[0.06em] text-white/90 uppercase"
               >
                 {activeHook}
-              </motion.h1>
+              </motion.p>
             </AnimatePresence>
           </div>
-
-          <p className="mt-3 text-[11px] text-white/40">{landing.essentials}</p>
         </header>
 
-        {/* Booking — single path, no duplicate CTAs */}
-        <section id="book" className="mt-7 scroll-mt-4">
-          <div
-            className="rounded-3xl border p-4 sm:p-5"
-            style={{
-              borderColor: `${CLUB_ROGUE_THEME.orange}35`,
-              background: `linear-gradient(168deg, rgba(249,115,22,0.14) 0%, rgba(12,6,4,0.98) 50%)`,
-              boxShadow: `0 0 48px ${CLUB_ROGUE_THEME.glow}`,
-            }}
-          >
-            {paymentConfigured === false ? (
-              <p className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-100/90">
-                Online booking opens once payment is live. WhatsApp below works meanwhile.
-              </p>
-            ) : null}
-
-            {success ? (
-              <div className="py-6 text-center">
-                <p className="text-2xl font-extrabold text-emerald-100">You&apos;re in.</p>
-                <p className="mt-2 text-sm text-emerald-100/75">Check WhatsApp — your table&apos;s locked.</p>
-                <button
-                  type="button"
-                  onClick={() => setSuccess(false)}
-                  className="mt-5 text-xs text-emerald-200/80 underline underline-offset-4"
-                >
-                  Book another table
-                </button>
+        {/* Form */}
+        <section id="book" className="mt-8">
+          {success ? (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-3xl border px-5 py-10 text-center backdrop-blur-xl"
+              style={{
+                borderColor: "rgba(52, 211, 153, 0.25)",
+                background: "rgba(16, 185, 129, 0.08)",
+              }}
+            >
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-xl text-emerald-300">
+                ✓
               </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Name"
-                    className="rounded-xl border border-white/12 bg-black/50 px-3 py-3 text-sm outline-none placeholder:text-white/30 focus:border-orange-400/50"
-                  />
-                  <input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                    placeholder="Mobile"
-                    type="tel"
-                    className="rounded-xl border border-white/12 bg-black/50 px-3 py-3 text-sm outline-none placeholder:text-white/30 focus:border-orange-400/50"
-                  />
-                </div>
+              <p className="text-xl font-semibold text-white">You&apos;re in</p>
+              <p className="mt-1.5 text-sm" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
+                Table confirmed — check WhatsApp
+              </p>
+              <button
+                type="button"
+                onClick={() => setSuccess(false)}
+                className="mt-7 w-full rounded-full py-3 text-sm font-semibold text-[#0c0604]"
+                style={{ background: CLUB_ROGUE_THEME.orange }}
+              >
+                Book another
+              </button>
+            </motion.div>
+          ) : (
+            <div className="space-y-3">
+              {paymentConfigured === false && (
+                <p
+                  className="rounded-2xl border px-3 py-2.5 text-center text-xs"
+                  style={{
+                    borderColor: "rgba(251, 191, 36, 0.25)",
+                    background: "rgba(251, 191, 36, 0.08)",
+                    color: "rgba(253, 230, 138, 0.9)",
+                  }}
+                >
+                  Online booking opens soon — WhatsApp below
+                </p>
+              )}
 
-                <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-                  <span className="text-xs text-white/50">Guests</span>
-                  <div className="flex items-center gap-2.5">
+              {/* Grouped fields — iOS-style */}
+              <div
+                className="overflow-hidden rounded-2xl border backdrop-blur-md"
+                style={{ borderColor: CLUB_ROGUE_THEME.border, background: CLUB_ROGUE_THEME.surface }}
+              >
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Name"
+                  className={fieldClass}
+                  style={{ borderBottom: `1px solid ${CLUB_ROGUE_THEME.borderSubtle}` }}
+                />
+                <input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  placeholder="Mobile"
+                  type="tel"
+                  className={fieldClass}
+                />
+              </div>
+
+              <div
+                className="overflow-hidden rounded-2xl border backdrop-blur-md"
+                style={{ borderColor: CLUB_ROGUE_THEME.border, background: CLUB_ROGUE_THEME.surface }}
+              >
+                <div
+                  className="flex items-center justify-between px-4 py-3"
+                  style={{ borderBottom: `1px solid ${CLUB_ROGUE_THEME.borderSubtle}` }}
+                >
+                  <span className="text-sm" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
+                    Guests
+                  </span>
+                  <div className="flex items-center gap-3">
                     <button
                       type="button"
                       onClick={() => setPeople((p) => Math.max(1, p - 1))}
-                      className="h-7 w-7 rounded-lg border border-white/15 text-sm text-white/70"
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-base"
+                      style={{ background: CLUB_ROGUE_THEME.surfaceRaised, color: CLUB_ROGUE_THEME.text }}
                     >
                       −
                     </button>
-                    <span className="w-5 text-center text-sm font-bold">{people}</span>
+                    <span className="w-4 text-center text-sm font-semibold">{people}</span>
                     <button
                       type="button"
                       onClick={() => setPeople((p) => Math.min(20, p + 1))}
-                      className="h-7 w-7 rounded-lg border border-white/15 text-sm text-white/70"
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-base"
+                      style={{ background: CLUB_ROGUE_THEME.surfaceRaised, color: CLUB_ROGUE_THEME.text }}
                     >
                       +
                     </button>
                   </div>
                 </div>
-
-                {brandId === CLUB_ROGUE_GACHIBOWLI_ID && (
-                  <div className="grid grid-cols-2 gap-2">
-                    {(["tollywood", "bollywood"] as const).map((g) => (
-                      <button
-                        key={g}
-                        type="button"
-                        onClick={() => setNightGenre(g)}
-                        className="rounded-xl border py-2 text-[11px] font-bold uppercase tracking-wide"
-                        style={{
-                          borderColor: nightGenre === g ? CLUB_ROGUE_THEME.orange : "rgba(255,255,255,0.1)",
-                          backgroundColor: nightGenre === g ? `${CLUB_ROGUE_THEME.orange}22` : "transparent",
-                          color: nightGenre === g ? CLUB_ROGUE_THEME.orangeLight : "rgba(255,255,255,0.45)",
-                        }}
-                      >
-                        {g}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
                 <button
                   type="button"
                   onClick={() => setShowTimePicker((v) => !v)}
-                  className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-black/25 px-3 py-2.5 text-left"
+                  className="flex w-full items-center justify-between px-4 py-3 text-left"
                 >
-                  <span className="text-xs text-white/45">Arrival</span>
-                  <span className="text-sm font-semibold text-white/90">
+                  <span className="text-sm" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
+                    Arrival
+                  </span>
+                  <span className="text-sm font-medium text-white/90">
                     Tonight · {eventSlotLabel(bookTime)}
-                    <span className="ml-2 text-[10px] font-normal text-orange-300/80">
-                      {showTimePicker ? "hide" : "change"}
+                    <span className="ml-1.5 text-xs font-normal" style={{ color: CLUB_ROGUE_THEME.orange }}>
+                      {showTimePicker ? "▲" : "▼"}
                     </span>
                   </span>
                 </button>
-
-                {showTimePicker && (
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {slots.map((slot) => (
-                      <button
-                        key={slot}
-                        type="button"
-                        onClick={() => {
-                          setBookTime(slot);
-                          setShowTimePicker(false);
-                        }}
-                        className="rounded-lg border py-2 text-[11px] font-semibold"
-                        style={{
-                          borderColor: bookTime === slot ? CLUB_ROGUE_THEME.orange : "rgba(255,255,255,0.1)",
-                          backgroundColor: bookTime === slot ? `${CLUB_ROGUE_THEME.orange}20` : "transparent",
-                          color: bookTime === slot ? CLUB_ROGUE_THEME.orangeLight : "rgba(255,255,255,0.55)",
-                        }}
-                      >
-                        {eventSlotLabel(slot)}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
-                  <input
-                    type="checkbox"
-                    checked={coverAck}
-                    onChange={(e) => setCoverAck(e.target.checked)}
-                    className="mt-0.5"
-                  />
-                  <span className="text-[10px] leading-snug text-white/45">{CLUB_ROGUE_COVER_CHARGE_SUMMARY}</span>
-                </label>
-
-                {error ? <p className="text-center text-xs text-red-300/90">{error}</p> : null}
-
-                <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2.5 text-[11px]">
-                  <div className="flex justify-between text-white/45">
-                    <span>{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.confirmation}</span>
-                    <span>₹{CLUB_ROGUE_CONFIRMATION_FEE_INR}</span>
-                  </div>
-                  <div className="mt-1 flex justify-between text-white/45">
-                    <span>{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.gstHandling}</span>
-                    <span>₹{CLUB_ROGUE_GST_HANDLING_INR}</span>
-                  </div>
-                  <div className="mt-2 flex justify-between border-t border-white/10 pt-2 font-semibold text-white/85">
-                    <span>{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.total}</span>
-                    <span>₹{CLUB_ROGUE_RESERVATION_FEE_INR}</span>
-                  </div>
-                </div>
-
-                <motion.button
-                  type="button"
-                  onClick={() => void handleBook()}
-                  disabled={submitting || razorpayLoading || paymentConfigured === false}
-                  whileTap={{ scale: 0.98 }}
-                  animate={{
-                    boxShadow: [
-                      `0 8px 32px ${CLUB_ROGUE_THEME.glow}`,
-                      `0 8px 48px rgba(249,115,22,0.55)`,
-                      `0 8px 32px ${CLUB_ROGUE_THEME.glow}`,
-                    ],
-                  }}
-                  transition={{ repeat: Infinity, duration: 2.4, ease: "easeInOut" }}
-                  className="w-full rounded-2xl py-4 text-base font-extrabold tracking-wide text-[#0c0604] disabled:opacity-50"
-                  style={{
-                    background: `linear-gradient(135deg, ${CLUB_ROGUE_THEME.orangeLight}, ${CLUB_ROGUE_THEME.orange})`,
-                  }}
-                >
-                  {submitting || razorpayLoading
-                    ? "Locking your table…"
-                    : paymentConfigured === false
-                      ? "Booking opens soon"
-                      : `Pay ₹${CLUB_ROGUE_RESERVATION_FEE_INR} & confirm`}
-                </motion.button>
               </div>
-            )}
-          </div>
+
+              {brandId === CLUB_ROGUE_GACHIBOWLI_ID && (
+                <div className="grid grid-cols-2 gap-2">
+                  {(["tollywood", "bollywood"] as const).map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setNightGenre(g)}
+                      className="rounded-2xl border py-2.5 text-[11px] font-semibold uppercase tracking-wider backdrop-blur-md"
+                      style={{
+                        borderColor: nightGenre === g ? CLUB_ROGUE_THEME.orange : CLUB_ROGUE_THEME.border,
+                        background: nightGenre === g ? "rgba(249, 115, 22, 0.15)" : CLUB_ROGUE_THEME.surface,
+                        color: nightGenre === g ? CLUB_ROGUE_THEME.orangeLight : CLUB_ROGUE_THEME.textMuted,
+                      }}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {showTimePicker && (
+                <div className="grid grid-cols-4 gap-1.5">
+                  {slots.map((slot) => (
+                    <button
+                      key={slot}
+                      type="button"
+                      onClick={() => {
+                        setBookTime(slot);
+                        setShowTimePicker(false);
+                      }}
+                      className="rounded-xl border py-2 text-xs font-medium backdrop-blur-md"
+                      style={{
+                        borderColor: bookTime === slot ? CLUB_ROGUE_THEME.orange : CLUB_ROGUE_THEME.borderSubtle,
+                        background: bookTime === slot ? "rgba(249, 115, 22, 0.12)" : CLUB_ROGUE_THEME.surface,
+                        color: bookTime === slot ? CLUB_ROGUE_THEME.orangeLight : CLUB_ROGUE_THEME.textMuted,
+                      }}
+                    >
+                      {eventSlotLabel(slot)}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {error ? (
+                <p className="text-center text-xs text-red-300/90">{error}</p>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={handlePayClick}
+                disabled={submitting || razorpayLoading || paymentConfigured === false}
+                className="w-full rounded-full py-3.5 text-[15px] font-semibold text-[#0c0604] shadow-lg shadow-orange-500/20 transition-transform active:scale-[0.98] disabled:opacity-45"
+                style={{
+                  background: `linear-gradient(135deg, ${CLUB_ROGUE_THEME.orangeLight}, ${CLUB_ROGUE_THEME.orange})`,
+                }}
+              >
+                {submitting || razorpayLoading ? "Processing…" : "Book table"}
+              </button>
+            </div>
+          )}
         </section>
 
-        {/* Tonight — optional, one tap */}
+        {/* Tonight */}
         {!loading && venue.offers.length > 0 && (
-          <section className="mt-6">
-            <p className="mb-2 text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-white/30">
+          <section className="mt-10">
+            <p
+              className="mb-3 text-center text-[10px] font-medium uppercase tracking-[0.25em]"
+              style={{ color: CLUB_ROGUE_THEME.textDim }}
+            >
               Tonight
             </p>
-            <div className="flex justify-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex justify-center gap-2">
               {venue.offers.slice(0, 4).map((o) => {
                 const sel = selectedEventId === o.id;
                 return (
@@ -564,30 +601,24 @@ export default function ClubRogueOutletPage({
                     key={o.id}
                     type="button"
                     onClick={() => selectEvent(o.id)}
-                    className="relative h-20 w-14 shrink-0 overflow-hidden rounded-lg border transition-all"
+                    className="relative h-[4.5rem] w-11 shrink-0 overflow-hidden rounded-xl transition-all"
                     style={{
-                      borderColor: sel ? CLUB_ROGUE_THEME.orange : "rgba(255,255,255,0.08)",
-                      opacity: sel ? 1 : 0.65,
+                      boxShadow: sel ? `0 0 0 2px ${CLUB_ROGUE_THEME.orange}` : "none",
+                      opacity: sel ? 1 : 0.55,
                     }}
                   >
-                    <Image src={o.imageUrl} alt="" fill className="object-cover" sizes="56px" unoptimized />
+                    <Image src={o.imageUrl} alt="" fill className="object-cover" sizes="44px" unoptimized />
                   </button>
                 );
               })}
             </div>
-            {selectedEvent && (
-              <p className="mt-1.5 text-center text-[10px] text-white/35">
-                {selectedEvent.title ||
-                  guestEventDateLine(selectedEvent.eventDate, { eventContinuous: selectedEvent.eventContinuous })}
-              </p>
-            )}
           </section>
         )}
 
-        {/* Vibe peek */}
+        {/* Gallery */}
         {venue.galleryImages.length > 0 && (
-          <section className="mt-6">
-            <div className="flex justify-center gap-1.5">
+          <section className="mt-8">
+            <div className="flex justify-center gap-2">
               {venue.galleryImages.slice(0, 3).map((src, i) => (
                 <button
                   key={src}
@@ -596,16 +627,17 @@ export default function ClubRogueOutletPage({
                     setGalleryIndex(i);
                     setGalleryOpen(true);
                   }}
-                  className="relative h-24 w-[30%] overflow-hidden rounded-xl opacity-80 transition-opacity hover:opacity-100"
+                  className="relative h-44 w-[4.5rem] overflow-hidden rounded-2xl transition-transform active:scale-[0.98]"
+                  style={{ opacity: 0.85 }}
                 >
-                  <Image src={src} alt="" fill className="object-cover" sizes="120px" />
+                  <Image src={src} alt="" fill className="object-cover" sizes="72px" />
                 </button>
               ))}
             </div>
           </section>
         )}
 
-        <footer className="mt-8 flex justify-center gap-4 text-[10px] text-white/35">
+        <footer className="mt-10 flex justify-center gap-5 text-[11px]" style={{ color: CLUB_ROGUE_THEME.textDim }}>
           <a href={venue.mapUrl} target="_blank" rel="noopener noreferrer" className="hover:text-white/55">
             Locate
           </a>
@@ -628,6 +660,102 @@ export default function ClubRogueOutletPage({
           ) : null}
         </footer>
       </div>
+
+      {/* Payment confirmation popup — only on Pay click */}
+      <AnimatePresence>
+        {confirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:px-4">
+            <motion.button
+              type="button"
+              aria-label="Close"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              onClick={() => !submitting && closeConfirm()}
+            />
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="confirm-pay-title"
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 40, opacity: 0 }}
+              transition={{ type: "spring", damping: 26, stiffness: 300 }}
+              className="relative z-10 w-full max-w-sm rounded-t-3xl border p-5 backdrop-blur-xl sm:rounded-3xl"
+              style={{
+                borderColor: CLUB_ROGUE_THEME.border,
+                background: "rgba(22, 16, 14, 0.92)",
+              }}
+            >
+              <h2 id="confirm-pay-title" className="text-base font-semibold text-white">
+                Before you pay
+              </h2>
+
+              <div
+                className="mt-4 space-y-3 rounded-2xl border px-4 py-3.5 text-sm leading-relaxed"
+                style={{
+                  borderColor: CLUB_ROGUE_THEME.borderSubtle,
+                  background: CLUB_ROGUE_THEME.surface,
+                  color: CLUB_ROGUE_THEME.textMuted,
+                }}
+              >
+                <p>
+                  <span className="font-semibold text-white">₹2,000 cover</span> per person at entry —
+                  redeemable on food &amp; drinks.
+                </p>
+                <p className="border-t pt-3" style={{ borderColor: CLUB_ROGUE_THEME.borderSubtle }}>
+                  <span className="font-semibold" style={{ color: CLUB_ROGUE_THEME.orangeLight }}>
+                    ₹{fee.totalInr} online
+                  </span>{" "}
+                  only confirms your table. Not entry. Not cover.
+                </p>
+              </div>
+
+              <label
+                className="mt-4 flex cursor-pointer items-start gap-3 text-xs leading-relaxed"
+                style={{ color: CLUB_ROGUE_THEME.textMuted }}
+              >
+                <input
+                  type="checkbox"
+                  checked={coverAck}
+                  onChange={(e) => setCoverAck(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-orange-500"
+                />
+                {CLUB_ROGUE_COVER_CHARGE_ACK}
+              </label>
+
+              {confirmError ? (
+                <p className="mt-3 text-center text-xs text-red-300">{confirmError}</p>
+              ) : null}
+
+              <div className="mt-5 grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={closeConfirm}
+                  disabled={submitting}
+                  className="rounded-full border py-3 text-sm font-medium disabled:opacity-50"
+                  style={{
+                    borderColor: CLUB_ROGUE_THEME.border,
+                    color: CLUB_ROGUE_THEME.textMuted,
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleConfirmPayment()}
+                  disabled={submitting || razorpayLoading}
+                  className="rounded-full py-3 text-sm font-semibold text-[#0c0604] disabled:opacity-50"
+                  style={{ background: CLUB_ROGUE_THEME.orange }}
+                >
+                  {submitting || razorpayLoading ? "Processing…" : `Pay ₹${fee.totalInr}`}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {galleryOpen && (
         <GalleryModal

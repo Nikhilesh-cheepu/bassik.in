@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { fulfillRazorpayReservationPayment } from "@/lib/razorpay-fulfillment";
 import { verifyRazorpayPaymentSignature } from "@/lib/razorpay";
 
 export async function POST(req: NextRequest) {
@@ -17,56 +17,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Payment verification failed." }, { status: 400 });
     }
 
-    const payment = await prisma.reservationPayment.findUnique({
-      where: { razorpayOrderId: orderId },
+    const result = await fulfillRazorpayReservationPayment({
+      orderId,
+      paymentId,
+      origin: req.nextUrl.origin,
+      cookie: req.headers.get("cookie") || "",
     });
-    if (!payment) {
-      return NextResponse.json({ error: "Payment record not found." }, { status: 404 });
+
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
-    if (payment.status === "PAID" && payment.reservationId) {
-      return NextResponse.json({ success: true, reservationId: payment.reservationId });
-    }
-
-    await prisma.reservationPayment.update({
-      where: { id: payment.id },
-      data: {
-        status: "PAID",
-        razorpayPaymentId: paymentId,
-      },
-    });
-
-    const bookingDraft = payment.bookingDraft as Record<string, unknown>;
-    const origin = req.nextUrl.origin;
-    const reservationRes = await fetch(`${origin}/api/reservations`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        cookie: req.headers.get("cookie") || "",
-      },
-      body: JSON.stringify({
-        ...bookingDraft,
-        clubRoguePaymentOrderId: orderId,
-      }),
-    });
-    const reservationData = await reservationRes.json().catch(() => ({}));
-    if (!reservationRes.ok) {
-      return NextResponse.json(
-        { error: reservationData.error || "Booking failed after payment. Contact support." },
-        { status: 502 }
-      );
-    }
-
-    const reservationId =
-      typeof reservationData.reservationId === "string" ? reservationData.reservationId : null;
-
-    await prisma.reservationPayment.update({
-      where: { id: payment.id },
-      data: { reservationId },
-    });
 
     return NextResponse.json({
       success: true,
-      reservationId: reservationData.reservationId,
+      reservationId: result.reservationId,
     });
   } catch (error) {
     console.error("[razorpay verify]", error);
