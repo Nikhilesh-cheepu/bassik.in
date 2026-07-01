@@ -449,18 +449,22 @@ export default function TeamClient() {
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
-    const res = await fetch("/api/team/auth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-    const data = await readTeamApiJson(res);
-    if (!res.ok) {
-      setLoginError(teamApiError(data, "Invalid password"));
-      return;
+    try {
+      const res = await fetch("/api/team/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const data = await readTeamApiJson(res);
+      if (!res.ok) {
+        setLoginError(teamApiError(data, "Invalid password"));
+        return;
+      }
+      setUser(data.user as TeamUser);
+      setPassword("");
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "Login failed — try refreshing the page");
     }
-    setUser(data.user as TeamUser);
-    setPassword("");
   };
 
   const logout = async () => {
