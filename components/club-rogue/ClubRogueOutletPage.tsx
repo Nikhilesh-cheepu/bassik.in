@@ -565,47 +565,6 @@ export default function ClubRogueOutletPage({
                 <p className="text-center text-xs text-red-300/90">{error}</p>
               ) : null}
 
-              <div
-                className="rounded-2xl border px-4 py-3.5 text-sm backdrop-blur-md"
-                style={{
-                  borderColor: CLUB_ROGUE_THEME.border,
-                  background: CLUB_ROGUE_THEME.surface,
-                }}
-              >
-                <p
-                  className="text-[10px] font-semibold uppercase tracking-wider"
-                  style={{ color: CLUB_ROGUE_THEME.textDim }}
-                >
-                  Online confirmation fee
-                </p>
-                <p className="mt-2 font-medium text-white/90">
-                  ₹{fee.perGuestTotalInr} × {fee.guestCount}{" "}
-                  {fee.guestCount === 1 ? "guest" : "guests"} = ₹{fee.totalInr}
-                </p>
-                {fee.showDetailedGst ? (
-                  <div className="mt-3 space-y-1.5 border-t pt-3" style={{ borderColor: CLUB_ROGUE_THEME.borderSubtle }}>
-                    <div className="flex justify-between" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
-                      <span>{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.confirmation}</span>
-                      <span>₹{fee.confirmationInr}</span>
-                    </div>
-                    <div className="flex justify-between" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
-                      <span>{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.gstHandling}</span>
-                      <span>₹{fee.gstHandlingInr}</span>
-                    </div>
-                  </div>
-                ) : null}
-                <div
-                  className="mt-3 flex items-baseline justify-between border-t pt-3"
-                  style={{ borderColor: CLUB_ROGUE_THEME.borderSubtle }}
-                >
-                  <span className="font-medium text-white/80">{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.total}</span>
-                  <span className="text-lg font-bold text-white">₹{fee.totalInr}</span>
-                </div>
-                <p className="mt-2 text-[10px] leading-relaxed" style={{ color: CLUB_ROGUE_THEME.textDim }}>
-                  Online only — not entry or cover. ₹2,000 cover per person is paid at the venue.
-                </p>
-              </div>
-
               <button
                 type="button"
                 onClick={handlePayClick}
@@ -730,24 +689,51 @@ export default function ClubRogueOutletPage({
               </h2>
 
               <div
-                className="mt-4 space-y-3 rounded-2xl border px-4 py-3.5 text-sm leading-relaxed"
+                className="mt-4 space-y-3 rounded-2xl border px-4 py-3.5 text-sm"
                 style={{
                   borderColor: CLUB_ROGUE_THEME.borderSubtle,
                   background: CLUB_ROGUE_THEME.surface,
-                  color: CLUB_ROGUE_THEME.textMuted,
                 }}
               >
-                <p>
+                <p className="leading-relaxed" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
                   <span className="font-semibold text-white">₹2,000 cover</span> per person at entry —
                   redeemable on food &amp; drinks.
                 </p>
-                <p className="border-t pt-3" style={{ borderColor: CLUB_ROGUE_THEME.borderSubtle }}>
-                  <span className="font-semibold" style={{ color: CLUB_ROGUE_THEME.orangeLight }}>
+
+                <div className="border-t pt-3" style={{ borderColor: CLUB_ROGUE_THEME.borderSubtle }}>
+                  <p
+                    className="text-[10px] font-semibold uppercase tracking-wider"
+                    style={{ color: CLUB_ROGUE_THEME.textDim }}
+                  >
+                    Online confirmation fee
+                  </p>
+                  <p className="mt-2 font-medium text-white/90">
                     ₹{fee.perGuestTotalInr} × {fee.guestCount}{" "}
-                    {fee.guestCount === 1 ? "guest" : "guests"} = ₹{fee.totalInr} online
-                  </span>{" "}
-                  — confirmation fee only. Not entry. Not cover.
-                </p>
+                    {fee.guestCount === 1 ? "guest" : "guests"} = ₹{fee.totalInr}
+                  </p>
+                  {fee.showDetailedGst ? (
+                    <div className="mt-3 space-y-1.5">
+                      <div className="flex justify-between" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
+                        <span>{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.confirmation}</span>
+                        <span>₹{fee.confirmationInr}</span>
+                      </div>
+                      <div className="flex justify-between" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
+                        <span>{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.gstHandling}</span>
+                        <span>₹{fee.gstHandlingInr}</span>
+                      </div>
+                    </div>
+                  ) : null}
+                  <div
+                    className="mt-3 flex items-baseline justify-between border-t pt-3"
+                    style={{ borderColor: CLUB_ROGUE_THEME.borderSubtle }}
+                  >
+                    <span className="font-medium text-white/80">{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.total}</span>
+                    <span className="text-lg font-bold text-white">₹{fee.totalInr}</span>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-relaxed" style={{ color: CLUB_ROGUE_THEME.textDim }}>
+                    Online only — not entry or cover. Confirmation fee holds your table.
+                  </p>
+                </div>
               </div>
 
               <label

@@ -7,7 +7,7 @@ import type {
 import type { TeamSession } from "@/lib/team-auth";
 import { isTeamMemberId } from "@/lib/team-members";
 import { isTeamOutletId } from "@/lib/team-outlets";
-import { isAsapStartDate } from "@/lib/team-tasks";
+import { isAsapStartDate, teamTaskCompletedDayKey } from "@/lib/team-tasks";
 import { parseSheetData } from "@/lib/team-planning";
 
 export type CalendarEntryKind =
@@ -201,6 +201,7 @@ export function entriesFromCalendarEvent(row: TeamCalendarEvent): TeamCalendarEn
 
 export function entriesFromAdTask(task: TeamAdTask): TeamCalendarEntryDto[] {
   const entries: TeamCalendarEntryDto[] = [];
+  const asap = isAsapStartDate(task.startDate);
   const base = {
     outletId: task.outletId,
     source: "task" as const,
@@ -209,7 +210,20 @@ export function entriesFromAdTask(task: TeamAdTask): TeamCalendarEntryDto[] {
     status: task.status,
   };
 
-  if (task.startDate && !isAsapStartDate(task.startDate)) {
+  if (asap) {
+    const d = teamTaskCompletedDayKey(task.createdAt);
+    if (d !== "unknown") {
+      entries.push({
+        id: `task:${task.id}:created:${d}`,
+        date: d,
+        endDate: null,
+        title: task.title,
+        subtitle: "ASAP",
+        kind: "TASK",
+        ...base,
+      });
+    }
+  } else if (task.startDate) {
     const d = normalizeCalendarDate(task.startDate);
     if (d) {
       entries.push({
@@ -224,7 +238,7 @@ export function entriesFromAdTask(task: TeamAdTask): TeamCalendarEntryDto[] {
     }
   }
 
-  if (task.endDate) {
+  if (task.endDate && !asap) {
     const d = normalizeCalendarDate(task.endDate);
     if (d) {
       entries.push({
