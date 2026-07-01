@@ -248,23 +248,29 @@ function ShareSheet({
           className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white"
         />
         <ul className="mt-4 max-h-[40vh] space-y-1 overflow-y-auto">
-          {members.map((m) => {
-            const on = selected.includes(m.id);
-            return (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  onClick={() => toggle(m.id)}
-                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm ${
-                    on ? "bg-violet-500/15 text-white ring-1 ring-violet-400/20" : "text-white/70 hover:bg-white/[0.04]"
-                  }`}
-                >
-                  {m.name}
-                  <span className={`h-4 w-4 rounded border ${on ? "border-violet-400 bg-violet-500" : "border-white/20"}`} />
-                </button>
-              </li>
-            );
-          })}
+          {members.length === 0 ? (
+            <li className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-4 text-center text-sm text-white/45">
+              No teammates available to share with.
+            </li>
+          ) : (
+            members.map((m) => {
+              const on = selected.includes(m.id);
+              return (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggle(m.id)}
+                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm ${
+                      on ? "bg-violet-500/15 text-white ring-1 ring-violet-400/20" : "text-white/70 hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    {m.name}
+                    <span className={`h-4 w-4 rounded border ${on ? "border-violet-400 bg-violet-500" : "border-white/20"}`} />
+                  </button>
+                </li>
+              );
+            })
+          )}
         </ul>
         <div className="mt-4 flex gap-2">
           <button
@@ -586,6 +592,19 @@ export default function TeamCalendarView({
     }
   };
 
+  const exitShareMode = () => {
+    setShareMode(false);
+    setSharePick([]);
+    setShareOpen(false);
+  };
+
+  const enterShareMode = () => {
+    setShareMode(true);
+    setSharePick([]);
+    setMobileDaySheet(false);
+    setShareOpen(false);
+  };
+
   const submitShare = async () => {
     setShareSaving(true);
     setError(null);
@@ -603,8 +622,7 @@ export default function TeamCalendarView({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Share failed");
       setShareOpen(false);
-      setShareMode(false);
-      setSharePick([]);
+      exitShareMode();
       setShareMembers([]);
       setShareTitle("");
       setShareMessage("");
@@ -626,7 +644,7 @@ export default function TeamCalendarView({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-2 xl:pb-4">
+    <div className="flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-hidden pb-2 xl:pb-4">
       {error ? (
         <p className="mb-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
           {error}
@@ -698,11 +716,7 @@ export default function TeamCalendarView({
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
             <button
               type="button"
-              onClick={() => {
-                setShareMode((v) => !v);
-                setSharePick([]);
-                setMobileDaySheet(false);
-              }}
+              onClick={() => (shareMode ? exitShareMode() : enterShareMode())}
               className={teamFilterChip(shareMode, "violet")}
             >
               {shareMode ? `Pick (${sharePick.length})` : "Share"}
@@ -711,7 +725,7 @@ export default function TeamCalendarView({
               <button
                 type="button"
                 onClick={() => setShareOpen(true)}
-                className="rounded-full bg-violet-500/20 px-3 py-1.5 text-[11px] font-semibold text-violet-100 ring-1 ring-violet-400/25"
+                className="hidden rounded-full bg-violet-500/20 px-3 py-1.5 text-[11px] font-semibold text-violet-100 ring-1 ring-violet-400/25 xl:inline-flex"
               >
                 Send
               </button>
@@ -728,7 +742,18 @@ export default function TeamCalendarView({
         {loading ? <span className="hidden text-[10px] text-white/30 xl:inline">Updating…</span> : null}
       </div>
 
-      <div className="-mx-1 mt-2 flex gap-1 overflow-x-auto px-1 pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {shareMode ? (
+        <div className="mt-2 rounded-xl border border-violet-400/20 bg-violet-500/10 px-3 py-2.5 xl:mt-3">
+          <p className="text-[13px] font-medium text-violet-100">Tap days on the calendar to select them</p>
+          <p className="mt-0.5 text-[11px] text-white/45">
+            {sharePick.length === 0
+              ? "Selected days will be shared with your team."
+              : `${sharePick.length} day${sharePick.length === 1 ? "" : "s"} selected`}
+          </p>
+        </div>
+      ) : null}
+
+      <div className="mt-2 flex min-w-0 gap-1 overflow-x-auto pb-2 pl-1 pr-[max(0.75rem,env(safe-area-inset-right))] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden xl:pl-0 xl:pr-0">
         {KIND_FILTERS.map((f) => (
           <button
             key={f.id}
@@ -758,8 +783,12 @@ export default function TeamCalendarView({
         </label>
       </div>
 
-      <div className="mt-1 min-h-0 flex-1 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] xl:gap-6">
-        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-1.5 sm:p-3 xl:p-3">
+      <div className="mt-1 min-h-0 w-full min-w-0 max-w-full flex-1 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] xl:gap-6">
+        <div
+          className={`min-w-0 overflow-hidden rounded-2xl border bg-white/[0.02] p-1.5 sm:p-3 xl:p-3 ${
+            shareMode ? "border-violet-400/25 ring-1 ring-violet-400/10" : "border-white/[0.06]"
+          }`}
+        >
           <div className="mb-0.5 grid grid-cols-7">
             {weekdays.map((w) => (
               <div
@@ -777,7 +806,7 @@ export default function TeamCalendarView({
               }
               const dayEntries = byDate[dateKey] ?? [];
               const isToday = dateKey === todayKey;
-              const isSelected = dateKey === selectedDate;
+              const isSelected = !shareMode && dateKey === selectedDate;
               const isSharePicked = sharePick.includes(dateKey);
               const isShared = sharedDateKeys.includes(dateKey);
               const hasEvents = dayEntries.length > 0;
@@ -795,21 +824,28 @@ export default function TeamCalendarView({
                     selectDay(dateKey);
                   }}
                   className={`relative flex aspect-square min-h-[2.75rem] flex-col items-center justify-start pt-1 transition sm:min-h-[3.25rem] ${
-                    isSharePicked ? "opacity-100" : ""
+                    shareMode && !isSharePicked ? "active:scale-95" : ""
                   }`}
                 >
                   <span
-                    className={`flex h-8 w-8 items-center justify-center rounded-full text-[15px] font-medium sm:text-sm ${
+                    className={`relative flex h-8 w-8 items-center justify-center rounded-full text-[15px] font-medium sm:text-sm ${
                       isSharePicked
-                        ? "bg-violet-500 text-white"
-                        : isToday
-                          ? "bg-cyan-500 text-white"
-                          : isSelected
-                            ? "bg-white/15 text-white"
-                            : "text-white/80"
+                        ? "bg-violet-500 text-white ring-2 ring-violet-300/40"
+                        : shareMode
+                          ? "bg-white/[0.04] text-white/75 ring-1 ring-white/[0.08]"
+                          : isToday
+                            ? "bg-cyan-500 text-white"
+                            : isSelected
+                              ? "bg-white/15 text-white"
+                              : "text-white/80"
                     }`}
                   >
                     {dayNum}
+                    {isSharePicked ? (
+                      <span className="absolute -right-0.5 -top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white text-[8px] font-bold text-violet-600">
+                        ✓
+                      </span>
+                    ) : null}
                   </span>
                   <div className="mt-0.5 flex h-1.5 items-center justify-center gap-0.5">
                     {hasEvents ? (
@@ -925,6 +961,36 @@ export default function TeamCalendarView({
           onSubmit={(e) => void saveEvent(e)}
           onDelete={editingEventId ? () => void deleteEvent() : undefined}
         />
+      ) : null}
+
+      {shareMode ? (
+        <div
+          className="fixed inset-x-3 z-30 rounded-2xl border border-violet-400/20 bg-[#12121a]/95 p-3 shadow-lg backdrop-blur-md xl:hidden"
+          style={{ bottom: `calc(${TEAM_DOCK_PADDING} + 0.5rem)` }}
+        >
+          <p className="text-center text-[12px] text-white/50">
+            {sharePick.length === 0
+              ? "Tap any day above to add it"
+              : `${sharePick.length} day${sharePick.length === 1 ? "" : "s"} ready to share`}
+          </p>
+          <div className="mt-2.5 flex gap-2">
+            <button
+              type="button"
+              onClick={exitShareMode}
+              className="min-h-[44px] flex-1 rounded-xl border border-white/10 text-sm text-white/60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={sharePick.length === 0}
+              onClick={() => setShareOpen(true)}
+              className="min-h-[44px] flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {sharePick.length === 0 ? "Choose days" : `Share ${sharePick.length} day${sharePick.length === 1 ? "" : "s"}`}
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {selectedDate && !mobileDaySheet && !shareMode ? (

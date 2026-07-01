@@ -309,33 +309,37 @@ function NoteListItem({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full border-b border-white/[0.06] px-4 py-3.5 text-left transition active:bg-white/[0.04] xl:px-3.5 xl:py-2.5 ${
+      className={`box-border w-full max-w-full overflow-hidden border-b border-white/[0.06] px-4 py-3.5 text-left transition active:bg-white/[0.04] max-xl:pr-[max(1rem,env(safe-area-inset-right))] xl:px-3.5 xl:py-2.5 xl:pr-3.5 ${
         selected ? "bg-white/[0.05] xl:bg-white/[0.06]" : ""
       }`}
     >
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <p className={`truncate text-[15px] font-semibold leading-tight xl:text-[13px] xl:font-medium ${selected ? "text-white" : "text-white/92"}`}>
+      <div className="min-w-0 overflow-hidden">
+        <div className="flex min-w-0 items-baseline justify-between gap-3">
+          <p
+            className={`min-w-0 flex-1 truncate text-[15px] font-semibold leading-tight xl:text-[13px] xl:font-medium ${
+              selected ? "text-white" : "text-white/92"
+            }`}
+          >
             {title}
           </p>
-          {preview ? (
-            <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-white/38 xl:mt-0.5 xl:line-clamp-1 xl:text-[11px] xl:text-white/32">
-              {preview}
-            </p>
-          ) : null}
-          {hasMeta ? (
-            <div className="mt-1.5 hidden flex-wrap items-center gap-1 xl:flex">
-              <OutletTag outletId={note.outletId} compact />
-              {note.category ? (
-                <span className="rounded-md bg-white/[0.04] px-1.5 py-0.5 text-[9px] text-white/35">{note.category}</span>
-              ) : null}
-              <SharedBadge note={note} />
-            </div>
-          ) : null}
+          <span className="shrink-0 text-[11px] tabular-nums text-white/32 xl:text-[10px] xl:text-white/28">
+            {formatNoteListDate(note.updatedAt || note.createdAt)}
+          </span>
         </div>
-        <span className="shrink-0 pt-0.5 text-[12px] tabular-nums text-white/32 xl:text-[10px] xl:text-white/28">
-          {formatNoteListDate(note.updatedAt || note.createdAt)}
-        </span>
+        {preview ? (
+          <p className="mt-1 line-clamp-2 break-words text-[13px] leading-snug text-white/38 xl:mt-0.5 xl:line-clamp-1 xl:text-[11px] xl:text-white/32">
+            {preview}
+          </p>
+        ) : null}
+        {hasMeta ? (
+          <div className="mt-1.5 hidden flex-wrap items-center gap-1 xl:flex">
+            <OutletTag outletId={note.outletId} compact />
+            {note.category ? (
+              <span className="rounded-md bg-white/[0.04] px-1.5 py-0.5 text-[9px] text-white/35">{note.category}</span>
+            ) : null}
+            <SharedBadge note={note} />
+          </div>
+        ) : null}
       </div>
     </button>
   );
@@ -951,8 +955,8 @@ export default function TeamNotesView({
     : null;
 
   const listPane = (
-    <div className="flex h-full min-h-0 flex-col bg-[#06060a] xl:bg-[#09090e]">
-      <div className="shrink-0 space-y-2.5 border-b border-white/[0.06] px-4 py-3 xl:border-white/[0.05] xl:px-3 xl:py-2.5">
+    <div className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-col overflow-hidden bg-[#06060a] xl:bg-[#09090e]">
+      <div className="shrink-0 space-y-2.5 border-b border-white/[0.06] px-4 py-3 max-xl:pr-[max(1rem,env(safe-area-inset-right))] xl:border-white/[0.05] xl:px-3 xl:py-2.5">
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <span className="pointer-events-none absolute inset-y-0 left-3 flex w-4 items-center justify-center text-white/30">
@@ -1009,7 +1013,7 @@ export default function TeamNotesView({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
+      <div className="min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]">
         {!ready ? (
           <div className="space-y-px p-2">
             {[1, 2, 3, 4].map((i) => (
@@ -1080,9 +1084,9 @@ export default function TeamNotesView({
 
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden xl:rounded-xl xl:border xl:border-white/[0.05] xl:bg-[#07070b] xl:min-h-[calc(100dvh-10.5rem)]">
-        <div className="grid min-h-0 flex-1 xl:min-h-[calc(100dvh-10.5rem)] xl:grid-cols-[minmax(248px,280px)_1fr]">
-          <div className={`min-h-0 xl:border-r xl:border-white/[0.05] ${showEditor ? "hidden xl:flex xl:flex-col" : "flex flex-col"}`}>
+      <div className="flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-hidden xl:rounded-xl xl:border xl:border-white/[0.05] xl:bg-[#07070b] xl:min-h-[calc(100dvh-10.5rem)]">
+        <div className="grid min-h-0 w-full min-w-0 flex-1 xl:min-h-[calc(100dvh-10.5rem)] xl:grid-cols-[minmax(248px,280px)_1fr]">
+          <div className={`min-h-0 w-full min-w-0 max-w-full overflow-hidden xl:border-r xl:border-white/[0.05] ${showEditor ? "hidden xl:flex xl:flex-col" : "flex flex-col"}`}>
             {listPane}
           </div>
           <div className={`hidden min-h-0 bg-[#0b0b10] xl:flex xl:flex-col ${showEditor ? "xl:flex" : ""}`}>

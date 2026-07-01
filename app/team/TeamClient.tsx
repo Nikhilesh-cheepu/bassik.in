@@ -1081,9 +1081,9 @@ export default function TeamClient() {
       />
 
       <main
-        className={`${TEAM_PAGE} min-h-0 flex-1 max-xl:pb-[var(--team-dock-pad)] ${
+        className={`${TEAM_PAGE} min-h-0 min-w-0 w-full max-w-full flex-1 max-xl:pb-[var(--team-dock-pad)] ${
           tab === "ai" || tab === "reminders" || tab === "calendar" || tab === "vault"
-            ? "flex flex-col overflow-hidden py-0 md:py-4"
+            ? "flex flex-col overflow-hidden py-0 max-xl:px-0 max-xl:max-w-none md:py-4"
             : "overflow-y-auto overscroll-contain py-3 [-webkit-overflow-scrolling:touch] md:py-4"
         }`}
         style={{ ["--team-dock-pad" as string]: TEAM_DOCK_PADDING }}
