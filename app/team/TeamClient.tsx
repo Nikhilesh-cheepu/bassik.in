@@ -54,6 +54,8 @@ const MEMBER_AD_FILTERS: { id: Filter; label: string }[] = [
 
 type StartTiming = "asap" | "date" | "none";
 
+type TaskFormMode = "new" | "edit" | "duplicate";
+
 type TaskForm = {
   outletId: string;
   assigneeId: string;
@@ -160,6 +162,53 @@ function resolveStartDateForSave(form: TaskForm): string {
   return "";
 }
 
+function taskToForm(task: TeamTaskDto): TaskForm {
+  const timing = startTimingFromTask(task);
+  const end = endTimeModeFromTask(task.endTime);
+  const dl = endTimeModeFromTask(task.deadlineTime);
+  return {
+    outletId: task.outletId,
+    assigneeId: task.assigneeId,
+    title: task.title,
+    description: task.description ?? "",
+    creativeLinks:
+      task.creativeLinks.length > 0
+        ? task.creativeLinks.map((l) => ({ ...l }))
+        : [emptyCreativeLink()],
+    uploadedUrl: task.uploadedUrl ?? "",
+    uploadedName: task.uploadedUrl ? "Uploaded file" : "",
+    startTiming: timing,
+    startDate: timing === "date" ? (task.startDate ?? "") : "",
+    endDate: task.endDate ?? "",
+    endTimeMode: end.mode,
+    endTimeCustom: end.customTime,
+    deadlineDate: task.deadlineDate ?? "",
+    deadlineTimeMode: dl.mode,
+    deadlineTimeCustom: dl.customTime,
+    priority: task.priority,
+    referenceUrls: task.referenceUrls ?? [],
+  };
+}
+
+function duplicateTaskTitle(title: string): string {
+  const base = title.trim();
+  const suffix = " (copy)";
+  if (!base) return "Copy";
+  if (base.toLowerCase().endsWith("(copy)")) return base;
+  const next = `${base}${suffix}`;
+  return next.length <= 200 ? next : `${base.slice(0, 200 - suffix.length)}${suffix}`;
+}
+
+function closeTaskForm(
+  setShowTaskForm: (v: boolean) => void,
+  setEditing: (v: TeamTaskDto | null) => void,
+  setTaskFormMode: (v: TaskFormMode) => void
+) {
+  setShowTaskForm(false);
+  setEditing(null);
+  setTaskFormMode("new");
+}
+
 function DateFields({
   label,
   dateValue,
@@ -244,6 +293,7 @@ export default function TeamClient() {
   const [error, setError] = useState<string | null>(null);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editing, setEditing] = useState<TeamTaskDto | null>(null);
+  const [taskFormMode, setTaskFormMode] = useState<TaskFormMode>("new");
   const [taskForm, setTaskForm] = useState<TaskForm>(emptyTaskForm);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ fileName: string; siteUrl: string } | null>(null);
@@ -487,6 +537,7 @@ export default function TeamClient() {
     soleMember?.id ?? (memberTab !== "all" ? memberTab : (members[0]?.id ?? "amit"));
 
   const openCreateTask = () => {
+    setTaskFormMode("new");
     setEditing(null);
     setTaskForm(emptyTaskForm(resolveAssigneeId()));
     setUploadStatus(null);
@@ -495,6 +546,7 @@ export default function TeamClient() {
 
   const openPocAssignTask = () => {
     const delegates = user?.memberId ? pocDelegateAssigneeIds(user.memberId) : ["mahesh"];
+    setTaskFormMode("new");
     setEditing(null);
     setTaskForm(emptyTaskForm(delegates[0] ?? "mahesh"));
     setUploadStatus(null);
@@ -502,31 +554,19 @@ export default function TeamClient() {
   };
 
   const openEditTask = (task: TeamTaskDto) => {
-    const timing = startTimingFromTask(task);
-    const end = endTimeModeFromTask(task.endTime);
-    const dl = endTimeModeFromTask(task.deadlineTime);
+    setTaskFormMode("edit");
     setEditing(task);
+    setTaskForm(taskToForm(task));
+    setShowTaskForm(true);
+  };
+
+  const duplicateTask = (task: TeamTaskDto) => {
+    setTaskFormMode("duplicate");
+    setEditing(null);
+    setUploadStatus(null);
     setTaskForm({
-      outletId: task.outletId,
-      assigneeId: task.assigneeId,
-      title: task.title,
-      description: task.description ?? "",
-      creativeLinks:
-        task.creativeLinks.length > 0
-          ? task.creativeLinks.map((l) => ({ ...l }))
-          : [emptyCreativeLink()],
-      uploadedUrl: task.uploadedUrl ?? "",
-      uploadedName: task.uploadedUrl ? "Uploaded file" : "",
-      startTiming: timing,
-      startDate: timing === "date" ? (task.startDate ?? "") : "",
-      endDate: task.endDate ?? "",
-      endTimeMode: end.mode,
-      endTimeCustom: end.customTime,
-      deadlineDate: task.deadlineDate ?? "",
-      deadlineTimeMode: dl.mode,
-      deadlineTimeCustom: dl.customTime,
-      priority: task.priority,
-      referenceUrls: task.referenceUrls ?? [],
+      ...taskToForm(task),
+      title: duplicateTaskTitle(task.title),
     });
     setShowTaskForm(true);
   };
@@ -787,8 +827,7 @@ export default function TeamClient() {
       });
       const data = await readTeamApiJson(res);
       if (!res.ok) throw new Error(teamApiError(data, "Save failed"));
-      setShowTaskForm(false);
-      setEditing(null);
+      closeTaskForm(setShowTaskForm, setEditing, setTaskFormMode);
       await loadTasks(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
@@ -1139,6 +1178,7 @@ export default function TeamClient() {
             onReject={(t) => void rejectTask(t)}
             onToggleDone={(t) => void toggleTaskDone(t)}
             onEdit={openEditTask}
+            onDuplicate={duplicateTask}
             onDelete={(t) => void deleteTask(t)}
             onReorder={reorderTasks}
             onPriorityChange={changeTaskPriority}
@@ -1296,8 +1336,17 @@ export default function TeamClient() {
           >
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
             <h2 className="text-lg font-semibold">
-              {editing ? "Edit ad task" : isPoc ? "Assign task to Mahesh" : "New ad task"}
+              {taskFormMode === "edit"
+                ? "Edit ad task"
+                : taskFormMode === "duplicate"
+                  ? "Duplicate ad task"
+                  : isPoc
+                    ? "Assign task to Mahesh"
+                    : "New ad task"}
             </h2>
+            {taskFormMode === "duplicate" ? (
+              <p className="mt-1 text-xs text-white/45">Creates a new task — edit anything before saving.</p>
+            ) : null}
 
             {isPoc ? (
               <p className="mt-3 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 py-2.5 text-sm text-cyan-50/90">
@@ -1558,10 +1607,7 @@ export default function TeamClient() {
             <div className="mt-5 flex gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setShowTaskForm(false);
-                  setEditing(null);
-                }}
+                onClick={() => closeTaskForm(setShowTaskForm, setEditing, setTaskFormMode)}
                 className="min-h-[48px] flex-1 rounded-xl border border-white/10 text-sm text-white/60"
               >
                 Cancel
@@ -1571,7 +1617,13 @@ export default function TeamClient() {
                 disabled={saving || uploading || refUploading}
                 className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-sm font-semibold disabled:opacity-50"
               >
-                {saving ? "Saving…" : editing ? "Save" : "Create"}
+                {saving
+                  ? "Saving…"
+                  : taskFormMode === "duplicate"
+                    ? "Create copy"
+                    : editing
+                      ? "Save"
+                      : "Create"}
               </button>
             </div>
           </form>

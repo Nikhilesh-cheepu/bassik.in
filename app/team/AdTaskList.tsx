@@ -91,6 +91,7 @@ type CardProps = {
   canDrag: boolean;
   onToggleDone: (task: TeamTaskDto) => void;
   onEdit: (task: TeamTaskDto) => void;
+  onDuplicate?: (task: TeamTaskDto) => void;
   onDelete: (task: TeamTaskDto) => void;
   onApprove?: (task: TeamTaskDto) => void;
   onReject?: (task: TeamTaskDto) => void;
@@ -127,6 +128,7 @@ function AdTaskCard({
   canDrag,
   onToggleDone,
   onEdit,
+  onDuplicate,
   onDelete,
   onApprove,
   onReject,
@@ -279,6 +281,15 @@ function AdTaskCard({
                   >
                     Edit
                   </button>
+                  {onDuplicate ? (
+                    <button
+                      type="button"
+                      onClick={() => onDuplicate(task)}
+                      className="min-h-[40px] rounded-lg px-3 text-xs text-white/50"
+                    >
+                      Copy
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => onDelete(task)}
@@ -329,6 +340,7 @@ export type AdTaskListProps = {
   groupDoneByDate?: boolean;
   onToggleDone: (task: TeamTaskDto) => void;
   onEdit: (task: TeamTaskDto) => void;
+  onDuplicate?: (task: TeamTaskDto) => void;
   onDelete: (task: TeamTaskDto) => void;
   onApprove?: (task: TeamTaskDto) => void;
   onReject?: (task: TeamTaskDto) => void;
@@ -346,6 +358,7 @@ export default function AdTaskList({
   groupDoneByDate = false,
   onToggleDone,
   onEdit,
+  onDuplicate,
   onDelete,
   onApprove,
   onReject,
@@ -388,6 +401,7 @@ export default function AdTaskList({
     canDrag,
   onToggleDone,
   onEdit,
+  onDuplicate,
   onDelete,
   onApprove,
   onReject,
