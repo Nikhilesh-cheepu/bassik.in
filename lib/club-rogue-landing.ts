@@ -16,18 +16,23 @@ export const CLUB_ROGUE_THEME = {
   glow: "rgba(249, 115, 22, 0.22)",
 } as const;
 
-/** Rotating hero lines — clear, professional, booking-focused. */
+/**
+ * Rotating hero lines — one mood per slide.
+ * Breakup · date night · single · ladies · squad · weekend · dance
+ */
 export const CLUB_ROGUE_EMOTIONAL_HOOKS = [
-  "Reserve your table. Walk in ready for the night.",
-  "Book ahead. Skip the wait at the door.",
-  "Weekend tables fill fast — secure yours now.",
-  "Planning a night out? Confirm your table in seconds.",
-  "Come with friends or on your own. Just book ahead.",
-  "One confirmed table. One great night out.",
-  "The night is already moving. Reserve your spot.",
-  "Hyderabad club nights start with a booked table.",
-  "Lock your table before you head out.",
-  "Your table is one step away.",
+  "Fresh breakup? The bass hits harder than your ex. Book a table.",
+  "Date night tonight? Lock the table before the butterflies panic.",
+  "Single? Perfect. Your table does not need a plus-one.",
+  "Ladies — free drinks on us. Book your table and walk in.",
+  "New date, new outfit, new plans? Book the table first.",
+  "Squad night out? Do not show up without a table.",
+  "Flying solo? The dance floor still loves you. Book ahead.",
+  "Saturday night and no plan? Fix that — book a table.",
+  "Came to drink, dance, and forget Monday? Book your table.",
+  "Birthday, anniversary, or just because — reserve your table.",
+  "The night is young. Your table should be booked already.",
+  "One tap. One table. One story for tomorrow morning.",
 ] as const;
 
 export const CLUB_ROGUE_LANDING: Record<
@@ -40,22 +45,22 @@ export const CLUB_ROGUE_LANDING: Record<
   "club-rogue-gachibowli": {
     locality: "Gachibowli",
     extraHooks: [
-      "Tollywood and Bollywood nights — reserve your table.",
-      "Gachibowli weekends are busy. Book your table early.",
+      "Tollywood or Bollywood tonight? Either way — book your table.",
+      "Gachibowli crowd is already getting ready. Book before they do.",
     ],
   },
   "club-rogue-kondapur": {
     locality: "Kondapur",
     extraHooks: [
-      "Kondapur nights move fast — confirm your table ahead.",
-      "Peak weekend energy starts with a reserved table.",
+      "Kondapur weekends do not wait. Book your table now.",
+      "Peak energy, packed floor — table booked means you are in.",
     ],
   },
   "club-rogue-jubilee-hills": {
     locality: "Jubilee Hills",
     extraHooks: [
-      "Premium club nights — reserve your table in advance.",
-      "Jubilee Hills fills up early. Book before you leave home.",
+      "Jubilee Hills nights hit different — book like you mean it.",
+      "Dress up, show up, table ready. That is the move.",
     ],
   },
 };

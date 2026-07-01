@@ -34,7 +34,7 @@ const GalleryModal = dynamic(() => import("@/components/GalleryModal"));
 
 const LOGO = "/logos/club-rogue.png";
 const DEFAULT_MAP = "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6";
-const HOOK_ROTATE_MS = 14000;
+const HOOK_ROTATE_MS = 15000;
 
 const DEFAULT_FEE: ClubRogueCustomerFeeBreakdown = {
   totalInr: 50,
@@ -394,7 +394,7 @@ export default function ClubRogueOutletPage({
             {venueName}
           </p>
 
-          <div className="relative mx-auto mt-5 min-h-[5rem] px-1">
+          <div className="relative mx-auto mt-5 min-h-[5.5rem] px-1">
             <AnimatePresence mode="wait">
               <motion.p
                 key={`${brandId}-${hookIndex}`}
