@@ -349,7 +349,6 @@ export type BuildCalendarOpts = {
 export function buildCalendarEntries(opts: BuildCalendarOpts): TeamCalendarEntryDto[] {
   const isAdmin = opts.session.role === "admin";
   const memberId = opts.session.memberId ?? opts.session.username;
-  const isMemberLike = opts.session.role === "member" || opts.session.role === "poc";
 
   const raw: TeamCalendarEntryDto[] = [];
 
@@ -372,19 +371,13 @@ export function buildCalendarEntries(opts: BuildCalendarOpts): TeamCalendarEntry
   if (!isAdmin) {
     filtered = filtered.filter((e) => {
       if (e.source === "task") {
-        if (e.assigneeId === memberId) return true;
-        if (opts.sharedDateKeys.has(e.date)) return true;
-        return false;
+        return e.assigneeId === memberId;
       }
       if (e.source === "event" || e.source === "planning") {
         return opts.sharedDateKeys.has(e.date);
       }
       return false;
     });
-  }
-
-  if (isMemberLike && !isAdmin && opts.sharedDateKeys.size === 0) {
-    filtered = filtered.filter((e) => e.source === "task" && e.assigneeId === memberId);
   }
 
   if (opts.kinds?.length) {

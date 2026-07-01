@@ -45,14 +45,20 @@ export async function GET(req: NextRequest) {
 
   const viewerId = calendarViewerId(session);
   const isAdmin = session.role === "admin";
+  const memberId = session.memberId ?? session.username;
 
   try {
     const sharedDateKeys =
       isAdmin ? new Set<string>() : await sharedDatesForMember(viewerId);
 
+    const taskWhere = {
+      ...(outletId ? { outletId } : {}),
+      ...(!isAdmin ? { assigneeId: memberId } : {}),
+    };
+
     const [tasks, events, planningNotes] = await Promise.all([
       prisma.teamAdTask.findMany({
-        where: outletId ? { outletId } : undefined,
+        where: taskWhere,
         orderBy: { createdAt: "desc" },
       }),
       prisma.teamCalendarEvent.findMany({
