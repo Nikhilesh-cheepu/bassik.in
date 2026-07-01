@@ -16,18 +16,18 @@ export const CLUB_ROGUE_THEME = {
   glow: "rgba(249, 115, 22, 0.22)",
 } as const;
 
-/** Rotating hero lines — emotional, booking-focused. */
+/** Rotating hero lines — clear, professional, booking-focused. */
 export const CLUB_ROGUE_EMOTIONAL_HOOKS = [
-  "Bring your girl. Or don't. Either way, book a table.",
-  "No plus-one? Your table's still waiting.",
-  "Date night, boys' night, solo night — just book.",
-  "She said yes? Lock the table before someone else does.",
-  "Coming solo? The dance floor doesn't judge.",
-  "Want to dance like crazy? Book a table.",
-  "The crowd's already moving. Your table's waiting.",
-  "One tap between you and a legendary night.",
-  "Here to drink and dance? Book a table.",
-  "Feel it before you walk in. Just book.",
+  "Reserve your table. Walk in ready for the night.",
+  "Book ahead. Skip the wait at the door.",
+  "Weekend tables fill fast — secure yours now.",
+  "Planning a night out? Confirm your table in seconds.",
+  "Come with friends or on your own. Just book ahead.",
+  "One confirmed table. One great night out.",
+  "The night is already moving. Reserve your spot.",
+  "Hyderabad club nights start with a booked table.",
+  "Lock your table before you head out.",
+  "Your table is one step away.",
 ] as const;
 
 export const CLUB_ROGUE_LANDING: Record<
@@ -39,15 +39,24 @@ export const CLUB_ROGUE_LANDING: Record<
 > = {
   "club-rogue-gachibowli": {
     locality: "Gachibowli",
-    extraHooks: ["Tollywood or Bollywood — pick your vibe, book your table."],
+    extraHooks: [
+      "Tollywood and Bollywood nights — reserve your table.",
+      "Gachibowli weekends are busy. Book your table early.",
+    ],
   },
   "club-rogue-kondapur": {
     locality: "Kondapur",
-    extraHooks: ["Kondapur nights hit different. Book before it's gone."],
+    extraHooks: [
+      "Kondapur nights move fast — confirm your table ahead.",
+      "Peak weekend energy starts with a reserved table.",
+    ],
   },
   "club-rogue-jubilee-hills": {
     locality: "Jubilee Hills",
-    extraHooks: ["Jubilee Hills energy. One table away."],
+    extraHooks: [
+      "Premium club nights — reserve your table in advance.",
+      "Jubilee Hills fills up early. Book before you leave home.",
+    ],
   },
 };
 
