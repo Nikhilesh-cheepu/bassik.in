@@ -141,8 +141,9 @@ export default function TeamPageHeader({
             <button
               type="button"
               onClick={onLogout}
-              className="hidden rounded-xl border border-white/10 p-2 text-white/45 hover:bg-white/[0.04] xl:flex"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 text-white/45 active:bg-white/[0.06] xl:h-auto xl:w-auto xl:p-2 xl:hover:bg-white/[0.04]"
               aria-label="Lock"
+              title="Log out"
             >
               <IconLock className="h-4 w-4" />
             </button>
