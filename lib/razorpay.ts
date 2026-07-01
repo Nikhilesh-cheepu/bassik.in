@@ -1,6 +1,8 @@
 import Razorpay from "razorpay";
 import crypto from "crypto";
-import { CLUB_ROGUE_RESERVATION_FEE_PAISE } from "@/lib/club-rogue-fees";
+import {
+  clubRogueReservationFeePaiseForGuests,
+} from "@/lib/club-rogue-fees";
 import { isClubRogueBrand } from "@/lib/club-rogue";
 
 export function getRazorpayPublicKeyId(): string {
@@ -24,10 +26,8 @@ export function getRazorpayClient(): Razorpay {
   return new Razorpay({ key_id, key_secret });
 }
 
-export function clubRogueReservationFeePaise(): number {
-  const raw = process.env.CLUB_ROGUE_RESERVATION_FEE_PAISE?.trim();
-  if (raw && /^\d+$/.test(raw)) return Math.max(100, parseInt(raw, 10));
-  return CLUB_ROGUE_RESERVATION_FEE_PAISE;
+export function clubRogueReservationFeePaise(guestCount = 1): number {
+  return clubRogueReservationFeePaiseForGuests(guestCount);
 }
 
 export function verifyRazorpayPaymentSignature(params: {

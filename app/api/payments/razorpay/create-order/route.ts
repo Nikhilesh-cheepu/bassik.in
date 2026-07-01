@@ -45,6 +45,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const guests = Math.max(1, Math.min(20, parseInt(numberOfMen, 10) || 1));
+
     const bookingDraft = {
       ...body,
       fullName,
@@ -75,7 +77,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const amountPaise = clubRogueReservationFeePaise();
+    const amountPaise = clubRogueReservationFeePaise(guests);
     const razorpay = getRazorpayClient();
     const order = await razorpay.orders.create({
       amount: amountPaise,

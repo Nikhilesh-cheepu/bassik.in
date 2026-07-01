@@ -8,10 +8,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { BRANDS } from "@/lib/brands";
 import {
   CLUB_ROGUE_COVER_CHARGE_ACK,
+  CLUB_ROGUE_FEE_BREAKDOWN_LABELS,
   CLUB_ROGUE_GACHIBOWLI_ID,
   CLUB_ROGUE_BRAND_IDS,
   clubRogueChatVenueName,
-  type ClubRogueCustomerFeeBreakdown,
+  getClubRogueCustomerFeeBreakdown,
 } from "@/lib/club-rogue";
 import {
   CLUB_ROGUE_THEME,
@@ -35,13 +36,6 @@ const GalleryModal = dynamic(() => import("@/components/GalleryModal"));
 const LOGO = "/logos/club-rogue.png";
 const DEFAULT_MAP = "https://maps.app.goo.gl/wD2TKLaW9v5gFnmj6";
 const HOOK_ROTATE_MS = 15000;
-
-const DEFAULT_FEE: ClubRogueCustomerFeeBreakdown = {
-  totalInr: 50,
-  confirmationInr: 41,
-  gstHandlingInr: 9,
-  showDetailedGst: true,
-};
 
 type Offer = {
   id: string;
@@ -98,7 +92,7 @@ export default function ClubRogueOutletPage({
   const [selectedEventId, setSelectedEventId] = useState<string | null>(initialEventId);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [people, setPeople] = useState(2);
+  const [people, setPeople] = useState(1);
   const [bookDate, setBookDate] = useState(() => resolveEventBookDateTime(null).date);
   const [bookTime, setBookTime] = useState(() => resolveEventBookDateTime(null).time);
   const [showTimePicker, setShowTimePicker] = useState(false);
@@ -111,9 +105,14 @@ export default function ClubRogueOutletPage({
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [paymentConfigured, setPaymentConfigured] = useState<boolean | null>(null);
-  const [fee, setFee] = useState<ClubRogueCustomerFeeBreakdown>(DEFAULT_FEE);
+  const [perGuestInr, setPerGuestInr] = useState(50);
   const [hookIndex, setHookIndex] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const fee = useMemo(
+    () => getClubRogueCustomerFeeBreakdown(people, perGuestInr),
+    [people, perGuestInr]
+  );
 
   const selectedEvent = venue.offers.find((o) => o.id === selectedEventId) ?? null;
   const slots = getAvailableEventSlots(bookDate);
@@ -125,7 +124,7 @@ export default function ClubRogueOutletPage({
   const resetForm = useCallback(() => {
     setName("");
     setPhone("");
-    setPeople(2);
+    setPeople(1);
     setCoverAck(false);
     setNightGenre("");
     setShowTimePicker(false);
@@ -164,13 +163,10 @@ export default function ClubRogueOutletPage({
       .then((r) => r.json())
       .then((d) => {
         setPaymentConfigured(Boolean(d.configured));
-        if (typeof d.totalInr === "number") {
-          setFee({
-            totalInr: d.totalInr,
-            confirmationInr: d.confirmationInr ?? d.totalInr,
-            gstHandlingInr: d.gstHandlingInr ?? 0,
-            showDetailedGst: Boolean(d.showDetailedGst),
-          });
+        if (typeof d.perGuestTotalInr === "number") {
+          setPerGuestInr(d.perGuestTotalInr);
+        } else if (typeof d.totalInr === "number" && typeof d.guestCount === "number") {
+          setPerGuestInr(d.totalInr / Math.max(1, d.guestCount));
         }
       })
       .catch(() => setPaymentConfigured(false));
@@ -569,6 +565,47 @@ export default function ClubRogueOutletPage({
                 <p className="text-center text-xs text-red-300/90">{error}</p>
               ) : null}
 
+              <div
+                className="rounded-2xl border px-4 py-3.5 text-sm backdrop-blur-md"
+                style={{
+                  borderColor: CLUB_ROGUE_THEME.border,
+                  background: CLUB_ROGUE_THEME.surface,
+                }}
+              >
+                <p
+                  className="text-[10px] font-semibold uppercase tracking-wider"
+                  style={{ color: CLUB_ROGUE_THEME.textDim }}
+                >
+                  Online confirmation fee
+                </p>
+                <p className="mt-2 font-medium text-white/90">
+                  ₹{fee.perGuestTotalInr} × {fee.guestCount}{" "}
+                  {fee.guestCount === 1 ? "guest" : "guests"} = ₹{fee.totalInr}
+                </p>
+                {fee.showDetailedGst ? (
+                  <div className="mt-3 space-y-1.5 border-t pt-3" style={{ borderColor: CLUB_ROGUE_THEME.borderSubtle }}>
+                    <div className="flex justify-between" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
+                      <span>{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.confirmation}</span>
+                      <span>₹{fee.confirmationInr}</span>
+                    </div>
+                    <div className="flex justify-between" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
+                      <span>{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.gstHandling}</span>
+                      <span>₹{fee.gstHandlingInr}</span>
+                    </div>
+                  </div>
+                ) : null}
+                <div
+                  className="mt-3 flex items-baseline justify-between border-t pt-3"
+                  style={{ borderColor: CLUB_ROGUE_THEME.borderSubtle }}
+                >
+                  <span className="font-medium text-white/80">{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.total}</span>
+                  <span className="text-lg font-bold text-white">₹{fee.totalInr}</span>
+                </div>
+                <p className="mt-2 text-[10px] leading-relaxed" style={{ color: CLUB_ROGUE_THEME.textDim }}>
+                  Online only — not entry or cover. ₹2,000 cover per person is paid at the venue.
+                </p>
+              </div>
+
               <button
                 type="button"
                 onClick={handlePayClick}
@@ -706,9 +743,10 @@ export default function ClubRogueOutletPage({
                 </p>
                 <p className="border-t pt-3" style={{ borderColor: CLUB_ROGUE_THEME.borderSubtle }}>
                   <span className="font-semibold" style={{ color: CLUB_ROGUE_THEME.orangeLight }}>
-                    ₹{fee.totalInr} online
+                    ₹{fee.perGuestTotalInr} × {fee.guestCount}{" "}
+                    {fee.guestCount === 1 ? "guest" : "guests"} = ₹{fee.totalInr} online
                   </span>{" "}
-                  only confirms your table. Not entry. Not cover.
+                  — confirmation fee only. Not entry. Not cover.
                 </p>
               </div>
 

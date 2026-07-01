@@ -76,28 +76,60 @@ export function clubRogueReservationFeeInr(): number {
 }
 
 export type ClubRogueCustomerFeeBreakdown = {
+  guestCount: number;
+  perGuestTotalInr: number;
   totalInr: number;
   confirmationInr: number;
   gstHandlingInr: number;
-  /** Full ₹41 + ₹9 split — hidden for low test amounts (e.g. ₹2). */
+  gstInr: number;
   showDetailedGst: boolean;
 };
 
-/** Guest-facing fee lines for the booking card and payment status API. */
-export function getClubRogueCustomerFeeBreakdown(): ClubRogueCustomerFeeBreakdown {
-  const totalInr = clubRogueReservationFeeInr();
-  if (totalInr <= 10) {
+/** Per-guest all-in confirmation fee (env `CLUB_ROGUE_RESERVATION_FEE_PAISE` or default ₹50). */
+export function clubRoguePerGuestFeeInr(): number {
+  return clubRogueReservationFeeInr();
+}
+
+/** Guest-facing fee lines — scales with guest count (₹50 × guests, etc.). */
+export function getClubRogueCustomerFeeBreakdown(
+  guestCount = 1,
+  perGuestTotalInr = clubRoguePerGuestFeeInr()
+): ClubRogueCustomerFeeBreakdown {
+  const guests = Math.max(1, Math.min(20, Math.floor(guestCount)));
+  const perGuest = Math.max(1, perGuestTotalInr);
+  const totalInr = round2(perGuest * guests);
+
+  if (perGuest <= 10) {
     return {
+      guestCount: guests,
+      perGuestTotalInr: perGuest,
       totalInr,
       confirmationInr: totalInr,
       gstHandlingInr: 0,
+      gstInr: 0,
       showDetailedGst: false,
     };
   }
+
+  const scale = perGuest / CLUB_ROGUE_RESERVATION_FEE_INR;
+  const perGuestConfirmation = round2(CLUB_ROGUE_CONFIRMATION_FEE_INR * scale);
+  const perGuestGstHandling = round2(CLUB_ROGUE_GST_HANDLING_INR * scale);
+  const confirmationInr = round2(perGuestConfirmation * guests);
+  const gstHandlingInr = round2(perGuestGstHandling * guests);
+  const gstInr = round2(clubRogueGstOnConfirmationInr(perGuestConfirmation) * guests);
+
   return {
+    guestCount: guests,
+    perGuestTotalInr: perGuest,
     totalInr,
-    confirmationInr: CLUB_ROGUE_CONFIRMATION_FEE_INR,
-    gstHandlingInr: round2(totalInr - CLUB_ROGUE_CONFIRMATION_FEE_INR),
+    confirmationInr,
+    gstHandlingInr,
+    gstInr,
     showDetailedGst: true,
   };
+}
+
+export function clubRogueReservationFeePaiseForGuests(guestCount = 1, perGuestTotalInr?: number): number {
+  const breakdown = getClubRogueCustomerFeeBreakdown(guestCount, perGuestTotalInr);
+  return Math.round(breakdown.totalInr * 100);
 }
