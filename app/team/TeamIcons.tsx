@@ -15,6 +15,18 @@ export function IconTasks({ className = "h-6 w-6" }: { className?: string }) {
   );
 }
 
+export function IconCalendar({ className = "h-6 w-6" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+      <rect x="4" y="5" width="16" height="15" rx="2" />
+      <path d="M8 3v4M16 3v4M4 10h16" />
+      <circle cx="9" cy="14" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="14" r="1" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="17" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 export function IconPlan({ className = "h-6 w-6" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">

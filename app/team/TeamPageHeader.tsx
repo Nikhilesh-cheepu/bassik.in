@@ -4,19 +4,17 @@ import type { ReactNode } from "react";
 import { TEAM_AD_OUTLETS } from "@/lib/team-outlets";
 import { IconChevronDown, IconLock, teamFilterChip } from "./TeamIcons";
 import { TEAM_PAGE, type TeamTab } from "./TeamNav";
-import { PlanningFilters } from "./TeamPlanningView";
-import type { TeamPlanningFilter } from "@/lib/team-planning";
 
 const TAB_TITLES: Record<TeamTab, string> = {
   ads: "Ads & creatives",
-  planning: "Planning & feedback",
+  calendar: "Team calendar",
   reminders: "Notes",
   ai: "AI assistant",
 };
 
 const MOBILE_TITLES: Record<TeamTab, string> = {
   ads: "Tasks",
-  planning: "Planning",
+  calendar: "Calendar",
   reminders: "Notes",
   ai: "AI",
 };
@@ -56,26 +54,6 @@ function OutletSelect({
   );
 }
 
-function SearchInput({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-}) {
-  return (
-    <input
-      type="search"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      className="h-7 min-w-[7rem] flex-1 rounded-full bg-white/[0.05] px-3 text-[11px] text-white/70 outline-none ring-1 ring-white/[0.08] placeholder:text-white/30 focus:ring-white/20 sm:max-w-[12rem]"
-    />
-  );
-}
-
 export default function TeamPageHeader({
   tab,
   userLabel,
@@ -95,16 +73,6 @@ export default function TeamPageHeader({
   members,
   memberTab,
   onMemberTabChange,
-  planningFilter,
-  onPlanningFilterChange,
-  notesSearch,
-  onNotesSearchChange,
-  notesOutletFilter,
-  onNotesOutletFilterChange,
-  planningSearch,
-  onPlanningSearchChange,
-  planningOutletFilter,
-  onPlanningOutletFilterChange,
 }: {
   tab: TeamTab;
   userLabel: string;
@@ -124,16 +92,6 @@ export default function TeamPageHeader({
   members: { id: string; name: string }[];
   memberTab: MemberTab;
   onMemberTabChange: (id: MemberTab) => void;
-  planningFilter: TeamPlanningFilter;
-  onPlanningFilterChange: (f: TeamPlanningFilter) => void;
-  notesSearch: string;
-  onNotesSearchChange: (v: string) => void;
-  notesOutletFilter: string;
-  onNotesOutletFilterChange: (v: string) => void;
-  planningSearch: string;
-  onPlanningSearchChange: (v: string) => void;
-  planningOutletFilter: string;
-  onPlanningOutletFilterChange: (v: string) => void;
 }) {
   const outletLabel =
     TEAM_AD_OUTLETS.find((o) => o.id === outletFilter)?.label ?? "All outlets";
@@ -154,12 +112,12 @@ export default function TeamPageHeader({
         {refreshing ? " · …" : ""}
       </span>
     </p>
-  ) : tab !== "ai" && !isMemberHub && tab !== "reminders" && tab !== "planning" ? (
+  ) : tab !== "ai" && !isMemberHub && tab !== "reminders" && tab !== "calendar" ? (
     <p className="mt-0.5 text-[11px] text-white/35 xl:hidden">{userLabel}</p>
   ) : isMemberHub || tab === "reminders" ? (
     <p className="mt-0.5 text-[11px] text-white/35">Personal workspace — tag outlets or keep Direct</p>
-  ) : tab === "planning" ? (
-    <p className="mt-0.5 text-[11px] text-white/35">Shared calendars, sheets & team feedback</p>
+  ) : tab === "calendar" ? (
+    <p className="mt-0.5 text-[11px] text-white/35">Tasks, shoots, plans — share selected dates with the team</p>
   ) : null;
 
   return (
@@ -234,21 +192,6 @@ export default function TeamPageHeader({
                 ))}
               </>
             ) : null}
-          </div>
-        ) : tab === "planning" ? (
-          <div className={`${SCROLL_ROW} gap-2`}>
-            <PlanningFilters filter={planningFilter} onFilterChange={onPlanningFilterChange} />
-            <span className="mx-0.5 h-3.5 w-px shrink-0 bg-white/10" aria-hidden />
-            <OutletSelect
-              value={planningOutletFilter}
-              onChange={onPlanningOutletFilterChange}
-              ariaLabel="Filter planning by outlet"
-            />
-            <SearchInput
-              value={planningSearch}
-              onChange={onPlanningSearchChange}
-              placeholder="Search planning…"
-            />
           </div>
         ) : null}
       </div>

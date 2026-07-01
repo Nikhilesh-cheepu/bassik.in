@@ -22,11 +22,7 @@ import AdTaskList from "./AdTaskList";
 import { emptyMemberRecordForm, MemberRecordSheet, type MemberRecordForm } from "./MemberRecordSheet";
 import TeamPageHeader from "./TeamPageHeader";
 import TeamNotesView, { emptyNoteForm, type NoteForm } from "./TeamNotesView";
-import {
-  emptyPlanningSheetForm,
-  PlanningSheetFormSheet,
-  type PlanningSheetForm,
-} from "./TeamPlanningSheet";
+import TeamCalendarView from "./TeamCalendarView";
 import { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
 import TeamDock, { TeamActionSheet, TeamMoreSheet } from "./TeamDock";
 import TeamWhatsAppSheet from "./TeamWhatsAppSheet";
@@ -34,9 +30,7 @@ import TeamDoneReportBanner from "./TeamDoneReportBanner";
 import TeamDoneReportSheet from "./TeamDoneReportSheet";
 import { TEAM_DOCK_PADDING } from "./TeamIcons";
 import TeamAiPanel from "./TeamAiPanel";
-import { PlanningNoteList } from "./TeamPlanningView";
-import type { TeamPlanningDto, TeamPlanningFilter } from "@/lib/team-planning";
-import { searchPlanningNotes } from "@/lib/team-planning";
+import { teamPersonalNoteOwnerId } from "@/lib/team-personal-notes";
 
 type TeamUser = { username: string; role: "admin" | "member" | "viewer" | "poc"; memberId?: string };
 type TeamMember = { id: string; name: string; role?: string };
@@ -223,23 +217,16 @@ export default function TeamClient() {
   const [tab, setTab] = useState<TeamTab>("ads");
   const [tasks, setTasks] = useState<TeamTaskDto[]>([]);
   const [personalNotes, setPersonalNotes] = useState<TeamPersonalNoteDto[]>([]);
-  const [planningNotes, setPlanningNotes] = useState<TeamPlanningDto[]>([]);
   const [tasksReady, setTasksReady] = useState(false);
   const [notesReady, setNotesReady] = useState(false);
-  const [planningReady, setPlanningReady] = useState(false);
+  const [calendarAddSignal, setCalendarAddSignal] = useState(0);
   const [noteForm, setNoteForm] = useState<NoteForm>(emptyNoteForm());
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [notesSearch, setNotesSearch] = useState("");
   const [notesOutletFilter, setNotesOutletFilter] = useState("");
   const [notesScope, setNotesScope] = useState<NoteListScope>("all");
   const [noteUploading, setNoteUploading] = useState(false);
-  const [planningSearch, setPlanningSearch] = useState("");
-  const [planningOutletFilter, setPlanningOutletFilter] = useState("");
   const [noteComposeKey, setNoteComposeKey] = useState(0);
-  const [planningFilter, setPlanningFilter] = useState<TeamPlanningFilter>("all");
-  const [showPlanningForm, setShowPlanningForm] = useState(false);
-  const [editingPlanning, setEditingPlanning] = useState<TeamPlanningDto | null>(null);
-  const [planningForm, setPlanningForm] = useState<PlanningSheetForm>(emptyPlanningSheetForm());
   const [refUploading, setRefUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<Filter>("todo");
@@ -350,31 +337,6 @@ export default function TeamClient() {
     }
   }, [notesSearch, notesOutletFilter, notesScope]);
 
-  const loadPlanning = useCallback(
-    async (silent = false) => {
-      if (!silent) setRefreshing(true);
-      setError(null);
-      try {
-        const qs = new URLSearchParams();
-        if (planningFilter !== "all") qs.set("type", planningFilter);
-        const res = await fetch(`/api/team/planning?${qs}`);
-        if (res.status === 401) {
-          setUser(null);
-          return;
-        }
-        const data = await readTeamApiJson(res);
-        if (!res.ok) throw new Error(teamApiError(data, "Could not load planning"));
-        setPlanningNotes(teamApiArray<TeamPlanningDto>(data, "notes"));
-        setPlanningReady(true);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Load failed");
-      } finally {
-        setRefreshing(false);
-      }
-    },
-    [planningFilter]
-  );
-
   const probeSession = useCallback(async () => {
     try {
       const res = await fetch("/api/team/auth");
@@ -398,34 +360,30 @@ export default function TeamClient() {
 
   useEffect(() => {
     if (!user) return;
-    if (isMemberLike && (tab === "planning" || tab === "ai")) {
+    if (isMemberLike && tab === "ai") {
       setTab("reminders");
     }
-  }, [user, tab, isMemberLike]);
+    if (isViewer && (tab === "calendar" || tab === "reminders" || tab === "ai")) {
+      setTab("ads");
+    }
+  }, [user, tab, isMemberLike, isViewer]);
 
   useEffect(() => {
     if (!user) return;
     if (tab === "ads") void loadTasks(tasksReady);
     else if (tab === "reminders" && !isViewer) void loadPersonalNotes(notesReady);
-    else if (tab === "planning") void loadPlanning(planningReady);
-  }, [user, tab, loadTasks, loadPersonalNotes, loadPlanning, isViewer, isMemberLike]);
+  }, [user, tab, loadTasks, loadPersonalNotes, isViewer, isMemberLike]);
 
   useEffect(() => {
     if (!user || tab !== "reminders" || isViewer) return;
     void loadPersonalNotes(notesReady);
   }, [notesSearch, notesOutletFilter, notesScope]);
 
-  useEffect(() => {
-    if (!user || tab !== "planning") return;
-    void loadPlanning(planningReady);
-  }, [planningFilter]);
-
   const shareDoneReport = () => setShowDoneReportSheet(true);
 
   useEffect(() => {
     const open =
       showTaskForm ||
-      showPlanningForm ||
       showMemberRecordForm ||
       showActionSheet ||
       showMoreSheet ||
@@ -435,7 +393,7 @@ export default function TeamClient() {
     return () => {
       document.body.style.overflow = "";
     };
-  }, [showTaskForm, showPlanningForm, showMemberRecordForm, showActionSheet, showMoreSheet, showWhatsAppSheet, showDoneReportSheet]);
+  }, [showTaskForm, showMemberRecordForm, showActionSheet, showMoreSheet, showWhatsAppSheet, showDoneReportSheet]);
 
   const uploadBlob = async (file: File, kind: "creative" | "reference") => {
     const fd = new FormData();
@@ -475,16 +433,12 @@ export default function TeamClient() {
     setTab("ads");
     setTasks([]);
     setPersonalNotes([]);
-    setPlanningNotes([]);
     setTasksReady(false);
     setNotesReady(false);
-    setPlanningReady(false);
     setNoteForm(emptyNoteForm());
     setEditingNoteId(null);
     setNotesSearch("");
     setNotesOutletFilter("");
-    setPlanningSearch("");
-    setPlanningOutletFilter("");
   };
 
   const resolveAssigneeId = () =>
@@ -671,87 +625,6 @@ export default function TeamClient() {
     }
   };
 
-  const uploadPlanningFile = async (file: File) => {
-    setRefUploading(true);
-    setError(null);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("outletId", planningForm.outletId || "general");
-      fd.append("kind", "planning");
-      const res = await fetch("/api/team/upload", { method: "POST", body: fd });
-      const data = await readTeamApiJson(res);
-      if (!res.ok) throw new Error(teamApiError(data, "Upload failed"));
-      setPlanningForm((f) => ({
-        ...f,
-        attachments: [
-          ...f.attachments,
-          { url: teamApiString(data, "url") ?? "", fileName: teamApiString(data, "fileName") ?? file.name, mimeType: teamApiString(data, "mimeType") ?? file.type },
-        ],
-      }));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setRefUploading(false);
-    }
-  };
-
-  const openCreatePlanning = (type: "PLANNING" | "FEEDBACK" = "PLANNING") => {
-    setEditingPlanning(null);
-    setPlanningForm(emptyPlanningSheetForm(type));
-    setShowPlanningForm(true);
-  };
-
-  const openEditPlanning = (n: TeamPlanningDto) => {
-    setEditingPlanning(n);
-    setPlanningForm({
-      type: n.type,
-      title: n.title,
-      outletId: n.outletId ?? "",
-      sheetData: n.sheetData ?? emptyPlanningSheetForm(n.type).sheetData,
-      attachments: n.attachments ?? [],
-    });
-    setShowPlanningForm(true);
-  };
-
-  const savePlanning = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      const payload = {
-        type: planningForm.type,
-        title: planningForm.title.trim(),
-        outletId: planningForm.outletId,
-        sheetData: planningForm.sheetData,
-        attachmentUrls: planningForm.attachments,
-      };
-      const url = editingPlanning
-        ? `/api/team/planning/${editingPlanning.id}`
-        : "/api/team/planning";
-      const res = await fetch(url, {
-        method: editingPlanning ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await readTeamApiJson(res);
-      if (!res.ok) throw new Error(teamApiError(data, "Save failed"));
-      setShowPlanningForm(false);
-      setEditingPlanning(null);
-      await loadPlanning(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deletePlanningNote = async (n: TeamPlanningDto) => {
-    if (!window.confirm(`Delete "${n.title}"?`)) return;
-    const res = await fetch(`/api/team/planning/${n.id}`, { method: "DELETE" });
-    if (res.ok) await loadPlanning(true);
-  };
-
   const saveTask = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -878,21 +751,13 @@ export default function TeamClient() {
   const activeMemberLabel =
     memberTab !== "all" ? memberName(members, memberTab) : null;
 
-  const filteredPlanningNotes = useMemo(
-    () => searchPlanningNotes(planningNotes, { q: planningSearch, outletId: planningOutletFilter }),
-    [planningNotes, planningSearch, planningOutletFilter]
-  );
-
-  const listReady =
-    tab === "ads" ? tasksReady : tab === "reminders" ? notesReady : tab === "planning" ? planningReady : true;
+  const listReady = tab === "ads" ? tasksReady : tab === "reminders" ? notesReady : true;
   const listEmpty =
     tab === "ads"
       ? tasks.length === 0
-      : tab === "planning"
-        ? filteredPlanningNotes.length === 0 && !planningSearch && !planningOutletFilter
-        : tab === "reminders"
-          ? personalNotes.length === 0 && !notesSearch && !notesOutletFilter
-          : false;
+      : tab === "reminders"
+        ? personalNotes.length === 0 && !notesSearch && !notesOutletFilter
+        : false;
 
   const doneReportDateCount = useMemo(() => {
     const keys = new Set(
@@ -1034,13 +899,13 @@ export default function TeamClient() {
         >
           + Note
         </button>
-      ) : tab === "planning" && user.role === "admin" ? (
+      ) : tab === "calendar" && user.role === "admin" ? (
         <button
           type="button"
-          onClick={() => openCreatePlanning()}
+          onClick={() => setCalendarAddSignal((n) => n + 1)}
           className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white"
         >
-          + Planning
+          + Event
         </button>
       ) : null
     ) : null;
@@ -1052,7 +917,7 @@ export default function TeamClient() {
         onChange={setTab}
         hideReminders={isViewer}
         hideAi={isViewer || isMemberLike}
-        hidePlanning={isViewer || isMemberLike}
+        hideCalendar={isViewer}
         userLabel={userLabel}
         onLogout={() => void logout()}
       />
@@ -1077,16 +942,6 @@ export default function TeamClient() {
         members={members}
         memberTab={memberTab}
         onMemberTabChange={setMemberTab}
-        planningFilter={planningFilter}
-        onPlanningFilterChange={setPlanningFilter}
-        notesSearch={notesSearch}
-        onNotesSearchChange={setNotesSearch}
-        notesOutletFilter={notesOutletFilter}
-        onNotesOutletFilterChange={setNotesOutletFilter}
-        planningSearch={planningSearch}
-        onPlanningSearchChange={setPlanningSearch}
-        planningOutletFilter={planningOutletFilter}
-        onPlanningOutletFilterChange={setPlanningOutletFilter}
       />
 
       <main
@@ -1153,13 +1008,12 @@ export default function TeamClient() {
             onPriorityChange={changeTaskPriority}
           />
           </>
-        ) : tab === "planning" ? (
-          <PlanningNoteList
-            notes={filteredPlanningNotes}
-            ready={planningReady}
-            isViewer={isViewer}
-            onEdit={openEditPlanning}
-            onDelete={(n) => void deletePlanningNote(n)}
+        ) : tab === "calendar" && !isViewer ? (
+          <TeamCalendarView
+            members={members}
+            isAdmin={user.role === "admin"}
+            viewerId={teamPersonalNoteOwnerId(user)}
+            addEventSignal={calendarAddSignal}
           />
         ) : tab === "ai" && user.role === "admin" ? (
           <TeamAiPanel
@@ -1206,8 +1060,8 @@ export default function TeamClient() {
             focusNoteComposer();
             return;
           }
-          if (tab === "planning" && user.role === "admin") {
-            openCreatePlanning();
+          if (tab === "calendar" && user.role === "admin") {
+            setCalendarAddSignal((n) => n + 1);
             return;
           }
           setShowActionSheet(true);
@@ -1224,7 +1078,7 @@ export default function TeamClient() {
             ? [{ label: "New ad task", onClick: openCreateTask, tone: "accent" as const }]
             : []),
           ...(user.role === "admin"
-            ? [{ label: "New planning sheet", onClick: () => openCreatePlanning(), tone: "default" as const }]
+            ? [{ label: "New calendar event", onClick: () => setCalendarAddSignal((n) => n + 1), tone: "default" as const }]
             : []),
           ...(isPoc && tab === "ads"
             ? [
@@ -1254,7 +1108,7 @@ export default function TeamClient() {
         open={showMoreSheet}
         onClose={() => setShowMoreSheet(false)}
         onReminders={() => setTab("reminders")}
-        onPlanning={user.role === "admin" ? () => setTab("planning") : undefined}
+        onCalendar={!isViewer ? () => setTab("calendar") : undefined}
         onAi={() => setTab("ai")}
         onExport={exportExcel}
         onWhatsApp={user.role === "admin" ? shareWhatsApp : undefined}
@@ -1494,21 +1348,6 @@ export default function TeamClient() {
           </form>
         </div>
       ) : null}
-
-      <PlanningSheetFormSheet
-        open={showPlanningForm}
-        form={planningForm}
-        setForm={setPlanningForm}
-        editing={Boolean(editingPlanning)}
-        saving={saving}
-        uploading={refUploading}
-        onClose={() => {
-          setShowPlanningForm(false);
-          setEditingPlanning(null);
-        }}
-        onSubmit={savePlanning}
-        onUploadFile={(file) => void uploadPlanningFile(file)}
-      />
 
       <MemberRecordSheet
         open={showMemberRecordForm}

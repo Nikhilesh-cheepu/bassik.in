@@ -411,6 +411,60 @@ enum TeamPlanningType {
   FEEDBACK
 }
 
+enum TeamCalendarEventType {
+  SHOOT
+  PLAN
+  MEETING
+  OTHER
+}
+
+/// Custom calendar entries (shoots, plans, meetings).
+model TeamCalendarEvent {
+  id          String                @id @default(cuid())
+  type        TeamCalendarEventType @default(PLAN)
+  title       String
+  description String?
+  date        String                // YYYY-MM-DD
+  endDate     String?               // YYYY-MM-DD — optional multi-day span
+  outletId    String?
+  createdBy   String
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  @@index([date])
+  @@index([endDate])
+  @@index([outletId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+/// Admin shares selected calendar dates with teammates.
+model TeamCalendarShare {
+  id        String                    @id @default(cuid())
+  createdBy String
+  title     String?
+  dateKeys  Json                      // string[] — YYYY-MM-DD
+  message   String?
+  createdAt DateTime                  @default(now())
+  members   TeamCalendarShareMember[]
+
+  @@index([createdBy])
+  @@index([createdAt])
+}
+
+model TeamCalendarShareMember {
+  id        String            @id @default(cuid())
+  shareId   String
+  memberId  String
+  sharedBy  String
+  createdAt DateTime          @default(now())
+  share     TeamCalendarShare @relation(fields: [shareId], references: [id], onDelete: Cascade)
+
+  @@unique([shareId, memberId])
+  @@index([memberId])
+  @@index([shareId])
+}
+
 /// SEO & performance marketing ad/creative tasks (internal /team board).
 model TeamAdTask {
   id              String              @id @default(cuid())

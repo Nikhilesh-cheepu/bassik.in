@@ -4,8 +4,8 @@ import type { TeamTab } from "./TeamNav";
 import {
   IconAi,
   IconBell,
+  IconCalendar,
   IconMore,
-  IconPlan,
   IconPlus,
   IconTasks,
   IconWhatsApp,
@@ -64,10 +64,14 @@ export default function TeamDock({
         className={navClass}
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", minHeight: TEAM_DOCK_HEIGHT }}
       >
-        <div className="mx-auto flex h-14 max-w-sm items-end justify-between px-8">
+        <div className="mx-auto flex h-14 max-w-sm items-end justify-between px-4">
           <button type="button" onClick={() => onTab("ads")} className={dockItem(tab === "ads")}>
             <IconTasks className="h-[22px] w-[22px]" />
             Tasks
+          </button>
+          <button type="button" onClick={() => onTab("calendar")} className={dockItem(tab === "calendar")}>
+            <IconCalendar className="h-[22px] w-[22px]" />
+            Calendar
           </button>
           <button
             type="button"
@@ -115,9 +119,14 @@ export default function TeamDock({
         </button>
 
         {isAdmin ? (
-          <button type="button" onClick={() => onTab("planning")} className={dockItem(tab === "planning")}>
-            <IconPlan className="h-[22px] w-[22px]" />
-            Plan
+          <button type="button" onClick={() => onTab("calendar")} className={dockItem(tab === "calendar")}>
+            <IconCalendar className="h-[22px] w-[22px]" />
+            Calendar
+          </button>
+        ) : isMember ? (
+          <button type="button" onClick={() => onTab("calendar")} className={dockItem(tab === "calendar")}>
+            <IconCalendar className="h-[22px] w-[22px]" />
+            Calendar
           </button>
         ) : null}
 
@@ -179,7 +188,7 @@ export function TeamMoreSheet({
   open,
   onClose,
   onReminders,
-  onPlanning,
+  onCalendar,
   onAi,
   onExport,
   onWhatsApp,
@@ -187,14 +196,14 @@ export function TeamMoreSheet({
   open: boolean;
   onClose: () => void;
   onReminders: () => void;
-  onPlanning?: () => void;
+  onCalendar?: () => void;
   onAi: () => void;
   onExport: () => void;
   onWhatsApp?: () => void;
 }) {
   if (!open) return null;
   const items = [
-    ...(onPlanning ? [{ label: "Planning", icon: IconPlan, onClick: onPlanning }] : []),
+    ...(onCalendar ? [{ label: "Calendar", icon: IconCalendar, onClick: onCalendar }] : []),
     { label: "My notes", icon: IconBell, onClick: onReminders },
     { label: "AI assistant", icon: IconAi, onClick: onAi },
     ...(onWhatsApp ? [{ label: "WhatsApp report", icon: IconWhatsApp, onClick: onWhatsApp }] : []),
