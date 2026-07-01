@@ -74,29 +74,44 @@ function outletLabel(id: string | null): string | null {
   return TEAM_AD_OUTLETS.find((o) => o.id === id)?.label ?? id;
 }
 
-function EntryRow({ entry }: { entry: TeamCalendarEntryDto }) {
+function EntryRow({
+  entry,
+  onEdit,
+}: {
+  entry: TeamCalendarEntryDto;
+  onEdit?: () => void;
+}) {
   const outlet = outletLabel(entry.outletId);
-  return (
-    <li className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
-      <div className="flex items-start gap-2">
-        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${CALENDAR_KIND_COLORS[entry.kind]}`} />
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-white/90">{entry.title}</p>
-          {entry.subtitle ? (
-            <p className="mt-0.5 text-[11px] text-white/40">{entry.subtitle}</p>
-          ) : null}
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white/45">
-              {CALENDAR_KIND_LABELS[entry.kind]}
+  const content = (
+    <div className="flex items-start gap-2">
+      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${CALENDAR_KIND_COLORS[entry.kind]}`} />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-white/90">{entry.title}</p>
+        {entry.subtitle ? (
+          <p className="mt-0.5 text-[11px] text-white/40">{entry.subtitle}</p>
+        ) : null}
+        <div className="mt-1.5 flex flex-wrap gap-1.5">
+          <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white/45">
+            {CALENDAR_KIND_LABELS[entry.kind]}
+          </span>
+          {outlet ? (
+            <span className="rounded-md bg-cyan-500/10 px-1.5 py-0.5 text-[9px] text-cyan-200/70">
+              {outlet}
             </span>
-            {outlet ? (
-              <span className="rounded-md bg-cyan-500/10 px-1.5 py-0.5 text-[9px] text-cyan-200/70">
-                {outlet}
-              </span>
-            ) : null}
-          </div>
+          ) : null}
         </div>
       </div>
+    </div>
+  );
+  return (
+    <li className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
+      {onEdit ? (
+        <button type="button" onClick={onEdit} className="w-full text-left">
+          {content}
+        </button>
+      ) : (
+        content
+      )}
     </li>
   );
 }
@@ -736,19 +751,15 @@ export default function TeamCalendarView({
             ) : (
               <ul className="mt-3 max-h-[50vh] space-y-2 overflow-y-auto xl:max-h-[calc(100vh-16rem)]">
                 {selectedEntries.map((entry) => (
-                  <li key={entry.id}>
-                    {isAdmin && entry.source === "event" ? (
-                      <button
-                        type="button"
-                        onClick={() => openEditEvent(entry)}
-                        className="w-full text-left"
-                      >
-                        <EntryRow entry={entry} />
-                      </button>
-                    ) : (
-                      <EntryRow entry={entry} />
-                    )}
-                  </li>
+                  <EntryRow
+                    key={entry.id}
+                    entry={entry}
+                    onEdit={
+                      isAdmin && entry.source === "event"
+                        ? () => openEditEvent(entry)
+                        : undefined
+                    }
+                  />
                 ))}
               </ul>
             )}
