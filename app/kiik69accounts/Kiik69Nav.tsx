@@ -46,7 +46,7 @@ export function Kiik69SidebarNav({
   onChange: (id: Kiik69AccountsModule) => void;
 }) {
   return (
-    <aside className="sticky top-0 hidden h-[100dvh] w-[220px] shrink-0 flex-col border-r border-white/[0.06] bg-[#08080e] xl:flex xl:w-56">
+    <aside className="kiik69-sidebar sticky top-0 hidden h-[100dvh] w-[220px] shrink-0 flex-col border-r border-white/[0.06] bg-[#08080e] xl:flex xl:w-56">
       <div className="border-b border-white/[0.05] px-5 py-5">
         <Image src={LOGO} alt="KIIK 69" width={160} height={160} className="h-11 w-auto object-contain" priority />
         <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300/70">
@@ -99,23 +99,22 @@ export default function Kiik69Dock({
 
   return (
     <nav
-      className={navClass}
+      className={`kiik69-dock ${navClass}`}
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", minHeight: KIIK69_DOCK_HEIGHT }}
     >
-      <div className="mx-auto flex h-14 max-w-lg items-end px-0.5">
-        <button type="button" onClick={() => onModule("purchases")} className={dockItem(module === "purchases")}>
+      <div className="kiik69-dock-inner mx-auto flex h-14 max-w-lg items-end px-0.5">
+        <button
+          type="button"
+          onClick={() => onModule("purchases")}
+          className={`kiik69-dock-btn ${dockItem(module === "purchases")} ${module === "purchases" ? "is-active" : ""}`}
+        >
           <IconCart className="h-[22px] w-[22px]" />
           Purchases
         </button>
 
         {showAdd ? (
-          <button
-            type="button"
-            onClick={onAdd}
-            className="relative -top-3 flex w-12 shrink-0 flex-col items-center justify-center"
-            aria-label="Add purchase"
-          >
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/30">
+          <button type="button" onClick={onAdd} className="kiik69-dock-fab" aria-label="Add purchase">
+            <span>
               <IconPlus className="h-6 w-6" />
             </span>
           </button>
@@ -123,7 +122,11 @@ export default function Kiik69Dock({
           <div className="w-12 shrink-0" />
         )}
 
-        <button type="button" onClick={() => onModule("ai")} className={dockItem(module === "ai")}>
+        <button
+          type="button"
+          onClick={() => onModule("ai")}
+          className={`kiik69-dock-btn ${dockItem(module === "ai")} ${module === "ai" ? "is-active" : ""}`}
+        >
           <IconAi className="h-[22px] w-[22px]" />
           AI
         </button>
@@ -131,7 +134,9 @@ export default function Kiik69Dock({
         <button
           type="button"
           onClick={onMore}
-          className={dockItem(module !== "purchases" && module !== "ai")}
+          className={`kiik69-dock-btn ${dockItem(module !== "purchases" && module !== "ai")} ${
+            module !== "purchases" && module !== "ai" ? "is-active" : ""
+          }`}
         >
           <IconGrid className="h-[22px] w-[22px]" />
           More

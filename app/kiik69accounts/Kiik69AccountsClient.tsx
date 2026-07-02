@@ -71,10 +71,9 @@ export default function Kiik69AccountsClient() {
 
   const current = KIIK69_ACCOUNTS_MODULES.find((m) => m.id === module);
   const mobileTitle = current?.label ?? "Accounts";
-  const desktopTitle = current?.label ?? "Accounts";
 
   return (
-    <div className="min-h-[100dvh] bg-[#06060a] text-white xl:flex xl:h-[100dvh]">
+    <div className="kiik69-shell-inner min-h-[100dvh] bg-[#06060a] text-white xl:flex xl:h-[100dvh]">
       <Kiik69SidebarNav active={module} onChange={setModule} />
 
       <div className="flex h-[100dvh] min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-[env(safe-area-inset-bottom)] xl:max-h-[100dvh] xl:pb-0">
@@ -87,13 +86,12 @@ export default function Kiik69AccountsClient() {
                   alt="KIIK 69"
                   width={80}
                   height={80}
-                  className="h-9 w-9 shrink-0 rounded-lg object-contain xl:hidden"
+                  className="kiik69-mobile-only h-9 w-9 shrink-0 rounded-lg object-contain"
                   priority
                 />
                 <div className="min-w-0">
                   <h1 className="truncate text-base font-semibold tracking-tight xl:text-2xl">
-                    <span className="xl:hidden">{mobileTitle}</span>
-                    <span className="hidden xl:inline">{desktopTitle}</span>
+                    {mobileTitle}
                   </h1>
                   {current?.hint ? (
                     <p className="mt-0.5 text-[11px] text-white/35">{current.hint}</p>
@@ -105,7 +103,7 @@ export default function Kiik69AccountsClient() {
                 <button
                   type="button"
                   onClick={() => setAddSignal((n) => n + 1)}
-                  className="hidden shrink-0 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white xl:inline-flex"
+                  className="kiik69-desktop-only hidden shrink-0 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white xl:inline-flex"
                 >
                   + Add purchase
                 </button>

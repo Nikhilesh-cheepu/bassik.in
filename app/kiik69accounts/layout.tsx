@@ -1,3 +1,4 @@
+import "../globals.css";
 import "./kiik69-accounts.css";
 
 export default function Kiik69AccountsLayout({ children }: { children: React.ReactNode }) {
