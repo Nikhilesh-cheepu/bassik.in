@@ -74,6 +74,7 @@ export type Kiik69AccountsModule =
   | "ai"
   | "sales"
   | "inventory"
+  | "wallet"
   | "utilities"
   | "daily"
   | "games";
@@ -88,7 +89,8 @@ export const KIIK69_ACCOUNTS_MODULES: {
   { id: "purchases", label: "Purchases", shortLabel: "Buy", hint: "Log bills · tag outlet", live: true },
   { id: "ai", label: "AI accountant", shortLabel: "AI", hint: "Ask, calculate, summarize", live: true },
   { id: "sales", label: "Sales", shortLabel: "Sales", hint: "Kitchen sale 70/30 by outlet", live: false },
-  { id: "inventory", label: "Inventory", shortLabel: "Stock", hint: "Items & stock levels", live: false },
+  { id: "inventory", label: "Inventory", shortLabel: "Stock", hint: "Food & liquor stock in/out", live: true },
+  { id: "wallet", label: "Wallet", shortLabel: "Cash", hint: "KIIK 69 petty cash", live: true },
   { id: "utilities", label: "Utilities", shortLabel: "Bills", hint: "Repairs & utilities", live: false },
   { id: "daily", label: "Daily report", shortLabel: "Report", hint: "KIIK 69 end-of-day only", live: false },
   { id: "games", label: "Games", shortLabel: "Games", hint: "KIIK 69 game purchases only", live: false },

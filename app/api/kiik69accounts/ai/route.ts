@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getKiik69AccountsFromRequest } from "@/lib/kiik69-auth";
 import { runKiik69AccountantChat, type Kiik69AiMessage } from "@/lib/kiik69-accountant-ai";
 import { buildKiik69PurchaseStats } from "@/lib/kiik69-purchase-stats";
+import { buildKiik69StockStats } from "@/lib/kiik69-stock-stats";
 import { prismaSchemaErrorResponse } from "@/lib/prisma-schema-error";
 
 export async function POST(req: NextRequest) {
@@ -27,12 +28,26 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const rows = await prisma.kiik69Purchase.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 500,
-    });
-    const stats = buildKiik69PurchaseStats(rows);
-    const reply = await runKiik69AccountantChat(messages, stats);
+    const [purchaseRows, stockItems, stockMovements] = await Promise.all([
+      prisma.kiik69Purchase.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 500,
+      }),
+      prisma.kiik69StockItem.findMany({
+        where: { deletedAt: null },
+        include: {
+          movements: { select: { direction: true, quantityBase: true, costInr: true } },
+        },
+      }),
+      prisma.kiik69StockMovement.findMany({
+        select: { direction: true, costInr: true, movementDate: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+        take: 500,
+      }),
+    ]);
+    const stats = buildKiik69PurchaseStats(purchaseRows);
+    const stockStats = buildKiik69StockStats(stockItems, stockMovements);
+    const reply = await runKiik69AccountantChat(messages, stats, stockStats);
     return NextResponse.json({ reply });
   } catch (error) {
     const schema = prismaSchemaErrorResponse(error);

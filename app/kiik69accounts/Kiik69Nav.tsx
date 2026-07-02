@@ -1,8 +1,18 @@
 "use client";
 
 import Image from "next/image";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { KIIK69_ACCOUNTS_MODULES, type Kiik69AccountsModule } from "@/lib/kiik69-accounts";
 import { IconAi, IconCart, IconGrid, IconPlus } from "./Kiik69Icons";
+
+/** Render sheets at document root so overflow/stacking on main cannot block taps. */
+export function Kiik69SheetPortal({ children }: { children: ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+  return createPortal(children, document.body);
+}
 
 const LOGO = "/logos/kiik69.png";
 
@@ -15,7 +25,7 @@ export const KIIK69_PAGE =
   "mx-auto w-full max-w-lg px-3 sm:max-w-xl sm:px-4 md:max-w-2xl lg:max-w-none lg:px-8 xl:px-10";
 
 export const KIIK69_SHEET_OVERLAY =
-  "fixed inset-0 z-[60] flex flex-col justify-end bg-black/75 md:items-center md:justify-center md:p-8";
+  "fixed inset-0 z-[100] flex flex-col justify-end bg-black/75 md:items-center md:justify-center md:p-8";
 
 export const KIIK69_SHEET_PANEL =
   "max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0c0c12] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:max-h-[88vh] md:max-w-lg md:rounded-2xl md:shadow-2xl lg:max-w-xl";
@@ -87,15 +97,17 @@ export default function Kiik69Dock({
   onAdd,
   onMore,
   showAdd,
+  addLabel = "Add",
 }: {
   module: Kiik69AccountsModule;
   onModule: (id: Kiik69AccountsModule) => void;
   onAdd: () => void;
   onMore: () => void;
   showAdd: boolean;
+  addLabel?: string;
 }) {
   const navClass =
-    "fixed bottom-0 left-0 right-0 z-40 border-t border-white/[0.08] bg-[#0a0a10]/98 backdrop-blur-md xl:hidden";
+    "fixed bottom-0 left-0 right-0 z-50 border-t border-white/[0.08] bg-[#0a0a10]/98 backdrop-blur-md xl:hidden";
 
   return (
     <nav
@@ -113,7 +125,7 @@ export default function Kiik69Dock({
         </button>
 
         {showAdd ? (
-          <button type="button" onClick={onAdd} className="kiik69-dock-fab" aria-label="Add purchase">
+          <button type="button" onClick={onAdd} className="kiik69-dock-fab" aria-label={addLabel}>
             <span>
               <IconPlus className="h-6 w-6" />
             </span>
@@ -159,11 +171,12 @@ export function Kiik69MoreSheet({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/70 xl:hidden" onClick={onClose}>
-      <div
-        className="mx-auto w-full max-w-lg rounded-t-2xl border border-white/10 bg-[#0c0c12] p-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Kiik69SheetPortal>
+      <div className="fixed inset-0 z-[100] flex flex-col justify-end bg-black/70 xl:hidden" onClick={onClose}>
+        <div
+          className="mx-auto w-full max-w-lg rounded-t-2xl border border-white/10 bg-[#0c0c12] p-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
+          onClick={(e) => e.stopPropagation()}
+        >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
         <p className="mb-2 px-1 text-xs text-white/40">Modules</p>
         <div className="space-y-1">
@@ -190,7 +203,8 @@ export function Kiik69MoreSheet({
             </button>
           ))}
         </div>
+        </div>
       </div>
-    </div>
+    </Kiik69SheetPortal>
   );
 }

@@ -657,3 +657,63 @@ model Kiik69CustomOption {
   @@unique([kind, label])
   @@index([kind])
 }
+
+/// Stock master item — food or liquor; cost basis in ml/g/piece.
+model Kiik69StockItem {
+  id             String   @id @default(cuid())
+  name           String
+  category       String   // food | liquor
+  baseUnit       String   // ml | g | piece
+  costBasisQty   Decimal  @db.Decimal(14, 4)
+  costBasisUnit  String   // ml | l | g | kg | piece | bottle
+  costInr        Decimal  @db.Decimal(12, 2)
+  /// ml or g per bottle when stocking in/out by bottle
+  bottleSizeBase Decimal? @db.Decimal(14, 4)
+  notes          String?
+  deletedAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  movements Kiik69StockMovement[]
+
+  @@index([category])
+  @@index([name])
+}
+
+/// Stock in / stock out — quantities normalized to item base unit.
+model Kiik69StockMovement {
+  id               String   @id @default(cuid())
+  itemId           String
+  item             Kiik69StockItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  direction        String   // in | out
+  category         String   // food | liquor
+  quantity         Decimal  @db.Decimal(14, 4)
+  quantityUnit     String
+  quantityBase     Decimal  @db.Decimal(14, 4)
+  costInr          Decimal  @db.Decimal(12, 2)
+  movementDate     String?
+  note             String?
+  attachmentUrl    String?
+  attachmentFileName String?
+  aiSummary        String?
+  createdAt        DateTime @default(now())
+
+  @@index([itemId])
+  @@index([category, direction])
+  @@index([movementDate])
+  @@index([createdAt])
+}
+
+/// KIIK 69 petty-cash wallet — deposits and spends.
+model Kiik69WalletEntry {
+  id           String   @id @default(cuid())
+  type         String   // deposit | spend
+  amountInr    Decimal  @db.Decimal(12, 2)
+  balanceAfter Decimal  @db.Decimal(12, 2)
+  note         String?
+  entryDate    String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entryDate])
+}

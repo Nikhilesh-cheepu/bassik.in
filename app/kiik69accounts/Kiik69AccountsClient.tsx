@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   KIIK69_ACCOUNTS_MODULES,
   KIIK69_KITCHEN_OUTLETS,
@@ -10,8 +11,16 @@ import {
   KIIK69_PARTY_PLATE_RATE_INR,
   type Kiik69AccountsModule,
 } from "@/lib/kiik69-accounts";
+import {
+  readKiik69AccountsNav,
+  writeKiik69AccountsNav,
+  type Kiik69InventoryCategory,
+  type Kiik69InventoryDir,
+} from "@/lib/kiik69-accounts-nav";
 import Kiik69PurchasesView from "./Kiik69PurchasesView";
 import Kiik69AiPanel from "./Kiik69AiPanel";
+import Kiik69InventoryView from "./Kiik69InventoryView";
+import Kiik69WalletView from "./Kiik69WalletView";
 import Kiik69Dock, {
   KIIK69_DOCK_PADDING,
   KIIK69_PAGE,
@@ -59,16 +68,60 @@ function ComingSoon({ moduleId }: { moduleId: Kiik69AccountsModule }) {
 }
 
 export default function Kiik69AccountsClient() {
-  const [module, setModule] = useState<Kiik69AccountsModule>("purchases");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const [nav, setNav] = useState(() => readKiik69AccountsNav(searchParams.toString()));
   const [showMore, setShowMore] = useState(false);
-  const [addSignal, setAddSignal] = useState(0);
+  const [purchaseAddSignal, setPurchaseAddSignal] = useState(0);
+  const [walletAddSignal, setWalletAddSignal] = useState(0);
+  const [addItemSignal, setAddItemSignal] = useState(0);
+  const [stockSignal, setStockSignal] = useState(0);
   const [aiSeed, setAiSeed] = useState<string | null>(null);
+
+  const persistNav = useCallback(
+    (next: typeof nav) => {
+      setNav(next);
+      writeKiik69AccountsNav(pathname, next, (href) => router.replace(href, { scroll: false }));
+    },
+    [pathname, router]
+  );
+
+  useEffect(() => {
+    const fromUrl = readKiik69AccountsNav(searchParams.toString());
+    setNav((prev) =>
+      prev.module === fromUrl.module && prev.category === fromUrl.category && prev.dir === fromUrl.dir ? prev : fromUrl
+    );
+  }, [searchParams]);
+
+  const setModule = useCallback(
+    (module: Kiik69AccountsModule) => {
+      persistNav({ ...nav, module });
+    },
+    [nav, persistNav]
+  );
+
+  const setInventoryCategory = useCallback(
+    (category: Kiik69InventoryCategory) => {
+      persistNav({ ...nav, module: "inventory", category });
+    },
+    [nav, persistNav]
+  );
+
+  const setInventoryDir = useCallback(
+    (dir: Kiik69InventoryDir) => {
+      persistNav({ ...nav, module: "inventory", dir });
+    },
+    [nav, persistNav]
+  );
 
   const askAi = (prompt: string) => {
     setAiSeed(`${prompt}::${Date.now()}`);
     setModule("ai");
   };
 
+  const { module } = nav;
   const current = KIIK69_ACCOUNTS_MODULES.find((m) => m.id === module);
   const mobileTitle = current?.label ?? "Accounts";
 
@@ -102,10 +155,26 @@ export default function Kiik69AccountsClient() {
               {module === "purchases" ? (
                 <button
                   type="button"
-                  onClick={() => setAddSignal((n) => n + 1)}
+                  onClick={() => setPurchaseAddSignal((n) => n + 1)}
                   className="kiik69-desktop-only hidden shrink-0 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white xl:inline-flex"
                 >
                   + Add purchase
+                </button>
+              ) : module === "inventory" ? (
+                <button
+                  type="button"
+                  onClick={() => setAddItemSignal((n) => n + 1)}
+                  className="kiik69-desktop-only hidden shrink-0 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-100 xl:inline-flex"
+                >
+                  + Add item
+                </button>
+              ) : module === "wallet" ? (
+                <button
+                  type="button"
+                  onClick={() => setWalletAddSignal((n) => n + 1)}
+                  className="kiik69-desktop-only hidden shrink-0 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-semibold text-white xl:inline-flex"
+                >
+                  + Entry
                 </button>
               ) : null}
             </div>
@@ -119,9 +188,21 @@ export default function Kiik69AccountsClient() {
           style={{ ["--kiik69-dock-pad" as string]: KIIK69_DOCK_PADDING }}
         >
           {module === "purchases" ? (
-            <Kiik69PurchasesView addSignal={addSignal} onAskAi={askAi} />
+            <Kiik69PurchasesView addSignal={purchaseAddSignal} onAskAi={askAi} />
           ) : module === "ai" ? (
             <Kiik69AiPanel seedMessage={aiSeed?.split("::")[0] ?? null} />
+          ) : module === "inventory" ? (
+            <Kiik69InventoryView
+              category={nav.category}
+              stockTab={nav.dir}
+              onCategoryChange={setInventoryCategory}
+              onStockTabChange={setInventoryDir}
+              addItemSignal={addItemSignal}
+              stockSignal={stockSignal}
+              onAskAi={askAi}
+            />
+          ) : module === "wallet" ? (
+            <Kiik69WalletView addSignal={walletAddSignal} />
           ) : (
             <ComingSoon moduleId={module} />
           )}
@@ -130,9 +211,14 @@ export default function Kiik69AccountsClient() {
         <Kiik69Dock
           module={module}
           onModule={setModule}
-          onAdd={() => setAddSignal((n) => n + 1)}
+          onAdd={() => {
+            if (module === "inventory") setStockSignal((n) => n + 1);
+            else if (module === "wallet") setWalletAddSignal((n) => n + 1);
+            else setPurchaseAddSignal((n) => n + 1);
+          }}
           onMore={() => setShowMore(true)}
-          showAdd={module === "purchases"}
+          showAdd={module === "purchases" || module === "inventory" || module === "wallet"}
+          addLabel={module === "inventory" ? "Stock" : module === "wallet" ? "Entry" : "Add"}
         />
       </div>
 
