@@ -609,3 +609,25 @@ model TeamVaultShare {
   @@index([memberId])
   @@index([entryId])
 }
+
+/// KIIK 69 shared kitchen — purchases, sales, inventory ( /kick69/accounts ).
+model Kick69Purchase {
+  id            String   @id @default(cuid())
+  vendor        String
+  paymentMethod String
+  amount        Decimal? @db.Decimal(12, 2)
+  purchaseDate  String?
+  title         String?
+  description   String?
+  aiSummary     String?
+  billUrl       String?
+  billFileName  String?
+  purchaseLink  String?
+  createdBy     String   @default("admin")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([vendor])
+  @@index([purchaseDate])
+  @@index([createdAt])
+}
