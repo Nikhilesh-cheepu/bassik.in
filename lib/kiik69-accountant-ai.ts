@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { kiik69StatsContextBlock, type Kiik69PurchaseStats } from "@/lib/kiik69-purchase-stats";
 import { kiik69StockContextBlock, type Kiik69StockStats } from "@/lib/kiik69-stock-stats";
 
-export type Kiik69AiMessage = { role: "user" | "assistant"; content: string };
+export type Kiik69AiMessage = { role: "user" | "assistant"; content: string; createdAt?: string };
 
 const ACCOUNTANT_SYSTEM = `You are the AI accountant for KIIK 69 Sports Bar shared kitchen (Bassik.in ops, Hyderabad).
 

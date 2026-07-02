@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Kiik69AiMessage } from "@/lib/kiik69-accountant-ai";
+import { formatKiik69Timestamp } from "@/lib/kiik69-datetime";
 import { KIIK69_DOCK_PADDING } from "./Kiik69Nav";
 import { IconSparkle } from "./Kiik69Icons";
 
@@ -38,6 +39,10 @@ function parseStored(raw: string | null): Kiik69AiMessage[] | null {
   }
 }
 
+function stamp(): string {
+  return new Date().toISOString();
+}
+
 export default function Kiik69AiPanel({ seedMessage }: { seedMessage?: string | null }) {
   const [messages, setMessages] = useState<Kiik69AiMessage[]>([WELCOME]);
   const [hydrated, setHydrated] = useState(false);
@@ -67,7 +72,7 @@ export default function Kiik69AiPanel({ seedMessage }: { seedMessage?: string | 
       const trimmed = text.trim();
       if (!trimmed || loading) return;
       const prior = baseMessages ?? messages;
-      const next = [...prior, { role: "user" as const, content: trimmed }];
+      const next = [...prior, { role: "user" as const, content: trimmed, createdAt: stamp() }];
       setMessages(next);
       setInput("");
       setLoading(true);
@@ -80,9 +85,9 @@ export default function Kiik69AiPanel({ seedMessage }: { seedMessage?: string | 
         const data = await res.json();
         const reply =
           typeof data.reply === "string" ? data.reply : data.error || "Something went wrong.";
-        setMessages((m) => [...m, { role: "assistant", content: reply }]);
+        setMessages((m) => [...m, { role: "assistant", content: reply, createdAt: stamp() }]);
       } catch {
-        setMessages((m) => [...m, { role: "assistant", content: "Network error — try again." }]);
+        setMessages((m) => [...m, { role: "assistant", content: "Network error — try again.", createdAt: stamp() }]);
       } finally {
         setLoading(false);
       }
@@ -123,7 +128,7 @@ export default function Kiik69AiPanel({ seedMessage }: { seedMessage?: string | 
         {messages.map((m, i) => (
           <div
             key={i}
-            className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+            className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}
           >
             <div
               className={`max-w-[92%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
@@ -139,6 +144,11 @@ export default function Kiik69AiPanel({ seedMessage }: { seedMessage?: string | 
               ) : null}
               {m.content}
             </div>
+            {m.createdAt && i > 0 ? (
+              <p className="mt-0.5 px-1 text-[10px] text-white/30 tabular-nums">
+                {formatKiik69Timestamp(m.createdAt)}
+              </p>
+            ) : null}
           </div>
         ))}
         {loading ? (
