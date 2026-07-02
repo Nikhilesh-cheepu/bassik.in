@@ -18,6 +18,7 @@ import { formatKiik69Timestamp } from "@/lib/kiik69-datetime";
 import Kiik69PurchaseDetail from "./Kiik69PurchaseDetail";
 import Kiik69PurchaseForm, { type PurchaseFormData } from "./Kiik69PurchaseForm";
 import Kiik69PurchaseInsights from "./Kiik69PurchaseInsights";
+import { useKiik69BodyScrollLock } from "./Kiik69Nav";
 
 const DEFAULT_VENDOR_CHIPS = mergeKiik69OptionChips(KIIK69_PURCHASE_VENDORS, []);
 const DEFAULT_PAYMENT_CHIPS = mergeKiik69OptionChips(KIIK69_PAYMENT_METHODS, []);
@@ -159,6 +160,8 @@ export default function Kiik69PurchasesView({
     if (addSignal > 0) openNew();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addSignal]);
+
+  useKiik69BodyScrollLock(showForm || detail !== null);
 
   const grouped = useMemo(() => {
     const map = new Map<string, Kiik69PurchaseDto[]>();

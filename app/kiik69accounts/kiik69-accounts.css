@@ -186,3 +186,12 @@
   background: #f59e0b;
   color: #0c0a09;
 }
+
+.kiik69-sheet-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}

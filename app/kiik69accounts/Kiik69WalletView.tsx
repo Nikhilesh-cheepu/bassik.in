@@ -12,6 +12,7 @@ import {
   KIIK69_SHEET_PANEL,
   Kiik69SheetPortal,
   kiik69FilterChip,
+  useKiik69BodyScrollLock,
 } from "./Kiik69Nav";
 
 const todayKey = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -44,14 +45,7 @@ export default function Kiik69WalletView({ addSignal = 0 }: { addSignal?: number
     if (addSignal > 0) setShowForm(true);
   }, [addSignal]);
 
-  useEffect(() => {
-    if (!showForm) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [showForm]);
+  useKiik69BodyScrollLock(showForm);
 
   return (
     <div className="space-y-3">
@@ -155,7 +149,12 @@ function WalletFormSheet({ onClose, onSaved }: { onClose: () => void; onSaved: (
   return (
     <Kiik69SheetPortal>
       <div className={KIIK69_SHEET_OVERLAY} onClick={onClose} role="presentation">
-        <div className={`${KIIK69_SHEET_PANEL} max-w-md`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div
+          className={`${KIIK69_SHEET_PANEL} max-h-[92dvh] max-w-md overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]`}
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+        >
         <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/20 md:hidden" />
         <h2 className="text-lg font-semibold">KIIK 69 wallet</h2>
         <div className="mt-4 flex gap-2">

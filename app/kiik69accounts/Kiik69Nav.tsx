@@ -34,8 +34,26 @@ export const KIIK69_PAGE =
 export const KIIK69_SHEET_OVERLAY =
   "fixed inset-0 z-[100] flex flex-col justify-end bg-black/75 md:items-center md:justify-center md:p-8";
 
+/** Lock page scroll while a sheet is open — sheet must scroll internally. */
+export function useKiik69BodyScrollLock(locked: boolean) {
+  useEffect(() => {
+    if (!locked) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [locked]);
+}
+
+/** Scrollable body region inside a flex column sheet. */
+export const KIIK69_SHEET_BODY =
+  "kiik69-sheet-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5 [-webkit-overflow-scrolling:touch] touch-pan-y";
+
 export const KIIK69_SHEET_PANEL =
-  "max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0c0c12] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-white md:max-h-[88vh] md:max-w-lg md:rounded-2xl md:shadow-2xl lg:max-w-xl";
+  "max-h-[92dvh] w-full rounded-t-2xl border border-white/10 bg-[#0c0c12] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-white md:max-h-[88vh] md:max-w-lg md:rounded-2xl md:shadow-2xl lg:max-w-xl";
+
+export const KIIK69_SHEET_PANEL_FLEX = `${KIIK69_SHEET_PANEL} flex flex-col overflow-hidden`;
 
 export const KIIK69_BTN =
   "rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-sm font-semibold text-white disabled:opacity-50";

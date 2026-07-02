@@ -14,8 +14,11 @@ import { IconChevronLeft } from "./Kiik69Icons";
 import {
   KIIK69_BTN,
   KIIK69_INPUT,
+  KIIK69_SHEET_BODY,
   KIIK69_SHEET_OVERLAY,
   KIIK69_SHEET_PANEL,
+  KIIK69_SHEET_PANEL_FLEX,
+  Kiik69SheetPortal,
   kiik69FilterChip,
 } from "./Kiik69Nav";
 
@@ -184,33 +187,36 @@ export default function Kiik69PurchaseForm({
   };
 
   return (
-    <div className={KIIK69_SHEET_OVERLAY} onClick={onClose}>
-      <div className={KIIK69_SHEET_PANEL} onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center gap-2">
-          <button type="button" onClick={goBack} className="rounded-lg p-2 text-white/50 active:bg-white/[0.06]">
-            <IconChevronLeft />
-          </button>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-lg font-semibold">{editing ? "Edit purchase" : "New purchase"}</h3>
-            <p className="text-xs text-white/40">
-              Step {step + 1}/{STEPS.length} · {STEPS[step]}
-            </p>
+    <Kiik69SheetPortal>
+      <div className={KIIK69_SHEET_OVERLAY} onClick={onClose}>
+        <div className={KIIK69_SHEET_PANEL_FLEX} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+          <div className="shrink-0">
+            <div className="mb-3 flex items-center gap-2">
+              <button type="button" onClick={goBack} className="rounded-lg p-2 text-white/50 active:bg-white/[0.06]">
+                <IconChevronLeft />
+              </button>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-lg font-semibold">{editing ? "Edit purchase" : "New purchase"}</h3>
+                <p className="text-xs text-white/40">
+                  Step {step + 1}/{STEPS.length} · {STEPS[step]}
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-4 flex justify-center gap-1.5">
+              {STEPS.map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1 rounded-full transition-all ${i <= step ? "w-5 bg-amber-400" : "w-1.5 bg-white/15"}`}
+                />
+              ))}
+            </div>
           </div>
-        </div>
 
-        <div className="mb-4 flex justify-center gap-1.5">
-          {STEPS.map((_, i) => (
-            <div
-              key={i}
-              className={`h-1 rounded-full transition-all ${i <= step ? "w-5 bg-amber-400" : "w-1.5 bg-white/15"}`}
-            />
-          ))}
-        </div>
-
-        {step === 0 ? (
-          <div className="flex max-h-[min(70dvh,520px)] flex-col">
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-0.5">
-              <ChipSection
+          <div className={KIIK69_SHEET_BODY}>
+            {step === 0 ? (
+              <div className="space-y-4">
+                <ChipSection
                 label="Outlet — who is this purchase for?"
                 chips={KIIK69_PURCHASE_OUTLETS.map((o) => ({ id: o.id, label: o.label, custom: false }))}
                 value={form.outlet}
@@ -248,20 +254,11 @@ export default function Kiik69PurchaseForm({
                 onOtherChange={(v) => setForm((f) => ({ ...f, itemOther: v }))}
                 otherPlaceholder="Type item name"
               />
-            </div>
-            <button
-              type="button"
-              disabled={!detailsOk}
-              onClick={() => setStep(1)}
-              className={`mt-3 min-h-[48px] w-full shrink-0 ${KIIK69_BTN}`}
-            >
-              Continue to upload
-            </button>
-          </div>
-        ) : null}
+              </div>
+            ) : null}
 
-        {step === 1 ? (
-          <div className="space-y-4">
+            {step === 1 ? (
+              <div className="space-y-4">
             <p className="text-xs text-white/40">
               Add bills, invoices, payment screenshots, PDFs — as many as you need. Tag them on the next step (optional).
             </p>
@@ -361,173 +358,191 @@ export default function Kiik69PurchaseForm({
                 ) : null}
               </div>
             ) : null}
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => void goToReview()}
-                disabled={preparingReview || uploading}
-                className="min-h-[48px] flex-1 rounded-xl border border-white/10 text-sm text-white/60"
-              >
-                {form.attachments.length === 0 ? "Skip upload" : "Skip tagging"}
-              </button>
-              <button
-                type="button"
-                disabled={preparingReview || uploading}
-                onClick={() => void goToReview()}
-                className={`min-h-[48px] flex-[2] ${KIIK69_BTN}`}
-              >
-                {preparingReview || scanning ? "AI reading…" : "Continue"}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {step === 2 ? (
-          <div className="flex max-h-[min(78dvh,640px)] flex-col">
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-0.5">
-              {(form.attachments.length > 0 || hasAiContent(form, scanning || preparingReview)) && (
-                <div className="rounded-xl border border-amber-400/20 bg-amber-500/[0.08] px-3 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-300/85">
-                    What AI read from your files
-                  </p>
-                  {scanning || preparingReview ? (
-                    <p className="mt-2 text-xs text-amber-200/70">Reading documents…</p>
-                  ) : buildAiDisplayText(form) ? (
-                    <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-white/65">
-                      {buildAiDisplayText(form)}
-                    </p>
-                  ) : form.attachments.length > 0 ? (
-                    <p className="mt-2 text-xs text-white/40">
-                      AI could not read these files — add amount and notes manually below.
-                    </p>
-                  ) : null}
-                </div>
-              )}
-
-              {form.attachments.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-white/45">Tag each file (optional)</p>
-                  {form.attachments.map((a) => (
-                    <div key={a.id} className="rounded-xl border border-white/10 bg-[#0e0e14] p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-white/90">{a.fileName}</p>
-                          <a
-                            href={a.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[11px] text-amber-300/80"
-                          >
-                            Open file
-                          </a>
-                        </div>
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {KIIK69_DOC_TYPE_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.id || "skip"}
-                            type="button"
-                            onClick={() =>
-                              updateAttachment(a.id, {
-                                docType: opt.id as Kiik69DocType,
-                                docLabel: opt.id === "other" ? a.docLabel ?? "" : null,
-                              })
-                            }
-                            className={kiik69FilterChip(a.docType === opt.id)}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                      {a.docType === "other" ? (
-                        <OtherInput
-                          value={a.docLabel ?? ""}
-                          onChange={(v) => updateAttachment(a.id, { docLabel: v })}
-                          placeholder="What is this document?"
-                        />
-                      ) : null}
-                      {a.docType ? (
-                        <p className="mt-1 text-[10px] text-white/30">
-                          Tagged as {kiik69DocTypeLabel(a.docType, a.docLabel)}
-                        </p>
-                      ) : null}
-                      {a.aiNote ? (
-                        <p className="mt-2 text-xs leading-relaxed text-white/50">{a.aiNote}</p>
-                      ) : null}
-                      {a.transactionIds && a.transactionIds.length > 0 ? (
-                        <p className="mt-1 text-[11px] font-medium text-amber-200/75">
-                          Txn ID: {a.transactionIds.join(" · ")}
-                        </p>
-                      ) : null}
-                      {a.amountPaid != null || a.billTotal != null ? (
-                        <p className="mt-0.5 text-[11px] text-white/45">
-                          {a.billTotal != null ? `Bill ₹${a.billTotal}` : ""}
-                          {a.billTotal != null && a.amountPaid != null ? " · " : ""}
-                          {a.amountPaid != null ? `Paid ₹${a.amountPaid}` : ""}
-                        </p>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              <div className="space-y-3 border-t border-white/[0.06] pt-3">
-                <p className="text-xs font-medium text-white/45">Fill in details</p>
-                <input
-                  inputMode="decimal"
-                  value={form.amount}
-                  onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-                  placeholder="Amount (₹)"
-                  className={`${KIIK69_INPUT} text-center text-2xl font-semibold`}
-                />
-                <TeamDatePicker
-                  value={form.purchaseDate}
-                  onChange={(v) => setForm((f) => ({ ...f, purchaseDate: v }))}
-                  placeholder="Date"
-                  clearable
-                  accent="amber"
-                  compact
-                />
-                <input
-                  value={form.title}
-                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder="Title (optional)"
-                  className={KIIK69_INPUT}
-                />
-                <textarea
-                  value={form.description}
-                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                  placeholder="Your notes"
-                  rows={2}
-                  className={KIIK69_INPUT}
-                />
-                <input
-                  value={form.purchaseLink}
-                  onChange={(e) => setForm((f) => ({ ...f, purchaseLink: e.target.value }))}
-                  placeholder="Order link (optional)"
-                  className={KIIK69_INPUT}
-                />
               </div>
-            </div>
-
-            {error ? (
-              <p className="mt-2 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-                {error}
-              </p>
             ) : null}
 
-            <button
-              type="button"
-              disabled={!detailsOk || saving || uploading || scanning}
-              onClick={onSave}
-              className={`mt-3 min-h-[48px] w-full shrink-0 ${KIIK69_BTN}`}
-            >
-              {saving ? "Saving…" : editing ? "Update purchase" : "Save purchase"}
-            </button>
+            {step === 2 ? (
+              <div className="space-y-4">
+                {(form.attachments.length > 0 || hasAiContent(form, scanning || preparingReview)) && (
+                  <div className="rounded-xl border border-amber-400/20 bg-amber-500/[0.08] px-3 py-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-300/85">
+                      What AI read from your files
+                    </p>
+                    {scanning || preparingReview ? (
+                      <p className="mt-2 text-xs text-amber-200/70">Reading documents…</p>
+                    ) : buildAiDisplayText(form) ? (
+                      <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-white/65">
+                        {buildAiDisplayText(form)}
+                      </p>
+                    ) : form.attachments.length > 0 ? (
+                      <p className="mt-2 text-xs text-white/40">
+                        AI could not read these files — add amount and notes manually below.
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+
+                {form.attachments.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-white/45">Tag each file (optional)</p>
+                    {form.attachments.map((a) => (
+                      <div key={a.id} className="rounded-xl border border-white/10 bg-[#0e0e14] p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-white/90">{a.fileName}</p>
+                            <a
+                              href={a.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] text-amber-300/80"
+                            >
+                              Open file
+                            </a>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {KIIK69_DOC_TYPE_OPTIONS.map((opt) => (
+                            <button
+                              key={opt.id || "skip"}
+                              type="button"
+                              onClick={() =>
+                                updateAttachment(a.id, {
+                                  docType: opt.id as Kiik69DocType,
+                                  docLabel: opt.id === "other" ? a.docLabel ?? "" : null,
+                                })
+                              }
+                              className={kiik69FilterChip(a.docType === opt.id)}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                        {a.docType === "other" ? (
+                          <OtherInput
+                            value={a.docLabel ?? ""}
+                            onChange={(v) => updateAttachment(a.id, { docLabel: v })}
+                            placeholder="What is this document?"
+                          />
+                        ) : null}
+                        {a.docType ? (
+                          <p className="mt-1 text-[10px] text-white/30">
+                            Tagged as {kiik69DocTypeLabel(a.docType, a.docLabel)}
+                          </p>
+                        ) : null}
+                        {a.aiNote ? (
+                          <p className="mt-2 text-xs leading-relaxed text-white/50">{a.aiNote}</p>
+                        ) : null}
+                        {a.transactionIds && a.transactionIds.length > 0 ? (
+                          <p className="mt-1 text-[11px] font-medium text-amber-200/75">
+                            Txn ID: {a.transactionIds.join(" · ")}
+                          </p>
+                        ) : null}
+                        {a.amountPaid != null || a.billTotal != null ? (
+                          <p className="mt-0.5 text-[11px] text-white/45">
+                            {a.billTotal != null ? `Bill ₹${a.billTotal}` : ""}
+                            {a.billTotal != null && a.amountPaid != null ? " · " : ""}
+                            {a.amountPaid != null ? `Paid ₹${a.amountPaid}` : ""}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="space-y-3 border-t border-white/[0.06] pt-3">
+                  <p className="text-xs font-medium text-white/45">Fill in details</p>
+                  <input
+                    inputMode="decimal"
+                    value={form.amount}
+                    onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                    placeholder="Amount (₹)"
+                    className={`${KIIK69_INPUT} text-center text-2xl font-semibold`}
+                  />
+                  <TeamDatePicker
+                    value={form.purchaseDate}
+                    onChange={(v) => setForm((f) => ({ ...f, purchaseDate: v }))}
+                    placeholder="Date"
+                    clearable
+                    accent="amber"
+                    compact
+                  />
+                  <input
+                    value={form.title}
+                    onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                    placeholder="Title (optional)"
+                    className={KIIK69_INPUT}
+                  />
+                  <textarea
+                    value={form.description}
+                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                    placeholder="Your notes"
+                    rows={2}
+                    className={KIIK69_INPUT}
+                  />
+                  <input
+                    value={form.purchaseLink}
+                    onChange={(e) => setForm((f) => ({ ...f, purchaseLink: e.target.value }))}
+                    placeholder="Order link (optional)"
+                    className={KIIK69_INPUT}
+                  />
+                </div>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+
+          <div className="shrink-0 border-t border-white/[0.06] pt-3">
+            {step === 0 ? (
+              <button
+                type="button"
+                disabled={!detailsOk}
+                onClick={() => setStep(1)}
+                className={`min-h-[48px] w-full ${KIIK69_BTN}`}
+              >
+                Continue to upload
+              </button>
+            ) : null}
+
+            {step === 1 ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void goToReview()}
+                  disabled={preparingReview || uploading}
+                  className="min-h-[48px] flex-1 rounded-xl border border-white/10 text-sm text-white/60"
+                >
+                  {form.attachments.length === 0 ? "Skip upload" : "Skip tagging"}
+                </button>
+                <button
+                  type="button"
+                  disabled={preparingReview || uploading}
+                  onClick={() => void goToReview()}
+                  className={`min-h-[48px] flex-[2] ${KIIK69_BTN}`}
+                >
+                  {preparingReview || scanning ? "AI reading…" : "Continue"}
+                </button>
+              </div>
+            ) : null}
+
+            {step === 2 ? (
+              <>
+                {error ? (
+                  <p className="mb-2 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+                    {error}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={!detailsOk || saving || uploading || scanning}
+                  onClick={onSave}
+                  className={`min-h-[48px] w-full ${KIIK69_BTN}`}
+                >
+                  {saving ? "Saving…" : editing ? "Update purchase" : "Save purchase"}
+                </button>
+              </>
+            ) : null}
+          </div>
+        </div>
       </div>
-    </div>
+    </Kiik69SheetPortal>
   );
 }

@@ -28,6 +28,7 @@ import {
   KIIK69_SHEET_OVERLAY,
   KIIK69_SHEET_PANEL,
   Kiik69SheetPortal,
+  useKiik69BodyScrollLock,
 } from "./Kiik69Nav";
 
 type StockTab = "in" | "out";
@@ -166,18 +167,11 @@ export default function Kiik69InventoryView({
     if (addItemSignal > 0) setShowAddItem(true);
   }, [addItemSignal]);
 
+  useKiik69BodyScrollLock(showAddItem || showMoveForm || deleteItem !== null || showClearHistory);
+
   useEffect(() => {
     if (stockSignal > 0) setShowMoveForm(true);
   }, [stockSignal]);
-
-  useEffect(() => {
-    if (!showAddItem && !showMoveForm && !deleteItem && !showClearHistory) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [showAddItem, showMoveForm, deleteItem, showClearHistory]);
 
   const removeItem = async (item: Kiik69StockItemDto) => {
     const res = await fetch(`/api/kiik69accounts/stock/items/${item.id}`, { method: "DELETE" });
@@ -355,7 +349,7 @@ function DeleteItemSheet({
   return (
     <Kiik69SheetPortal>
       <div className={KIIK69_SHEET_OVERLAY} onClick={onClose} role="presentation">
-        <div className={`${KIIK69_SHEET_PANEL} max-w-sm`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className={`${KIIK69_SHEET_PANEL} max-h-[92dvh] max-w-sm overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
           <h2 className="text-lg font-semibold">Remove item?</h2>
           <p className="mt-2 text-sm text-white/55">
             <span className="font-medium text-white/80">{item.name}</span> will disappear from on-hand. Stock in &amp; out
@@ -407,7 +401,7 @@ function ClearHistorySheet({
   return (
     <Kiik69SheetPortal>
       <div className={KIIK69_SHEET_OVERLAY} onClick={onClose} role="presentation">
-        <div className={`${KIIK69_SHEET_PANEL} max-w-sm`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className={`${KIIK69_SHEET_PANEL} max-h-[92dvh] max-w-sm overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
           <h2 className="text-lg font-semibold">Clear history</h2>
           <p className="mt-1 text-xs text-white/40">For learning / reset — cannot be undone.</p>
 
@@ -733,7 +727,7 @@ function MovementFormSheet({
     <Kiik69SheetPortal>
       <div className={KIIK69_SHEET_OVERLAY} onClick={onClose} role="presentation">
         <div
-          className={`${KIIK69_SHEET_PANEL} max-w-md`}
+          className={`${KIIK69_SHEET_PANEL} max-h-[92dvh] max-w-md overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]`}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"

@@ -13,7 +13,7 @@ import {
   type Kiik69QtyUnit,
   type Kiik69StockCategory,
 } from "@/lib/kiik69-stock";
-import { KIIK69_BTN, KIIK69_INPUT, KIIK69_SHEET_OVERLAY, KIIK69_SHEET_PANEL, Kiik69SheetPortal, kiik69FilterChip } from "./Kiik69Nav";
+import { KIIK69_BTN, KIIK69_INPUT, KIIK69_SHEET_BODY, KIIK69_SHEET_OVERLAY, KIIK69_SHEET_PANEL_FLEX, Kiik69SheetPortal, kiik69FilterChip } from "./Kiik69Nav";
 
 const FOOD_ITEM_UNITS = KIIK69_ITEM_UNITS.filter((u) => u.id === "g" || u.id === "kg" || u.id === "piece");
 
@@ -66,7 +66,7 @@ export default function Kiik69AddItemSheet({
     <Kiik69SheetPortal>
       <div className={KIIK69_SHEET_OVERLAY} onClick={handleClose} role="presentation">
         <div
-          className={`${KIIK69_SHEET_PANEL} flex max-h-[92dvh] max-w-md flex-col md:max-w-lg`}
+          className={`${KIIK69_SHEET_PANEL_FLEX} max-w-md md:max-w-lg`}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
@@ -95,7 +95,7 @@ export default function Kiik69AddItemSheet({
           ))}
         </div>
 
-        <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
+        <div className={KIIK69_SHEET_BODY}>
           {!category ? (
             <p className="py-8 text-center text-sm text-white/35">Select Food or Liquor to continue</p>
           ) : category === "liquor" ? (

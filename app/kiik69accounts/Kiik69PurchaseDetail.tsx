@@ -11,7 +11,7 @@ import {
 import { kiik69DocTypeLabel, type Kiik69DocType } from "@/lib/kiik69-purchase-attachments";
 import { formatKiik69Timestamp } from "@/lib/kiik69-datetime";
 import { IconChevronLeft } from "./Kiik69Icons";
-import { KIIK69_BTN, KIIK69_INPUT, KIIK69_SHEET_OVERLAY, KIIK69_SHEET_PANEL } from "./Kiik69Nav";
+import { KIIK69_BTN, KIIK69_INPUT, KIIK69_SHEET_OVERLAY, KIIK69_SHEET_PANEL, Kiik69SheetPortal } from "./Kiik69Nav";
 
 function formatInr(n: number | null): string {
   if (n == null) return "—";
@@ -84,8 +84,14 @@ export default function Kiik69PurchaseDetail({
   };
 
   return (
-    <div className={KIIK69_SHEET_OVERLAY} onClick={onClose}>
-      <div className={`${KIIK69_SHEET_PANEL} max-w-md`} onClick={(e) => e.stopPropagation()}>
+    <Kiik69SheetPortal>
+      <div className={KIIK69_SHEET_OVERLAY} onClick={onClose}>
+        <div
+          className={`${KIIK69_SHEET_PANEL} max-h-[92dvh] max-w-md overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]`}
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+        >
         <div className="mb-4 flex items-center gap-2">
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-white/50 active:bg-white/[0.06]">
             <IconChevronLeft />
@@ -213,5 +219,6 @@ export default function Kiik69PurchaseDetail({
         )}
       </div>
     </div>
+    </Kiik69SheetPortal>
   );
 }
