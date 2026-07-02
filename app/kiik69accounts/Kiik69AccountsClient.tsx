@@ -2,17 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  KICK69_ACCOUNTS_MODULES,
-  KICK69_KITCHEN_OUTLETS,
-  KICK69_BASSIK_SHARE,
-  KICK69_OUTLET_SHARE,
-  KICK69_PARTY_PLATE_RATE_INR,
-  type Kick69AccountsModule,
-} from "@/lib/kick69-accounts";
-import Kick69PurchasesView from "./Kick69PurchasesView";
+  KIIK69_ACCOUNTS_MODULES,
+  KIIK69_KITCHEN_OUTLETS,
+  KIIK69_BASSIK_SHARE,
+  KIIK69_OUTLET_SHARE,
+  KIIK69_PARTY_PLATE_RATE_INR,
+  type Kiik69AccountsModule,
+} from "@/lib/kiik69-accounts";
+import Kiik69PurchasesView from "./Kiik69PurchasesView";
 
-function ModulePlaceholder({ moduleId }: { moduleId: Kick69AccountsModule }) {
-  const mod = KICK69_ACCOUNTS_MODULES.find((m) => m.id === moduleId);
+function ModulePlaceholder({ moduleId }: { moduleId: Kiik69AccountsModule }) {
+  const mod = KIIK69_ACCOUNTS_MODULES.find((m) => m.id === moduleId);
   if (moduleId === "sales") {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
@@ -20,12 +20,12 @@ function ModulePlaceholder({ moduleId }: { moduleId: Kick69AccountsModule }) {
         <p className="mt-2 text-sm text-white/45">Coming next — wired to your rules:</p>
         <ul className="mt-3 space-y-2 text-sm text-white/55">
           <li>
-            Outlets: {KICK69_KITCHEN_OUTLETS.map((o) => o.label).join(" · ")} (one shared kitchen)
+            Outlets: {KIIK69_KITCHEN_OUTLETS.map((o) => o.label).join(" · ")} (one shared kitchen)
           </li>
           <li>
-            Split: {Math.round(KICK69_BASSIK_SHARE * 100)}% Bassik · {Math.round(KICK69_OUTLET_SHARE * 100)}% outlet
+            Split: {Math.round(KIIK69_BASSIK_SHARE * 100)}% Bassik · {Math.round(KIIK69_OUTLET_SHARE * 100)}% outlet
           </li>
-          <li>Party packages: ₹{KICK69_PARTY_PLATE_RATE_INR} per plate (e.g. 20 plates × ₹750)</li>
+          <li>Party packages: ₹{KIIK69_PARTY_PLATE_RATE_INR} per plate (e.g. 20 plates × ₹750)</li>
         </ul>
       </div>
     );
@@ -39,14 +39,14 @@ function ModulePlaceholder({ moduleId }: { moduleId: Kick69AccountsModule }) {
   );
 }
 
-export default function Kick69AccountsClient() {
+export default function Kiik69AccountsClient() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
-  const [module, setModule] = useState<Kick69AccountsModule>("purchases");
+  const [module, setModule] = useState<Kiik69AccountsModule>("purchases");
 
   const checkAuth = useCallback(async () => {
-    const res = await fetch("/api/kick69/auth");
+    const res = await fetch("/api/kiik69accounts/auth");
     const data = await res.json();
     setAuthed(Boolean(data.authenticated));
   }, []);
@@ -58,7 +58,7 @@ export default function Kick69AccountsClient() {
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError(null);
-    const res = await fetch("/api/kick69/auth", {
+    const res = await fetch("/api/kiik69accounts/auth", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password }),
@@ -72,7 +72,7 @@ export default function Kick69AccountsClient() {
   };
 
   const logout = async () => {
-    await fetch("/api/kick69/auth", { method: "DELETE" });
+    await fetch("/api/kiik69accounts/auth", { method: "DELETE" });
     setAuthed(false);
   };
 
@@ -130,7 +130,7 @@ export default function Kick69AccountsClient() {
         </div>
         <div className="mx-auto max-w-2xl overflow-x-auto px-4 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex gap-1.5">
-            {KICK69_ACCOUNTS_MODULES.map((m) => (
+            {KIIK69_ACCOUNTS_MODULES.map((m) => (
               <button
                 key={m.id}
                 type="button"
@@ -149,7 +149,7 @@ export default function Kick69AccountsClient() {
       </header>
 
       <main className="mx-auto max-w-2xl px-4 py-4 pb-10">
-        {module === "purchases" ? <Kick69PurchasesView /> : <ModulePlaceholder moduleId={module} />}
+        {module === "purchases" ? <Kiik69PurchasesView /> : <ModulePlaceholder moduleId={module} />}
       </main>
     </div>
   );

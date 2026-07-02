@@ -1,17 +1,17 @@
-import type { Kick69Purchase } from "@prisma/client";
+import type { Kiik69Purchase } from "@prisma/client";
 
 /** Shared kitchen serves these outlets — 70% Bassik / 30% outlet (future sales modules). */
-export const KICK69_KITCHEN_OUTLETS = [
+export const KIIK69_KITCHEN_OUTLETS = [
   { id: "sky-high", label: "Sky High" },
   { id: "sound-of-soul", label: "Sound of Soul" },
   { id: "kiik69", label: "KIIK 69" },
 ] as const;
 
-export const KICK69_BASSIK_SHARE = 0.7;
-export const KICK69_OUTLET_SHARE = 0.3;
-export const KICK69_PARTY_PLATE_RATE_INR = 750;
+export const KIIK69_BASSIK_SHARE = 0.7;
+export const KIIK69_OUTLET_SHARE = 0.3;
+export const KIIK69_PARTY_PLATE_RATE_INR = 750;
 
-export const KICK69_PURCHASE_VENDORS = [
+export const KIIK69_PURCHASE_VENDORS = [
   { id: "zepto", label: "Zepto" },
   { id: "instamart", label: "Instamart" },
   { id: "blinkit", label: "Blinkit" },
@@ -24,7 +24,7 @@ export const KICK69_PURCHASE_VENDORS = [
   { id: "other", label: "Others" },
 ] as const;
 
-export const KICK69_PAYMENT_METHODS = [
+export const KIIK69_PAYMENT_METHODS = [
   { id: "upi", label: "UPI" },
   { id: "cash", label: "Cash" },
   { id: "card", label: "Card" },
@@ -33,10 +33,10 @@ export const KICK69_PAYMENT_METHODS = [
   { id: "other", label: "Other" },
 ] as const;
 
-export type Kick69PurchaseVendorId = (typeof KICK69_PURCHASE_VENDORS)[number]["id"];
-export type Kick69PaymentMethodId = (typeof KICK69_PAYMENT_METHODS)[number]["id"];
+export type Kiik69PurchaseVendorId = (typeof KIIK69_PURCHASE_VENDORS)[number]["id"];
+export type Kiik69PaymentMethodId = (typeof KIIK69_PAYMENT_METHODS)[number]["id"];
 
-export type Kick69AccountsModule =
+export type Kiik69AccountsModule =
   | "purchases"
   | "sales"
   | "inventory"
@@ -44,7 +44,7 @@ export type Kick69AccountsModule =
   | "daily"
   | "games";
 
-export const KICK69_ACCOUNTS_MODULES: { id: Kick69AccountsModule; label: string; hint: string }[] = [
+export const KIIK69_ACCOUNTS_MODULES: { id: Kiik69AccountsModule; label: string; hint: string }[] = [
   { id: "purchases", label: "Purchases", hint: "Vendors, bills & payments" },
   { id: "sales", label: "Kitchen & outlet sales", hint: "70/30 split · party plates ₹750" },
   { id: "inventory", label: "Inventory", hint: "Stock in / out · items" },
@@ -53,7 +53,7 @@ export const KICK69_ACCOUNTS_MODULES: { id: Kick69AccountsModule; label: string;
   { id: "games", label: "Games", hint: "Game purchases" },
 ];
 
-export type Kick69PurchaseDto = {
+export type Kiik69PurchaseDto = {
   id: string;
   vendor: string;
   paymentMethod: string;
@@ -69,31 +69,31 @@ export type Kick69PurchaseDto = {
   updatedAt: string;
 };
 
-const VENDOR_IDS = new Set<string>(KICK69_PURCHASE_VENDORS.map((v) => v.id));
-const PAYMENT_IDS = new Set<string>(KICK69_PAYMENT_METHODS.map((p) => p.id));
+const VENDOR_IDS = new Set<string>(KIIK69_PURCHASE_VENDORS.map((v) => v.id));
+const PAYMENT_IDS = new Set<string>(KIIK69_PAYMENT_METHODS.map((p) => p.id));
 
-export function isKick69PurchaseVendor(id: string): id is Kick69PurchaseVendorId {
+export function isKiik69PurchaseVendor(id: string): id is Kiik69PurchaseVendorId {
   return VENDOR_IDS.has(id);
 }
 
-export function isKick69PaymentMethod(id: string): id is Kick69PaymentMethodId {
+export function isKiik69PaymentMethod(id: string): id is Kiik69PaymentMethodId {
   return PAYMENT_IDS.has(id);
 }
 
-export function kick69VendorLabel(id: string): string {
-  return KICK69_PURCHASE_VENDORS.find((v) => v.id === id)?.label ?? id;
+export function kiik69VendorLabel(id: string): string {
+  return KIIK69_PURCHASE_VENDORS.find((v) => v.id === id)?.label ?? id;
 }
 
-export function kick69PaymentLabel(id: string): string {
-  return KICK69_PAYMENT_METHODS.find((p) => p.id === id)?.label ?? id;
+export function kiik69PaymentLabel(id: string): string {
+  return KIIK69_PAYMENT_METHODS.find((p) => p.id === id)?.label ?? id;
 }
 
-export function parseKick69PurchaseDate(raw: unknown): string | null {
+export function parseKiik69PurchaseDate(raw: unknown): string | null {
   const v = typeof raw === "string" ? raw.trim() : "";
   return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
 }
 
-export function toKick69PurchaseDto(row: Kick69Purchase): Kick69PurchaseDto {
+export function toKiik69PurchaseDto(row: Kiik69Purchase): Kiik69PurchaseDto {
   return {
     id: row.id,
     vendor: row.vendor,
@@ -114,10 +114,10 @@ export function toKick69PurchaseDto(row: Kick69Purchase): Kick69PurchaseDto {
 export function parsePurchasePayload(body: Record<string, unknown>) {
   const vendorRaw = typeof body.vendor === "string" ? body.vendor.trim() : "";
   const paymentRaw = typeof body.paymentMethod === "string" ? body.paymentMethod.trim() : "";
-  if (!isKick69PurchaseVendor(vendorRaw)) {
+  if (!isKiik69PurchaseVendor(vendorRaw)) {
     throw new Error("Select a vendor");
   }
-  if (!isKick69PaymentMethod(paymentRaw)) {
+  if (!isKiik69PaymentMethod(paymentRaw)) {
     throw new Error("Select a payment method");
   }
   const amountRaw = body.amount;
@@ -139,7 +139,7 @@ export function parsePurchasePayload(body: Record<string, unknown>) {
   const billUrl = typeof body.billUrl === "string" ? body.billUrl.trim() : "";
   const billFileName = typeof body.billFileName === "string" ? body.billFileName.trim().slice(0, 200) : "";
   const purchaseLink = typeof body.purchaseLink === "string" ? body.purchaseLink.trim().slice(0, 500) : "";
-  const purchaseDate = parseKick69PurchaseDate(body.purchaseDate);
+  const purchaseDate = parseKiik69PurchaseDate(body.purchaseDate);
 
   return {
     vendor: vendorRaw,

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getKick69AccountsFromRequest } from "@/lib/kick69-auth";
-import { analyzeKick69PurchaseBill } from "@/lib/kick69-purchase-ai";
-import { isKick69PaymentMethod, isKick69PurchaseVendor } from "@/lib/kick69-accounts";
+import { getKiik69AccountsFromRequest } from "@/lib/kiik69-auth";
+import { analyzeKiik69PurchaseBill } from "@/lib/kiik69-purchase-ai";
+import { isKiik69PaymentMethod, isKiik69PurchaseVendor } from "@/lib/kiik69-accounts";
 
 export async function POST(req: NextRequest) {
-  if (!(await getKick69AccountsFromRequest(req))) {
+  if (!(await getKiik69AccountsFromRequest(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -19,15 +19,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await analyzeKick69PurchaseBill({ imageUrl, vendor, paymentMethod });
+    const result = await analyzeKiik69PurchaseBill({ imageUrl, vendor, paymentMethod });
     return NextResponse.json({
       ...result,
       vendor:
-        result.suggestedVendor && isKick69PurchaseVendor(result.suggestedVendor)
+        result.suggestedVendor && isKiik69PurchaseVendor(result.suggestedVendor)
           ? result.suggestedVendor
           : undefined,
       paymentMethod:
-        result.suggestedPayment && isKick69PaymentMethod(result.suggestedPayment)
+        result.suggestedPayment && isKiik69PaymentMethod(result.suggestedPayment)
           ? result.suggestedPayment
           : undefined,
     });

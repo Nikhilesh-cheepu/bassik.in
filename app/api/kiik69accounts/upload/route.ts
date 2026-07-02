@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
-import { getKick69AccountsFromRequest } from "@/lib/kick69-auth";
+import { getKiik69AccountsFromRequest } from "@/lib/kiik69-auth";
 
 export const runtime = "nodejs";
 
@@ -22,7 +22,7 @@ function resolveMime(file: File): string | null {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await getKick69AccountsFromRequest(req))) {
+  if (!(await getKiik69AccountsFromRequest(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
   const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
   const safeName = (file.name || `bill.${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
-  const pathname = `kick69/${folder}/${Date.now()}-${safeName}`;
+  const pathname = `kiik69/${folder}/${Date.now()}-${safeName}`;
 
   try {
     const bytes = Buffer.from(await file.arrayBuffer());
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ url: blob.url, fileName: file.name, mimeType });
   } catch (e) {
-    console.error("[kick69 upload]", e);
+    console.error("[kiik69 upload]", e);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-export type Kick69PurchaseAiResult = {
+export type Kiik69PurchaseAiResult = {
   title: string;
   amount: number | null;
   purchaseDate: string | null;
@@ -33,11 +33,11 @@ async function fetchImageAsDataUrl(imageUrl: string): Promise<string> {
   return `data:${mime};base64,${buf.toString("base64")}`;
 }
 
-export async function analyzeKick69PurchaseBill(input: {
+export async function analyzeKiik69PurchaseBill(input: {
   imageUrl: string;
   vendor?: string;
   paymentMethod?: string;
-}): Promise<Kick69PurchaseAiResult> {
+}): Promise<Kiik69PurchaseAiResult> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("AI is not configured (missing OPENAI_API_KEY).");
 

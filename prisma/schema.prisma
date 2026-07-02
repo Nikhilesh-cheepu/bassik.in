@@ -610,8 +610,8 @@ model TeamVaultShare {
   @@index([entryId])
 }
 
-/// KIIK 69 shared kitchen — purchases, sales, inventory ( /kick69/accounts ).
-model Kick69Purchase {
+/// KIIK 69 shared kitchen — purchases, sales, inventory ( /kiik69accounts ).
+model Kiik69Purchase {
   id            String   @id @default(cuid())
   vendor        String
   paymentMethod String

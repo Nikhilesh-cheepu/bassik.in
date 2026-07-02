@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  KICK69_PAYMENT_METHODS,
-  KICK69_PURCHASE_VENDORS,
-  kick69PaymentLabel,
-  kick69VendorLabel,
-  type Kick69PurchaseDto,
-} from "@/lib/kick69-accounts";
+  KIIK69_PAYMENT_METHODS,
+  KIIK69_PURCHASE_VENDORS,
+  kiik69PaymentLabel,
+  kiik69VendorLabel,
+  type Kiik69PurchaseDto,
+} from "@/lib/kiik69-accounts";
 import { TeamDatePicker } from "@/app/team/TeamDatePicker";
 
 type PurchaseForm = {
@@ -41,8 +41,8 @@ function formatInr(n: number | null): string {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 }
 
-export default function Kick69PurchasesView() {
-  const [purchases, setPurchases] = useState<Kick69PurchaseDto[]>([]);
+export default function Kiik69PurchasesView() {
+  const [purchases, setPurchases] = useState<Kiik69PurchaseDto[]>([]);
   const [ready, setReady] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<PurchaseForm>(emptyForm);
@@ -53,7 +53,7 @@ export default function Kick69PurchasesView() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/kick69/purchases");
+    const res = await fetch("/api/kiik69accounts/purchases");
     const data = await res.json();
     if (res.ok) {
       setPurchases(data.purchases ?? []);
@@ -72,7 +72,7 @@ export default function Kick69PurchasesView() {
     setError(null);
   };
 
-  const openEdit = (p: Kick69PurchaseDto) => {
+  const openEdit = (p: Kiik69PurchaseDto) => {
     setEditingId(p.id);
     setForm({
       vendor: p.vendor,
@@ -97,7 +97,7 @@ export default function Kick69PurchasesView() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("kind", "bill");
-      const res = await fetch("/api/kick69/upload", { method: "POST", body: fd });
+      const res = await fetch("/api/kiik69accounts/upload", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");
       setForm((f) => ({
@@ -120,7 +120,7 @@ export default function Kick69PurchasesView() {
     setScanning(true);
     setError(null);
     try {
-      const res = await fetch("/api/kick69/purchases/ai", {
+      const res = await fetch("/api/kiik69accounts/purchases/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -167,7 +167,9 @@ export default function Kick69PurchasesView() {
         billFileName: form.billFileName || null,
         purchaseLink: form.purchaseLink.trim() || null,
       };
-      const url = editingId ? `/api/kick69/purchases/${editingId}` : "/api/kick69/purchases";
+      const url = editingId
+        ? `/api/kiik69accounts/purchases/${editingId}`
+        : "/api/kiik69accounts/purchases";
       const res = await fetch(url, {
         method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -187,7 +189,7 @@ export default function Kick69PurchasesView() {
 
   const remove = async (id: string) => {
     if (!window.confirm("Delete this purchase?")) return;
-    await fetch(`/api/kick69/purchases/${id}`, { method: "DELETE" });
+    await fetch(`/api/kiik69accounts/purchases/${id}`, { method: "DELETE" });
     await load();
   };
 
@@ -228,9 +230,9 @@ export default function Kick69PurchasesView() {
             >
               <div className="flex items-start justify-between gap-2">
                 <button type="button" onClick={() => openEdit(p)} className="min-w-0 flex-1 text-left">
-                  <p className="font-medium text-white/92">{p.title || kick69VendorLabel(p.vendor)}</p>
+                  <p className="font-medium text-white/92">{p.title || kiik69VendorLabel(p.vendor)}</p>
                   <p className="mt-0.5 text-xs text-white/40">
-                    {kick69VendorLabel(p.vendor)} · {kick69PaymentLabel(p.paymentMethod)} · {formatInr(p.amount)}
+                    {kiik69VendorLabel(p.vendor)} · {kiik69PaymentLabel(p.paymentMethod)} · {formatInr(p.amount)}
                   </p>
                   {p.aiSummary ? (
                     <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-white/35">{p.aiSummary}</p>
@@ -277,7 +279,7 @@ export default function Kick69PurchasesView() {
               className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
             >
               <option value="">Select vendor</option>
-              {KICK69_PURCHASE_VENDORS.map((v) => (
+              {KIIK69_PURCHASE_VENDORS.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.label}
                 </option>
@@ -292,7 +294,7 @@ export default function Kick69PurchasesView() {
               className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
             >
               <option value="">Select payment</option>
-              {KICK69_PAYMENT_METHODS.map((p) => (
+              {KIIK69_PAYMENT_METHODS.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
                 </option>

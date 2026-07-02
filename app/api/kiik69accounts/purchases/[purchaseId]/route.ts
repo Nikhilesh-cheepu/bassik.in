@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getKick69AccountsFromRequest } from "@/lib/kick69-auth";
-import { parsePurchasePayload, toKick69PurchaseDto } from "@/lib/kick69-accounts";
+import { getKiik69AccountsFromRequest } from "@/lib/kiik69-auth";
+import { parsePurchasePayload, toKiik69PurchaseDto } from "@/lib/kiik69-accounts";
 import { prismaSchemaErrorResponse } from "@/lib/prisma-schema-error";
 
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ purchaseId: string }> }
 ) {
-  if (!(await getKick69AccountsFromRequest(req))) {
+  if (!(await getKiik69AccountsFromRequest(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { purchaseId } = await params;
   try {
-    await prisma.kick69Purchase.delete({ where: { id: purchaseId } });
+    await prisma.kiik69Purchase.delete({ where: { id: purchaseId } });
     return NextResponse.json({ success: true });
   } catch (error) {
     const schema = prismaSchemaErrorResponse(error);
@@ -27,7 +27,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ purchaseId: string }> }
 ) {
-  if (!(await getKick69AccountsFromRequest(req))) {
+  if (!(await getKiik69AccountsFromRequest(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -36,11 +36,11 @@ export async function PATCH(
 
   try {
     const data = parsePurchasePayload(body);
-    const row = await prisma.kick69Purchase.update({
+    const row = await prisma.kiik69Purchase.update({
       where: { id: purchaseId },
       data,
     });
-    return NextResponse.json({ purchase: toKick69PurchaseDto(row) });
+    return NextResponse.json({ purchase: toKiik69PurchaseDto(row) });
   } catch (error) {
     const schema = prismaSchemaErrorResponse(error);
     if (schema) return schema;
