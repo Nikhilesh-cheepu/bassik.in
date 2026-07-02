@@ -71,14 +71,14 @@ function SegmentSwitch<T extends string>({
   onChange,
 }: {
   value: T;
-  options: { id: T; label: string; hint?: string }[];
+  options: { id: T; label: string }[];
   onChange: (id: T) => void;
 }) {
   return (
     <div
       role="group"
       aria-label="Inventory view"
-      className="flex w-full rounded-full bg-white/[0.04] p-0.5 ring-1 ring-white/[0.08]"
+      className="kiik69-segment flex w-full rounded-full bg-white/[0.04] p-0.5 ring-1 ring-white/[0.08]"
     >
       {options.map((o) => {
         const active = value === o.id;
@@ -86,17 +86,13 @@ function SegmentSwitch<T extends string>({
           <button
             key={o.id}
             type="button"
+            aria-pressed={active}
             onClick={() => onChange(o.id)}
-            className={`min-h-[40px] flex-1 rounded-full px-2 py-2 text-center text-xs font-semibold transition touch-manipulation ${
+            className={`min-h-[36px] flex-1 rounded-full px-3 py-2 text-center text-xs font-semibold transition touch-manipulation ${
               active ? "bg-amber-500 text-stone-950 shadow-sm" : "text-white/45 hover:text-white/65"
             }`}
           >
-            <span className="block">{o.label}</span>
-            {o.hint ? (
-              <span className={`mt-0.5 block text-[10px] font-normal ${active ? "text-stone-800/70" : "text-white/30"}`}>
-                {o.hint}
-              </span>
-            ) : null}
+            {o.label}
           </button>
         );
       })}
@@ -246,22 +242,23 @@ export default function Kiik69InventoryView({
         </button>
       </div>
 
-      <SegmentSwitch
-        value={pane}
-        options={[
-          {
-            id: "onhand",
-            label: "On hand",
-            hint: loading ? "…" : `${items.length} · ${formatInr(totalOnHand)}`,
-          },
-          {
-            id: "history",
-            label: historyLabel,
-            hint: loading ? "…" : `${movements.length} entries`,
-          },
-        ]}
-        onChange={setPane}
-      />
+      <div className="space-y-1.5">
+        <SegmentSwitch
+          value={pane}
+          options={[
+            { id: "onhand", label: "On hand" },
+            { id: "history", label: historyLabel },
+          ]}
+          onChange={setPane}
+        />
+        {!loading ? (
+          <p className="text-center text-[11px] text-white/35">
+            {pane === "onhand"
+              ? `${items.length} item${items.length !== 1 ? "s" : ""} · ${formatInr(totalOnHand)}`
+              : `${movements.length} ${movements.length === 1 ? "entry" : "entries"}`}
+          </p>
+        ) : null}
+      </div>
 
       {error ? (
         <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-200">{error}</p>
@@ -490,12 +487,6 @@ function OnHandSection({
 
   return (
     <section>
-      <div className="mb-2.5 flex items-end justify-between gap-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-white/35">On hand</h3>
-        <p className="text-xs text-white/40">
-          {items.length} item{items.length !== 1 ? "s" : ""} · <span className="font-medium text-emerald-300/90">{formatInr(totalValue)}</span>
-        </p>
-      </div>
       <ul className="space-y-2">
         {items.map((item) => {
           const pct =
@@ -510,7 +501,7 @@ function OnHandSection({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="truncate text-[15px] font-semibold text-white">{item.name}</p>
-                  <p className="mt-0.5 text-[11px] text-white/38">
+                  <p className="mt-0.5 text-[11px] font-medium text-amber-200/80">
                     {item.category === "liquor"
                       ? formatLiquorCostLabel(liquorBottleSizeMl(item), item.costInr)
                       : formatItemCostLabel(item)}
