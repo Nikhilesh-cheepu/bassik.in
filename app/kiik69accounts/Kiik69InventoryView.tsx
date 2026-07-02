@@ -31,6 +31,7 @@ import {
 } from "./Kiik69Nav";
 
 type StockTab = "in" | "out";
+type InventoryPane = "onhand" | "history";
 
 const todayKey = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
@@ -64,6 +65,45 @@ function PillToggle<T extends string>({
   );
 }
 
+function SegmentSwitch<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: { id: T; label: string; hint?: string }[];
+  onChange: (id: T) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Inventory view"
+      className="flex w-full rounded-full bg-white/[0.04] p-0.5 ring-1 ring-white/[0.08]"
+    >
+      {options.map((o) => {
+        const active = value === o.id;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onChange(o.id)}
+            className={`min-h-[40px] flex-1 rounded-full px-2 py-2 text-center text-xs font-semibold transition touch-manipulation ${
+              active ? "bg-amber-500 text-stone-950 shadow-sm" : "text-white/45 hover:text-white/65"
+            }`}
+          >
+            <span className="block">{o.label}</span>
+            {o.hint ? (
+              <span className={`mt-0.5 block text-[10px] font-normal ${active ? "text-stone-800/70" : "text-white/30"}`}>
+                {o.hint}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Kiik69InventoryView({
   category,
   stockTab,
@@ -90,6 +130,7 @@ export default function Kiik69InventoryView({
   const [refreshKey, setRefreshKey] = useState(0);
   const [deleteItem, setDeleteItem] = useState<Kiik69StockItemDto | null>(null);
   const [showClearHistory, setShowClearHistory] = useState(false);
+  const [pane, setPane] = useState<InventoryPane>("onhand");
 
   const direction: Kiik69StockDirection = stockTab === "in" ? "in" : "out";
 
@@ -167,6 +208,9 @@ export default function Kiik69InventoryView({
     return { count: movements.length, usedBase, usedCost };
   }, [direction, movements]);
 
+  const historyLabel = stockTab === "in" ? "Stock in" : "Stock out";
+  const totalOnHand = useMemo(() => items.reduce((s, i) => s + i.remainingValueInr, 0), [items]);
+
   return (
     <div className="space-y-4 pb-2">
       {onAskAi ? (
@@ -202,6 +246,23 @@ export default function Kiik69InventoryView({
         </button>
       </div>
 
+      <SegmentSwitch
+        value={pane}
+        options={[
+          {
+            id: "onhand",
+            label: "On hand",
+            hint: loading ? "…" : `${items.length} · ${formatInr(totalOnHand)}`,
+          },
+          {
+            id: "history",
+            label: historyLabel,
+            hint: loading ? "…" : `${movements.length} entries`,
+          },
+        ]}
+        onChange={setPane}
+      />
+
       {error ? (
         <p className="rounded-2xl border border-red-400/20 bg-red-500/10 px-3 py-2.5 text-sm text-red-200">{error}</p>
       ) : null}
@@ -214,16 +275,21 @@ export default function Kiik69InventoryView({
         </div>
       ) : (
         <>
-          <OnHandSection items={items} category={category} onDelete={setDeleteItem} />
-          {direction === "out" && stockOutTotals && stockOutTotals.count > 0 ? (
-            <StockOutSummary totals={stockOutTotals} category={category} />
-          ) : null}
-          <MovementsTimeline
-            movements={movements}
-            direction={direction}
-            category={category}
-            onClearHistory={() => setShowClearHistory(true)}
-          />
+          {pane === "onhand" ? (
+            <OnHandSection items={items} category={category} onDelete={setDeleteItem} />
+          ) : (
+            <>
+              {direction === "out" && stockOutTotals && stockOutTotals.count > 0 ? (
+                <StockOutSummary totals={stockOutTotals} category={category} />
+              ) : null}
+              <MovementsTimeline
+                movements={movements}
+                direction={direction}
+                category={category}
+                onClearHistory={() => setShowClearHistory(true)}
+              />
+            </>
+          )}
         </>
       )}
 
@@ -516,7 +582,6 @@ function MovementsTimeline({
   category: Kiik69StockCategory;
   onClearHistory: () => void;
 }) {
-  const title = direction === "in" ? "Stock in history" : "Stock out log";
   const groups = groupMovementsByDate(movements);
 
   if (movements.length === 0) {
@@ -530,8 +595,7 @@ function MovementsTimeline({
 
   return (
     <section>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-white/35">{title}</h3>
+      <div className="mb-3 flex justify-end">
         <button
           type="button"
           onClick={onClearHistory}
