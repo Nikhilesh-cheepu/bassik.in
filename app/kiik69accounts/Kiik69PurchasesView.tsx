@@ -14,6 +14,7 @@ import {
   type Kiik69PurchaseDto,
 } from "@/lib/kiik69-accounts";
 import { newKiik69AttachmentId, type Kiik69PurchaseAttachment } from "@/lib/kiik69-purchase-attachments";
+import { formatKiik69Timestamp } from "@/lib/kiik69-datetime";
 import Kiik69PurchaseDetail from "./Kiik69PurchaseDetail";
 import Kiik69PurchaseForm, { type PurchaseFormData } from "./Kiik69PurchaseForm";
 import Kiik69PurchaseInsights from "./Kiik69PurchaseInsights";
@@ -425,6 +426,9 @@ export default function Kiik69PurchasesView({
                             {kiik69OutletLabel(p.outlet, p.outletLabel)} ·{" "}
                             {kiik69VendorLabel(p.vendor, p.vendorLabel)} ·{" "}
                             {kiik69ItemLabel(p.item, p.itemLabel)}
+                          </p>
+                          <p className="mt-0.5 text-[10px] text-white/30 tabular-nums">
+                            {formatKiik69Timestamp(p.createdAt, p.purchaseDate)}
                           </p>
                           {p.aiSummary ? (
                             <p className="mt-1 line-clamp-1 text-[11px] text-white/30">{p.aiSummary}</p>

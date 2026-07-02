@@ -1,4 +1,5 @@
 import type { Kiik69StockItem, Kiik69StockMovement } from "@prisma/client";
+import { formatKiik69Timestamp } from "@/lib/kiik69-datetime";
 
 export type Kiik69StockCategory = "food" | "liquor";
 export type Kiik69StockDirection = "in" | "out";
@@ -419,13 +420,8 @@ export function movementDisplayDate(m: Kiik69StockMovementDto): string {
   return m.movementDate ?? m.createdAt.slice(0, 10);
 }
 
-export function formatMovementTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-IN", {
-    timeZone: IST,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+export function formatMovementTime(iso: string, movementDate?: string | null): string {
+  return formatKiik69Timestamp(iso, movementDate);
 }
 
 export function movementDateGroupKey(ymd: string): string {

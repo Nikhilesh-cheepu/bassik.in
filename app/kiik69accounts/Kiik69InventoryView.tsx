@@ -9,7 +9,6 @@ import {
   formatLiquorCostLabel,
   formatMovementQty,
   formatMovementRemainingAfter,
-  formatMovementTime,
   groupMovementsByDate,
   liquorBottleSizeMl,
   qtyUnitsStockIn,
@@ -20,6 +19,7 @@ import {
   type Kiik69StockItemDto,
   type Kiik69StockMovementDto,
 } from "@/lib/kiik69-stock";
+import { formatKiik69Timestamp } from "@/lib/kiik69-datetime";
 import Kiik69AddItemSheet from "./Kiik69AddItemSheet";
 import Kiik69InventoryInsights from "./Kiik69InventoryInsights";
 import {
@@ -34,6 +34,12 @@ type StockTab = "in" | "out";
 type InventoryPane = "onhand" | "history";
 
 const todayKey = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+function RecordTime({ iso, date }: { iso: string; date?: string | null }) {
+  return (
+    <p className="text-[10px] leading-tight text-white/30 tabular-nums">{formatKiik69Timestamp(iso, date)}</p>
+  );
+}
 
 function PillToggle<T extends string>({
   value,
@@ -508,7 +514,8 @@ function OnHandSection({
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-sm font-semibold tabular-nums text-amber-200">{formatItemRemaining(item)}</p>
+                  <RecordTime iso={item.updatedAt} />
+                  <p className="mt-1 text-sm font-semibold tabular-nums text-amber-200">{formatItemRemaining(item)}</p>
                   <p className="mt-0.5 text-xs tabular-nums text-emerald-300/85">{formatInr(item.remainingValueInr)}</p>
                   <button
                     type="button"
@@ -598,9 +605,7 @@ function MovementsTimeline({
       <div className="space-y-5">
         {groups.map((group) => (
           <div key={group.label}>
-            <p className="mb-2 sticky top-0 z-[1] inline-flex rounded-full bg-[#06060a]/90 px-2.5 py-1 text-[11px] font-semibold text-white/50 backdrop-blur-sm">
-              {group.label}
-            </p>
+            <p className="mb-1.5 text-[10px] text-white/30">{group.label}</p>
             <ul className="space-y-2">
               {group.items.map((m) =>
                 direction === "out" ? (
@@ -621,28 +626,24 @@ function StockOutCard({ movement: m }: { movement: Kiik69StockMovementDto }) {
   return (
     <li className="overflow-hidden rounded-2xl bg-[#0e0e14] ring-1 ring-white/[0.07]">
       <div className="flex items-start justify-between gap-3 border-b border-white/[0.05] px-3.5 py-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-[15px] font-semibold text-white">{m.itemName}</p>
-          <p className="mt-0.5 text-xs text-orange-300/90">
-            Used <span className="font-semibold">{formatMovementQty(m)}</span>
-            <span className="text-white/30"> · </span>
-            {formatMovementTime(m.createdAt)}
-          </p>
-          {m.note ? <p className="mt-1 text-[11px] text-white/38">{m.note}</p> : null}
+          <p className="mt-0.5 text-xs text-white/45">Used {formatMovementQty(m)}</p>
+          {m.note ? <p className="mt-1 text-[11px] text-white/35">{m.note}</p> : null}
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-sm font-bold tabular-nums text-orange-300">−{formatInr(m.costInr)}</p>
-          <p className="mt-0.5 text-[10px] text-white/30">cost used</p>
+          <RecordTime iso={m.createdAt} date={m.movementDate} />
+          <p className="mt-1 text-sm font-semibold tabular-nums text-white/85">−{formatInr(m.costInr)}</p>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-px bg-white/[0.04]">
         <div className="bg-[#0e0e14] px-3.5 py-2.5">
-          <p className="text-[10px] uppercase tracking-wide text-white/32">Stock left</p>
-          <p className="mt-0.5 text-xs font-medium text-amber-200/95">{formatMovementRemainingAfter(m)}</p>
+          <p className="text-[10px] text-white/30">Stock left</p>
+          <p className="mt-0.5 text-xs text-white/70">{formatMovementRemainingAfter(m)}</p>
         </div>
         <div className="bg-[#0e0e14] px-3.5 py-2.5">
-          <p className="text-[10px] uppercase tracking-wide text-white/32">Value left</p>
-          <p className="mt-0.5 text-xs font-medium tabular-nums text-emerald-300/90">
+          <p className="text-[10px] text-white/30">Value left</p>
+          <p className="mt-0.5 text-xs tabular-nums text-white/70">
             {m.remainingValueAfterInr != null ? formatInr(m.remainingValueAfterInr) : "—"}
           </p>
         </div>
@@ -654,19 +655,16 @@ function StockOutCard({ movement: m }: { movement: Kiik69StockMovementDto }) {
 function StockInCard({ movement: m }: { movement: Kiik69StockMovementDto }) {
   return (
     <li className="flex items-start justify-between gap-3 rounded-2xl bg-[#0e0e14] px-3.5 py-3 ring-1 ring-white/[0.07]">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-[15px] font-semibold text-white">{m.itemName}</p>
-        <p className="mt-0.5 text-xs text-white/45">
-          +{formatMovementQty(m)}
-          <span className="text-white/25"> · </span>
-          {formatMovementTime(m.createdAt)}
-        </p>
+        <p className="mt-0.5 text-xs text-white/45">+{formatMovementQty(m)}</p>
         {m.note ? <p className="mt-1 text-[11px] text-white/35">{m.note}</p> : null}
       </div>
       <div className="shrink-0 text-right">
-        <p className="text-sm font-bold tabular-nums text-emerald-300">+{formatInr(m.costInr)}</p>
+        <RecordTime iso={m.createdAt} date={m.movementDate} />
+        <p className="mt-1 text-sm font-semibold tabular-nums text-white/85">+{formatInr(m.costInr)}</p>
         {m.remainingValueAfterInr != null ? (
-          <p className="mt-0.5 text-[10px] text-white/32">bal {formatInr(m.remainingValueAfterInr)}</p>
+          <p className="mt-0.5 text-[10px] text-white/30">bal {formatInr(m.remainingValueAfterInr)}</p>
         ) : null}
       </div>
     </li>

@@ -9,6 +9,7 @@ import {
   type Kiik69PurchaseDto,
 } from "@/lib/kiik69-accounts";
 import { kiik69DocTypeLabel, type Kiik69DocType } from "@/lib/kiik69-purchase-attachments";
+import { formatKiik69Timestamp } from "@/lib/kiik69-datetime";
 import { IconChevronLeft } from "./Kiik69Icons";
 import { KIIK69_BTN, KIIK69_INPUT, KIIK69_SHEET_OVERLAY, KIIK69_SHEET_PANEL } from "./Kiik69Nav";
 
@@ -119,6 +120,12 @@ export default function Kiik69PurchaseDetail({
           <div className="flex justify-between gap-4 text-sm">
             <dt className="text-white/40">Date</dt>
             <dd className="text-white/85">{formatDate(purchase.purchaseDate)}</dd>
+          </div>
+          <div className="flex justify-between gap-4 text-sm">
+            <dt className="text-white/40">Logged</dt>
+            <dd className="text-[11px] text-white/40 tabular-nums">
+              {formatKiik69Timestamp(purchase.createdAt, purchase.purchaseDate)}
+            </dd>
           </div>
           {allAttachments.length > 0 ? (
             <div className="space-y-2 border-t border-white/[0.06] pt-2">

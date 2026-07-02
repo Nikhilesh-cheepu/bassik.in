@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { TeamDatePicker } from "@/app/team/TeamDatePicker";
+import { formatKiik69Timestamp } from "@/lib/kiik69-datetime";
 import type { Kiik69WalletSummary } from "@/lib/kiik69-wallet";
 import { formatInr as formatWalletInr } from "@/lib/kiik69-wallet";
 import {
@@ -94,7 +95,9 @@ export default function Kiik69WalletView({ addSignal = 0 }: { addSignal?: number
                         {e.type === "deposit" ? "Deposit" : "Spend"}
                         {e.note ? ` · ${e.note}` : ""}
                       </p>
-                      <p className="text-[11px] text-white/35">{e.entryDate ?? e.createdAt.slice(0, 10)}</p>
+                      <p className="text-[10px] text-white/30 tabular-nums">
+                        {formatKiik69Timestamp(e.createdAt, e.entryDate)}
+                      </p>
                     </div>
                     <p className={`text-sm font-semibold ${e.type === "deposit" ? "text-emerald-300" : "text-orange-300"}`}>
                       {e.type === "deposit" ? "+" : "−"}
