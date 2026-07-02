@@ -11,6 +11,11 @@ const JWT_SECRET = new TextEncoder().encode(
     "dev-kiik69-accounts-secret-change-in-production"
 );
 
+export function verifyKiik69DeletePassword(password: string): boolean {
+  const expected = process.env.KIIK69_DELETE_PASSWORD?.trim() || "9550";
+  return password.trim() === expected;
+}
+
 export function resolveKiik69AccountsPassword(password: string): boolean {
   const expected =
     process.env.KIIK69_ACCOUNTS_PASSWORD?.trim() ||
@@ -36,13 +41,19 @@ export async function verifyKiik69AccountsSession(token: string): Promise<boolea
   }
 }
 
+export function isKiik69AccountsAuthRequired(): boolean {
+  return process.env.KIIK69_ACCOUNTS_REQUIRE_AUTH === "true";
+}
+
 export async function getKiik69AccountsFromRequest(request: NextRequest): Promise<boolean> {
+  if (!isKiik69AccountsAuthRequired()) return true;
   const token = request.cookies.get(KIIK69_ACCOUNTS_COOKIE)?.value;
   if (!token) return false;
   return verifyKiik69AccountsSession(token);
 }
 
 export async function getKiik69AccountsFromCookies(): Promise<boolean> {
+  if (!isKiik69AccountsAuthRequired()) return true;
   const jar = await cookies();
   const token = jar.get(KIIK69_ACCOUNTS_COOKIE)?.value;
   if (!token) return false;

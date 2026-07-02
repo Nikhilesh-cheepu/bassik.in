@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   createKiik69AccountsToken,
   getKiik69AccountsFromRequest,
+  isKiik69AccountsAuthRequired,
   KIIK69_ACCOUNTS_COOKIE,
   resolveKiik69AccountsPassword,
 } from "@/lib/kiik69-auth";
 
 export async function GET(req: NextRequest) {
+  if (!isKiik69AccountsAuthRequired()) {
+    return NextResponse.json({ authenticated: true, authRequired: false });
+  }
   const ok = await getKiik69AccountsFromRequest(req);
-  return NextResponse.json({ authenticated: ok });
+  return NextResponse.json({ authenticated: ok, authRequired: true });
 }
 
 export async function POST(req: NextRequest) {

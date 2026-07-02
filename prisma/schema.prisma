@@ -614,7 +614,13 @@ model TeamVaultShare {
 model Kiik69Purchase {
   id            String   @id @default(cuid())
   vendor        String
+  vendorLabel   String?
   paymentMethod String
+  paymentLabel  String?
+  item          String?
+  itemLabel     String?
+  outlet        String?
+  outletLabel   String?
   amount        Decimal? @db.Decimal(12, 2)
   purchaseDate  String?
   title         String?
@@ -622,12 +628,32 @@ model Kiik69Purchase {
   aiSummary     String?
   billUrl       String?
   billFileName  String?
+  billDocType   String?
+  paymentProofUrl       String?
+  paymentProofFileName  String?
+  attachments           Json?
   purchaseLink  String?
   createdBy     String   @default("admin")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([vendor])
+  @@index([item])
+  @@index([outlet])
   @@index([purchaseDate])
   @@index([createdAt])
+}
+
+/// User-saved vendor / payment / item names (from "Others" or AI).
+model Kiik69CustomOption {
+  id        String   @id @default(cuid())
+  kind      String
+  slug      String
+  label     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([kind, slug])
+  @@unique([kind, label])
+  @@index([kind])
 }

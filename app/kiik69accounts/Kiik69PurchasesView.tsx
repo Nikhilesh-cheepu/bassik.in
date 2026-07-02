@@ -1,38 +1,42 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Kiik69OptionChip } from "@/lib/kiik69-custom-options";
 import {
   KIIK69_PAYMENT_METHODS,
+  KIIK69_PURCHASE_ITEMS,
   KIIK69_PURCHASE_VENDORS,
+  kiik69ItemLabel,
+  kiik69OutletLabel,
   kiik69PaymentLabel,
   kiik69VendorLabel,
+  mergeKiik69OptionChips,
   type Kiik69PurchaseDto,
 } from "@/lib/kiik69-accounts";
-import { TeamDatePicker } from "@/app/team/TeamDatePicker";
+import { newKiik69AttachmentId, type Kiik69PurchaseAttachment } from "@/lib/kiik69-purchase-attachments";
+import Kiik69PurchaseDetail from "./Kiik69PurchaseDetail";
+import Kiik69PurchaseForm, { type PurchaseFormData } from "./Kiik69PurchaseForm";
+import Kiik69PurchaseInsights from "./Kiik69PurchaseInsights";
 
-type PurchaseForm = {
-  vendor: string;
-  paymentMethod: string;
-  amount: string;
-  purchaseDate: string;
-  title: string;
-  description: string;
-  aiSummary: string;
-  billUrl: string;
-  billFileName: string;
-  purchaseLink: string;
-};
+const DEFAULT_VENDOR_CHIPS = mergeKiik69OptionChips(KIIK69_PURCHASE_VENDORS, []);
+const DEFAULT_PAYMENT_CHIPS = mergeKiik69OptionChips(KIIK69_PAYMENT_METHODS, []);
+const DEFAULT_ITEM_CHIPS = mergeKiik69OptionChips(KIIK69_PURCHASE_ITEMS, []);
 
-const emptyForm = (): PurchaseForm => ({
+const emptyForm = (): PurchaseFormData => ({
+  outlet: "",
+  outletOther: "",
   vendor: "",
+  vendorOther: "",
   paymentMethod: "",
+  paymentOther: "",
+  item: "",
+  itemOther: "",
   amount: "",
   purchaseDate: "",
   title: "",
   description: "",
   aiSummary: "",
-  billUrl: "",
-  billFileName: "",
+  attachments: [],
   purchaseLink: "",
 });
 
@@ -41,16 +45,100 @@ function formatInr(n: number | null): string {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
 }
 
-export default function Kiik69PurchasesView() {
+function dateGroupKey(ymd: string | null): string {
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return "Earlier";
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const y = new Date(today);
+  y.setDate(y.getDate() - 1);
+  const yesterdayKey = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, "0")}-${String(y.getDate()).padStart(2, "0")}`;
+  if (ymd === todayKey) return "Today";
+  if (ymd === yesterdayKey) return "Yesterday";
+  return new Date(ymd + "T12:00:00").toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+}
+
+function purchaseToForm(p: Kiik69PurchaseDto): PurchaseFormData {
+  return {
+    outlet: p.outlet ?? "",
+    outletOther: p.outlet === "other" ? (p.outletLabel ?? "") : "",
+    vendor: p.vendor,
+    vendorOther: p.vendorLabel ?? "",
+    paymentMethod: p.paymentMethod,
+    paymentOther: p.paymentLabel ?? "",
+    item: p.item ?? "",
+    itemOther: p.itemLabel ?? "",
+    amount: p.amount != null ? String(p.amount) : "",
+    purchaseDate: p.purchaseDate ?? "",
+    title: p.title ?? "",
+    description: p.description ?? "",
+    aiSummary: p.aiSummary ?? "",
+    attachments: p.attachments.map((a) => ({ ...a })),
+    purchaseLink: p.purchaseLink ?? "",
+  };
+}
+
+type AiScanResult = {
+  title?: string;
+  amount?: number | null;
+  billTotal?: number | null;
+  amountPaid?: number | null;
+  purchaseDate?: string | null;
+  aiSummary?: string;
+  notes?: string;
+  description?: string;
+  vendor?: string;
+  paymentMethod?: string;
+  item?: string;
+  itemOther?: string;
+  transactionIds?: string[];
+};
+
+function mergeAiIntoForm(prev: PurchaseFormData, data: AiScanResult): PurchaseFormData {
+  const bestAmount = data.amountPaid ?? data.billTotal ?? data.amount;
+  return {
+    ...prev,
+    title: data.title || prev.title,
+    amount: bestAmount != null ? String(bestAmount) : prev.amount,
+    purchaseDate: data.purchaseDate || prev.purchaseDate,
+    aiSummary: [prev.aiSummary, data.aiSummary || data.notes].filter(Boolean).join("\n\n").trim(),
+    vendor: data.vendor || prev.vendor,
+    paymentMethod: data.paymentMethod || prev.paymentMethod,
+    item: data.item || prev.item,
+    itemOther: data.itemOther || prev.itemOther,
+    description: data.description || data.notes || prev.description || data.aiSummary || prev.aiSummary,
+  };
+}
+
+export default function Kiik69PurchasesView({
+  addSignal = 0,
+  onAskAi,
+}: {
+  addSignal?: number;
+  onAskAi?: (prompt: string) => void;
+}) {
   const [purchases, setPurchases] = useState<Kiik69PurchaseDto[]>([]);
   const [ready, setReady] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<PurchaseForm>(emptyForm);
+  const [form, setForm] = useState<PurchaseFormData>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Kiik69PurchaseDto | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [vendorChips, setVendorChips] = useState<Kiik69OptionChip[]>(DEFAULT_VENDOR_CHIPS);
+  const [paymentChips, setPaymentChips] = useState<Kiik69OptionChip[]>(DEFAULT_PAYMENT_CHIPS);
+  const [itemChips, setItemChips] = useState<Kiik69OptionChip[]>(DEFAULT_ITEM_CHIPS);
+
+  const loadOptions = useCallback(async () => {
+    const res = await fetch("/api/kiik69accounts/options");
+    const data = await res.json();
+    if (res.ok) {
+      setVendorChips(data.vendors ?? DEFAULT_VENDOR_CHIPS);
+      setPaymentChips(data.payments ?? DEFAULT_PAYMENT_CHIPS);
+      setItemChips(data.items ?? DEFAULT_ITEM_CHIPS);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/kiik69accounts/purchases");
@@ -63,86 +151,121 @@ export default function Kiik69PurchasesView() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadOptions();
+  }, [load, loadOptions]);
+
+  useEffect(() => {
+    if (addSignal > 0) openNew();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addSignal]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, Kiik69PurchaseDto[]>();
+    for (const p of purchases) {
+      const key = dateGroupKey(p.purchaseDate);
+      const list = map.get(key) ?? [];
+      list.push(p);
+      map.set(key, list);
+    }
+    const order = ["Today", "Yesterday"];
+    return [...map.entries()].sort((a, b) => {
+      const ai = order.indexOf(a[0]);
+      const bi = order.indexOf(b[0]);
+      if (ai !== -1 || bi !== -1) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      return 0;
+    });
+  }, [purchases]);
 
   const openNew = () => {
     setEditingId(null);
     setForm(emptyForm());
     setShowForm(true);
     setError(null);
+    void loadOptions();
   };
 
   const openEdit = (p: Kiik69PurchaseDto) => {
+    setDetail(null);
     setEditingId(p.id);
-    setForm({
-      vendor: p.vendor,
-      paymentMethod: p.paymentMethod,
-      amount: p.amount != null ? String(p.amount) : "",
-      purchaseDate: p.purchaseDate ?? "",
-      title: p.title ?? "",
-      description: p.description ?? "",
-      aiSummary: p.aiSummary ?? "",
-      billUrl: p.billUrl ?? "",
-      billFileName: p.billFileName ?? "",
-      purchaseLink: p.purchaseLink ?? "",
-    });
+    setForm(purchaseToForm(p));
     setShowForm(true);
     setError(null);
+    void loadOptions();
   };
 
-  const uploadBill = async (file: File) => {
-    setUploading(true);
-    setError(null);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("kind", "bill");
-      const res = await fetch("/api/kiik69accounts/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Upload failed");
-      setForm((f) => ({
-        ...f,
-        billUrl: data.url,
-        billFileName: data.fileName ?? file.name,
-      }));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setUploading(false);
-    }
+  const scanDocument = async (
+    attachment: Kiik69PurchaseAttachment,
+    ctx: PurchaseFormData
+  ): Promise<AiScanResult | null> => {
+    const docCategory =
+      attachment.docType === "payment"
+        ? "payment"
+        : attachment.docType === "invoice"
+          ? "invoice"
+          : attachment.docType === "bill"
+            ? "bill"
+            : undefined;
+    const res = await fetch("/api/kiik69accounts/purchases/ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        documentUrl: attachment.url,
+        mimeType: attachment.mimeType || undefined,
+        docCategory,
+        vendor: ctx.vendor || undefined,
+        paymentMethod: ctx.paymentMethod || undefined,
+        item: ctx.item || undefined,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "AI scan failed");
+    return data as AiScanResult;
   };
 
-  const runAiScan = async () => {
-    if (!form.billUrl) {
-      setError("Upload a bill image first");
-      return;
-    }
+  const applyScanResult = (
+    prev: PurchaseFormData,
+    att: Kiik69PurchaseAttachment,
+    data: AiScanResult
+  ): PurchaseFormData => {
+    const note = data.aiSummary || data.notes || "";
+    const withNote: PurchaseFormData = {
+      ...prev,
+      attachments: prev.attachments.map((a) =>
+        a.id === att.id
+          ? {
+              ...a,
+              aiNote: note || a.aiNote,
+              transactionIds: data.transactionIds?.length ? data.transactionIds : a.transactionIds,
+              amountPaid: data.amountPaid ?? a.amountPaid,
+              billTotal: data.billTotal ?? a.billTotal,
+            }
+          : a
+      ),
+    };
+    return mergeAiIntoForm(withNote, data);
+  };
+
+  const runAiOnAttachments = async (ctx: PurchaseFormData) => {
+    const scannable = ctx.attachments.filter(
+      (a) =>
+        !a.aiNote &&
+        (a.mimeType.startsWith("image/") || a.mimeType === "application/pdf" || a.url.includes(".pdf"))
+    );
+    if (scannable.length === 0) return;
+
     setScanning(true);
     setError(null);
     try {
-      const res = await fetch("/api/kiik69accounts/purchases/ai", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageUrl: form.billUrl,
-          vendor: form.vendor || undefined,
-          paymentMethod: form.paymentMethod || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "AI scan failed");
-      setForm((f) => ({
-        ...f,
-        title: data.title || f.title,
-        amount: data.amount != null ? String(data.amount) : f.amount,
-        purchaseDate: data.purchaseDate || f.purchaseDate,
-        aiSummary: data.aiSummary || f.aiSummary,
-        vendor: data.vendor || f.vendor,
-        paymentMethod: data.paymentMethod || f.paymentMethod,
-        description: f.description.trim()
-          ? f.description
-          : data.aiSummary || f.description,
-      }));
+      let merged = { ...ctx };
+      for (const att of scannable) {
+        try {
+          const data = await scanDocument(att, merged);
+          if (data) merged = applyScanResult(merged, att, data);
+        } catch {
+          // other files may still work
+        }
+      }
+      setForm(syncAiSummaryFromAttachments(merged));
     } catch (e) {
       setError(e instanceof Error ? e.message : "AI scan failed");
     } finally {
@@ -150,21 +273,78 @@ export default function Kiik69PurchasesView() {
     }
   };
 
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const syncAiSummaryFromAttachments = (ctx: PurchaseFormData): PurchaseFormData => {
+    if (ctx.aiSummary?.trim()) return ctx;
+    const combined = ctx.attachments
+      .filter((a) => a.aiNote?.trim())
+      .map((a) => `${a.fileName}: ${a.aiNote}`)
+      .join("\n\n");
+    return combined ? { ...ctx, aiSummary: combined } : ctx;
+  };
+
+  const uploadSingleFile = async (file: File): Promise<Kiik69PurchaseAttachment> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("kind", "files");
+    const res = await fetch("/api/kiik69accounts/upload", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Upload failed");
+    return {
+      id: newKiik69AttachmentId(),
+      url: data.url,
+      fileName: data.fileName ?? file.name,
+      mimeType: data.mimeType ?? "",
+      docType: "",
+    };
+  };
+
+  const uploadFiles = async (files: FileList | File[]) => {
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const uploaded: Kiik69PurchaseAttachment[] = [];
+      for (const file of list) {
+        uploaded.push(await uploadSingleFile(file));
+      }
+      const nextCtx: PurchaseFormData = {
+        ...form,
+        attachments: [...form.attachments, ...uploaded],
+      };
+      setForm(nextCtx);
+      setUploading(false);
+      await runAiOnAttachments(nextCtx);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed");
+      setUploading(false);
+    }
+  };
+
+  const enterReview = async (ctx: PurchaseFormData) => {
+    await runAiOnAttachments(ctx);
+    setForm((f) => syncAiSummaryFromAttachments(f));
+  };
+
+  const save = async () => {
     setSaving(true);
     setError(null);
     try {
       const payload = {
+        outlet: form.outlet,
+        outletOther: form.outletOther.trim() || null,
         vendor: form.vendor,
+        vendorOther: form.vendorOther.trim() || null,
         paymentMethod: form.paymentMethod,
+        paymentOther: form.paymentOther.trim() || null,
+        item: form.item,
+        itemOther: form.itemOther.trim() || null,
         amount: form.amount.trim() ? Number(form.amount) : null,
         purchaseDate: form.purchaseDate || null,
         title: form.title.trim() || null,
         description: form.description.trim() || null,
         aiSummary: form.aiSummary.trim() || null,
-        billUrl: form.billUrl || null,
-        billFileName: form.billFileName || null,
+        attachments: form.attachments,
         purchaseLink: form.purchaseLink.trim() || null,
       };
       const url = editingId
@@ -179,7 +359,7 @@ export default function Kiik69PurchasesView() {
       if (!res.ok) throw new Error(data.error || "Save failed");
       setShowForm(false);
       setEditingId(null);
-      await load();
+      await Promise.all([load(), loadOptions()]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -187,224 +367,113 @@ export default function Kiik69PurchasesView() {
     }
   };
 
-  const remove = async (id: string) => {
-    if (!window.confirm("Delete this purchase?")) return;
-    await fetch(`/api/kiik69accounts/purchases/${id}`, { method: "DELETE" });
+  const remove = async (id: string, deletePassword: string) => {
+    const res = await fetch(`/api/kiik69accounts/purchases/${id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deletePassword }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Delete failed");
+    setDetail(null);
     await load();
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h2 className="text-base font-semibold text-white">Purchases</h2>
-          <p className="text-xs text-white/40">Zepto, Instamart, Blinkit & more — bill + AI</p>
-        </div>
-        <button
-          type="button"
-          onClick={openNew}
-          className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold"
-        >
-          + Add
-        </button>
-      </div>
+    <>
+      {onAskAi ? <Kiik69PurchaseInsights onAskAi={onAskAi} refreshKey={purchases.length} /> : null}
 
       {error && !showForm ? (
-        <p className="rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</p>
+        <p className="mb-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+          {error}
+        </p>
       ) : null}
 
       {!ready ? (
-        <div className="space-y-2">
+        <div className="space-y-3 py-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 animate-pulse rounded-xl bg-white/[0.04]" />
+            <div
+              key={i}
+              className="h-20 animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.03]"
+            />
           ))}
         </div>
       ) : purchases.length === 0 ? (
-        <p className="py-12 text-center text-sm text-white/35">No purchases yet — tap Add to log one.</p>
+        <p className="py-16 text-center text-sm text-white/40">No purchases yet — tap + to log one.</p>
       ) : (
-        <ul className="space-y-2">
-          {purchases.map((p) => (
-            <li
-              key={p.id}
-              className="rounded-xl border border-white/[0.06] bg-[#0e0e14] px-3.5 py-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <button type="button" onClick={() => openEdit(p)} className="min-w-0 flex-1 text-left">
-                  <p className="font-medium text-white/92">{p.title || kiik69VendorLabel(p.vendor)}</p>
-                  <p className="mt-0.5 text-xs text-white/40">
-                    {kiik69VendorLabel(p.vendor)} · {kiik69PaymentLabel(p.paymentMethod)} · {formatInr(p.amount)}
-                  </p>
-                  {p.aiSummary ? (
-                    <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-white/35">{p.aiSummary}</p>
-                  ) : null}
-                </button>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  {p.billUrl ? (
-                    <a
-                      href={p.billUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] text-cyan-400/90"
+        <div className="space-y-4">
+          {grouped.map(([label, items]) => (
+            <section key={label}>
+              <h3 className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/30">
+                {label}
+              </h3>
+              <ul className="space-y-2">
+                {items.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => setDetail(p)}
+                      className="relative w-full overflow-hidden rounded-xl bg-[#0e0e14] py-3 pl-3.5 pr-3 text-left ring-1 ring-white/[0.06] active:bg-white/[0.03]"
                     >
-                      Bill
-                    </a>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => void remove(p.id)}
-                    className="text-[11px] text-red-300/60"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            </li>
+                      <div className="absolute inset-y-0 left-0 w-1 bg-amber-500/80" />
+                      <div className="flex items-start justify-between gap-3 pl-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-white/92">
+                            {p.title || kiik69ItemLabel(p.item, p.itemLabel)}
+                          </p>
+                          <p className="mt-0.5 text-xs text-white/40">
+                            {kiik69OutletLabel(p.outlet, p.outletLabel)} ·{" "}
+                            {kiik69VendorLabel(p.vendor, p.vendorLabel)} ·{" "}
+                            {kiik69ItemLabel(p.item, p.itemLabel)}
+                          </p>
+                          {p.aiSummary ? (
+                            <p className="mt-1 line-clamp-1 text-[11px] text-white/30">{p.aiSummary}</p>
+                          ) : null}
+                        </div>
+                        <p className="shrink-0 text-sm font-semibold text-amber-200/90">{formatInr(p.amount)}</p>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
 
-      {showForm ? (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/75 sm:items-center sm:justify-center sm:p-6">
-          <form
-            onSubmit={save}
-            className="max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0c0c12] p-4 sm:max-w-lg sm:rounded-2xl"
-          >
-            <h3 className="text-lg font-semibold">{editingId ? "Edit purchase" : "New purchase"}</h3>
-
-            <label className="mt-4 block text-xs font-medium text-white/50">Vendor</label>
-            <select
-              required
-              value={form.vendor}
-              onChange={(e) => setForm((f) => ({ ...f, vendor: e.target.value }))}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-            >
-              <option value="">Select vendor</option>
-              {KIIK69_PURCHASE_VENDORS.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
-
-            <label className="mt-3 block text-xs font-medium text-white/50">Payment</label>
-            <select
-              required
-              value={form.paymentMethod}
-              onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-            >
-              <option value="">Select payment</option>
-              {KIIK69_PAYMENT_METHODS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-
-            <label className="mt-3 block text-xs font-medium text-white/50">Bill / invoice</label>
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              disabled={uploading}
-              className="mt-1 block w-full text-sm text-white/60"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void uploadBill(file);
-                e.target.value = "";
-              }}
-            />
-            {uploading ? <p className="mt-1 text-xs text-cyan-200">Uploading…</p> : null}
-            {form.billFileName ? (
-              <p className="mt-1 text-xs text-emerald-300">✓ {form.billFileName}</p>
-            ) : null}
-            {form.billUrl ? (
-              <button
-                type="button"
-                disabled={scanning}
-                onClick={() => void runAiScan()}
-                className="mt-2 rounded-lg bg-violet-500/15 px-3 py-2 text-xs font-medium text-violet-200 ring-1 ring-violet-400/20 disabled:opacity-50"
-              >
-                {scanning ? "AI reading bill…" : "Scan bill with AI"}
-              </button>
-            ) : null}
-
-            <label className="mt-3 block text-xs font-medium text-white/50">Purchase link (optional)</label>
-            <input
-              value={form.purchaseLink}
-              onChange={(e) => setForm((f) => ({ ...f, purchaseLink: e.target.value }))}
-              placeholder="Order link from app"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-            />
-
-            <label className="mt-3 block text-xs font-medium text-white/50">Title</label>
-            <input
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              placeholder="What you bought"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-            />
-
-            <label className="mt-3 block text-xs font-medium text-white/50">Amount (₹)</label>
-            <input
-              inputMode="decimal"
-              value={form.amount}
-              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-            />
-
-            <label className="mt-3 block text-xs font-medium text-white/50">Purchase date</label>
-            <div className="mt-1">
-              <TeamDatePicker
-                value={form.purchaseDate}
-                onChange={(v) => setForm((f) => ({ ...f, purchaseDate: v }))}
-                placeholder="Select date"
-                clearable
-              />
-            </div>
-
-            <label className="mt-3 block text-xs font-medium text-white/50">Notes</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              rows={2}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-base"
-            />
-
-            {form.aiSummary ? (
-              <div className="mt-3 rounded-xl border border-violet-400/15 bg-violet-500/5 p-3">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-violet-200/70">AI summary</p>
-                <p className="mt-1 text-xs leading-relaxed text-white/50">{form.aiSummary}</p>
-              </div>
-            ) : null}
-
-            {error ? (
-              <p className="mt-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-                {error}
-              </p>
-            ) : null}
-
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditingId(null);
-                }}
-                className="min-h-[48px] flex-1 rounded-xl border border-white/10 text-sm text-white/60"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={saving || uploading || scanning}
-                className="min-h-[48px] flex-1 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 text-sm font-semibold disabled:opacity-50"
-              >
-                {saving ? "Saving…" : "Save"}
-              </button>
-            </div>
-          </form>
-        </div>
+      {detail ? (
+        <Kiik69PurchaseDetail
+          purchase={detail}
+          onClose={() => setDetail(null)}
+          onEdit={() => openEdit(detail)}
+          onDelete={async (password) => {
+            await remove(detail.id, password);
+          }}
+        />
       ) : null}
-    </div>
+
+      {showForm ? (
+        <Kiik69PurchaseForm
+          key={editingId ?? "new"}
+          form={form}
+          setForm={setForm}
+          vendorChips={vendorChips}
+          paymentChips={paymentChips}
+          itemChips={itemChips}
+          editing={Boolean(editingId)}
+          saving={saving}
+          uploading={uploading}
+          scanning={scanning}
+          error={error}
+          onClose={() => {
+            setShowForm(false);
+            setEditingId(null);
+          }}
+          onSave={() => void save()}
+          onUploadFiles={(files) => void uploadFiles(files)}
+          onEnterReview={enterReview}
+        />
+      ) : null}
+    </>
   );
 }

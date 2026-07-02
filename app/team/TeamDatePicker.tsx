@@ -37,11 +37,16 @@ export function TeamDatePicker({
   onChange,
   placeholder = "Select date",
   clearable = false,
+  accent = "cyan",
+  compact = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   clearable?: boolean;
+  accent?: "cyan" | "amber";
+  /** Smaller calendar + centered popover — use inside sheets/modals */
+  compact?: boolean;
 }) {
   const id = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -82,23 +87,35 @@ export function TeamDatePicker({
   };
 
   const calendar = (
-    <div className="rounded-2xl border border-white/10 bg-[#12121a] p-3 shadow-2xl shadow-black/50">
-      <div className="mb-2 flex items-center justify-between gap-2">
+    <div
+      className={`rounded-2xl border shadow-2xl shadow-black/50 ${
+        compact ? "p-2" : "p-3"
+      } ${
+        accent === "amber"
+          ? "border-amber-900/35 bg-[#18120e]"
+          : "border-white/10 bg-[#12121a]"
+      }`}
+    >
+      <div className={`flex items-center justify-between gap-2 ${compact ? "mb-1" : "mb-2"}`}>
         <button
           type="button"
           onClick={() => goMonth(-1)}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-white/60 active:bg-white/[0.06]"
+          className={`flex items-center justify-center rounded-full text-lg text-white/60 active:bg-white/[0.06] ${
+            compact ? "h-7 w-7" : "h-9 w-9"
+          }`}
           aria-label="Previous month"
         >
           ‹
         </button>
-        <p className="min-w-0 flex-1 truncate text-center text-sm font-semibold text-white/90">
+        <p className={`min-w-0 flex-1 truncate text-center font-semibold text-white/90 ${compact ? "text-xs" : "text-sm"}`}>
           {monthLabel(viewYear, viewMonth)}
         </p>
         <button
           type="button"
           onClick={() => goMonth(1)}
-          className="flex h-9 w-9 items-center justify-center rounded-full text-lg text-white/60 active:bg-white/[0.06]"
+          className={`flex items-center justify-center rounded-full text-lg text-white/60 active:bg-white/[0.06] ${
+            compact ? "h-7 w-7" : "h-9 w-9"
+          }`}
           aria-label="Next month"
         >
           ›
@@ -106,7 +123,10 @@ export function TeamDatePicker({
       </div>
       <div className="mb-1 grid grid-cols-7">
         {weekdays.map((w) => (
-          <div key={w} className="py-1 text-center text-[10px] font-semibold uppercase text-white/30">
+          <div
+            key={w}
+            className={`py-0.5 text-center font-semibold uppercase text-white/30 ${compact ? "text-[9px]" : "text-[10px]"}`}
+          >
             {w.slice(0, 3)}
           </div>
         ))}
@@ -114,24 +134,29 @@ export function TeamDatePicker({
       <div className="grid grid-cols-7 gap-y-0.5">
         {cells.map((dateKey, i) => {
           if (!dateKey) {
-            return <div key={`pad-${i}`} className="aspect-square" />;
+            return <div key={`pad-${i}`} className={compact ? "h-7" : "aspect-square"} />;
           }
           const isToday = dateKey === todayKey;
           const isSelected = dateKey === value;
           const dayNum = parseInt(dateKey.slice(8), 10);
+          const daySize = compact ? "h-7 w-7 text-xs" : "h-9 w-9 text-sm";
           return (
             <button
               key={dateKey}
               type="button"
               onClick={() => pick(dateKey)}
-              className="flex aspect-square items-center justify-center"
+              className={`flex items-center justify-center ${compact ? "h-7" : "aspect-square"}`}
             >
               <span
-                className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium ${
+                className={`flex items-center justify-center rounded-full font-medium ${daySize} ${
                   isSelected
-                    ? "bg-cyan-500 text-white"
+                    ? accent === "amber"
+                      ? "bg-amber-500 text-stone-950"
+                      : "bg-cyan-500 text-white"
                     : isToday
-                      ? "bg-white/10 text-cyan-200"
+                      ? accent === "amber"
+                        ? "bg-amber-500/15 text-amber-200"
+                        : "bg-white/10 text-cyan-200"
                       : "text-white/80 active:bg-white/[0.08]"
                 }`}
               >
@@ -141,11 +166,13 @@ export function TeamDatePicker({
           );
         })}
       </div>
-      <div className="mt-2 flex gap-2">
+      <div className={`flex gap-2 ${compact ? "mt-1.5" : "mt-2"}`}>
         <button
           type="button"
           onClick={() => pick(todayKey)}
-          className="min-h-[40px] flex-1 rounded-xl bg-white/[0.06] text-sm font-medium text-white/70"
+          className={`flex-1 rounded-xl bg-white/[0.06] font-medium text-white/70 ${
+            compact ? "min-h-[32px] text-xs" : "min-h-[40px] text-sm"
+          }`}
         >
           Today
         </button>
@@ -156,7 +183,9 @@ export function TeamDatePicker({
               onChange("");
               setOpen(false);
             }}
-            className="min-h-[40px] rounded-xl border border-white/10 px-4 text-sm text-white/50"
+            className={`rounded-xl border border-white/10 text-white/50 ${
+              compact ? "min-h-[32px] px-3 text-xs" : "min-h-[40px] px-4 text-sm"
+            }`}
           >
             Clear
           </button>
@@ -171,9 +200,11 @@ export function TeamDatePicker({
         type="button"
         id={id}
         onClick={() => setOpen((v) => !v)}
-        className={`flex w-full items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/40 px-3 py-3 text-left text-base ${
-          value ? "text-white" : "text-white/40"
-        }`}
+        className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-3 text-left text-base ${
+          accent === "amber"
+            ? "border-amber-900/30 bg-[#0c0806]"
+            : "border-white/10 bg-black/40"
+        } ${value ? "text-white" : "text-white/40"}`}
         aria-expanded={open}
         aria-haspopup="dialog"
       >
@@ -183,11 +214,17 @@ export function TeamDatePicker({
       {open ? (
         <>
           <div
-            className="fixed inset-0 z-[60] bg-black/50 md:hidden"
+            className="fixed inset-0 z-[80] bg-black/50"
             onClick={() => setOpen(false)}
             aria-hidden
           />
-          <div className="fixed inset-x-3 bottom-3 z-[70] md:absolute md:inset-x-auto md:bottom-auto md:left-0 md:right-0 md:top-full md:mt-2 md:w-full md:min-w-[18rem] md:z-50">
+          <div
+            className={
+              compact
+                ? "fixed left-1/2 top-1/2 z-[90] w-[min(100vw-2rem,17.5rem)] -translate-x-1/2 -translate-y-1/2"
+                : "fixed inset-x-3 bottom-3 z-[70] md:absolute md:inset-x-auto md:bottom-auto md:left-0 md:right-0 md:top-full md:mt-2 md:w-full md:min-w-[18rem] md:z-50 md:translate-x-0 md:translate-y-0"
+            }
+          >
             {calendar}
           </div>
         </>

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { getKiik69AccountsFromRequest } from "@/lib/kiik69-auth";
+import { getKiik69AccountsFromRequest, verifyKiik69DeletePassword } from "@/lib/kiik69-auth";
 import { parsePurchasePayload, toKiik69PurchaseDto } from "@/lib/kiik69-accounts";
+import { upsertKiik69CustomOptionsFromPurchase } from "@/lib/kiik69-custom-options-db";
 import { prismaSchemaErrorResponse } from "@/lib/prisma-schema-error";
 
 export async function DELETE(
@@ -13,6 +14,12 @@ export async function DELETE(
   }
 
   const { purchaseId } = await params;
+  const body = await req.json().catch(() => ({}));
+  const deletePassword = typeof body.deletePassword === "string" ? body.deletePassword : "";
+  if (!verifyKiik69DeletePassword(deletePassword)) {
+    return NextResponse.json({ error: "Wrong delete password" }, { status: 403 });
+  }
+
   try {
     await prisma.kiik69Purchase.delete({ where: { id: purchaseId } });
     return NextResponse.json({ success: true });
@@ -36,6 +43,7 @@ export async function PATCH(
 
   try {
     const data = parsePurchasePayload(body);
+    await upsertKiik69CustomOptionsFromPurchase(data);
     const row = await prisma.kiik69Purchase.update({
       where: { id: purchaseId },
       data,
@@ -45,6 +53,15 @@ export async function PATCH(
     const schema = prismaSchemaErrorResponse(error);
     if (schema) return schema;
     const message = error instanceof Error ? error.message : "Update failed";
+    if (message.includes("Unknown argument")) {
+      return NextResponse.json(
+        {
+          error:
+            "Database schema out of date. Stop the dev server, run: npx prisma generate && rm -rf .next && npm run dev",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

@@ -16,6 +16,7 @@ function resolveMime(file: File): string | null {
     png: "image/png",
     webp: "image/webp",
     heic: "image/heic",
+    gif: "image/gif",
     pdf: "application/pdf",
   };
   return byExt[ext] ?? null;
@@ -28,25 +29,31 @@ export async function POST(req: NextRequest) {
 
   const formData = await req.formData().catch(() => null);
   const file = formData?.get("file");
-  const kind = formData?.get("kind");
-  const folder = kind === "bill" ? "bills" : "files";
+  const kind = String(formData?.get("kind") ?? "bill").toLowerCase();
+  const folder =
+    kind === "payment"
+      ? "payments"
+      : kind === "invoice"
+        ? "invoices"
+        : kind === "files"
+          ? "files"
+          : "bills";
 
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
 
   const mimeType = resolveMime(file);
-  const ok =
-    mimeType?.startsWith("image/") || mimeType === "application/pdf";
+  const ok = mimeType?.startsWith("image/") || mimeType === "application/pdf";
   if (!ok) {
-    return NextResponse.json({ error: "Use an image or PDF for bills." }, { status: 400 });
+    return NextResponse.json({ error: "Use an image or PDF." }, { status: 400 });
   }
   if (file.size > MAX_SIZE) {
     return NextResponse.json({ error: "Max file size is 25MB." }, { status: 400 });
   }
 
   const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
-  const safeName = (file.name || `bill.${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+  const safeName = (file.name || `file.${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
   const pathname = `kiik69/${folder}/${Date.now()}-${safeName}`;
 
   try {
@@ -56,7 +63,19 @@ export async function POST(req: NextRequest) {
       contentType: mimeType ?? undefined,
       addRandomSuffix: false,
     });
-    return NextResponse.json({ url: blob.url, fileName: file.name, mimeType });
+    return NextResponse.json({
+      url: blob.url,
+      fileName: file.name,
+      mimeType,
+      kind:
+        folder === "payments"
+          ? "payment"
+          : folder === "invoices"
+            ? "invoice"
+            : folder === "files"
+              ? "file"
+              : "bill",
+    });
   } catch (e) {
     console.error("[kiik69 upload]", e);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });

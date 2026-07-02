@@ -16,7 +16,7 @@ function chatEmbedFrameAncestorsDirective() {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Let Next load @clerk/nextjs from node_modules on the server instead of bundling (fixes vendor-chunks/@clerk.js resolution)
-  serverExternalPackages: ["@clerk/nextjs"],
+  serverExternalPackages: ["@clerk/nextjs", "@prisma/client", "pdf-parse", "pdfjs-dist"],
   // Performance optimizations
   compress: true,
   poweredByHeader: false,

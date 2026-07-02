@@ -1,0 +1,28 @@
+/* KIIK 69 — same dark base as Team (#06060a); overrides global white body */
+.kiik69-shell {
+  min-height: 100dvh;
+  min-height: 100svh;
+  background-color: #06060a;
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+}
+
+.kiik69-shell input,
+.kiik69-shell select,
+.kiik69-shell textarea {
+  color: #ffffff;
+  font-size: 16px; /* prevents iOS zoom on focus */
+}
+
+@media (min-width: 768px) {
+  .kiik69-shell input,
+  .kiik69-shell select,
+  .kiik69-shell textarea {
+    font-size: inherit;
+  }
+}
+
+.kiik69-shell select option {
+  background: #0c0c12;
+  color: #ffffff;
+}
