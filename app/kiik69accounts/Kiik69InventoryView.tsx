@@ -25,8 +25,10 @@ import Kiik69InventoryInsights from "./Kiik69InventoryInsights";
 import {
   KIIK69_BTN,
   KIIK69_INPUT,
+  KIIK69_SHEET_BODY,
   KIIK69_SHEET_OVERLAY,
-  KIIK69_SHEET_PANEL,
+  KIIK69_SHEET_PANEL_FLEX,
+  KIIK69_SHEET_PANEL_SCROLL,
   Kiik69SheetPortal,
   useKiik69BodyScrollLock,
 } from "./Kiik69Nav";
@@ -349,7 +351,7 @@ function DeleteItemSheet({
   return (
     <Kiik69SheetPortal>
       <div className={KIIK69_SHEET_OVERLAY} onClick={onClose} role="presentation">
-        <div className={`${KIIK69_SHEET_PANEL} max-h-[92dvh] max-w-sm overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className={`${KIIK69_SHEET_PANEL_SCROLL} max-w-sm`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
           <h2 className="text-lg font-semibold">Remove item?</h2>
           <p className="mt-2 text-sm text-white/55">
             <span className="font-medium text-white/80">{item.name}</span> will disappear from on-hand. Stock in &amp; out
@@ -401,7 +403,7 @@ function ClearHistorySheet({
   return (
     <Kiik69SheetPortal>
       <div className={KIIK69_SHEET_OVERLAY} onClick={onClose} role="presentation">
-        <div className={`${KIIK69_SHEET_PANEL} max-h-[92dvh] max-w-sm overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <div className={`${KIIK69_SHEET_PANEL_SCROLL} max-w-sm`} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
           <h2 className="text-lg font-semibold">Clear history</h2>
           <p className="mt-1 text-xs text-white/40">For learning / reset — cannot be undone.</p>
 
@@ -727,102 +729,109 @@ function MovementFormSheet({
     <Kiik69SheetPortal>
       <div className={KIIK69_SHEET_OVERLAY} onClick={onClose} role="presentation">
         <div
-          className={`${KIIK69_SHEET_PANEL} max-h-[92dvh] max-w-md overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]`}
+          className={`${KIIK69_SHEET_PANEL_FLEX} max-w-md`}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"
         >
-          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/20 md:hidden" />
-          <h2 className="text-lg font-semibold capitalize">
-            {category} · stock {direction === "in" ? "in" : "out"}
-          </h2>
-          {category === "liquor" ? (
-            <p className="mt-1 text-xs text-white/40">
-              {direction === "in" ? "Bottles or ml" : "Pours in ml (e.g. 60)"}
-            </p>
-          ) : null}
+          <div className="shrink-0">
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-white/20 md:hidden" />
+            <h2 className="text-lg font-semibold capitalize">
+              {category} · stock {direction === "in" ? "in" : "out"}
+            </h2>
+            {category === "liquor" ? (
+              <p className="mt-1 text-xs text-white/40">
+                {direction === "in" ? "Bottles or ml" : "Pours in ml (e.g. 60)"}
+              </p>
+            ) : null}
+          </div>
 
-          {items.length === 0 ? (
-            <p className="mt-4 text-sm text-white/45">Add a {category} item first.</p>
-          ) : (
-            <div className="mt-4 space-y-3">
-              <label className="block">
-                <span className="text-xs text-white/45">Item</span>
-                <select className={`${KIIK69_INPUT} mt-1`} value={itemId} onChange={(e) => setItemId(e.target.value)}>
-                  {items.map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {i.name} ({formatItemRemaining(i)})
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {selected ? (
-                <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 text-[11px] text-white/50">
-                  <div className="flex justify-between gap-2">
-                    <span>On hand</span>
-                    <span className="font-medium text-amber-200/90">{formatItemRemaining(selected)}</span>
-                  </div>
-                  <div className="mt-1 flex justify-between gap-2">
-                    <span>Value</span>
-                    <span className="font-medium text-emerald-300/85">{formatInr(selected.remainingValueInr)}</span>
-                  </div>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-2 gap-2">
+          <div className={KIIK69_SHEET_BODY}>
+            {items.length === 0 ? (
+              <p className="py-4 text-sm text-white/45">Add a {category} item first.</p>
+            ) : (
+              <div className="mt-2 space-y-3">
                 <label className="block">
-                  <span className="text-xs text-white/45">Qty</span>
-                  <input
-                    className={`${KIIK69_INPUT} mt-1`}
-                    inputMode="decimal"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                    placeholder={direction === "out" && category === "liquor" ? "60" : "1"}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs text-white/45">Unit</span>
-                  <select
-                    className={`${KIIK69_INPUT} mt-1`}
-                    value={quantityUnit}
-                    onChange={(e) => setQuantityUnit(e.target.value as Kiik69QtyUnit)}
-                  >
-                    {unitOptions.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.label}
+                  <span className="text-xs text-white/45">Item</span>
+                  <select className={`${KIIK69_INPUT} mt-1`} value={itemId} onChange={(e) => setItemId(e.target.value)}>
+                    {items.map((i) => (
+                      <option key={i.id} value={i.id}>
+                        {i.name} ({formatItemRemaining(i)})
                       </option>
                     ))}
                   </select>
                 </label>
-              </div>
-              <label className="block">
-                <span className="text-xs text-white/45">Date</span>
-                <div className="mt-1">
-                  <TeamDatePicker value={movementDate} onChange={setMovementDate} compact accent="amber" />
+                {selected ? (
+                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5 text-[11px] text-white/50">
+                    <div className="flex justify-between gap-2">
+                      <span>On hand</span>
+                      <span className="font-medium text-amber-200/90">{formatItemRemaining(selected)}</span>
+                    </div>
+                    <div className="mt-1 flex justify-between gap-2">
+                      <span>Value</span>
+                      <span className="font-medium text-emerald-300/85">{formatInr(selected.remainingValueInr)}</span>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="text-xs text-white/45">Qty</span>
+                    <input
+                      className={`${KIIK69_INPUT} mt-1`}
+                      inputMode="decimal"
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                      placeholder={direction === "out" && category === "liquor" ? "60" : "1"}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-white/45">Unit</span>
+                    <select
+                      className={`${KIIK69_INPUT} mt-1`}
+                      value={quantityUnit}
+                      onChange={(e) => setQuantityUnit(e.target.value as Kiik69QtyUnit)}
+                    >
+                      {unitOptions.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
-              </label>
-              <label className="block">
-                <span className="text-xs text-white/45">Note</span>
-                <input className={`${KIIK69_INPUT} mt-1`} value={note} onChange={(e) => setNote(e.target.value)} />
-              </label>
+                <label className="block">
+                  <span className="text-xs text-white/45">Date</span>
+                  <div className="mt-1">
+                    <TeamDatePicker value={movementDate} onChange={setMovementDate} compact accent="amber" />
+                  </div>
+                </label>
+                <label className="block">
+                  <span className="text-xs text-white/45">Note</span>
+                  <input className={`${KIIK69_INPUT} mt-1`} value={note} onChange={(e) => setNote(e.target.value)} />
+                </label>
+              </div>
+            )}
+            {error ? <p className="mt-3 text-sm text-red-300">{error}</p> : null}
+          </div>
+
+          <div className="shrink-0 border-t border-white/[0.06] pt-3">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="min-h-[48px] flex-1 rounded-xl border border-white/10 text-sm text-white/60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saving || items.length === 0 || !quantity.trim()}
+                onClick={() => void save()}
+                className={`${KIIK69_BTN} min-h-[48px] flex-1 rounded-xl`}
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
             </div>
-          )}
-          {error ? <p className="mt-3 text-sm text-red-300">{error}</p> : null}
-          <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="min-h-[48px] flex-1 rounded-xl border border-white/10 text-sm text-white/60"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={saving || items.length === 0 || !quantity.trim()}
-              onClick={() => void save()}
-              className={`${KIIK69_BTN} min-h-[48px] flex-1 rounded-xl`}
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
           </div>
         </div>
       </div>

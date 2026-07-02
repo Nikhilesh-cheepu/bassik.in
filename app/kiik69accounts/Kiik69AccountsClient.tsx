@@ -26,6 +26,7 @@ import Kiik69Dock, {
   KIIK69_PAGE,
   Kiik69MoreSheet,
   Kiik69SidebarNav,
+  useKiik69BodyScrollLock,
 } from "./Kiik69Nav";
 
 const LOGO = "/logos/kiik69.png";
@@ -124,6 +125,8 @@ export default function Kiik69AccountsClient() {
   const { module } = nav;
   const current = KIIK69_ACCOUNTS_MODULES.find((m) => m.id === module);
   const mobileTitle = current?.label ?? "Accounts";
+
+  useKiik69BodyScrollLock(showMore);
 
   return (
     <div className="kiik69-shell-inner min-h-[100dvh] bg-[#06060a] text-white xl:flex xl:h-[100dvh]">

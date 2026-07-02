@@ -9,7 +9,7 @@ import {
   KIIK69_BTN,
   KIIK69_INPUT,
   KIIK69_SHEET_OVERLAY,
-  KIIK69_SHEET_PANEL,
+  KIIK69_SHEET_PANEL_SCROLL,
   Kiik69SheetPortal,
   kiik69FilterChip,
   useKiik69BodyScrollLock,
@@ -150,7 +150,7 @@ function WalletFormSheet({ onClose, onSaved }: { onClose: () => void; onSaved: (
     <Kiik69SheetPortal>
       <div className={KIIK69_SHEET_OVERLAY} onClick={onClose} role="presentation">
         <div
-          className={`${KIIK69_SHEET_PANEL} max-h-[92dvh] max-w-md overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]`}
+          className={`${KIIK69_SHEET_PANEL_SCROLL} max-w-md`}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"

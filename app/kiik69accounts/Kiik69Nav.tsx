@@ -55,6 +55,10 @@ export const KIIK69_SHEET_PANEL =
 
 export const KIIK69_SHEET_PANEL_FLEX = `${KIIK69_SHEET_PANEL} flex flex-col overflow-hidden`;
 
+/** Simple sheets — whole panel scrolls (detail, wallet, small dialogs). */
+export const KIIK69_SHEET_PANEL_SCROLL =
+  `${KIIK69_SHEET_PANEL} max-h-[92dvh] overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] touch-pan-y`;
+
 export const KIIK69_BTN =
   "rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-sm font-semibold text-white disabled:opacity-50";
 
@@ -195,14 +199,16 @@ export function Kiik69MoreSheet({
   if (!open) return null;
   return (
     <Kiik69SheetPortal>
-      <div className="fixed inset-0 z-[100] flex flex-col justify-end bg-black/70 xl:hidden" onClick={onClose}>
+      <div className={KIIK69_SHEET_OVERLAY} onClick={onClose}>
         <div
-          className="mx-auto w-full max-w-lg rounded-t-2xl border border-white/10 bg-[#0c0c12] p-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
+          className={`${KIIK69_SHEET_PANEL_SCROLL} mx-auto max-w-lg xl:hidden`}
           onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
         >
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
-        <p className="mb-2 px-1 text-xs text-white/40">Modules</p>
-        <div className="space-y-1">
+          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
+          <p className="mb-2 px-1 text-xs text-white/40">Modules</p>
+          <div className="space-y-1">
           {KIIK69_ACCOUNTS_MODULES.filter((m) => isMoreModule(m.id)).map((m) => (
             <button
               key={m.id}
