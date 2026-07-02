@@ -35,7 +35,7 @@ export const KIIK69_SHEET_OVERLAY =
   "fixed inset-0 z-[100] flex flex-col justify-end bg-black/75 md:items-center md:justify-center md:p-8";
 
 export const KIIK69_SHEET_PANEL =
-  "max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0c0c12] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:max-h-[88vh] md:max-w-lg md:rounded-2xl md:shadow-2xl lg:max-w-xl";
+  "max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0c0c12] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-white md:max-h-[88vh] md:max-w-lg md:rounded-2xl md:shadow-2xl lg:max-w-xl";
 
 export const KIIK69_BTN =
   "rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-sm font-semibold text-white disabled:opacity-50";

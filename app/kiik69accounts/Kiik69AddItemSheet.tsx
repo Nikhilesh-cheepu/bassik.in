@@ -151,9 +151,9 @@ function LiquorItemForm({
         <input className={`${KIIK69_INPUT} mt-1`} inputMode="decimal" value={costPerBottle} onChange={(e) => setCostPerBottle(e.target.value)} />
       </label>
       {size > 0 && cost > 0 ? (
-        <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.08] px-3 py-2 text-sm">
-          {formatLiquorCostLabel(size, cost)}
-          <p className="mt-1 text-[10px] text-white/40">60 ml pour ≈ {formatInr((cost / size) * 60)}</p>
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
+          <p className="text-sm font-medium text-amber-50">{formatLiquorCostLabel(size, cost)}</p>
+          <p className="mt-1 text-xs text-amber-200/80">60 ml pour ≈ {formatInr((cost / size) * 60)}</p>
         </div>
       ) : null}
       {error ? <p className="text-sm text-red-300">{error}</p> : null}
@@ -226,8 +226,10 @@ function FoodItemForm({
         <input className={`${KIIK69_INPUT} mt-1`} inputMode="decimal" value={totalCost} onChange={(e) => setTotalCost(e.target.value)} />
       </label>
       {unitNum > 0 && costNum > 0 ? (
-        <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.08] px-3 py-2 text-sm">
-          {formatItemCostLabel({ costInr: costNum, costBasisQty: unitNum, costBasisUnit: unit })}
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
+          <p className="text-sm font-medium text-amber-50">
+            {formatItemCostLabel({ costInr: costNum, costBasisQty: unitNum, costBasisUnit: unit })}
+          </p>
         </div>
       ) : null}
       {error ? <p className="text-sm text-red-300">{error}</p> : null}
