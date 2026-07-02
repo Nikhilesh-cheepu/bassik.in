@@ -45,6 +45,15 @@ export function IconUpload({ className = "h-8 w-8" }: { className?: string }) {
   );
 }
 
+export function IconStock({ className = "h-5 w-5" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+      <path d="M4 7.5L12 3l8 4.5v9L12 21l-8-4.5v-9z" strokeLinejoin="round" />
+      <path d="M12 12v9M4 7.5l8 4.5 8-4.5" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function IconAi({ className = "h-5 w-5" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">

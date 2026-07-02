@@ -4,7 +4,14 @@ import Image from "next/image";
 import { useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { KIIK69_ACCOUNTS_MODULES, type Kiik69AccountsModule } from "@/lib/kiik69-accounts";
-import { IconAi, IconCart, IconGrid, IconPlus } from "./Kiik69Icons";
+import { IconCart, IconGrid, IconPlus, IconStock } from "./Kiik69Icons";
+
+/** Modules pinned to the mobile dock — excluded from the More sheet. */
+const KIIK69_DOCK_TAB_MODULES: Kiik69AccountsModule[] = ["purchases", "inventory"];
+
+function isMoreModule(module: Kiik69AccountsModule): boolean {
+  return !KIIK69_DOCK_TAB_MODULES.includes(module);
+}
 
 /** Render sheets at document root so overflow/stacking on main cannot block taps. */
 export function Kiik69SheetPortal({ children }: { children: ReactNode }) {
@@ -136,19 +143,17 @@ export default function Kiik69Dock({
 
         <button
           type="button"
-          onClick={() => onModule("ai")}
-          className={`kiik69-dock-btn ${dockItem(module === "ai")} ${module === "ai" ? "is-active" : ""}`}
+          onClick={() => onModule("inventory")}
+          className={`kiik69-dock-btn ${dockItem(module === "inventory")} ${module === "inventory" ? "is-active" : ""}`}
         >
-          <IconAi className="h-[22px] w-[22px]" />
-          AI
+          <IconStock className="h-[22px] w-[22px]" />
+          Stock
         </button>
 
         <button
           type="button"
           onClick={onMore}
-          className={`kiik69-dock-btn ${dockItem(module !== "purchases" && module !== "ai")} ${
-            module !== "purchases" && module !== "ai" ? "is-active" : ""
-          }`}
+          className={`kiik69-dock-btn ${dockItem(isMoreModule(module))} ${isMoreModule(module) ? "is-active" : ""}`}
         >
           <IconGrid className="h-[22px] w-[22px]" />
           More
@@ -180,7 +185,7 @@ export function Kiik69MoreSheet({
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/20" />
         <p className="mb-2 px-1 text-xs text-white/40">Modules</p>
         <div className="space-y-1">
-          {KIIK69_ACCOUNTS_MODULES.map((m) => (
+          {KIIK69_ACCOUNTS_MODULES.filter((m) => isMoreModule(m.id)).map((m) => (
             <button
               key={m.id}
               type="button"
