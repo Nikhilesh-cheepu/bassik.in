@@ -140,7 +140,7 @@ export function normalizeTeamStartDate(raw: string): string | null {
 export function filterTeamTasks(
   tasks: TeamAdTask[],
   filter: TeamTaskFilter,
-  role?: "admin" | "member" | "viewer" | "poc"
+  role?: "admin" | "member" | "viewer" | "poc" | "content"
 ): TeamAdTask[] {
   const memberLike = role === "member" || role === "poc";
   switch (filter) {

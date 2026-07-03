@@ -7,6 +7,7 @@ import { TEAM_PAGE, type TeamTab } from "./TeamNav";
 
 const TAB_TITLES: Record<TeamTab, string> = {
   ads: "Ads & creatives",
+  shoots: "Shoot calendar",
   calendar: "Team calendar",
   reminders: "Notes",
   vault: "Passwords",
@@ -15,6 +16,7 @@ const TAB_TITLES: Record<TeamTab, string> = {
 
 const MOBILE_TITLES: Record<TeamTab, string> = {
   ads: "Tasks",
+  shoots: "Shoots",
   calendar: "Calendar",
   reminders: "Notes",
   vault: "Passwords",

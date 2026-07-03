@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 
 export const TEAM_COOKIE = "team_session";
 
-export type TeamRole = "admin" | "member" | "viewer" | "poc";
+export type TeamRole = "admin" | "member" | "viewer" | "poc" | "content";
 
 export type TeamSession = {
   username: string;
@@ -28,7 +28,7 @@ function teamAccounts(): { username: string; password: string; role: TeamRole; m
     .map((m) => ({
       username: m.id,
       password: passwords[m.id]?.trim() ?? "",
-      role: (m.kind === "poc" ? "poc" : "member") as TeamRole,
+      role: (m.kind === "poc" ? "poc" : m.kind === "content" ? "content" : "member") as TeamRole,
       memberId: m.id,
     }))
     .filter((m) => m.password);
@@ -82,13 +82,15 @@ export async function verifyTeamSession(token: string): Promise<TeamSession | nu
           ? "viewer"
           : payload.role === "poc"
             ? "poc"
-            : "member";
+            : payload.role === "content"
+              ? "content"
+              : "member";
     if (!username) return null;
     if (role === "viewer") return { username, role };
     const memberId =
       typeof payload.memberId === "string" && isTeamMemberId(payload.memberId)
         ? payload.memberId
-        : (role === "member" || role === "poc") && isTeamMemberId(username)
+        : (role === "member" || role === "poc" || role === "content") && isTeamMemberId(username)
           ? username
           : undefined;
     return { username, role, memberId };
@@ -112,4 +114,8 @@ export async function getTeamFromCookies(): Promise<TeamSession | null> {
 
 export function isMemberLikeRole(role: TeamRole): boolean {
   return role === "member" || role === "poc";
+}
+
+export function isContentCreatorRole(role: TeamRole): boolean {
+  return role === "content";
 }

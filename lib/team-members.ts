@@ -1,6 +1,6 @@
 /** Team member roster for /team — extend via TEAM_MEMBERS_JSON in env. */
 
-export type TeamMemberKind = "default" | "poc";
+export type TeamMemberKind = "default" | "poc" | "content";
 
 export type TeamMember = {
   id: string;
@@ -23,6 +23,7 @@ const DEFAULT_ROSTER: TeamMember[] = [
     kind: "poc",
     delegateAssignees: ["mahesh"],
   },
+  { id: "srinath", name: "Srinath", role: "Content Creator", kind: "content" },
 ];
 
 function normalizeMember(raw: unknown): TeamMember | null {
@@ -33,7 +34,7 @@ function normalizeMember(raw: unknown): TeamMember | null {
   const name = m.name.trim();
   if (!id || !name) return null;
   const role = typeof m.role === "string" && m.role.trim() ? m.role.trim() : undefined;
-  const kind = m.kind === "poc" ? ("poc" as const) : undefined;
+  const kind = m.kind === "poc" ? ("poc" as const) : m.kind === "content" ? ("content" as const) : undefined;
   const delegateAssignees = Array.isArray(m.delegateAssignees)
     ? m.delegateAssignees
         .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
@@ -68,6 +69,7 @@ const DEFAULT_PASSWORDS: Record<string, string> = {
   jeslyn: "jeslyn01",
   mahesh: "mahesh01",
   shravya: "shravya2026",
+  srinath: "srinath123",
 };
 
 /** Member login passwords — defined in repo (not env). */
@@ -81,6 +83,10 @@ export function getTeamMember(id: string): TeamMember | undefined {
 
 export function isTeamPocMember(id: string): boolean {
   return getTeamMember(id)?.kind === "poc";
+}
+
+export function isTeamContentMember(id: string): boolean {
+  return getTeamMember(id)?.kind === "content";
 }
 
 /** Members a POC can assign ad tasks to (e.g. Mahesh for Shravya). */

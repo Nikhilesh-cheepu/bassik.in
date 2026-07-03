@@ -26,6 +26,8 @@ import TeamPageHeader from "./TeamPageHeader";
 import TeamNotesView, { emptyNoteForm, type NoteForm } from "./TeamNotesView";
 import TeamVaultView, { emptyVaultForm, type VaultForm } from "./TeamVaultView";
 import TeamCalendarView from "./TeamCalendarView";
+import TeamShootsView from "./TeamShootsView";
+import { canCreateShoots } from "@/lib/team-shoots";
 import { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
 import TeamDock, { TeamActionSheet, TeamMoreSheet } from "./TeamDock";
 import TeamWhatsAppSheet from "./TeamWhatsAppSheet";
@@ -36,7 +38,7 @@ import { TEAM_DOCK_PADDING } from "./TeamIcons";
 import TeamAiPanel from "./TeamAiPanel";
 import { teamPersonalNoteOwnerId } from "@/lib/team-personal-notes";
 
-type TeamUser = { username: string; role: "admin" | "member" | "viewer" | "poc"; memberId?: string };
+type TeamUser = { username: string; role: "admin" | "member" | "viewer" | "poc" | "content"; memberId?: string };
 type TeamMember = { id: string; name: string; role?: string };
 type Filter = "all" | "todo" | "done" | "pending";
 type MemberTab = "all" | string;
@@ -270,6 +272,7 @@ export default function TeamClient() {
   const [tasksReady, setTasksReady] = useState(false);
   const [notesReady, setNotesReady] = useState(false);
   const [calendarAddSignal, setCalendarAddSignal] = useState(0);
+  const [shootAddSignal, setShootAddSignal] = useState(0);
   const [noteForm, setNoteForm] = useState<NoteForm>(emptyNoteForm());
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [notesSearch, setNotesSearch] = useState("");
@@ -319,6 +322,7 @@ export default function TeamClient() {
 
   const isMember = user?.role === "member";
   const isPoc = user?.role === "poc";
+  const isContent = user?.role === "content";
   const isMemberLike = isMember || isPoc;
   const isMemberHub = isMemberLike && tab === "reminders";
 
@@ -424,7 +428,9 @@ export default function TeamClient() {
       const res = await fetch("/api/team/auth");
       if (res.ok) {
         const data = await readTeamApiJson(res);
-        setUser((data.user as TeamUser | null | undefined) ?? null);
+        const u = (data.user as TeamUser | null | undefined) ?? null;
+        setUser(u);
+        if (u?.role === "content") setTab("shoots");
       } else setUser(null);
     } finally {
       setBooting(false);
@@ -445,16 +451,20 @@ export default function TeamClient() {
     if (isMemberLike && tab === "ai") {
       setTab("reminders");
     }
-    if (isViewer && (tab === "calendar" || tab === "reminders" || tab === "vault" || tab === "ai")) {
+    if (isContent && (tab === "ads" || tab === "calendar" || tab === "vault" || tab === "ai")) {
+      setTab("shoots");
+    }
+    if (isViewer && (tab === "calendar" || tab === "reminders" || tab === "vault" || tab === "ai" || tab === "shoots")) {
       setTab("ads");
     }
-  }, [user, tab, isMemberLike, isViewer]);
+  }, [user, tab, isMemberLike, isViewer, isContent]);
 
   useEffect(() => {
     if (!user) return;
     if (tab === "ads") void loadTasks(tasksReady);
     else if (tab === "reminders" && !isViewer) void loadPersonalNotes(notesReady);
     else if (tab === "vault" && !isViewer) void loadVaultEntries(vaultReady);
+    else if (tab === "shoots" && !isViewer) void loadPersonalNotes(notesReady);
   }, [user, tab, loadTasks, loadPersonalNotes, loadVaultEntries, isViewer, isMemberLike, notesReady, vaultReady, tasksReady]);
 
   useEffect(() => {
@@ -511,6 +521,8 @@ export default function TeamClient() {
         return;
       }
       setUser(data.user as TeamUser);
+      const loggedIn = data.user as TeamUser;
+      if (loggedIn.role === "content") setTab("shoots");
       setPassword("");
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : "Login failed — try refreshing the page");
@@ -995,7 +1007,9 @@ export default function TeamClient() {
         ? "Viewer · read-only"
         : user.role === "poc"
           ? `${memberName(members, user.memberId ?? user.username)} · POC`
-          : memberName(members, user.memberId ?? user.username);
+          : user.role === "content"
+            ? `${memberName(members, user.memberId ?? user.username)} · Content`
+            : memberName(members, user.memberId ?? user.username);
 
   const notesViewerId =
     user.role === "admin" ? "admin" : (user.memberId ?? user.username);
@@ -1090,9 +1104,11 @@ export default function TeamClient() {
         active={tab}
         onChange={setTab}
         hideReminders={isViewer}
-        hideVault={isViewer}
-        hideAi={isViewer || isMemberLike}
-        hideCalendar={isViewer}
+        hideVault={isViewer || isContent}
+        hideAi={isViewer || isMemberLike || isContent}
+        hideCalendar={isViewer || isContent}
+        hideShoots={isViewer}
+        hideAds={isContent}
         userLabel={userLabel}
         onLogout={() => void logout()}
       />
@@ -1121,7 +1137,7 @@ export default function TeamClient() {
 
       <main
         className={`${TEAM_PAGE} min-h-0 min-w-0 w-full max-w-full flex-1 max-xl:pb-[var(--team-dock-pad)] ${
-          tab === "ai" || tab === "reminders" || tab === "calendar" || tab === "vault"
+          tab === "ai" || tab === "reminders" || tab === "calendar" || tab === "vault" || tab === "shoots"
             ? "flex flex-col overflow-hidden py-0 max-xl:px-0 max-xl:max-w-none md:py-4"
             : "overflow-y-auto overscroll-contain py-3 [-webkit-overflow-scrolling:touch] md:py-4"
         }`}
@@ -1184,6 +1200,14 @@ export default function TeamClient() {
             onPriorityChange={changeTaskPriority}
           />
           </>
+        ) : tab === "shoots" && !isViewer ? (
+          <TeamShootsView
+            members={members}
+            viewerId={notesViewerId}
+            canCreate={canCreateShoots(user)}
+            addSignal={shootAddSignal}
+            notes={personalNotes}
+          />
         ) : tab === "calendar" && !isViewer ? (
           <TeamCalendarView
             members={members}
@@ -1253,8 +1277,13 @@ export default function TeamClient() {
         onTab={setTab}
         isAdmin={user.role === "admin"}
         isMember={isMemberLike}
+        isContent={isContent}
         isViewer={isViewer}
         onAdd={() => {
+          if (tab === "shoots" && canCreateShoots(user)) {
+            setShootAddSignal((n) => n + 1);
+            return;
+          }
           if (tab === "reminders" && !isViewer) {
             focusNoteComposer();
             return;
@@ -1311,8 +1340,9 @@ export default function TeamClient() {
         open={showMoreSheet}
         onClose={() => setShowMoreSheet(false)}
         onReminders={() => setTab("reminders")}
-        onVault={!isViewer ? () => setTab("vault") : undefined}
-        onCalendar={!isViewer ? () => setTab("calendar") : undefined}
+        onShoots={!isViewer ? () => setTab("shoots") : undefined}
+        onVault={!isViewer && !isContent ? () => setTab("vault") : undefined}
+        onCalendar={!isViewer && !isContent ? () => setTab("calendar") : undefined}
         onAi={() => setTab("ai")}
         onExport={exportExcel}
         onWhatsApp={user.role === "admin" ? shareWhatsApp : undefined}

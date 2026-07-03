@@ -26,6 +26,7 @@ export default function TeamDock({
   onTab,
   isAdmin,
   isMember,
+  isContent,
   isViewer,
   onAdd,
   onWhatsApp,
@@ -35,6 +36,7 @@ export default function TeamDock({
   onTab: (t: TeamTab) => void;
   isAdmin: boolean;
   isMember: boolean;
+  isContent?: boolean;
   isViewer: boolean;
   onAdd: () => void;
   onWhatsApp?: () => void;
@@ -53,6 +55,40 @@ export default function TeamDock({
           <button type="button" onClick={() => onTab("ads")} className={dockItem(tab === "ads")}>
             <IconTasks className="h-[22px] w-[22px]" />
             Tasks
+          </button>
+        </div>
+      </nav>
+    );
+  }
+
+  if (isContent) {
+    return (
+      <nav
+        className={navClass}
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", minHeight: TEAM_DOCK_HEIGHT }}
+      >
+        <div className="mx-auto flex h-14 max-w-sm items-end justify-between px-4">
+          <button type="button" onClick={() => onTab("shoots")} className={dockItem(tab === "shoots")}>
+            <IconCalendar className="h-[22px] w-[22px]" />
+            Shoots
+          </button>
+          <button
+            type="button"
+            onClick={onAdd}
+            className="relative -top-3 flex shrink-0 flex-col items-center"
+            aria-label="Create"
+          >
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-violet-500 text-white shadow-lg shadow-rose-500/30">
+              <IconPlus className="h-6 w-6" />
+            </span>
+          </button>
+          <button type="button" onClick={() => onTab("reminders")} className={dockItem(tab === "reminders")}>
+            <IconBell className="h-[22px] w-[22px]" />
+            Notes
+          </button>
+          <button type="button" onClick={onMore} className={dockItem(false)}>
+            <IconMore className="h-[22px] w-[22px]" />
+            More
           </button>
         </div>
       </nav>
@@ -193,6 +229,7 @@ export function TeamMoreSheet({
   open,
   onClose,
   onReminders,
+  onShoots,
   onVault,
   onCalendar,
   onAi,
@@ -202,6 +239,7 @@ export function TeamMoreSheet({
   open: boolean;
   onClose: () => void;
   onReminders: () => void;
+  onShoots?: () => void;
   onVault?: () => void;
   onCalendar?: () => void;
   onAi: () => void;
@@ -210,6 +248,7 @@ export function TeamMoreSheet({
 }) {
   if (!open) return null;
   const items = [
+    ...(onShoots ? [{ label: "Shoot calendar", icon: IconCalendar, onClick: onShoots }] : []),
     ...(onCalendar ? [{ label: "Calendar", icon: IconCalendar, onClick: onCalendar }] : []),
     { label: "My notes", icon: IconBell, onClick: onReminders },
     ...(onVault ? [{ label: "Passwords", icon: IconKey, onClick: onVault }] : []),

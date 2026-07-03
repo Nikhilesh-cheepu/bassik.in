@@ -465,6 +465,54 @@ model TeamCalendarShareMember {
   @@index([shareId])
 }
 
+/// Content creator shoot days — calendar, drive links, linked notes.
+model TeamShoot {
+  id                 String              @id @default(cuid())
+  ownerId            String
+  shootDate          String              // YYYY-MM-DD
+  outletId           String?
+  title              String?
+  shootNotes         String?
+  rawFilesDriveLink  String?
+  editFilesDriveLink String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  noteLinks          TeamShootNoteLink[]
+  shares             TeamShootShare[]
+
+  @@index([ownerId])
+  @@index([shootDate])
+  @@index([outletId])
+  @@index([createdAt])
+}
+
+model TeamShootNoteLink {
+  id        String           @id @default(cuid())
+  shootId   String
+  noteId    String
+  addedBy   String
+  createdAt DateTime         @default(now())
+  shoot     TeamShoot        @relation(fields: [shootId], references: [id], onDelete: Cascade)
+  note      TeamPersonalNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@unique([shootId, noteId])
+  @@index([shootId])
+  @@index([noteId])
+}
+
+model TeamShootShare {
+  id        String    @id @default(cuid())
+  shootId   String
+  memberId  String
+  sharedBy  String
+  createdAt DateTime  @default(now())
+  shoot     TeamShoot @relation(fields: [shootId], references: [id], onDelete: Cascade)
+
+  @@unique([shootId, memberId])
+  @@index([memberId])
+  @@index([shootId])
+}
+
 /// SEO & performance marketing ad/creative tasks (internal /team board).
 model TeamAdTask {
   id              String              @id @default(cuid())
@@ -555,6 +603,7 @@ model TeamPersonalNote {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   shares      TeamNoteShare[]
+  shootLinks  TeamShootNoteLink[]
 
   @@index([ownerId])
   @@index([outletId])
