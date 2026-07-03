@@ -105,3 +105,12 @@ body {
   }
 }
 
+/* Razorpay checkout — keep full viewport width on mobile (guards against body scroll-lock shift). */
+.razorpay-container,
+.razorpay-backdrop {
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+  margin-left: 0 !important;
+}

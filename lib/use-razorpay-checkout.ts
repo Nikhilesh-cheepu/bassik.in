@@ -54,6 +54,15 @@ export function useRazorpayCheckout() {
         await loadRazorpayScript();
         if (!window.Razorpay) throw new Error("Razorpay unavailable");
 
+        // iOS: Razorpay modal misaligns if body was pinned for another overlay.
+        document.documentElement.style.overflow = "";
+        document.body.style.overflow = "";
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.left = "";
+        document.body.style.right = "";
+        document.body.style.width = "";
+
         await new Promise<void>((resolve, reject) => {
           let settled = false;
           const finish = (fn: () => void) => {

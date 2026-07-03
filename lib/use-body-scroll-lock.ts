@@ -10,10 +10,13 @@ type LockedRoot = {
 
 type LockSnapshot = {
   scrollY: number;
+  scrollX: number;
   htmlOverflow: string;
   bodyOverflow: string;
   bodyPosition: string;
   bodyTop: string;
+  bodyLeft: string;
+  bodyRight: string;
   bodyWidth: string;
   roots: LockedRoot[];
   pinBody: boolean;
@@ -42,13 +45,17 @@ function applyLock(options?: BodyScrollLockOptions) {
 
   const pinBody = options?.pinBody ?? true;
   const scrollY = window.scrollY;
+  const scrollX = window.scrollX;
 
   snapshot = {
     scrollY,
+    scrollX,
     htmlOverflow: document.documentElement.style.overflow,
     bodyOverflow: document.body.style.overflow,
     bodyPosition: document.body.style.position,
     bodyTop: document.body.style.top,
+    bodyLeft: document.body.style.left,
+    bodyRight: document.body.style.right,
     bodyWidth: document.body.style.width,
     roots: [],
     pinBody,
@@ -60,7 +67,9 @@ function applyLock(options?: BodyScrollLockOptions) {
   if (pinBody) {
     document.body.style.position = "fixed";
     document.body.style.top = `-${scrollY}px`;
-    document.body.style.width = "100%";
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    // Avoid width:100% — on iOS it can shift fixed children (Razorpay, modals) left.
   }
 
   for (const el of queryRoots(options?.extraRootSelector)) {
@@ -87,8 +96,10 @@ function releaseLock() {
   if (state.pinBody) {
     document.body.style.position = state.bodyPosition;
     document.body.style.top = state.bodyTop;
+    document.body.style.left = state.bodyLeft;
+    document.body.style.right = state.bodyRight;
     document.body.style.width = state.bodyWidth;
-    window.scrollTo(0, state.scrollY);
+    window.scrollTo(state.scrollX, state.scrollY);
   }
 
   for (const { el, overflow, scrollTop } of state.roots) {
