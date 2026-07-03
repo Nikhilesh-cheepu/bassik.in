@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { BRANDS } from "@/lib/brands";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import {
   CLUB_ROGUE_COVER_CHARGE_SUMMARY,
   CLUB_ROGUE_GACHIBOWLI_ID,
@@ -64,6 +65,7 @@ export default function EventQuickBookSheet({
   const [showBookedToast, setShowBookedToast] = useState(false);
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useBodyScrollLock(isOpen && selectedEvent !== null);
   useEffect(() => {
     if (!isOpen) return;
     setEventBookName(initialName);
@@ -160,7 +162,7 @@ export default function EventQuickBookSheet({
           <>
             <motion.button
               type="button"
-              className="fixed inset-0 z-[110] bg-black/60"
+              className="fixed inset-0 z-[110] touch-none bg-black/60"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -170,7 +172,8 @@ export default function EventQuickBookSheet({
               initial={{ y: -24, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: -24, opacity: 0 }}
-              className="fixed inset-x-0 top-0 z-[120] mx-auto w-full max-w-md rounded-b-3xl border-b border-white/15 bg-[#0b0f17]/95 p-4"
+              className="fixed inset-x-0 top-0 z-[120] mx-auto w-full max-w-md max-h-[88dvh] overflow-y-auto overscroll-contain rounded-b-3xl border-b border-white/15 bg-[#0b0f17]/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch]"
+              style={{ touchAction: "pan-y" }}
             >
               <h3 className="text-sm font-semibold text-white">Event Booking</h3>
               <div className="mt-3 flex items-center gap-3 rounded-xl border border-white/12 bg-white/[0.04] p-2">

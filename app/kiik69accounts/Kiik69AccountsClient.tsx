@@ -185,6 +185,7 @@ export default function Kiik69AccountsClient() {
         </header>
 
         <main
+          data-kiik69-scroll-root
           className={`${KIIK69_PAGE} min-h-0 min-w-0 w-full max-w-full flex-1 overflow-y-auto overscroll-contain py-3 [-webkit-overflow-scrolling:touch] md:py-4 max-xl:pb-[var(--kiik69-dock-pad)] ${
             module === "ai" ? "flex flex-col overflow-hidden" : ""
           }`}

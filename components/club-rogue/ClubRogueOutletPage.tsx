@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -29,6 +30,7 @@ import {
 import { getContactForBrand, getFullPhoneNumber, getWhatsAppMessageForBrand } from "@/lib/outlet-contacts";
 import { guestEventDateLine } from "@/lib/event-date-display";
 import { useRazorpayCheckout } from "@/lib/use-razorpay-checkout";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import type { VenuePayload } from "@/lib/venue-data";
 
 const GalleryModal = dynamic(() => import("@/components/GalleryModal"));
@@ -108,6 +110,9 @@ export default function ClubRogueOutletPage({
   const [perGuestInr, setPerGuestInr] = useState(50);
   const [hookIndex, setHookIndex] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmPortalReady, setConfirmPortalReady] = useState(false);
+
+  useBodyScrollLock(confirmOpen);
 
   const fee = useMemo(
     () => getClubRogueCustomerFeeBreakdown(people, perGuestInr),
@@ -206,16 +211,16 @@ export default function ClubRogueOutletPage({
   }, [bookDate, bookTime]);
 
   useEffect(() => {
+    setConfirmPortalReady(true);
+  }, []);
+
+  useEffect(() => {
     if (!confirmOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !submitting) closeConfirm();
     };
-    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [confirmOpen, submitting, closeConfirm]);
 
   const selectEvent = (id: string) => {
@@ -657,129 +662,132 @@ export default function ClubRogueOutletPage({
         </footer>
       </div>
 
-      {/* Payment confirmation popup — only on Pay click */}
-      <AnimatePresence>
-        {confirmOpen && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:px-4">
-            <motion.button
-              type="button"
-              aria-label="Close"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-              onClick={() => !submitting && closeConfirm()}
-            />
-            <motion.div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="confirm-pay-title"
-              initial={{ y: 40, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 40, opacity: 0 }}
-              transition={{ type: "spring", damping: 26, stiffness: 300 }}
-              className="relative z-10 w-full max-w-sm rounded-t-3xl border p-5 backdrop-blur-xl sm:rounded-3xl"
-              style={{
-                borderColor: CLUB_ROGUE_THEME.border,
-                background: "rgba(22, 16, 14, 0.92)",
-              }}
-            >
-              <h2 id="confirm-pay-title" className="text-base font-semibold text-white">
-                Before you pay
-              </h2>
-
-              <div
-                className="mt-4 space-y-3 rounded-2xl border px-4 py-3.5 text-sm"
-                style={{
-                  borderColor: CLUB_ROGUE_THEME.borderSubtle,
-                  background: CLUB_ROGUE_THEME.surface,
-                }}
-              >
-                <p className="leading-relaxed" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
-                  <span className="font-semibold text-white">₹2,000 cover</span> per person at entry —
-                  redeemable on food &amp; drinks.
-                </p>
-
-                <div className="border-t pt-3" style={{ borderColor: CLUB_ROGUE_THEME.borderSubtle }}>
-                  <p
-                    className="text-[10px] font-semibold uppercase tracking-wider"
-                    style={{ color: CLUB_ROGUE_THEME.textDim }}
-                  >
-                    Online confirmation fee
-                  </p>
-                  <p className="mt-2 font-medium text-white/90">
-                    ₹{fee.perGuestTotalInr} × {fee.guestCount}{" "}
-                    {fee.guestCount === 1 ? "guest" : "guests"} = ₹{fee.totalInr}
-                  </p>
-                  {fee.showDetailedGst ? (
-                    <div className="mt-3 space-y-1.5">
-                      <div className="flex justify-between" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
-                        <span>{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.confirmation}</span>
-                        <span>₹{fee.confirmationInr}</span>
-                      </div>
-                      <div className="flex justify-between" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
-                        <span>{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.gstHandling}</span>
-                        <span>₹{fee.gstHandlingInr}</span>
-                      </div>
-                    </div>
-                  ) : null}
-                  <div
-                    className="mt-3 flex items-baseline justify-between border-t pt-3"
-                    style={{ borderColor: CLUB_ROGUE_THEME.borderSubtle }}
-                  >
-                    <span className="font-medium text-white/80">{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.total}</span>
-                    <span className="text-lg font-bold text-white">₹{fee.totalInr}</span>
-                  </div>
-                  <p className="mt-2 text-[10px] leading-relaxed" style={{ color: CLUB_ROGUE_THEME.textDim }}>
-                    Online only — not entry or cover. Confirmation fee holds your table.
-                  </p>
-                </div>
-              </div>
-
-              <label
-                className="mt-4 flex cursor-pointer items-start gap-3 text-xs leading-relaxed"
-                style={{ color: CLUB_ROGUE_THEME.textMuted }}
-              >
-                <input
-                  type="checkbox"
-                  checked={coverAck}
-                  onChange={(e) => setCoverAck(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-orange-500"
-                />
-                {CLUB_ROGUE_COVER_CHARGE_ACK}
-              </label>
-
-              {confirmError ? (
-                <p className="mt-3 text-center text-xs text-red-300">{confirmError}</p>
-              ) : null}
-
-              <div className="mt-5 grid grid-cols-2 gap-2.5">
-                <button
+      {confirmPortalReady && confirmOpen
+        ? createPortal(
+            <AnimatePresence>
+              <div className="fixed inset-0 z-50 flex min-h-0 flex-col justify-end overflow-hidden sm:items-center sm:justify-center sm:px-4 sm:py-6">
+                <motion.button
                   type="button"
-                  onClick={closeConfirm}
-                  disabled={submitting}
-                  className="rounded-full border py-3 text-sm font-medium disabled:opacity-50"
+                  aria-label="Close"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 touch-none bg-black/80 backdrop-blur-sm"
+                  onClick={() => !submitting && closeConfirm()}
+                />
+                <motion.div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="confirm-pay-title"
+                  initial={{ y: 40, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 40, opacity: 0 }}
+                  transition={{ type: "spring", damping: 26, stiffness: 300 }}
+                  className="relative z-10 w-full max-w-sm max-h-[92dvh] min-h-0 overflow-y-auto overscroll-contain rounded-t-3xl border p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] backdrop-blur-xl sm:rounded-3xl [-webkit-overflow-scrolling:touch]"
                   style={{
                     borderColor: CLUB_ROGUE_THEME.border,
-                    color: CLUB_ROGUE_THEME.textMuted,
+                    background: "rgba(22, 16, 14, 0.92)",
+                    touchAction: "pan-y",
                   }}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleConfirmPayment()}
-                  disabled={submitting || razorpayLoading}
-                  className="rounded-full py-3 text-sm font-semibold text-[#0c0604] disabled:opacity-50"
-                  style={{ background: CLUB_ROGUE_THEME.orange }}
-                >
-                  {submitting || razorpayLoading ? "Processing…" : `Pay ₹${fee.totalInr}`}
-                </button>
+                  <h2 id="confirm-pay-title" className="text-base font-semibold text-white">
+                    Before you pay
+                  </h2>
+
+                  <div
+                    className="mt-4 space-y-3 rounded-2xl border px-4 py-3.5 text-sm"
+                    style={{
+                      borderColor: CLUB_ROGUE_THEME.borderSubtle,
+                      background: CLUB_ROGUE_THEME.surface,
+                    }}
+                  >
+                    <p className="leading-relaxed" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
+                      <span className="font-semibold text-white">₹2,000 cover</span> per person at entry —
+                      redeemable on food &amp; drinks.
+                    </p>
+
+                    <div className="border-t pt-3" style={{ borderColor: CLUB_ROGUE_THEME.borderSubtle }}>
+                      <p
+                        className="text-[10px] font-semibold uppercase tracking-wider"
+                        style={{ color: CLUB_ROGUE_THEME.textDim }}
+                      >
+                        Online confirmation fee
+                      </p>
+                      <p className="mt-2 font-medium text-white/90">
+                        ₹{fee.perGuestTotalInr} × {fee.guestCount}{" "}
+                        {fee.guestCount === 1 ? "guest" : "guests"} = ₹{fee.totalInr}
+                      </p>
+                      {fee.showDetailedGst ? (
+                        <div className="mt-3 space-y-1.5">
+                          <div className="flex justify-between" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
+                            <span>{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.confirmation}</span>
+                            <span>₹{fee.confirmationInr}</span>
+                          </div>
+                          <div className="flex justify-between" style={{ color: CLUB_ROGUE_THEME.textMuted }}>
+                            <span>{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.gstHandling}</span>
+                            <span>₹{fee.gstHandlingInr}</span>
+                          </div>
+                        </div>
+                      ) : null}
+                      <div
+                        className="mt-3 flex items-baseline justify-between border-t pt-3"
+                        style={{ borderColor: CLUB_ROGUE_THEME.borderSubtle }}
+                      >
+                        <span className="font-medium text-white/80">{CLUB_ROGUE_FEE_BREAKDOWN_LABELS.total}</span>
+                        <span className="text-lg font-bold text-white">₹{fee.totalInr}</span>
+                      </div>
+                      <p className="mt-2 text-[10px] leading-relaxed" style={{ color: CLUB_ROGUE_THEME.textDim }}>
+                        Online only — not entry or cover. Confirmation fee holds your table.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label
+                    className="mt-4 flex cursor-pointer items-start gap-3 text-xs leading-relaxed"
+                    style={{ color: CLUB_ROGUE_THEME.textMuted }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={coverAck}
+                      onChange={(e) => setCoverAck(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-orange-500"
+                    />
+                    {CLUB_ROGUE_COVER_CHARGE_ACK}
+                  </label>
+
+                  {confirmError ? (
+                    <p className="mt-3 text-center text-xs text-red-300">{confirmError}</p>
+                  ) : null}
+
+                  <div className="mt-5 grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={closeConfirm}
+                      disabled={submitting}
+                      className="rounded-full border py-3 text-sm font-medium disabled:opacity-50"
+                      style={{
+                        borderColor: CLUB_ROGUE_THEME.border,
+                        color: CLUB_ROGUE_THEME.textMuted,
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleConfirmPayment()}
+                      disabled={submitting || razorpayLoading}
+                      className="rounded-full py-3 text-sm font-semibold text-[#0c0604] disabled:opacity-50"
+                      style={{ background: CLUB_ROGUE_THEME.orange }}
+                    >
+                      {submitting || razorpayLoading ? "Processing…" : `Pay ₹${fee.totalInr}`}
+                    </button>
+                  </div>
+                </motion.div>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+            </AnimatePresence>,
+            document.body
+          )
+        : null}
 
       {galleryOpen && (
         <GalleryModal
