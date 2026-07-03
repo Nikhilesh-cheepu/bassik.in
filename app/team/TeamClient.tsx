@@ -1095,6 +1095,14 @@ export default function TeamClient() {
         >
           + Event
         </button>
+      ) : tab === "shoots" && canCreateShoots(user) ? (
+        <button
+          type="button"
+          onClick={() => setShootAddSignal((n) => n + 1)}
+          className="rounded-xl bg-gradient-to-r from-rose-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white"
+        >
+          + New shoot
+        </button>
       ) : null
     ) : null;
 
