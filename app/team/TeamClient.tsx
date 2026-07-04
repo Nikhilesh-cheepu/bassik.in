@@ -783,6 +783,18 @@ export default function TeamClient() {
     }
   };
 
+  const shareVaultEntry = useCallback(async (entryId: string, sharedWith: string[]) => {
+    setError(null);
+    const res = await fetch(`/api/team/vault/${entryId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sharedWith }),
+    });
+    const data = await readTeamApiJson(res);
+    if (!res.ok) throw new Error(teamApiError(data, "Could not share password"));
+    await loadVaultEntries(true);
+  }, [loadVaultEntries]);
+
   const uploadFile = async (file: File) => {
     setUploading(true);
     setError(null);
@@ -1348,6 +1360,13 @@ export default function TeamClient() {
             saving={saving}
             onLoadForEdit={loadVaultForEdit}
             onDelete={(e) => void deleteVaultEntry(e)}
+            onShareEntry={async (entryId, sharedWith) => {
+              try {
+                await shareVaultEntry(entryId, sharedWith);
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Share failed");
+              }
+            }}
           />
         ) : null}
       </main>

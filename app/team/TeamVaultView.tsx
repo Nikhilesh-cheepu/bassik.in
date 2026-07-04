@@ -147,42 +147,55 @@ function ShareSheet({
   selected,
   onChange,
   onClose,
+  saving,
+  onConfirm,
 }: {
   open: boolean;
   targets: Member[];
   selected: string[];
   onChange: (ids: string[]) => void;
   onClose: () => void;
+  saving?: boolean;
+  onConfirm?: () => void;
 }) {
   if (!open) return null;
   return (
     <div className={TEAM_SHEET_OVERLAY} onClick={onClose}>
       <div className={`${TEAM_SHEET_PANEL} max-w-md`} onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-[17px] font-semibold text-white">Share password</h2>
-        <p className="mt-1 text-[12px] text-white/40">Teammates can view and copy — not edit</p>
+        <h2 className="text-[17px] font-semibold text-white">Share with team</h2>
+        <p className="mt-1 text-[12px] text-white/40">Teammates can view and copy — not edit or delete</p>
         <ul className="mt-4 max-h-[50vh] space-y-1 overflow-y-auto">
-          {targets.map((m) => {
-            const on = selected.includes(m.id);
-            return (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onChange(on ? selected.filter((x) => x !== m.id) : [...selected, m.id])
-                  }
-                  className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-[15px] ${
-                    on ? "bg-violet-500/15 text-white ring-1 ring-violet-400/20" : "text-white/70"
-                  }`}
-                >
-                  {m.name}
-                  <span className={`h-4 w-4 rounded border ${on ? "border-violet-400 bg-violet-500" : "border-white/20"}`} />
-                </button>
-              </li>
-            );
-          })}
+          {targets.length === 0 ? (
+            <li className="px-2 py-4 text-center text-sm text-white/35">No teammates to share with</li>
+          ) : (
+            targets.map((m) => {
+              const on = selected.includes(m.id);
+              return (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onChange(on ? selected.filter((x) => x !== m.id) : [...selected, m.id])
+                    }
+                    className={`flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-[15px] ${
+                      on ? "bg-violet-500/15 text-white ring-1 ring-violet-400/20" : "text-white/70"
+                    }`}
+                  >
+                    {m.name}
+                    <span className={`h-4 w-4 rounded border ${on ? "border-violet-400 bg-violet-500" : "border-white/20"}`} />
+                  </button>
+                </li>
+              );
+            })
+          )}
         </ul>
-        <button type="button" onClick={onClose} className="mt-4 w-full rounded-xl bg-white/[0.09] py-3 text-sm font-medium text-white">
-          Done
+        <button
+          type="button"
+          disabled={saving}
+          onClick={onConfirm ?? onClose}
+          className="mt-4 w-full rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {saving ? "Saving…" : selected.length > 0 ? `Share with ${selected.length}` : "Done"}
         </button>
       </div>
     </div>
@@ -216,6 +229,8 @@ function VaultListItem({
         <p className="mt-0.5 truncate text-[13px] text-white/38">{preview}</p>
         {!entry.isOwner && entry.sharedByLabel ? (
           <p className="mt-0.5 text-[10px] text-sky-300/60">from {entry.sharedByLabel}</p>
+        ) : entry.sharedWithLabels.length > 0 ? (
+          <p className="mt-0.5 text-[10px] text-violet-300/60">shared · {entry.sharedWithLabels.length}</p>
         ) : null}
       </div>
       <span className="shrink-0 text-[12px] text-white/30">{formatVaultListDate(entry.updatedAt)}</span>
@@ -308,6 +323,7 @@ function VaultDetailView({
   password,
   loading,
   onEdit,
+  onShare,
   onBack,
   showBack,
 }: {
@@ -315,6 +331,7 @@ function VaultDetailView({
   password: string;
   loading: boolean;
   onEdit?: () => void;
+  onShare?: () => void;
   onBack?: () => void;
   showBack?: boolean;
 }) {
@@ -336,14 +353,28 @@ function VaultDetailView({
             <span className="text-[11px] text-sky-300/60">Shared by {entry.sharedByLabel}</span>
           ) : null}
         </div>
-        {entry.isOwner && onEdit ? (
-          <button
-            type="button"
-            onClick={onEdit}
-            className="min-h-[44px] rounded-lg px-4 text-[15px] font-semibold text-amber-400 xl:text-[13px]"
-          >
-            Edit
-          </button>
+        {entry.isOwner ? (
+          <div className="flex items-center gap-1">
+            {onShare ? (
+              <button
+                type="button"
+                onClick={onShare}
+                className="flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-[14px] font-medium text-violet-300 xl:text-[13px]"
+              >
+                <IconShare />
+                Share
+              </button>
+            ) : null}
+            {onEdit ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="min-h-[44px] rounded-lg px-4 text-[15px] font-semibold text-amber-400 xl:text-[13px]"
+              >
+                Edit
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 xl:px-8">
@@ -367,10 +398,29 @@ function VaultDetailView({
               </div>
             ) : null}
             {entry.sharedWithLabels.length > 0 ? (
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-white/30">Shared with</p>
-                <p className="mt-1 text-[13px] text-white/45">{entry.sharedWithLabels.join(", ")}</p>
+              <div className="rounded-xl border border-violet-400/15 bg-violet-500/[0.06] p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-violet-200/70">Shared with team</p>
+                <p className="mt-1 text-[14px] text-white/75">{entry.sharedWithLabels.join(", ")}</p>
+                {onShare ? (
+                  <button
+                    type="button"
+                    onClick={onShare}
+                    className="mt-3 flex min-h-[40px] items-center gap-1.5 rounded-lg bg-violet-500/15 px-3 text-[13px] font-medium text-violet-200"
+                  >
+                    <IconShare />
+                    Update sharing
+                  </button>
+                ) : null}
               </div>
+            ) : entry.isOwner && onShare ? (
+              <button
+                type="button"
+                onClick={onShare}
+                className="flex w-full min-h-[48px] items-center justify-center gap-2 rounded-xl border border-dashed border-violet-400/25 bg-violet-500/[0.06] text-[14px] font-medium text-violet-200"
+              >
+                <IconShare />
+                Share with team
+              </button>
             ) : null}
           </div>
         )}
@@ -388,7 +438,7 @@ function VaultEditor({
   onCancel,
   onDelete,
   onBack,
-  shareTargets,
+  onOpenShare,
   showBack,
 }: {
   form: VaultForm;
@@ -399,10 +449,9 @@ function VaultEditor({
   onCancel: () => void;
   onDelete?: () => void;
   onBack?: () => void;
-  shareTargets: Member[];
+  onOpenShare: () => void;
   showBack?: boolean;
 }) {
-  const [shareOpen, setShareOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<{ title: string; category: string } | null>(null);
   const formRef = useRef(form);
@@ -464,11 +513,12 @@ function VaultEditor({
             </button>
             <button
               type="button"
-              onClick={() => setShareOpen(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-white/50"
-              aria-label="Share"
+              onClick={onOpenShare}
+              className="flex min-h-[44px] items-center gap-1.5 rounded-lg px-2 text-[14px] font-medium text-violet-300 xl:px-3 xl:text-[12px]"
             >
               <IconShare />
+              Share
+              {form.sharedWith.length > 0 ? ` (${form.sharedWith.length})` : ""}
             </button>
             {editingId && onDelete ? (
               <button type="button" onClick={onDelete} className="hidden px-2 text-[11px] text-red-300/80 sm:inline">
@@ -581,17 +631,24 @@ function VaultEditor({
                 className="mt-1.5 w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3 text-[15px] text-white outline-none"
               />
             </div>
+            <button
+              type="button"
+              onClick={onOpenShare}
+              className="flex w-full min-h-[52px] items-center justify-between rounded-xl border border-violet-400/20 bg-violet-500/[0.06] px-4 py-3 text-left"
+            >
+              <span>
+                <span className="block text-[14px] font-medium text-violet-100">Share with team</span>
+                <span className="mt-0.5 block text-[12px] text-white/40">
+                  {form.sharedWith.length > 0
+                    ? `${form.sharedWith.length} teammate${form.sharedWith.length === 1 ? "" : "s"} selected`
+                    : "Pick who can view and copy this password"}
+                </span>
+              </span>
+              <IconShare className="shrink-0 text-violet-300/80" />
+            </button>
           </div>
         </div>
       </div>
-
-      <ShareSheet
-        open={shareOpen}
-        targets={shareTargets}
-        selected={form.sharedWith}
-        onChange={(sharedWith) => onFormChange({ ...form, sharedWith })}
-        onClose={() => setShareOpen(false)}
-      />
     </>
   );
 }
@@ -647,6 +704,7 @@ export default function TeamVaultView({
   saving,
   onLoadForEdit,
   onDelete,
+  onShareEntry,
 }: {
   entries: TeamVaultEntryDto[];
   ready: boolean;
@@ -668,13 +726,62 @@ export default function TeamVaultView({
   saving: boolean;
   onLoadForEdit: (entry: TeamVaultEntryDto) => Promise<void>;
   onDelete: (entry: TeamVaultEntryDto) => void;
+  onShareEntry: (entryId: string, sharedWith: string[]) => Promise<void>;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelMode, setPanelMode] = useState<PanelMode>("empty");
   const [viewPassword, setViewPassword] = useState("");
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [mobilePanel, setMobilePanel] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareMode, setShareMode] = useState<"detail" | "editor">("detail");
+  const [shareSelection, setShareSelection] = useState<string[]>([]);
+  const [shareEntryId, setShareEntryId] = useState<string | null>(null);
+  const [shareSaving, setShareSaving] = useState(false);
   const shareTargets = shareTargetsFor(viewerId, members);
+
+  const openShareFromDetail = useCallback((entry: TeamVaultEntryDto) => {
+    setShareMode("detail");
+    setShareEntryId(entry.id);
+    setShareSelection(entry.sharedWith);
+    setShareOpen(true);
+  }, []);
+
+  const openShareFromEditor = useCallback(() => {
+    setShareMode("editor");
+    setShareEntryId(editingId);
+    setShareSelection(form.sharedWith);
+    setShareOpen(true);
+  }, [editingId, form.sharedWith]);
+
+  const closeShare = useCallback(() => {
+    setShareOpen(false);
+    setShareSaving(false);
+  }, []);
+
+  const confirmShare = useCallback(async () => {
+    if (shareMode === "editor") {
+      onFormChange({ ...form, sharedWith: shareSelection });
+      if (editingId) {
+        setShareSaving(true);
+        try {
+          await onShareEntry(editingId, shareSelection);
+        } finally {
+          setShareSaving(false);
+        }
+      }
+      closeShare();
+      return;
+    }
+    if (!shareEntryId) return;
+    setShareSaving(true);
+    try {
+      await onShareEntry(shareEntryId, shareSelection);
+      closeShare();
+    } finally {
+      setShareSaving(false);
+    }
+  }, [shareMode, shareEntryId, shareSelection, form, editingId, onFormChange, onShareEntry, closeShare]);
 
   const activeEntry = selectedId ? entries.find((e) => e.id === selectedId) : null;
 
@@ -763,6 +870,7 @@ export default function TeamVaultView({
           password={viewPassword}
           loading={passwordLoading}
           onEdit={activeEntry.isOwner ? () => void startEdit() : undefined}
+          onShare={activeEntry.isOwner ? () => openShareFromDetail(activeEntry) : undefined}
           onBack={handleBackMobile}
           showBack
         />
@@ -779,7 +887,7 @@ export default function TeamVaultView({
           onCancel={cancelEdit}
           onDelete={activeEntry?.isOwner ? () => onDelete(activeEntry) : undefined}
           onBack={handleBackMobile}
-          shareTargets={shareTargets}
+          onOpenShare={openShareFromEditor}
           showBack
         />
       );
@@ -856,6 +964,16 @@ export default function TeamVaultView({
       {showMobileOverlay ? (
         <div className="fixed inset-0 z-50 flex flex-col bg-[#0b0b10] xl:hidden">{rightPane}</div>
       ) : null}
+
+      <ShareSheet
+        open={shareOpen}
+        targets={shareTargets}
+        selected={shareSelection}
+        onChange={setShareSelection}
+        onClose={closeShare}
+        saving={shareSaving}
+        onConfirm={() => void confirmShare()}
+      />
     </>
   );
 }
