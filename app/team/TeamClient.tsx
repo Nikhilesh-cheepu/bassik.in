@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TEAM_AD_OUTLETS } from "@/lib/team-outlets";
-import { pocDelegateAssigneeIds } from "@/lib/team-members";
+import { pocDelegateAssigneeIds, teamMembersForClient } from "@/lib/team-members";
 import {
   isAsapStartDate,
   TEAM_START_ASAP,
@@ -27,7 +27,9 @@ import TeamNotesView, { emptyNoteForm, type NoteForm } from "./TeamNotesView";
 import TeamVaultView, { emptyVaultForm, type VaultForm } from "./TeamVaultView";
 import TeamCalendarView from "./TeamCalendarView";
 import TeamShootsView from "./TeamShootsView";
+import TeamContentFilesView from "./TeamContentFilesView";
 import { canCreateShoots } from "@/lib/team-shoots";
+import { readCachedTeamUser, writeCachedTeamUser } from "@/lib/team-session-cache";
 import { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
 import TeamDock, { TeamActionSheet, TeamMoreSheet } from "./TeamDock";
 import TeamWhatsAppSheet from "./TeamWhatsAppSheet";
@@ -261,16 +263,16 @@ function DateFields({
 }
 
 export default function TeamClient() {
-  const [user, setUser] = useState<TeamUser | null>(null);
+  const [user, setUser] = useState<TeamUser | null>(() => readCachedTeamUser());
   const [members, setMembers] = useState<TeamMember[]>([]);
-  const [booting, setBooting] = useState(true);
+  const [sessionResolved, setSessionResolved] = useState(false);
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [tab, setTab] = useState<TeamTab>("ads");
   const [tasks, setTasks] = useState<TeamTaskDto[]>([]);
   const [personalNotes, setPersonalNotes] = useState<TeamPersonalNoteDto[]>([]);
-  const [tasksReady, setTasksReady] = useState(false);
-  const [notesReady, setNotesReady] = useState(false);
+  const [tasksReady, setTasksReady] = useState(true);
+  const [notesReady, setNotesReady] = useState(true);
   const [calendarAddSignal, setCalendarAddSignal] = useState(0);
   const [shootAddSignal, setShootAddSignal] = useState(0);
   const [noteForm, setNoteForm] = useState<NoteForm>(emptyNoteForm());
@@ -281,7 +283,7 @@ export default function TeamClient() {
   const [noteUploading, setNoteUploading] = useState(false);
   const [noteComposeKey, setNoteComposeKey] = useState(0);
   const [vaultEntries, setVaultEntries] = useState<TeamVaultEntryDto[]>([]);
-  const [vaultReady, setVaultReady] = useState(false);
+  const [vaultReady, setVaultReady] = useState(true);
   const [vaultForm, setVaultForm] = useState<VaultForm>(emptyVaultForm());
   const [editingVaultId, setEditingVaultId] = useState<string | null>(null);
   const [vaultSearch, setVaultSearch] = useState("");
@@ -338,20 +340,13 @@ export default function TeamClient() {
     ];
   }, [user?.role, counts.pending]);
 
-  const loadMembers = useCallback(async () => {
-    const res = await fetch("/api/team/members");
-    if (res.status === 401) {
-      setUser(null);
-      return;
-    }
-    if (res.ok) {
-      const data = await readTeamApiJson(res);
-      setMembers(teamApiArray<TeamMember>(data, "members"));
-    }
-  }, []);
+  useEffect(() => {
+    if (!user) return;
+    setMembers(teamMembersForClient());
+  }, [user]);
 
   const loadTasks = useCallback(
-    async (silent = false) => {
+    async (silent = true) => {
       if (!silent) setRefreshing(true);
       setError(null);
       try {
@@ -366,17 +361,17 @@ export default function TeamClient() {
         const data = await readTeamApiJson(res);
         if (!res.ok) throw new Error(teamApiError(data, "Could not load tasks"));
         setTasks(teamApiArray<TeamTaskDto>(data, "tasks"));
-        setTasksReady(true);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Load failed");
       } finally {
+        setTasksReady(true);
         setRefreshing(false);
       }
     },
     [filter, outletFilter, memberTab, canBrowseAllMembers]
   );
 
-  const loadPersonalNotes = useCallback(async (silent = false) => {
+  const loadPersonalNotes = useCallback(async (silent = true) => {
     if (!silent) setRefreshing(true);
     setError(null);
     try {
@@ -392,15 +387,15 @@ export default function TeamClient() {
       const data = await readTeamApiJson(res);
       if (!res.ok) throw new Error(teamApiError(data, "Could not load notes"));
       setPersonalNotes(teamApiArray<TeamPersonalNoteDto>(data, "notes"));
-      setNotesReady(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
+      setNotesReady(true);
       setRefreshing(false);
     }
   }, [notesSearch, notesOutletFilter, notesScope]);
 
-  const loadVaultEntries = useCallback(async (silent = false) => {
+  const loadVaultEntries = useCallback(async (silent = true) => {
     if (!silent) setRefreshing(true);
     setError(null);
     try {
@@ -415,10 +410,10 @@ export default function TeamClient() {
       const data = await readTeamApiJson(res);
       if (!res.ok) throw new Error(teamApiError(data, "Could not load passwords"));
       setVaultEntries(teamApiArray<TeamVaultEntryDto>(data, "entries"));
-      setVaultReady(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
+      setVaultReady(true);
       setRefreshing(false);
     }
   }, [vaultSearch, vaultScope]);
@@ -430,10 +425,16 @@ export default function TeamClient() {
         const data = await readTeamApiJson(res);
         const u = (data.user as TeamUser | null | undefined) ?? null;
         setUser(u);
+        writeCachedTeamUser(u);
         if (u?.role === "content") setTab("shoots");
-      } else setUser(null);
+      } else {
+        setUser(null);
+        writeCachedTeamUser(null);
+      }
+    } catch {
+      /* keep cached user if offline; session will revalidate on next action */
     } finally {
-      setBooting(false);
+      setSessionResolved(true);
     }
   }, []);
 
@@ -443,39 +444,40 @@ export default function TeamClient() {
 
   useEffect(() => {
     if (!user) return;
-    void loadMembers();
-  }, [user, loadMembers]);
-
-  useEffect(() => {
-    if (!user) return;
     if (isMemberLike && tab === "ai") {
       setTab("reminders");
     }
-    if (isContent && (tab === "ads" || tab === "calendar" || tab === "vault" || tab === "ai")) {
+    if (isContent && (tab === "ads" || tab === "calendar" || tab === "ai")) {
       setTab("shoots");
     }
-    if (isViewer && (tab === "calendar" || tab === "reminders" || tab === "vault" || tab === "ai" || tab === "shoots")) {
+    if (
+      isViewer &&
+      (tab === "calendar" ||
+        tab === "reminders" ||
+        tab === "vault" ||
+        tab === "ai" ||
+        tab === "shoots" ||
+        tab === "raw-files" ||
+        tab === "edit-files")
+    ) {
       setTab("ads");
     }
   }, [user, tab, isMemberLike, isViewer, isContent]);
 
   useEffect(() => {
-    if (!user) return;
-    if (tab === "ads") void loadTasks(tasksReady);
-    else if (tab === "reminders" && !isViewer) void loadPersonalNotes(notesReady);
-    else if (tab === "vault" && !isViewer) void loadVaultEntries(vaultReady);
-    else if (tab === "shoots" && !isViewer) void loadPersonalNotes(notesReady);
-  }, [user, tab, loadTasks, loadPersonalNotes, loadVaultEntries, isViewer, isMemberLike, notesReady, vaultReady, tasksReady]);
+    if (!user || tab !== "ads") return;
+    void loadTasks(true);
+  }, [user, tab, filter, outletFilter, memberTab, loadTasks]);
 
   useEffect(() => {
     if (!user || tab !== "reminders" || isViewer) return;
-    void loadPersonalNotes(notesReady);
-  }, [notesSearch, notesOutletFilter, notesScope]);
+    void loadPersonalNotes(true);
+  }, [user, tab, isViewer, notesSearch, notesOutletFilter, notesScope, loadPersonalNotes]);
 
   useEffect(() => {
     if (!user || tab !== "vault" || isViewer) return;
-    void loadVaultEntries(vaultReady);
-  }, [vaultSearch, vaultScope]);
+    void loadVaultEntries(true);
+  }, [user, tab, isViewer, vaultSearch, vaultScope, loadVaultEntries]);
 
   const shareDoneReport = () => setShowDoneReportSheet(true);
 
@@ -520,8 +522,9 @@ export default function TeamClient() {
         setLoginError(teamApiError(data, "Invalid password"));
         return;
       }
-      setUser(data.user as TeamUser);
       const loggedIn = data.user as TeamUser;
+      setUser(loggedIn);
+      writeCachedTeamUser(loggedIn);
       if (loggedIn.role === "content") setTab("shoots");
       setPassword("");
     } catch (err) {
@@ -532,13 +535,15 @@ export default function TeamClient() {
   const logout = async () => {
     await fetch("/api/team/auth", { method: "DELETE" });
     setUser(null);
+    writeCachedTeamUser(null);
     setMembers([]);
     setMemberTab("all");
     setTab("ads");
     setTasks([]);
     setPersonalNotes([]);
-    setTasksReady(false);
-    setNotesReady(false);
+    setTasksReady(true);
+    setNotesReady(true);
+    setVaultReady(true);
     setNoteForm(emptyNoteForm());
     setEditingNoteId(null);
     setNotesSearch("");
@@ -960,10 +965,10 @@ export default function TeamClient() {
     listReady &&
     tasks.length > 0;
 
-  if (booting) {
+  if (!user && !sessionResolved) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-[#06060a] text-white/50">
-        Loading…
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/15 border-t-cyan-400" />
       </div>
     );
   }
@@ -1079,11 +1084,11 @@ export default function TeamClient() {
             + Log work
           </button>
         </div>
-      ) : tab === "reminders" ? (
+      ) : tab === "reminders" && !isViewer ? (
         <button
           type="button"
           onClick={focusNoteComposer}
-          className="hidden rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white"
+          className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white"
         >
           + Note
         </button>
@@ -1103,7 +1108,42 @@ export default function TeamClient() {
         >
           + New shoot
         </button>
+      ) : tab === "vault" ? (
+        <button
+          type="button"
+          onClick={focusVaultComposer}
+          className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-4 py-2 text-sm font-semibold text-white"
+        >
+          + Password
+        </button>
       ) : null
+    ) : null;
+
+  const mobileHeaderAction =
+    isContent && tab === "shoots" && canCreateShoots(user) ? (
+      <button
+        type="button"
+        onClick={() => setShootAddSignal((n) => n + 1)}
+        className="rounded-xl bg-gradient-to-r from-rose-500 to-violet-500 px-3 py-1.5 text-xs font-semibold text-white"
+      >
+        + New shoot
+      </button>
+    ) : isContent && tab === "reminders" ? (
+      <button
+        type="button"
+        onClick={focusNoteComposer}
+        className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-3 py-1.5 text-xs font-semibold text-white"
+      >
+        + Note
+      </button>
+    ) : isContent && tab === "vault" ? (
+      <button
+        type="button"
+        onClick={focusVaultComposer}
+        className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-3 py-1.5 text-xs font-semibold text-white"
+      >
+        + Password
+      </button>
     ) : null;
 
   return (
@@ -1112,10 +1152,12 @@ export default function TeamClient() {
         active={tab}
         onChange={setTab}
         hideReminders={isViewer}
-        hideVault={isViewer || isContent}
+        hideVault={isViewer}
         hideAi={isViewer || isMemberLike || isContent}
         hideCalendar={isViewer || isContent}
         hideShoots={isViewer}
+        hideRawFiles={!isContent}
+        hideEditFiles={!isContent}
         hideAds={isContent}
         userLabel={userLabel}
         onLogout={() => void logout()}
@@ -1130,6 +1172,7 @@ export default function TeamClient() {
         showStats={tab === "ads"}
         isMemberHub={isMemberHub}
         desktopAction={desktopPrimaryAction}
+        mobileAction={mobileHeaderAction}
         onLogout={() => void logout()}
         filter={filter}
         onFilterChange={setFilter}
@@ -1145,7 +1188,13 @@ export default function TeamClient() {
 
       <main
         className={`${TEAM_PAGE} min-h-0 min-w-0 w-full max-w-full flex-1 max-xl:pb-[var(--team-dock-pad)] ${
-          tab === "ai" || tab === "reminders" || tab === "calendar" || tab === "vault" || tab === "shoots"
+          tab === "ai" ||
+          tab === "reminders" ||
+          tab === "calendar" ||
+          tab === "vault" ||
+          tab === "shoots" ||
+          tab === "raw-files" ||
+          tab === "edit-files"
             ? "flex flex-col overflow-hidden py-0 max-xl:px-0 max-xl:max-w-none md:py-4"
             : "overflow-y-auto overscroll-contain py-3 [-webkit-overflow-scrolling:touch] md:py-4"
         }`}
@@ -1157,16 +1206,7 @@ export default function TeamClient() {
           </p>
         ) : null}
 
-        {!listReady ? (
-          <div className="space-y-3 py-2">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-28 animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.03]"
-              />
-            ))}
-          </div>
-        ) : listEmpty && tab === "ads" ? (
+        {listEmpty && tab === "ads" && tasksReady ? (
           <p className="py-16 text-center text-sm text-white/40">
             {isViewer
               ? activeMemberLabel
@@ -1214,8 +1254,11 @@ export default function TeamClient() {
             viewerId={notesViewerId}
             canCreate={canCreateShoots(user)}
             addSignal={shootAddSignal}
-            notes={personalNotes}
           />
+        ) : tab === "raw-files" && isContent ? (
+          <TeamContentFilesView mode="raw" canEdit={canCreateShoots(user)} />
+        ) : tab === "edit-files" && isContent ? (
+          <TeamContentFilesView mode="edit" canEdit={canCreateShoots(user)} />
         ) : tab === "calendar" && !isViewer ? (
           <TeamCalendarView
             members={members}
@@ -1349,7 +1392,7 @@ export default function TeamClient() {
         onClose={() => setShowMoreSheet(false)}
         onReminders={() => setTab("reminders")}
         onShoots={!isViewer ? () => setTab("shoots") : undefined}
-        onVault={!isViewer && !isContent ? () => setTab("vault") : undefined}
+        onVault={!isViewer ? () => setTab("vault") : undefined}
         onCalendar={!isViewer && !isContent ? () => setTab("calendar") : undefined}
         onAi={() => setTab("ai")}
         onExport={exportExcel}

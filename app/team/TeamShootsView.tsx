@@ -17,8 +17,6 @@ export type ShootForm = {
   outletId: string;
   title: string;
   shootNotes: string;
-  rawFilesDriveLink: string;
-  editFilesDriveLink: string;
 };
 
 function formatMonthLabel(year: number, month: number): string {
@@ -46,51 +44,42 @@ export function emptyShootForm(date?: string | Date): ShootForm {
     outletId: "",
     title: "",
     shootNotes: "",
-    rawFilesDriveLink: "",
-    editFilesDriveLink: "",
   };
 }
 
-function DriveSection({
-  title,
-  hint,
-  value,
-  onChange,
-  readOnlyUrl,
-}: {
-  title: string;
-  hint: string;
-  value?: string;
-  onChange?: (v: string) => void;
-  readOnlyUrl?: string | null;
-}) {
-  if (readOnlyUrl) {
-    if (!readOnlyUrl) return null;
-    return (
-      <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] p-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-amber-200/90">{title}</p>
-        <a
-          href={readOnlyUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-cyan-300"
-        >
-          <span className="truncate">Open in Drive</span>
-          <span className="shrink-0 text-xs text-white/40">→</span>
-        </a>
-      </div>
-    );
-  }
+function ShootFileStatus({ shoot }: { shoot: TeamShootDto }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-white/70">{title}</p>
-      <p className="mt-0.5 text-[11px] text-white/35">{hint}</p>
-      <input
-        value={value ?? ""}
-        onChange={(e) => onChange?.(e.target.value)}
-        placeholder="https://drive.google.com/..."
-        className="mt-2 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white placeholder:text-white/25"
-      />
+    <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+      <p className="text-[11px] text-white/45">
+        Add or update Drive links in the <span className="text-amber-200/90">Raw files</span> and{" "}
+        <span className="text-cyan-200/90">Editing files</span> tabs.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {shoot.rawFilesDriveLink ? (
+          <a
+            href={shoot.rawFilesDriveLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg bg-amber-500/15 px-3 py-1.5 text-xs font-medium text-amber-100"
+          >
+            Open raw
+          </a>
+        ) : (
+          <span className="rounded-lg bg-white/5 px-3 py-1.5 text-xs text-white/35">Raw — not linked</span>
+        )}
+        {shoot.editFilesDriveLink ? (
+          <a
+            href={shoot.editFilesDriveLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg bg-cyan-500/15 px-3 py-1.5 text-xs font-medium text-cyan-100"
+          >
+            Open edits
+          </a>
+        ) : (
+          <span className="rounded-lg bg-white/5 px-3 py-1.5 text-xs text-white/35">Edits — not linked</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -100,13 +89,11 @@ export default function TeamShootsView({
   viewerId,
   canCreate,
   addSignal = 0,
-  notes = [],
 }: {
   members: Member[];
   viewerId: string;
   canCreate: boolean;
   addSignal?: number;
-  notes?: TeamPersonalNoteDto[];
 }) {
   const today = new Date();
   const [viewYear, setViewYear] = useState(today.getFullYear());
@@ -115,7 +102,9 @@ export default function TeamShootsView({
     `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
   );
   const [shoots, setShoots] = useState<TeamShootDto[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [tagNotes, setTagNotes] = useState<TeamPersonalNoteDto[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outletFilter, setOutletFilter] = useState("");
   const [formOpen, setFormOpen] = useState(false);
@@ -124,6 +113,10 @@ export default function TeamShootsView({
   const [originalTaggedNoteIds, setOriginalTaggedNoteIds] = useState<string[]>([]);
   const [noteTagSearch, setNoteTagSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingDriveLinks, setEditingDriveLinks] = useState<{
+    raw: string | null;
+    edit: string | null;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [detail, setDetail] = useState<TeamShootDto | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
@@ -147,7 +140,7 @@ export default function TeamShootsView({
   const selectedShoots = selectedDate ? byDate[selectedDate] ?? [] : [];
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
-  const myNotes = useMemo(() => notes.filter((n) => n.isOwner), [notes]);
+  const myNotes = useMemo(() => tagNotes.filter((n) => n.isOwner), [tagNotes]);
   const filteredNotesForTag = useMemo(() => {
     const q = noteTagSearch.trim().toLowerCase();
     if (!q) return myNotes;
@@ -167,7 +160,7 @@ export default function TeamShootsView({
   }, [shoots, todayKey]);
 
   const loadShoots = useCallback(async () => {
-    setLoading(true);
+    setRefreshing(true);
     setError(null);
     try {
       const qs = new URLSearchParams({ from: bounds.from, to: bounds.to });
@@ -179,13 +172,32 @@ export default function TeamShootsView({
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     } finally {
-      setLoading(false);
+      setRefreshing(false);
     }
   }, [bounds.from, bounds.to, outletFilter]);
+
+  const loadTagNotes = useCallback(async () => {
+    setNotesLoading(true);
+    try {
+      const res = await fetch("/api/team/notes");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not load notes");
+      setTagNotes(data.notes ?? []);
+    } catch {
+      setTagNotes([]);
+    } finally {
+      setNotesLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     void loadShoots();
   }, [loadShoots]);
+
+  useEffect(() => {
+    if (!formOpen) return;
+    void loadTagNotes();
+  }, [formOpen, loadTagNotes]);
 
   useEffect(() => {
     const el = dateStripRef.current?.querySelector(`[data-date="${selectedDate}"]`);
@@ -203,6 +215,7 @@ export default function TeamShootsView({
     (date?: string) => {
       if (!canCreate) return;
       setEditingId(null);
+      setEditingDriveLinks(null);
       resetFormState(date ?? selectedDate);
       setFormOpen(true);
     },
@@ -219,13 +232,15 @@ export default function TeamShootsView({
       return;
     }
     setEditingId(shoot.id);
+    setEditingDriveLinks({
+      raw: shoot.rawFilesDriveLink,
+      edit: shoot.editFilesDriveLink,
+    });
     setForm({
       shootDate: shoot.shootDate,
       outletId: shoot.outletId ?? "",
       title: shoot.title ?? "",
       shootNotes: shoot.shootNotes ?? "",
-      rawFilesDriveLink: shoot.rawFilesDriveLink ?? "",
-      editFilesDriveLink: shoot.editFilesDriveLink ?? "",
     });
     const linked = shoot.linkedNotes.map((n) => n.noteId);
     setTaggedNoteIds(linked);
@@ -268,8 +283,12 @@ export default function TeamShootsView({
         outletId: form.outletId || undefined,
         title: form.title.trim() || undefined,
         shootNotes: form.shootNotes.trim() || undefined,
-        rawFilesDriveLink: form.rawFilesDriveLink.trim() || undefined,
-        editFilesDriveLink: form.editFilesDriveLink.trim() || undefined,
+        ...(editingId && editingDriveLinks
+          ? {
+              rawFilesDriveLink: editingDriveLinks.raw ?? undefined,
+              editFilesDriveLink: editingDriveLinks.edit ?? undefined,
+            }
+          : {}),
       };
       const url = editingId ? `/api/team/shoots/${editingId}` : "/api/team/shoots";
       const res = await fetch(url, {
@@ -283,6 +302,7 @@ export default function TeamShootsView({
       if (shootId) await syncNoteTags(shootId);
       setFormOpen(false);
       setEditingId(null);
+      setEditingDriveLinks(null);
       if (detail?.id === shootId) setDetail(data.shoot);
       await loadShoots();
     } catch (err) {
@@ -304,6 +324,7 @@ export default function TeamShootsView({
       setFormOpen(false);
       setDetail(null);
       setEditingId(null);
+      setEditingDriveLinks(null);
       await loadShoots();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
@@ -371,7 +392,7 @@ export default function TeamShootsView({
         onSubmit={saveShoot}
       >
         <h2 className="text-lg font-semibold">{editingId ? "Edit shoot plan" : "New shoot plan"}</h2>
-        <p className="mt-1 text-xs text-white/40">Date, outlet, notes, drive links, and tag past notes.</p>
+        <p className="mt-1 text-xs text-white/40">Date, outlet, shoot notes, and tag existing notes.</p>
 
         <div className="mt-4 space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Shoot day</p>
@@ -410,21 +431,6 @@ export default function TeamShootsView({
           />
         </div>
 
-        <div className="mt-4 space-y-3">
-          <DriveSection
-            title="Raw files"
-            hint="Google Drive folder — unedited footage"
-            value={form.rawFilesDriveLink}
-            onChange={(v) => setForm((f) => ({ ...f, rawFilesDriveLink: v }))}
-          />
-          <DriveSection
-            title="Editing files"
-            hint="Google Drive folder — selects / edits for post"
-            value={form.editFilesDriveLink}
-            onChange={(v) => setForm((f) => ({ ...f, editFilesDriveLink: v }))}
-          />
-        </div>
-
         <div className="mt-4 rounded-2xl border border-violet-500/20 bg-violet-500/[0.06] p-3">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-200/90">Tag notes</p>
           <p className="mt-0.5 text-[11px] text-white/40">Attach notes you already created in Notes.</p>
@@ -437,7 +443,9 @@ export default function TeamShootsView({
             />
           ) : null}
           {filteredNotesForTag.length === 0 ? (
-            <p className="mt-2 text-xs text-white/35">No notes yet — create some in the Notes tab first.</p>
+            <p className="mt-2 text-xs text-white/35">
+              {notesLoading ? "Loading notes…" : "No notes yet — create some in the Notes tab first."}
+            </p>
           ) : (
             <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
               {filteredNotesForTag.map((n) => {
@@ -523,7 +531,7 @@ export default function TeamShootsView({
               + New shoot
             </button>
           ) : null}
-          {loading ? <span className="text-xs text-white/35">Loading…</span> : null}
+          {refreshing ? <span className="text-xs text-white/35">Updating…</span> : null}
         </div>
 
         <div className="flex items-center justify-between gap-2">
@@ -663,10 +671,7 @@ export default function TeamShootsView({
               <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-white/75">{detail.shootNotes}</p>
             ) : null}
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <DriveSection title="Raw files" hint="" readOnlyUrl={detail.rawFilesDriveLink} />
-              <DriveSection title="Editing files" hint="" readOnlyUrl={detail.editFilesDriveLink} />
-            </div>
+            <ShootFileStatus shoot={detail} />
 
             {detail.linkedNotes.length > 0 ? (
               <div className="mt-5">
@@ -745,10 +750,7 @@ export default function TeamShootsView({
               <p className="mt-3 whitespace-pre-wrap text-sm text-white/75">{detail.shootNotes}</p>
             ) : null}
 
-            <div className="mt-4 space-y-3">
-              <DriveSection title="Raw files" hint="" readOnlyUrl={detail.rawFilesDriveLink} />
-              <DriveSection title="Editing files" hint="" readOnlyUrl={detail.editFilesDriveLink} />
-            </div>
+            <ShootFileStatus shoot={detail} />
 
             {detail.linkedNotes.length > 0 ? (
               <div className="mt-4">

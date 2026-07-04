@@ -8,6 +8,8 @@ import { TEAM_PAGE, type TeamTab } from "./TeamNav";
 const TAB_TITLES: Record<TeamTab, string> = {
   ads: "Ads & creatives",
   shoots: "Shoot calendar",
+  "raw-files": "Raw files",
+  "edit-files": "Editing files",
   calendar: "Team calendar",
   reminders: "Notes",
   vault: "Passwords",
@@ -17,6 +19,8 @@ const TAB_TITLES: Record<TeamTab, string> = {
 const MOBILE_TITLES: Record<TeamTab, string> = {
   ads: "Tasks",
   shoots: "Shoots",
+  "raw-files": "Raw files",
+  "edit-files": "Editing files",
   calendar: "Calendar",
   reminders: "Notes",
   vault: "Passwords",
@@ -66,6 +70,7 @@ export default function TeamPageHeader({
   showStats,
   isMemberHub,
   desktopAction,
+  mobileAction,
   onLogout,
   filter,
   onFilterChange,
@@ -85,6 +90,7 @@ export default function TeamPageHeader({
   showStats: boolean;
   isMemberHub?: boolean;
   desktopAction?: ReactNode;
+  mobileAction?: ReactNode;
   onLogout: () => void;
   filter: Filter;
   onFilterChange: (f: Filter) => void;
@@ -116,6 +122,10 @@ export default function TeamPageHeader({
         {refreshing ? " · …" : ""}
       </span>
     </p>
+  ) : tab === "raw-files" || tab === "edit-files" ? (
+    <p className="mt-0.5 text-[11px] text-white/35">
+      {tab === "raw-files" ? "Google Drive links for unedited footage" : "Google Drive links for edits & exports"}
+    </p>
   ) : tab !== "ai" && !isMemberHub && tab !== "reminders" && tab !== "calendar" ? (
     <p className="mt-0.5 text-[11px] text-white/35 xl:hidden">{userLabel}</p>
   ) : isMemberHub || tab === "reminders" ? (
@@ -139,6 +149,7 @@ export default function TeamPageHeader({
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
+            {mobileAction ? <div className="xl:hidden">{mobileAction}</div> : null}
             {desktopAction ? <div className="hidden xl:block">{desktopAction}</div> : null}
             <button
               type="button"

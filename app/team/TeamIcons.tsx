@@ -70,6 +70,25 @@ export function IconWhatsApp({ className = "h-6 w-6" }: { className?: string }) 
   );
 }
 
+export function IconFilm({ className = "h-6 w-6" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M7 5v14M17 5v14M3 10h4M3 14h4M17 10h4M17 14h4" />
+    </svg>
+  );
+}
+
+export function IconScissors({ className = "h-6 w-6" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+      <circle cx="6" cy="7" r="2.5" />
+      <circle cx="6" cy="17" r="2.5" />
+      <path d="M8.5 8.5L20 20M8.5 15.5L20 4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function IconKey({ className = "h-6 w-6" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">

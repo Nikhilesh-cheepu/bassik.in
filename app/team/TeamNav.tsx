@@ -3,6 +3,8 @@
 export const TEAM_TABS = [
   { id: "ads", label: "Ads", short: "Ads & creatives" },
   { id: "shoots", label: "Shoots", short: "Shoot calendar" },
+  { id: "raw-files", label: "Raw", short: "Raw files" },
+  { id: "edit-files", label: "Edit", short: "Editing files" },
   { id: "calendar", label: "Calendar", short: "Calendar" },
   { id: "reminders", label: "Notes", short: "Notes" },
   { id: "vault", label: "Passwords", short: "Passwords" },
@@ -19,6 +21,8 @@ type NavProps = {
   hideAi?: boolean;
   hideCalendar?: boolean;
   hideShoots?: boolean;
+  hideRawFiles?: boolean;
+  hideEditFiles?: boolean;
   hideAds?: boolean;
 };
 
@@ -33,14 +37,21 @@ function visibleTabs({
   hideAi,
   hideCalendar,
   hideShoots,
+  hideRawFiles,
+  hideEditFiles,
   hideAds,
-}: Pick<NavProps, "hideReminders" | "hideVault" | "hideAi" | "hideCalendar" | "hideShoots" | "hideAds">) {
+}: Pick<
+  NavProps,
+  "hideReminders" | "hideVault" | "hideAi" | "hideCalendar" | "hideShoots" | "hideRawFiles" | "hideEditFiles" | "hideAds"
+>) {
   return TEAM_TABS.filter((t) => {
     if (hideReminders && t.id === "reminders") return false;
     if (hideVault && t.id === "vault") return false;
     if (hideAi && t.id === "ai") return false;
     if (hideCalendar && t.id === "calendar") return false;
     if (hideShoots && t.id === "shoots") return false;
+    if (hideRawFiles && t.id === "raw-files") return false;
+    if (hideEditFiles && t.id === "edit-files") return false;
     if (hideAds && t.id === "ads") return false;
     return true;
   });
@@ -54,11 +65,22 @@ export function TeamSidebarNav({
   hideAi,
   hideCalendar,
   hideShoots,
+  hideRawFiles,
+  hideEditFiles,
   hideAds,
   userLabel,
   onLogout,
 }: SidebarNavProps) {
-  const tabs = visibleTabs({ hideReminders, hideVault, hideAi, hideCalendar, hideShoots, hideAds });
+  const tabs = visibleTabs({
+    hideReminders,
+    hideVault,
+    hideAi,
+    hideCalendar,
+    hideShoots,
+    hideRawFiles,
+    hideEditFiles,
+    hideAds,
+  });
 
   return (
     <aside className="sticky top-0 hidden h-[100dvh] w-[220px] shrink-0 flex-col border-r border-white/[0.06] bg-[#08080e] xl:flex xl:w-56">
@@ -110,9 +132,20 @@ export default function TeamBottomNav({
   hideAi,
   hideCalendar,
   hideShoots,
+  hideRawFiles,
+  hideEditFiles,
   hideAds,
 }: NavProps) {
-  const tabs = visibleTabs({ hideReminders, hideVault, hideAi, hideCalendar, hideShoots, hideAds });
+  const tabs = visibleTabs({
+    hideReminders,
+    hideVault,
+    hideAi,
+    hideCalendar,
+    hideShoots,
+    hideRawFiles,
+    hideEditFiles,
+    hideAds,
+  });
 
   return (
     <nav className="flex border-t border-white/[0.06] bg-[#0a0a10]/98 md:min-h-[56px]">

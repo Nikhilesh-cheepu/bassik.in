@@ -5,9 +5,11 @@ import {
   IconAi,
   IconBell,
   IconCalendar,
+  IconFilm,
   IconKey,
   IconMore,
   IconPlus,
+  IconScissors,
   IconTasks,
   IconWhatsApp,
   TEAM_DOCK_HEIGHT,
@@ -65,30 +67,28 @@ export default function TeamDock({
     return (
       <nav
         className={navClass}
-        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", minHeight: TEAM_DOCK_HEIGHT }}
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", height: TEAM_DOCK_HEIGHT }}
       >
-        <div className="mx-auto flex h-14 max-w-sm items-end justify-between px-4">
+        <div className="mx-auto flex h-full max-w-lg px-1">
           <button type="button" onClick={() => onTab("shoots")} className={dockItem(tab === "shoots")}>
-            <IconCalendar className="h-[22px] w-[22px]" />
+            <IconCalendar className="h-[20px] w-[20px]" />
             Shoots
           </button>
-          <button
-            type="button"
-            onClick={onAdd}
-            className="relative -top-3 flex shrink-0 flex-col items-center"
-            aria-label="Create"
-          >
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-violet-500 text-white shadow-lg shadow-rose-500/30">
-              <IconPlus className="h-6 w-6" />
-            </span>
-          </button>
           <button type="button" onClick={() => onTab("reminders")} className={dockItem(tab === "reminders")}>
-            <IconBell className="h-[22px] w-[22px]" />
+            <IconBell className="h-[20px] w-[20px]" />
             Notes
           </button>
-          <button type="button" onClick={onMore} className={dockItem(false)}>
-            <IconMore className="h-[22px] w-[22px]" />
-            More
+          <button type="button" onClick={() => onTab("raw-files")} className={dockItem(tab === "raw-files")}>
+            <IconFilm className="h-[20px] w-[20px]" />
+            Raw
+          </button>
+          <button type="button" onClick={() => onTab("edit-files")} className={dockItem(tab === "edit-files")}>
+            <IconScissors className="h-[20px] w-[20px]" />
+            Edit
+          </button>
+          <button type="button" onClick={() => onTab("vault")} className={dockItem(tab === "vault")}>
+            <IconKey className="h-[20px] w-[20px]" />
+            Pass
           </button>
         </div>
       </nav>
