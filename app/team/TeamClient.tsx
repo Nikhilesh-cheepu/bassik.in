@@ -1364,6 +1364,10 @@ export default function TeamClient() {
             setShootAddSignal((n) => n + 1);
             return;
           }
+          if ((tab === "raw-files" || tab === "edit-files") && canCreateShoots(user)) {
+            setContentFilesAddSignal((n) => n + 1);
+            return;
+          }
           if (tab === "reminders" && !isViewer) {
             focusNoteComposer();
             return;

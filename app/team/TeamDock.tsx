@@ -67,9 +67,9 @@ export default function TeamDock({
     return (
       <nav
         className={navClass}
-        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", height: TEAM_DOCK_HEIGHT }}
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", minHeight: TEAM_DOCK_HEIGHT }}
       >
-        <div className="mx-auto flex h-full max-w-lg px-1">
+        <div className="mx-auto flex h-14 max-w-md items-end justify-between px-1">
           <button type="button" onClick={() => onTab("shoots")} className={dockItem(tab === "shoots")}>
             <IconCalendar className="h-[20px] w-[20px]" />
             Shoots
@@ -78,6 +78,16 @@ export default function TeamDock({
             <IconBell className="h-[20px] w-[20px]" />
             Notes
           </button>
+          <button
+            type="button"
+            onClick={onAdd}
+            className="relative -top-3 flex shrink-0 flex-col items-center"
+            aria-label="Add"
+          >
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-violet-500 text-white shadow-lg shadow-rose-500/30">
+              <IconPlus className="h-6 w-6" />
+            </span>
+          </button>
           <button type="button" onClick={() => onTab("raw-files")} className={dockItem(tab === "raw-files")}>
             <IconFilm className="h-[20px] w-[20px]" />
             Raw
@@ -85,10 +95,6 @@ export default function TeamDock({
           <button type="button" onClick={() => onTab("edit-files")} className={dockItem(tab === "edit-files")}>
             <IconScissors className="h-[20px] w-[20px]" />
             Edit
-          </button>
-          <button type="button" onClick={() => onTab("vault")} className={dockItem(tab === "vault")}>
-            <IconKey className="h-[20px] w-[20px]" />
-            Pass
           </button>
         </div>
       </nav>

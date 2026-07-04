@@ -26,7 +26,7 @@ export type TeamContentFileDto = {
 
 const EDIT_STATUS_LABELS: Record<TeamContentEditStatus, string> = {
   TO_EDIT: "To edit",
-  EDITED: "Edited",
+  EDITED: "Already edited",
 };
 
 function parseDriveUrl(raw: string | null | undefined): string | null {

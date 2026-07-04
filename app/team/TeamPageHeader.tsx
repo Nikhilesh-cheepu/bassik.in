@@ -123,9 +123,9 @@ export default function TeamPageHeader({
       </span>
     </p>
   ) : tab === "raw-files" ? (
-    <p className="mt-0.5 text-[11px] text-white/35">Title, link, and notes</p>
+    <p className="mt-0.5 text-[11px] text-white/35">Title, link, and description</p>
   ) : tab === "edit-files" ? (
-    <p className="mt-0.5 text-[11px] text-white/35">Title, link, and notes</p>
+    <p className="mt-0.5 text-[11px] text-white/35">Title, link, description — To edit or Already edited</p>
   ) : tab !== "ai" && !isMemberHub && tab !== "reminders" && tab !== "calendar" ? (
     <p className="mt-0.5 text-[11px] text-white/35 xl:hidden">{userLabel}</p>
   ) : isMemberHub || tab === "reminders" ? (
