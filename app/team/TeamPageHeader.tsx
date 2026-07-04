@@ -122,10 +122,10 @@ export default function TeamPageHeader({
         {refreshing ? " · …" : ""}
       </span>
     </p>
-  ) : tab === "raw-files" || tab === "edit-files" ? (
-    <p className="mt-0.5 text-[11px] text-white/35">
-      {tab === "raw-files" ? "Google Drive links for unedited footage" : "Google Drive links for edits & exports"}
-    </p>
+  ) : tab === "raw-files" ? (
+    <p className="mt-0.5 text-[11px] text-white/35">Title, link, and notes</p>
+  ) : tab === "edit-files" ? (
+    <p className="mt-0.5 text-[11px] text-white/35">Title, link, and notes</p>
   ) : tab !== "ai" && !isMemberHub && tab !== "reminders" && tab !== "calendar" ? (
     <p className="mt-0.5 text-[11px] text-white/35 xl:hidden">{userLabel}</p>
   ) : isMemberHub || tab === "reminders" ? (

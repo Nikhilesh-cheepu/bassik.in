@@ -479,6 +479,7 @@ model TeamShoot {
   updatedAt          DateTime            @updatedAt
   noteLinks          TeamShootNoteLink[]
   shares             TeamShootShare[]
+  contentFiles       TeamContentFile[]
 
   @@index([ownerId])
   @@index([shootDate])
@@ -511,6 +512,39 @@ model TeamShootShare {
   @@unique([shootId, memberId])
   @@index([memberId])
   @@index([shootId])
+}
+
+enum TeamContentFileKind {
+  RAW
+  EDIT
+}
+
+enum TeamContentEditStatus {
+  TO_EDIT
+  EDITED
+}
+
+/// Organized raw footage or edit pipeline items for content creators.
+model TeamContentFile {
+  id         String                 @id @default(cuid())
+  ownerId    String
+  kind       TeamContentFileKind
+  title      String?
+  driveLink  String?
+  notes      String?
+  outletId   String?
+  shootDate  String?                // YYYY-MM-DD
+  shootId    String?
+  editStatus TeamContentEditStatus  @default(TO_EDIT)
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+  shoot      TeamShoot?             @relation(fields: [shootId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, kind])
+  @@index([kind, editStatus])
+  @@index([shootId])
+  @@index([shootDate])
+  @@index([createdAt])
 }
 
 /// SEO & performance marketing ad/creative tasks (internal /team board).

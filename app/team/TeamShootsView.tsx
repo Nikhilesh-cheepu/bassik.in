@@ -51,8 +51,8 @@ function ShootFileStatus({ shoot }: { shoot: TeamShootDto }) {
   return (
     <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
       <p className="text-[11px] text-white/45">
-        Add or update Drive links in the <span className="text-amber-200/90">Raw files</span> and{" "}
-        <span className="text-cyan-200/90">Editing files</span> tabs.
+        Manage files in the <span className="text-amber-200/90">Raw files</span> and{" "}
+        <span className="text-cyan-200/90">Editing files</span> tabs — title, link, notes.
       </p>
       <div className="mt-2 flex flex-wrap gap-2">
         {shoot.rawFilesDriveLink ? (

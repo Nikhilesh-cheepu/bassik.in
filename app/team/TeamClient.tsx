@@ -275,6 +275,7 @@ export default function TeamClient() {
   const [notesReady, setNotesReady] = useState(true);
   const [calendarAddSignal, setCalendarAddSignal] = useState(0);
   const [shootAddSignal, setShootAddSignal] = useState(0);
+  const [contentFilesAddSignal, setContentFilesAddSignal] = useState(0);
   const [noteForm, setNoteForm] = useState<NoteForm>(emptyNoteForm());
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [notesSearch, setNotesSearch] = useState("");
@@ -1108,6 +1109,16 @@ export default function TeamClient() {
         >
           + New shoot
         </button>
+      ) : (tab === "raw-files" || tab === "edit-files") && canCreateShoots(user) ? (
+        <button
+          type="button"
+          onClick={() => setContentFilesAddSignal((n) => n + 1)}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold text-white ${
+            tab === "raw-files" ? "bg-amber-600" : "bg-cyan-600"
+          }`}
+        >
+          {tab === "raw-files" ? "+ Raw file" : "+ Edit file"}
+        </button>
       ) : tab === "vault" ? (
         <button
           type="button"
@@ -1135,6 +1146,16 @@ export default function TeamClient() {
         className="rounded-xl bg-gradient-to-r from-cyan-500 to-violet-500 px-3 py-1.5 text-xs font-semibold text-white"
       >
         + Note
+      </button>
+    ) : isContent && (tab === "raw-files" || tab === "edit-files") && canCreateShoots(user) ? (
+      <button
+        type="button"
+        onClick={() => setContentFilesAddSignal((n) => n + 1)}
+        className={`rounded-xl px-3 py-1.5 text-xs font-semibold text-white ${
+          tab === "raw-files" ? "bg-amber-600" : "bg-cyan-600"
+        }`}
+      >
+        + Add
       </button>
     ) : isContent && tab === "vault" ? (
       <button
@@ -1256,9 +1277,17 @@ export default function TeamClient() {
             addSignal={shootAddSignal}
           />
         ) : tab === "raw-files" && isContent ? (
-          <TeamContentFilesView mode="raw" canEdit={canCreateShoots(user)} />
+          <TeamContentFilesView
+            mode="raw"
+            canEdit={canCreateShoots(user)}
+            addSignal={contentFilesAddSignal}
+          />
         ) : tab === "edit-files" && isContent ? (
-          <TeamContentFilesView mode="edit" canEdit={canCreateShoots(user)} />
+          <TeamContentFilesView
+            mode="edit"
+            canEdit={canCreateShoots(user)}
+            addSignal={contentFilesAddSignal}
+          />
         ) : tab === "calendar" && !isViewer ? (
           <TeamCalendarView
             members={members}
