@@ -1,4 +1,5 @@
 import { getTeamMemberPasswords, getTeamMemberRoster, isTeamMemberId } from "@/lib/team-members";
+import { teamSecretForJwt } from "@/lib/team-secrets";
 import { SignJWT, jwtVerify } from "jose";
 import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
@@ -13,11 +14,7 @@ export type TeamSession = {
   memberId?: string;
 };
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.TEAM_SESSION_SECRET ||
-    process.env.ADMIN_SESSION_SECRET ||
-    "dev-team-secret-change-in-production"
-);
+const JWT_SECRET = teamSecretForJwt();
 
 const TEAM_ADMIN_PASSWORD = "522529";
 const TEAM_VIEWER_PASSWORD = "view01";

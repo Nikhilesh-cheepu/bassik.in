@@ -1,14 +1,8 @@
 import crypto from "crypto";
+import { teamSecretMaterial } from "@/lib/team-secrets";
 
 function vaultKey(): Buffer {
-  const raw =
-    process.env.VAULT_ENCRYPTION_KEY?.trim() ||
-    process.env.TEAM_SESSION_SECRET?.trim() ||
-    process.env.ADMIN_SESSION_SECRET?.trim();
-  if (!raw) {
-    throw new Error("Vault encryption is not configured (set VAULT_ENCRYPTION_KEY or TEAM_SESSION_SECRET).");
-  }
-  return crypto.createHash("sha256").update(raw).digest();
+  return crypto.createHash("sha256").update(teamSecretMaterial()).digest();
 }
 
 export function encryptVaultSecret(plaintext: string): string {
