@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { resetIosInputZoom } from "@/lib/reset-mobile-zoom";
+import {
+  lockViewportForPayment,
+  resetIosInputZoom,
+  unlockViewportForPayment,
+} from "@/lib/reset-mobile-zoom";
 
 declare global {
   interface Window {
@@ -65,47 +69,54 @@ export function useRazorpayCheckout() {
         document.body.style.width = "";
 
         resetIosInputZoom();
-        await new Promise<void>((r) => window.setTimeout(r, 80));
+        lockViewportForPayment();
+        await new Promise<void>((r) => window.setTimeout(r, 120));
 
-        await new Promise<void>((resolve, reject) => {
-          let settled = false;
-          const finish = (fn: () => void) => {
-            if (settled) return;
-            settled = true;
-            fn();
-          };
+        try {
+          await new Promise<void>((resolve, reject) => {
+            let settled = false;
+            const finish = (fn: () => void) => {
+              if (settled) return;
+              settled = true;
+              unlockViewportForPayment();
+              fn();
+            };
 
-          const rzp = new window.Razorpay!({
-            key: input.keyId,
-            amount: input.amountPaise,
-            currency: "INR",
-            name: input.name,
-            description: input.description,
-            order_id: input.orderId,
-            prefill: input.prefill,
-            theme: { color: "#F97316" },
-            handler: async (response: {
-              razorpay_order_id: string;
-              razorpay_payment_id: string;
-              razorpay_signature: string;
-            }) => {
-              try {
-                await onSuccess(response);
-                finish(resolve);
-              } catch (e) {
-                finish(() => reject(e));
-              }
-            },
-            modal: {
-              ondismiss: () => {
-                resetIosInputZoom();
-                finish(() => reject(new Error("Payment cancelled")));
+            const rzp = new window.Razorpay!({
+              key: input.keyId,
+              amount: input.amountPaise,
+              currency: "INR",
+              name: input.name,
+              description: input.description,
+              order_id: input.orderId,
+              prefill: input.prefill,
+              theme: { color: "#F97316" },
+              handler: async (response: {
+                razorpay_order_id: string;
+                razorpay_payment_id: string;
+                razorpay_signature: string;
+              }) => {
+                try {
+                  await onSuccess(response);
+                  finish(resolve);
+                } catch (e) {
+                  finish(() => reject(e));
+                }
               },
-            },
+              modal: {
+                ondismiss: () => {
+                  finish(() => reject(new Error("Payment cancelled")));
+                },
+              },
+            });
+            rzp.open();
           });
-          rzp.open();
-        });
+        } catch (e) {
+          unlockViewportForPayment();
+          throw e;
+        }
       } finally {
+        unlockViewportForPayment();
         busyRef.current = false;
         setLoading(false);
       }
