@@ -31,6 +31,7 @@ import { getContactForBrand, getFullPhoneNumber, getWhatsAppMessageForBrand } fr
 import { guestEventDateLine } from "@/lib/event-date-display";
 import { useRazorpayCheckout } from "@/lib/use-razorpay-checkout";
 import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
+import { blurActiveField, resetIosInputZoom } from "@/lib/reset-mobile-zoom";
 import type { VenuePayload } from "@/lib/venue-data";
 
 const GalleryModal = dynamic(() => import("@/components/GalleryModal"));
@@ -269,6 +270,7 @@ export default function ClubRogueOutletPage({
   };
 
   const handlePayClick = () => {
+    blurActiveField();
     const validationError = validateForm();
     if (validationError) {
       setError(validationError);
@@ -301,9 +303,12 @@ export default function ClubRogueOutletPage({
 
       // Close our sheet and release scroll lock before Razorpay — body pin shifts its modal left on iOS.
       setConfirmOpen(false);
+      blurActiveField();
+      resetIosInputZoom();
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
       });
+      await new Promise<void>((r) => window.setTimeout(r, 100));
 
       await openCheckout(
         {
@@ -351,7 +356,7 @@ export default function ClubRogueOutletPage({
   const activeHook = emotionalHooks[hookIndex % emotionalHooks.length] ?? emotionalHooks[0];
 
   const fieldClass =
-    "w-full bg-transparent px-4 py-3.5 text-sm text-white outline-none placeholder:text-white/30";
+    "w-full bg-transparent px-4 py-3.5 text-base text-white outline-none placeholder:text-white/30";
 
   return (
     <div

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { resetIosInputZoom } from "@/lib/reset-mobile-zoom";
 
 declare global {
   interface Window {
@@ -63,6 +64,9 @@ export function useRazorpayCheckout() {
         document.body.style.right = "";
         document.body.style.width = "";
 
+        resetIosInputZoom();
+        await new Promise<void>((r) => window.setTimeout(r, 80));
+
         await new Promise<void>((resolve, reject) => {
           let settled = false;
           const finish = (fn: () => void) => {
@@ -93,7 +97,10 @@ export function useRazorpayCheckout() {
               }
             },
             modal: {
-              ondismiss: () => finish(() => reject(new Error("Payment cancelled"))),
+              ondismiss: () => {
+                resetIosInputZoom();
+                finish(() => reject(new Error("Payment cancelled")));
+              },
             },
           });
           rzp.open();
