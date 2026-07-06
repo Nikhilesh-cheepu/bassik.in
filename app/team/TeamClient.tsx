@@ -1442,12 +1442,14 @@ export default function TeamClient() {
       <TeamMoreSheet
         open={showMoreSheet}
         onClose={() => setShowMoreSheet(false)}
-        onReminders={() => setTab("reminders")}
-        onShoots={!isViewer ? () => setTab("shoots") : undefined}
-        onVault={!isViewer ? () => setTab("vault") : undefined}
+        onReminders={!isContent ? () => setTab("reminders") : undefined}
+        onShoots={!isViewer && !isContent ? () => setTab("shoots") : undefined}
+        onRawFiles={isContent ? () => setTab("raw-files") : undefined}
+        onEditFiles={isContent ? () => setTab("edit-files") : undefined}
+        onVault={!isViewer && !isContent ? () => setTab("vault") : undefined}
         onCalendar={!isViewer && !isContent ? () => setTab("calendar") : undefined}
-        onAi={() => setTab("ai")}
-        onExport={exportExcel}
+        onAi={!isContent ? () => setTab("ai") : undefined}
+        onExport={!isContent ? exportExcel : undefined}
         onWhatsApp={user.role === "admin" ? shareWhatsApp : undefined}
       />
 

@@ -88,13 +88,13 @@ export default function TeamDock({
               <IconPlus className="h-6 w-6" />
             </span>
           </button>
-          <button type="button" onClick={() => onTab("raw-files")} className={dockItem(tab === "raw-files")}>
-            <IconFilm className="h-[20px] w-[20px]" />
-            Raw
+          <button type="button" onClick={() => onTab("vault")} className={dockItem(tab === "vault")}>
+            <IconKey className="h-[20px] w-[20px]" />
+            Pass
           </button>
-          <button type="button" onClick={() => onTab("edit-files")} className={dockItem(tab === "edit-files")}>
-            <IconScissors className="h-[20px] w-[20px]" />
-            Edit
+          <button type="button" onClick={onMore} className={dockItem(tab === "raw-files" || tab === "edit-files")}>
+            <IconMore className="h-[20px] w-[20px]" />
+            More
           </button>
         </div>
       </nav>
@@ -236,6 +236,8 @@ export function TeamMoreSheet({
   onClose,
   onReminders,
   onShoots,
+  onRawFiles,
+  onEditFiles,
   onVault,
   onCalendar,
   onAi,
@@ -244,23 +246,27 @@ export function TeamMoreSheet({
 }: {
   open: boolean;
   onClose: () => void;
-  onReminders: () => void;
+  onReminders?: () => void;
   onShoots?: () => void;
+  onRawFiles?: () => void;
+  onEditFiles?: () => void;
   onVault?: () => void;
   onCalendar?: () => void;
-  onAi: () => void;
-  onExport: () => void;
+  onAi?: () => void;
+  onExport?: () => void;
   onWhatsApp?: () => void;
 }) {
   if (!open) return null;
   const items = [
     ...(onShoots ? [{ label: "Shoot calendar", icon: IconCalendar, onClick: onShoots }] : []),
+    ...(onRawFiles ? [{ label: "Raw files", icon: IconFilm, onClick: onRawFiles }] : []),
+    ...(onEditFiles ? [{ label: "Editing files", icon: IconScissors, onClick: onEditFiles }] : []),
     ...(onCalendar ? [{ label: "Calendar", icon: IconCalendar, onClick: onCalendar }] : []),
-    { label: "My notes", icon: IconBell, onClick: onReminders },
+    ...(onReminders ? [{ label: "My notes", icon: IconBell, onClick: onReminders }] : []),
     ...(onVault ? [{ label: "Passwords", icon: IconKey, onClick: onVault }] : []),
-    { label: "AI assistant", icon: IconAi, onClick: onAi },
+    ...(onAi ? [{ label: "AI assistant", icon: IconAi, onClick: onAi }] : []),
     ...(onWhatsApp ? [{ label: "WhatsApp report", icon: IconWhatsApp, onClick: onWhatsApp }] : []),
-    { label: "Export Excel", icon: IconTasks, onClick: onExport },
+    ...(onExport ? [{ label: "Export Excel", icon: IconTasks, onClick: onExport }] : []),
   ];
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/70 xl:hidden" onClick={onClose}>
