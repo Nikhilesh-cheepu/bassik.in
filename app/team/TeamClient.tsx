@@ -28,6 +28,7 @@ import TeamVaultView, { emptyVaultForm, type VaultForm } from "./TeamVaultView";
 import TeamCalendarView from "./TeamCalendarView";
 import TeamShootsView from "./TeamShootsView";
 import TeamContentFilesView from "./TeamContentFilesView";
+import TeamTasksView from "./TeamTasksView";
 import { canCreateShoots } from "@/lib/team-shoots";
 import { readCachedTeamUser, writeCachedTeamUser } from "@/lib/team-session-cache";
 import { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
@@ -459,7 +460,8 @@ export default function TeamClient() {
         tab === "ai" ||
         tab === "shoots" ||
         tab === "raw-files" ||
-        tab === "edit-files")
+        tab === "edit-files" ||
+        tab === "tasks")
     ) {
       setTab("ads");
     }
@@ -1192,6 +1194,7 @@ export default function TeamClient() {
         hideRawFiles={!isContent}
         hideEditFiles={!isContent}
         hideAds={isContent}
+        hideTasks={isViewer}
         userLabel={userLabel}
         onLogout={() => void logout()}
       />
@@ -1227,7 +1230,8 @@ export default function TeamClient() {
           tab === "vault" ||
           tab === "shoots" ||
           tab === "raw-files" ||
-          tab === "edit-files"
+          tab === "edit-files" ||
+          tab === "tasks"
             ? "flex flex-col overflow-hidden py-0 max-xl:px-0 max-xl:max-w-none md:py-4"
             : "overflow-y-auto overscroll-contain py-3 [-webkit-overflow-scrolling:touch] md:py-4"
         }`}
@@ -1281,6 +1285,12 @@ export default function TeamClient() {
             onPriorityChange={changeTaskPriority}
           />
           </>
+        ) : tab === "tasks" && !isViewer ? (
+          <TeamTasksView
+            isAdmin={user.role === "admin"}
+            viewerId={notesViewerId}
+            members={members}
+          />
         ) : tab === "shoots" && !isViewer ? (
           <TeamShootsView
             members={members}

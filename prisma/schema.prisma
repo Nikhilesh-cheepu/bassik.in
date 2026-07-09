@@ -800,3 +800,70 @@ model Kiik69WalletEntry {
   @@index([createdAt])
   @@index([entryDate])
 }
+
+/// Personal todo items for team members (quick notes, personal tasks).
+model TeamTodoItem {
+  id          String              @id @default(cuid())
+  ownerId     String              // admin | member id
+  title       String
+  description String?
+  status      TeamAdTaskStatus    @default(TODO)
+  completedAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+/// Daily checklist templates created by managers for team members.
+model TeamDailyChecklist {
+  id          String   @id @default(cuid())
+  ownerId     String   // member id this checklist is for
+  title       String   // e.g. "Client 1", "Social Media Tasks"
+  description String?
+  sortOrder   Int      @default(0)
+  createdBy   String   // admin who created it
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items TeamChecklistItem[]
+
+  @@index([ownerId])
+  @@index([sortOrder])
+  @@index([createdAt])
+}
+
+/// Individual items in a daily checklist.
+model TeamChecklistItem {
+  id          String   @id @default(cuid())
+  checklistId String
+  title       String   // e.g. "Mon flyer - post", "Tue flyer - post"
+  description String?
+  dayOfWeek   String?  // mon | tue | wed | thu | fri | sat | sun | null (for any day)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  checklist  TeamDailyChecklist       @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  completions TeamChecklistCompletion[]
+
+  @@index([checklistId])
+  @@index([sortOrder])
+}
+
+/// Daily completion records for checklist items.
+model TeamChecklistCompletion {
+  id          String   @id @default(cuid())
+  itemId      String
+  completedBy String
+  date        String   // YYYY-MM-DD
+  completedAt DateTime @default(now())
+
+  item TeamChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, date])
+  @@index([itemId])
+  @@index([date])
+  @@index([completedBy])
+}
