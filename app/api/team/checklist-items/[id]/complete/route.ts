@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import { prisma } from "@/lib/db";
 import {
-  getCurrentWeekMeta,
   getTodayKey,
   isChecklistPlatformId,
-  itemDateKeyForWeek,
   parsePlatforms,
   platformsFromJson,
 } from "@/lib/team-checklists";
+import { SOCIAL_BOARD_PLATFORMS } from "@/lib/team-checklist-templates";
 import { teamPersonalNoteOwnerId } from "@/lib/team-personal-notes";
 
 export async function POST(
@@ -23,7 +22,6 @@ export async function POST(
 
   const { id } = await params;
   const completedBy = teamPersonalNoteOwnerId(session);
-  const week = getCurrentWeekMeta();
   const today = getTodayKey();
 
   try {
@@ -36,7 +34,7 @@ export async function POST(
 
     const item = await prisma.teamChecklistItem.findUnique({
       where: { id },
-      include: { checklist: true },
+      include: { checklist: true, completions: true },
     });
 
     if (!item) {
@@ -47,36 +45,110 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const kind = item.checklist.kind;
+    const isPost = kind === "posts";
+
+    // Posts: single completion (use first completion date or today)
+    if (isPost) {
+      const existing = item.completions[0] ?? null;
+      const date = existing?.date ?? today;
+
+      if (typeof body.markComplete === "boolean" && body.togglePlatform === undefined) {
+        if (body.markComplete) {
+          const platforms = [...SOCIAL_BOARD_PLATFORMS];
+          const row = existing
+            ? await prisma.teamChecklistCompletion.update({
+                where: { id: existing.id },
+                data: { completedBy, completedPlatforms: platforms },
+              })
+            : await prisma.teamChecklistCompletion.create({
+                data: {
+                  itemId: id,
+                  completedBy,
+                  date,
+                  completedPlatforms: platforms,
+                },
+              });
+          return NextResponse.json({
+            completed: true,
+            date: row.date,
+            completedPlatforms: platformsFromJson(row.completedPlatforms),
+          });
+        }
+        if (existing) {
+          await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
+        }
+        return NextResponse.json({ completed: false, date, completedPlatforms: [] });
+      }
+
+      if (typeof body.togglePlatform === "string") {
+        const platform = body.togglePlatform.trim().toLowerCase();
+        if (!isChecklistPlatformId(platform)) {
+          return NextResponse.json({ error: "Invalid platform" }, { status: 400 });
+        }
+        let next = existing ? platformsFromJson(existing.completedPlatforms) : [];
+        next = next.includes(platform) ? next.filter((p) => p !== platform) : [...next, platform];
+        if (next.length === 0) {
+          if (existing) await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
+          return NextResponse.json({ completed: false, date, completedPlatforms: [] });
+        }
+        const row = existing
+          ? await prisma.teamChecklistCompletion.update({
+              where: { id: existing.id },
+              data: { completedBy, completedPlatforms: next },
+            })
+          : await prisma.teamChecklistCompletion.create({
+              data: { itemId: id, completedBy, date, completedPlatforms: next },
+            });
+        return NextResponse.json({
+          completed: true,
+          date: row.date,
+          completedPlatforms: platformsFromJson(row.completedPlatforms),
+        });
+      }
+
+      // default toggle complete
+      if (existing) {
+        await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
+        return NextResponse.json({ completed: false, date, completedPlatforms: [] });
+      }
+      const row = await prisma.teamChecklistCompletion.create({
+        data: {
+          itemId: id,
+          completedBy,
+          date: today,
+          completedPlatforms: [...SOCIAL_BOARD_PLATFORMS],
+        },
+      });
+      return NextResponse.json({
+        completed: true,
+        date: row.date,
+        completedPlatforms: platformsFromJson(row.completedPlatforms),
+      });
+    }
+
+    // Stories / habits: date-keyed
     const dateRaw = typeof body.date === "string" ? body.date.trim() : "";
-    const date =
-      /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) && week.dayKeys.includes(dateRaw)
-        ? dateRaw
-        : itemDateKeyForWeek(item.dayOfWeek, week, today);
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : today;
 
     const existing = await prisma.teamChecklistCompletion.findUnique({
       where: { itemId_date: { itemId: id, date } },
     });
 
-    // Explicit mark complete toggle (no platform change)
-    if (typeof body.markComplete === "boolean" && body.togglePlatform === undefined && body.platforms === undefined) {
+    if (
+      typeof body.markComplete === "boolean" &&
+      body.togglePlatform === undefined &&
+      body.platforms === undefined
+    ) {
       if (body.markComplete) {
         const platforms =
-          existing
+          existing && platformsFromJson(existing.completedPlatforms).length
             ? platformsFromJson(existing.completedPlatforms)
-            : platformsFromJson(item.platforms);
+            : [...SOCIAL_BOARD_PLATFORMS];
         const row = await prisma.teamChecklistCompletion.upsert({
           where: { itemId_date: { itemId: id, date } },
-          create: {
-            itemId: id,
-            completedBy,
-            date,
-            completedPlatforms: platforms.length ? platforms : platformsFromJson(item.platforms),
-          },
-          update: {
-            completedBy,
-            completedPlatforms:
-              platforms.length > 0 ? platforms : platformsFromJson(item.platforms),
-          },
+          create: { itemId: id, completedBy, date, completedPlatforms: platforms },
+          update: { completedBy, completedPlatforms: platforms },
         });
         return NextResponse.json({
           completed: true,
@@ -84,57 +156,28 @@ export async function POST(
           completedPlatforms: platformsFromJson(row.completedPlatforms),
         });
       }
-
       if (existing) {
         await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
       }
       return NextResponse.json({ completed: false, date, completedPlatforms: [] });
     }
 
-    // Toggle a single platform
     if (typeof body.togglePlatform === "string") {
       const platform = body.togglePlatform.trim().toLowerCase();
       if (!isChecklistPlatformId(platform)) {
         return NextResponse.json({ error: "Invalid platform" }, { status: 400 });
       }
-
       let next = existing ? platformsFromJson(existing.completedPlatforms) : [];
-      if (next.includes(platform)) {
-        next = next.filter((p) => p !== platform);
-      } else {
-        next = [...next, platform];
-      }
-
-      if (next.length === 0 && !existing?.completedPlatforms) {
-        // If nothing left and we never marked complete with empty set, delete
-        if (existing) {
-          await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
-        }
-        return NextResponse.json({ completed: false, date, completedPlatforms: [] });
-      }
-
-      // Keep row if platforms remain OR item was previously marked (row exists with empty after uncheck all — delete)
+      next = next.includes(platform) ? next.filter((p) => p !== platform) : [...next, platform];
       if (next.length === 0) {
-        if (existing) {
-          await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
-        }
+        if (existing) await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
         return NextResponse.json({ completed: false, date, completedPlatforms: [] });
       }
-
       const row = await prisma.teamChecklistCompletion.upsert({
         where: { itemId_date: { itemId: id, date } },
-        create: {
-          itemId: id,
-          completedBy,
-          date,
-          completedPlatforms: next,
-        },
-        update: {
-          completedBy,
-          completedPlatforms: next,
-        },
+        create: { itemId: id, completedBy, date, completedPlatforms: next },
+        update: { completedBy, completedPlatforms: next },
       });
-
       return NextResponse.json({
         completed: true,
         date,
@@ -142,30 +185,17 @@ export async function POST(
       });
     }
 
-    // Replace full platforms list
     if (body.platforms !== undefined) {
       const next = parsePlatforms(body.platforms);
       if (next.length === 0) {
-        if (existing) {
-          await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
-        }
+        if (existing) await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
         return NextResponse.json({ completed: false, date, completedPlatforms: [] });
       }
-
       const row = await prisma.teamChecklistCompletion.upsert({
         where: { itemId_date: { itemId: id, date } },
-        create: {
-          itemId: id,
-          completedBy,
-          date,
-          completedPlatforms: next,
-        },
-        update: {
-          completedBy,
-          completedPlatforms: next,
-        },
+        create: { itemId: id, completedBy, date, completedPlatforms: next },
+        update: { completedBy, completedPlatforms: next },
       });
-
       return NextResponse.json({
         completed: true,
         date,
@@ -173,22 +203,19 @@ export async function POST(
       });
     }
 
-    // Legacy toggle: no body → flip completion for date
     if (existing) {
       await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
       return NextResponse.json({ completed: false, date, completedPlatforms: [] });
     }
 
-    const platforms = platformsFromJson(item.platforms);
     const row = await prisma.teamChecklistCompletion.create({
       data: {
         itemId: id,
         completedBy,
         date,
-        completedPlatforms: platforms,
+        completedPlatforms: [...SOCIAL_BOARD_PLATFORMS],
       },
     });
-
     return NextResponse.json({
       completed: true,
       date,

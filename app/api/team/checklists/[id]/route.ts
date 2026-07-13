@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import { prisma } from "@/lib/db";
 import {
-  getCurrentWeekMeta,
+  boardDateWindow,
   getTodayKey,
   toTeamDailyChecklistDto,
 } from "@/lib/team-checklists";
@@ -18,8 +18,8 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const week = getCurrentWeekMeta();
   const today = getTodayKey();
+  const dateKeys = boardDateWindow(today);
 
   try {
     const checklist = await prisma.teamDailyChecklist.findUnique({ where: { id } });
@@ -62,7 +62,7 @@ export async function PATCH(
         items: {
           include: {
             completions: {
-              where: { date: { in: week.dayKeys } },
+              where: { date: { in: dateKeys } },
             },
           },
         },
@@ -71,7 +71,6 @@ export async function PATCH(
 
     return NextResponse.json({
       checklist: toTeamDailyChecklistDto(updated, today),
-      week,
     });
   } catch (err) {
     console.error("[team/checklists/[id]] PATCH error:", err);

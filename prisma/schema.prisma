@@ -821,8 +821,12 @@ model TeamTodoItem {
 model TeamDailyChecklist {
   id          String   @id @default(cuid())
   ownerId     String   // member id this checklist is for
-  title       String   // e.g. "Client 1", "Social Media Tasks"
+  title       String   // e.g. "Komma Stories", "Posts ready to publish"
   description String?
+  /// stories | posts | habits
+  kind        String   @default("stories")
+  /// TEAM_AD_OUTLETS id when kind = stories
+  outletId    String?
   sortOrder   Int      @default(0)
   createdBy   String   // admin who created it
   createdAt   DateTime @default(now())
@@ -831,6 +835,9 @@ model TeamDailyChecklist {
   items TeamChecklistItem[]
 
   @@index([ownerId])
+  @@index([kind])
+  @@index([outletId])
+  @@index([ownerId, kind])
   @@index([sortOrder])
   @@index([createdAt])
 }
