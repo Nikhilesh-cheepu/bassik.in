@@ -8,6 +8,7 @@ import {
   IconFilm,
   IconKey,
   IconMore,
+  IconPlan,
   IconPlus,
   IconScissors,
   IconTasks,
@@ -112,9 +113,9 @@ export default function TeamDock({
             <IconTasks className="h-[22px] w-[22px]" />
             Tasks
           </button>
-          <button type="button" onClick={() => onTab("calendar")} className={dockItem(tab === "calendar")}>
-            <IconCalendar className="h-[22px] w-[22px]" />
-            Calendar
+          <button type="button" onClick={() => onTab("tasks")} className={dockItem(tab === "tasks")}>
+            <IconPlan className="h-[22px] w-[22px]" />
+            Lists
           </button>
           <button
             type="button"
@@ -240,6 +241,7 @@ export function TeamMoreSheet({
   onEditFiles,
   onVault,
   onCalendar,
+  onChecklists,
   onAi,
   onExport,
   onWhatsApp,
@@ -252,6 +254,7 @@ export function TeamMoreSheet({
   onEditFiles?: () => void;
   onVault?: () => void;
   onCalendar?: () => void;
+  onChecklists?: () => void;
   onAi?: () => void;
   onExport?: () => void;
   onWhatsApp?: () => void;
@@ -262,6 +265,7 @@ export function TeamMoreSheet({
     ...(onRawFiles ? [{ label: "Raw files", icon: IconFilm, onClick: onRawFiles }] : []),
     ...(onEditFiles ? [{ label: "Editing files", icon: IconScissors, onClick: onEditFiles }] : []),
     ...(onCalendar ? [{ label: "Calendar", icon: IconCalendar, onClick: onCalendar }] : []),
+    ...(onChecklists ? [{ label: "Checklists", icon: IconPlan, onClick: onChecklists }] : []),
     ...(onReminders ? [{ label: "My notes", icon: IconBell, onClick: onReminders }] : []),
     ...(onVault ? [{ label: "Passwords", icon: IconKey, onClick: onVault }] : []),
     ...(onAi ? [{ label: "AI assistant", icon: IconAi, onClick: onAi }] : []),

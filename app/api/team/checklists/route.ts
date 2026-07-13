@@ -1,35 +1,41 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { getTeamUserFromCookie } from "@/lib/team-auth";
-import { db } from "@/lib/db";
+import { NextRequest, NextResponse } from "next/server";
+import { getTeamFromRequest } from "@/lib/team-auth";
+import { prisma } from "@/lib/db";
 import {
+  getCurrentWeekMeta,
   getTodayKey,
+  parseDayOfWeek,
+  parsePlatforms,
   sortTeamChecklists,
   toTeamDailyChecklistDto,
 } from "@/lib/team-checklists";
 import { teamPersonalNoteOwnerId } from "@/lib/team-personal-notes";
+import { isTeamMemberId } from "@/lib/team-members";
 
-export async function GET(req: Request) {
-  const user = await getTeamUserFromCookie(await cookies());
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(req: NextRequest) {
+  const session = await getTeamFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.role === "viewer") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
-  const { searchParams } = new URL(req.url);
-  const manageMemberId = searchParams.get("manageMemberId");
-  
-  const ownerId = manageMemberId && user.role === "admin" 
-    ? manageMemberId 
-    : teamPersonalNoteOwnerId(user);
+  const manageMemberId = req.nextUrl.searchParams.get("manageMemberId");
+  const ownerId =
+    manageMemberId && session.role === "admin" && isTeamMemberId(manageMemberId)
+      ? manageMemberId
+      : teamPersonalNoteOwnerId(session);
 
+  const week = getCurrentWeekMeta();
   const today = getTodayKey();
 
   try {
-    const rawChecklists = await db.teamDailyChecklist.findMany({
+    const rawChecklists = await prisma.teamDailyChecklist.findMany({
       where: { ownerId },
       include: {
         items: {
           include: {
             completions: {
-              where: { date: today },
+              where: { date: { in: week.dayKeys } },
             },
           },
           orderBy: { sortOrder: "asc" },
@@ -41,31 +47,31 @@ export async function GET(req: Request) {
     const sorted = sortTeamChecklists(rawChecklists);
     const checklists = sorted.map((c) => toTeamDailyChecklistDto(c, today));
 
-    return NextResponse.json({ checklists });
+    return NextResponse.json({ checklists, week });
   } catch (err) {
     console.error("[team/checklists] GET error:", err);
-    return NextResponse.json(
-      { error: "Failed to load checklists" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to load checklists" }, { status: 500 });
   }
 }
 
-export async function POST(req: Request) {
-  const user = await getTeamUserFromCookie(await cookies());
-  if (!user || user.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function POST(req: NextRequest) {
+  const session = await getTeamFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
     const body = (await req.json()) as {
-      ownerId: string;
+      ownerId?: string;
       title?: string;
       description?: string;
       items?: Array<{
-        title: string;
+        title?: string;
         description?: string;
+        instructions?: string;
         dayOfWeek?: string;
+        platforms?: unknown;
       }>;
     };
 
@@ -74,30 +80,42 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Title required" }, { status: 400 });
     }
 
-    if (!body.ownerId?.trim()) {
-      return NextResponse.json({ error: "Owner required" }, { status: 400 });
+    const ownerId = body.ownerId?.trim() ?? "";
+    if (!ownerId || (!isTeamMemberId(ownerId) && ownerId !== "admin")) {
+      return NextResponse.json({ error: "Valid assignee required" }, { status: 400 });
     }
 
-    const checklist = await db.teamDailyChecklist.create({
+    const week = getCurrentWeekMeta();
+    const today = getTodayKey();
+
+    const checklist = await prisma.teamDailyChecklist.create({
       data: {
-        ownerId: body.ownerId,
+        ownerId,
         title,
         description: body.description?.trim() || null,
-        createdBy: teamPersonalNoteOwnerId(user),
+        createdBy: teamPersonalNoteOwnerId(session),
         items: {
-          create: (body.items ?? []).map((item, index) => ({
-            title: item.title.trim(),
-            description: item.description?.trim() || null,
-            dayOfWeek: item.dayOfWeek?.trim() || null,
-            sortOrder: index,
-          })),
+          create: (body.items ?? [])
+            .map((item, index) => {
+              const itemTitle = item.title?.trim();
+              if (!itemTitle) return null;
+              return {
+                title: itemTitle,
+                description: item.description?.trim() || null,
+                instructions: item.instructions?.trim() || null,
+                dayOfWeek: parseDayOfWeek(item.dayOfWeek),
+                platforms: parsePlatforms(item.platforms),
+                sortOrder: index,
+              };
+            })
+            .filter((x): x is NonNullable<typeof x> => x !== null),
         },
       },
       include: {
         items: {
           include: {
             completions: {
-              where: { date: getTodayKey() },
+              where: { date: { in: week.dayKeys } },
             },
           },
         },
@@ -105,13 +123,11 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({
-      checklist: toTeamDailyChecklistDto(checklist, getTodayKey()),
+      checklist: toTeamDailyChecklistDto(checklist, today),
+      week,
     });
   } catch (err) {
     console.error("[team/checklists] POST error:", err);
-    return NextResponse.json(
-      { error: "Failed to create checklist" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create checklist" }, { status: 500 });
   }
 }

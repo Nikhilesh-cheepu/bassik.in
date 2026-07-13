@@ -1458,6 +1458,7 @@ export default function TeamClient() {
         onEditFiles={isContent ? () => setTab("edit-files") : undefined}
         onVault={!isViewer && !isContent ? () => setTab("vault") : undefined}
         onCalendar={!isViewer && !isContent ? () => setTab("calendar") : undefined}
+        onChecklists={!isViewer ? () => setTab("tasks") : undefined}
         onAi={!isContent ? () => setTab("ai") : undefined}
         onExport={!isContent ? exportExcel : undefined}
         onWhatsApp={user.role === "admin" ? shareWhatsApp : undefined}

@@ -1,21 +1,27 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { getTeamUserFromCookie } from "@/lib/team-auth";
-import { db } from "@/lib/db";
+import { NextRequest, NextResponse } from "next/server";
+import { getTeamFromRequest } from "@/lib/team-auth";
+import { prisma } from "@/lib/db";
+import {
+  getTodayKey,
+  parseDayOfWeek,
+  parsePlatforms,
+  toTeamChecklistItemDto,
+} from "@/lib/team-checklists";
 
 export async function PATCH(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getTeamUserFromCookie(await cookies());
-  if (!user || user.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await getTeamFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id } = await params;
 
   try {
-    const item = await db.teamChecklistItem.findUnique({ where: { id } });
+    const item = await prisma.teamChecklistItem.findUnique({ where: { id } });
     if (!item) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
@@ -23,13 +29,19 @@ export async function PATCH(
     const body = (await req.json()) as {
       title?: string;
       description?: string;
+      instructions?: string;
       dayOfWeek?: string;
+      platforms?: unknown;
+      sortOrder?: number;
     };
 
     const updates: {
       title?: string;
       description?: string | null;
+      instructions?: string | null;
       dayOfWeek?: string | null;
+      platforms?: string[];
+      sortOrder?: number;
     } = {};
 
     if (body.title !== undefined) {
@@ -44,49 +56,59 @@ export async function PATCH(
       updates.description = body.description.trim() || null;
     }
 
-    if (body.dayOfWeek !== undefined) {
-      updates.dayOfWeek = body.dayOfWeek.trim() || null;
+    if (body.instructions !== undefined) {
+      updates.instructions = body.instructions.trim() || null;
     }
 
-    const updated = await db.teamChecklistItem.update({
+    if (body.dayOfWeek !== undefined) {
+      updates.dayOfWeek = parseDayOfWeek(body.dayOfWeek);
+    }
+
+    if (body.platforms !== undefined) {
+      updates.platforms = parsePlatforms(body.platforms);
+    }
+
+    if (typeof body.sortOrder === "number" && Number.isFinite(body.sortOrder)) {
+      updates.sortOrder = Math.round(body.sortOrder);
+    }
+
+    const updated = await prisma.teamChecklistItem.update({
       where: { id },
       data: updates,
+      include: { completions: true },
     });
 
-    return NextResponse.json({ item: updated });
+    return NextResponse.json({
+      item: toTeamChecklistItemDto(updated, getTodayKey()),
+    });
   } catch (err) {
     console.error("[team/checklist-items/[id]] PATCH error:", err);
-    return NextResponse.json(
-      { error: "Failed to update item" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to update item" }, { status: 500 });
   }
 }
 
 export async function DELETE(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getTeamUserFromCookie(await cookies());
-  if (!user || user.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await getTeamFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { id } = await params;
 
   try {
-    const item = await db.teamChecklistItem.findUnique({ where: { id } });
+    const item = await prisma.teamChecklistItem.findUnique({ where: { id } });
     if (!item) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });
     }
 
-    await db.teamChecklistItem.delete({ where: { id } });
+    await prisma.teamChecklistItem.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[team/checklist-items/[id]] DELETE error:", err);
-    return NextResponse.json(
-      { error: "Failed to delete item" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to delete item" }, { status: 500 });
   }
 }

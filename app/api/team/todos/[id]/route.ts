@@ -1,23 +1,25 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { getTeamUserFromCookie } from "@/lib/team-auth";
-import { db } from "@/lib/db";
+import { NextRequest, NextResponse } from "next/server";
+import { getTeamFromRequest } from "@/lib/team-auth";
+import { prisma } from "@/lib/db";
 import { toTeamTodoDto } from "@/lib/team-todos";
 import { teamPersonalNoteOwnerId } from "@/lib/team-personal-notes";
 import type { TeamAdTaskStatus } from "@prisma/client";
 
 export async function PATCH(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getTeamUserFromCookie(await cookies());
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await getTeamFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.role === "viewer") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id } = await params;
-  const ownerId = teamPersonalNoteOwnerId(user);
+  const ownerId = teamPersonalNoteOwnerId(session);
 
   try {
-    const todo = await db.teamTodoItem.findUnique({ where: { id } });
+    const todo = await prisma.teamTodoItem.findUnique({ where: { id } });
     if (!todo || todo.ownerId !== ownerId) {
       return NextResponse.json({ error: "Todo not found" }, { status: 404 });
     }
@@ -56,7 +58,7 @@ export async function PATCH(
       }
     }
 
-    const updated = await db.teamTodoItem.update({
+    const updated = await prisma.teamTodoItem.update({
       where: { id },
       data: updates,
     });
@@ -64,36 +66,33 @@ export async function PATCH(
     return NextResponse.json({ todo: toTeamTodoDto(updated) });
   } catch (err) {
     console.error("[team/todos/[id]] PATCH error:", err);
-    return NextResponse.json(
-      { error: "Failed to update todo" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to update todo" }, { status: 500 });
   }
 }
 
 export async function DELETE(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const user = await getTeamUserFromCookie(await cookies());
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await getTeamFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.role === "viewer") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id } = await params;
-  const ownerId = teamPersonalNoteOwnerId(user);
+  const ownerId = teamPersonalNoteOwnerId(session);
 
   try {
-    const todo = await db.teamTodoItem.findUnique({ where: { id } });
+    const todo = await prisma.teamTodoItem.findUnique({ where: { id } });
     if (!todo || todo.ownerId !== ownerId) {
       return NextResponse.json({ error: "Todo not found" }, { status: 404 });
     }
 
-    await db.teamTodoItem.delete({ where: { id } });
+    await prisma.teamTodoItem.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[team/todos/[id]] DELETE error:", err);
-    return NextResponse.json(
-      { error: "Failed to delete todo" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to delete todo" }, { status: 500 });
   }
 }

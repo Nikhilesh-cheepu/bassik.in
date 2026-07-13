@@ -7,6 +7,7 @@ import { TEAM_PAGE, type TeamTab } from "./TeamNav";
 
 const TAB_TITLES: Record<TeamTab, string> = {
   ads: "Ads & creatives",
+  tasks: "Weekly checklists",
   shoots: "Shoot calendar",
   "raw-files": "Raw files",
   "edit-files": "Editing files",
@@ -18,6 +19,7 @@ const TAB_TITLES: Record<TeamTab, string> = {
 
 const MOBILE_TITLES: Record<TeamTab, string> = {
   ads: "Tasks",
+  tasks: "Checklists",
   shoots: "Shoots",
   "raw-files": "Raw files",
   "edit-files": "Editing files",
@@ -141,7 +143,7 @@ export default function TeamPageHeader({
       <div className={TEAM_PAGE}>
         <div className="flex items-center justify-between gap-2 pt-2 pb-1 xl:items-start xl:pt-5 xl:pb-2">
           <div className="min-w-0 flex-1">
-            <h1 className={`truncate font-semibold tracking-tight ${tab === "reminders" || tab === "calendar" || tab === "vault" ? "text-[28px] font-bold xl:text-2xl xl:font-semibold" : "text-base xl:text-2xl"}`}>
+            <h1 className={`truncate font-semibold tracking-tight ${tab === "reminders" || tab === "calendar" || tab === "vault" || tab === "tasks" ? "text-[28px] font-bold xl:text-2xl xl:font-semibold" : "text-base xl:text-2xl"}`}>
               <span className="xl:hidden">{mobileTitle}</span>
               <span className="hidden xl:inline">{desktopTitle}</span>
             </h1>
