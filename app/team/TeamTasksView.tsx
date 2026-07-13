@@ -197,17 +197,10 @@ function ItemRow({
   busy: boolean;
   onComplete: (item: TeamChecklistItemDto, platforms: ChecklistPlatformId[]) => void;
 }) {
-  // Posts: no description/notes on the board — title + platforms only.
-  const notes =
-    item.kind === "posts"
-      ? ""
-      : item.instructions?.trim() || item.description?.trim() || "";
-  const [showNotes, setShowNotes] = useState(false);
   const [draftPlatforms, setDraftPlatforms] = useState<ChecklistPlatformId[]>([]);
 
   useEffect(() => {
     setDraftPlatforms([]);
-    setShowNotes(false);
   }, [item.id, dateKey]);
 
   const toggleDraft = (platform: ChecklistPlatformId) => {
@@ -224,16 +217,8 @@ function ItemRow({
           {item.isOverdue ? (
             <span className="ml-1.5 text-[10px] font-medium uppercase text-amber-300/75">Overdue</span>
           ) : null}
-          {notes ? (
-            <button
-              type="button"
-              onClick={() => setShowNotes((v) => !v)}
-              className="ml-1.5 inline-flex items-center gap-0.5 rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200"
-              aria-label="Note"
-            >
-              <IconNotes className="h-3 w-3" />
-              {countNoteLines(notes)}
-            </button>
+          {item.dueLabel ? (
+            <span className="ml-1.5 text-[11px] text-white/30">{item.dueLabel}</span>
           ) : null}
         </div>
 
@@ -253,7 +238,6 @@ function ItemRow({
           </button>
         </div>
       </div>
-      {showNotes && notes ? <ExpandableText text={notes} className="pb-1 text-[11px] leading-snug text-white/45" /> : null}
     </div>
   );
 }
