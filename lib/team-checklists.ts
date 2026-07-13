@@ -476,12 +476,16 @@ export function buildChecklistBoard(
   const focusStories: TeamChecklistItemDto[] = [];
   const focusAds: TeamChecklistItemDto[] = [];
 
+  // Stories are due the day before the flyer day (Tue board → Wednesday Story).
+  const storyTargetDate = addDaysYmd(focusDate, 1);
+  const storyTargetDayId = dayIdForYmd(storyTargetDate);
+
   for (const list of storyLists) {
     for (const item of list.items) {
       if (!item.dayOfWeek || !isChecklistDayId(item.dayOfWeek)) continue;
-      if (item.dayOfWeek !== day.focusDayId) continue;
+      if (item.dayOfWeek !== storyTargetDayId) continue;
 
-      const targetDate = focusDate;
+      const targetDate = storyTargetDate;
       const done = Boolean(item.completionsByDate[targetDate]);
       focusStories.push({
         ...item,
