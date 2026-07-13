@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   CHECKLIST_PLATFORM_IDS,
   CHECKLIST_PLATFORM_LABELS,
@@ -165,7 +165,8 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
   const [manageMemberId, setManageMemberId] = useState(() =>
     isAdmin ? members.find((m) => m.id === "amit")?.id ?? CHECKLIST_DEFAULT_OWNER_ID : viewerId
   );
-  const [focusDate, setFocusDate] = useState(() => getTodayKey());
+  const [focusDate, setFocusDate] = useState("");
+  const [todayKey, setTodayKey] = useState("");
   const [busyItemId, setBusyItemId] = useState<string | null>(null);
   const [postOpen, setPostOpen] = useState(false);
   const [outletsOpen, setOutletsOpen] = useState(false);
@@ -174,11 +175,18 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
   const [postDescription, setPostDescription] = useState("");
   const [postOutletId, setPostOutletId] = useState("");
 
-  const today = useMemo(() => getTodayKey(), []);
+  const today = todayKey;
   const yesterday = board?.day.yesterday ?? "";
   const tomorrow = board?.day.tomorrow ?? "";
 
+  useEffect(() => {
+    const t = getTodayKey();
+    setTodayKey(t);
+    setFocusDate(t);
+  }, []);
+
   const loadBoard = useCallback(async () => {
+    if (!focusDate) return;
     try {
       const qs = new URLSearchParams({ focusDate });
       if (isAdmin && manageMemberId) qs.set("manageMemberId", manageMemberId);
@@ -194,9 +202,10 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
   }, [focusDate, isAdmin, manageMemberId]);
 
   useEffect(() => {
+    if (!focusDate) return;
     setLoading(true);
     void loadBoard();
-  }, [loadBoard]);
+  }, [loadBoard, focusDate]);
 
   const togglePlatform = async (item: TeamChecklistItemDto, platform: ChecklistPlatformId) => {
     const date = item.targetDate ?? focusDate;

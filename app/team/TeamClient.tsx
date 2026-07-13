@@ -264,7 +264,7 @@ function DateFields({
 }
 
 export default function TeamClient() {
-  const [user, setUser] = useState<TeamUser | null>(() => readCachedTeamUser());
+  const [user, setUser] = useState<TeamUser | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [sessionResolved, setSessionResolved] = useState(false);
   const [password, setPassword] = useState("");
@@ -441,6 +441,9 @@ export default function TeamClient() {
   }, []);
 
   useEffect(() => {
+    // Restore cache only after mount so SSR HTML matches the first client render.
+    const cached = readCachedTeamUser();
+    if (cached) setUser(cached);
     void probeSession();
   }, [probeSession]);
 
