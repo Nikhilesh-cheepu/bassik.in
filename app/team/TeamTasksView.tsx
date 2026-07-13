@@ -45,6 +45,13 @@ const PLATFORMS = ["Instagram", "YouTube", "LinkedIn", "Facebook", "Twitter"];
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 function getWeekDates() {
+  if (typeof window === 'undefined') {
+    return {
+      label: 'This Week',
+      dates: '',
+    };
+  }
+  
   const now = new Date();
   const day = now.getDay();
   const monday = new Date(now);
