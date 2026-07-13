@@ -265,7 +265,7 @@ export function TeamMoreSheet({
     ...(onRawFiles ? [{ label: "Raw files", icon: IconFilm, onClick: onRawFiles }] : []),
     ...(onEditFiles ? [{ label: "Editing files", icon: IconScissors, onClick: onEditFiles }] : []),
     ...(onCalendar ? [{ label: "Calendar", icon: IconCalendar, onClick: onCalendar }] : []),
-    ...(onChecklists ? [{ label: "Checklists", icon: IconPlan, onClick: onChecklists }] : []),
+    ...(onChecklists ? [{ label: "Daily", icon: IconPlan, onClick: onChecklists }] : []),
     ...(onReminders ? [{ label: "My notes", icon: IconBell, onClick: onReminders }] : []),
     ...(onVault ? [{ label: "Passwords", icon: IconKey, onClick: onVault }] : []),
     ...(onAi ? [{ label: "AI assistant", icon: IconAi, onClick: onAi }] : []),

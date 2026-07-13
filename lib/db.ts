@@ -2,8 +2,12 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
+/** Bump when Prisma models/fields change so HMR drops a stale global client. */
+const PRISMA_CLIENT_GENERATION = 2;
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
+  prismaGeneration?: number;
 };
 
 function resolveDatabaseUrl(): string {
@@ -69,6 +73,7 @@ function createPrismaClient() {
 
 function prismaClientIsStale(client: PrismaClient | undefined): boolean {
   if (!client) return false;
+  if (globalForPrisma.prismaGeneration !== PRISMA_CLIENT_GENERATION) return true;
   return typeof (client as PrismaClient & { teamNoteShare?: unknown }).teamNoteShare === "undefined";
 }
 
@@ -78,4 +83,7 @@ if (process.env.NODE_ENV !== "production" && prismaClientIsStale(globalForPrisma
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+  globalForPrisma.prismaGeneration = PRISMA_CLIENT_GENERATION;
+}

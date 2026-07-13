@@ -4,12 +4,11 @@ import { prisma } from "@/lib/db";
 import {
   CHECKLIST_DEFAULT_OWNER_ID,
   defaultStoryItems,
-  HABIT_GROUPS_TITLE,
-  habitsChecklistTitle,
   postsChecklistTitle,
-  SOCIAL_BOARD_PLATFORMS,
   storiesChecklistTitle,
 } from "@/lib/team-checklist-templates";
+import { ensureOutletWeekendPosts } from "@/lib/team-ensure-outlet-posts";
+import { ensureOutletWeeklyAds } from "@/lib/team-ensure-outlet-ads";
 import { teamPersonalNoteOwnerId } from "@/lib/team-personal-notes";
 import { isTeamMemberId } from "@/lib/team-members";
 import { isTeamOutletId, teamOutletLabel } from "@/lib/team-outlets";
@@ -40,49 +39,35 @@ export async function POST(req: NextRequest) {
     const label = teamOutletLabel(outletId);
 
     if (body.disable) {
-      const existing = await prisma.teamDailyChecklist.findFirst({
+      const existingStories = await prisma.teamDailyChecklist.findFirst({
         where: { ownerId, kind: "stories", outletId },
       });
-      if (existing) {
-        await prisma.teamDailyChecklist.delete({ where: { id: existing.id } });
+      if (existingStories) {
+        await prisma.teamDailyChecklist.delete({ where: { id: existingStories.id } });
+      }
+      const existingPosts = await prisma.teamDailyChecklist.findFirst({
+        where: { ownerId, kind: "posts", outletId },
+      });
+      if (existingPosts) {
+        await prisma.teamDailyChecklist.delete({ where: { id: existingPosts.id } });
+      }
+      const existingAds = await prisma.teamDailyChecklist.findFirst({
+        where: { ownerId, kind: "ads", outletId },
+      });
+      if (existingAds) {
+        await prisma.teamDailyChecklist.delete({ where: { id: existingAds.id } });
       }
       return NextResponse.json({ ok: true, disabled: true, outletId });
     }
 
-    // Habits (official groups) — once per owner
-    let habits = await prisma.teamDailyChecklist.findFirst({
-      where: { ownerId, kind: "habits", outletId: null },
-    });
-    if (!habits) {
-      habits = await prisma.teamDailyChecklist.create({
-        data: {
-          ownerId,
-          kind: "habits",
-          title: habitsChecklistTitle(),
-          outletId: null,
-          createdBy,
-          items: {
-            create: [
-              {
-                title: HABIT_GROUPS_TITLE,
-                description: null,
-                instructions: "Scan official groups. If a post is ready, publish on IG + YT.",
-                dayOfWeek: null,
-                platforms: [...SOCIAL_BOARD_PLATFORMS],
-                sortOrder: 0,
-              },
-            ],
-          },
-        },
-      });
-    }
+    // Habits removed from Daily Checklist UI — skip creating new habit lists.
 
-    // Posts bucket — once per owner
-    let posts = await prisma.teamDailyChecklist.findFirst({
+    // General ad-hoc posts bucket — once per owner
+    let generalPosts = await prisma.teamDailyChecklist.findFirst({
       where: { ownerId, kind: "posts", outletId: null },
     });
-    if (!posts) {
-      posts = await prisma.teamDailyChecklist.create({
+    if (!generalPosts) {
+      generalPosts = await prisma.teamDailyChecklist.create({
         data: {
           ownerId,
           kind: "posts",
@@ -122,12 +107,29 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Fri / Sat / Sun posts for outlet (due 4 days before)
+    const outletPosts = await ensureOutletWeekendPosts(prisma, {
+      ownerId,
+      outletId,
+      outletLabel: label,
+      createdBy,
+    });
+
+    // Weekly Mon–Sun ads for outlet
+    const outletAds = await ensureOutletWeeklyAds(prisma, {
+      ownerId,
+      outletId,
+      outletLabel: label,
+      createdBy,
+    });
+
     return NextResponse.json({
       ok: true,
       outletId,
       storiesId: stories.id,
-      habitsId: habits.id,
-      postsId: posts.id,
+      postsId: generalPosts.id,
+      outletPostsId: outletPosts.id,
+      outletAdsId: outletAds.id,
     });
   } catch (err) {
     console.error("[team/checklists/ensure] POST error:", err);

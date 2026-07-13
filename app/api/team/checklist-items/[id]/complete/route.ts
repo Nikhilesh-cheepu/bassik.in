@@ -47,9 +47,10 @@ export async function POST(
 
     const kind = item.checklist.kind;
     const isPost = kind === "posts";
+    const isRecurringPost = isPost && Boolean(item.dayOfWeek);
 
-    // Posts: single completion (use first completion date or today)
-    if (isPost) {
+    // One-shot posts (no dayOfWeek): single completion
+    if (isPost && !isRecurringPost) {
       const existing = item.completions[0] ?? null;
       const date = existing?.date ?? today;
 
@@ -127,7 +128,7 @@ export async function POST(
       });
     }
 
-    // Stories / habits: date-keyed
+    // Stories / habits / recurring weekend posts: date-keyed
     const dateRaw = typeof body.date === "string" ? body.date.trim() : "";
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : today;
 

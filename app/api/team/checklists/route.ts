@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import { prisma } from "@/lib/db";
 import {
-  boardDateWindow,
   buildChecklistBoard,
   getTodayKey,
   isChecklistKind,
@@ -12,25 +11,67 @@ import {
   postsChecklistTitle,
   SOCIAL_BOARD_PLATFORMS,
 } from "@/lib/team-checklist-templates";
+import { ensureOutletWeekendPosts } from "@/lib/team-ensure-outlet-posts";
+import { ensureOutletWeeklyAds } from "@/lib/team-ensure-outlet-ads";
 import { teamPersonalNoteOwnerId } from "@/lib/team-personal-notes";
 import { isTeamMemberId } from "@/lib/team-members";
 import { isTeamOutletId, teamOutletLabel } from "@/lib/team-outlets";
 
-async function loadOwnerChecklists(ownerId: string, dateKeys: string[]) {
+type ChecklistRow = Awaited<ReturnType<typeof loadOwnerChecklists>>[number];
+
+/** Single query — avoid N+1 and double loads (Railway RTT is expensive). */
+async function loadOwnerChecklists(ownerId: string) {
   return prisma.teamDailyChecklist.findMany({
     where: { ownerId },
     include: {
       items: {
-        include: {
-          completions: {
-            where: { date: { in: dateKeys } },
-          },
-        },
+        include: { completions: true },
         orderBy: { sortOrder: "asc" },
       },
     },
     orderBy: { sortOrder: "asc" },
   });
+}
+
+/** Seed missing outlet posts/ads once — skip when already present. */
+async function backfillMissingOutletExtras(
+  rows: ChecklistRow[],
+  ownerId: string,
+  createdBy: string
+): Promise<boolean> {
+  const storyOutlets = [
+    ...new Set(
+      rows
+        .filter((c) => c.kind === "stories" && c.outletId && isTeamOutletId(c.outletId))
+        .map((c) => c.outletId as string)
+    ),
+  ];
+  if (storyOutlets.length === 0) return false;
+
+  const postOutlets = new Set(
+    rows.filter((c) => c.kind === "posts" && c.outletId).map((c) => c.outletId as string)
+  );
+  const adOutlets = new Set(
+    rows.filter((c) => c.kind === "ads" && c.outletId).map((c) => c.outletId as string)
+  );
+
+  const missing = storyOutlets.filter((id) => !postOutlets.has(id) || !adOutlets.has(id));
+  if (missing.length === 0) return false;
+
+  await Promise.all(
+    missing.map(async (outletId) => {
+      const outletLabel = teamOutletLabel(outletId);
+      const jobs: Promise<unknown>[] = [];
+      if (!postOutlets.has(outletId)) {
+        jobs.push(ensureOutletWeekendPosts(prisma, { ownerId, outletId, outletLabel, createdBy }));
+      }
+      if (!adOutlets.has(outletId)) {
+        jobs.push(ensureOutletWeeklyAds(prisma, { ownerId, outletId, outletLabel, createdBy }));
+      }
+      await Promise.all(jobs);
+    })
+  );
+  return true;
 }
 
 export async function GET(req: NextRequest) {
@@ -49,26 +90,17 @@ export async function GET(req: NextRequest) {
   const today = getTodayKey();
   const focusRaw = req.nextUrl.searchParams.get("focusDate")?.trim() ?? today;
   const focusDate = /^\d{4}-\d{2}-\d{2}$/.test(focusRaw) ? focusRaw : today;
-  const dateKeys = boardDateWindow(focusDate);
 
   try {
-    const raw = await loadOwnerChecklists(ownerId, dateKeys);
-    // Posts completions are not date-windowed the same way — reload posts with all completions
-    const posts = raw.find((c) => c.kind === "posts");
-    if (posts) {
-      const fullPosts = await prisma.teamDailyChecklist.findUnique({
-        where: { id: posts.id },
-        include: {
-          items: {
-            include: { completions: true },
-            orderBy: { sortOrder: "asc" },
-          },
-        },
-      });
-      if (fullPosts) {
-        const idx = raw.findIndex((c) => c.id === posts.id);
-        if (idx >= 0) raw[idx] = fullPosts;
-      }
+    let raw = await loadOwnerChecklists(ownerId);
+
+    const didBackfill = await backfillMissingOutletExtras(
+      raw,
+      ownerId,
+      teamPersonalNoteOwnerId(session)
+    );
+    if (didBackfill) {
+      raw = await loadOwnerChecklists(ownerId);
     }
 
     const board = buildChecklistBoard(raw, focusDate);
@@ -110,17 +142,13 @@ export async function POST(req: NextRequest) {
     const ownerId =
       body.ownerId && isTeamMemberId(body.ownerId) ? body.ownerId : CHECKLIST_DEFAULT_OWNER_ID;
     const createdBy = teamPersonalNoteOwnerId(session);
-    const outletLabel =
-      body.outletId && isTeamOutletId(body.outletId) ? teamOutletLabel(body.outletId) : null;
-    const description = [
-      body.description?.trim() || "",
-      outletLabel ? `Outlet: ${outletLabel}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    const outletId =
+      body.outletId && isTeamOutletId(body.outletId) ? body.outletId : null;
+    const outletLabel = outletId ? teamOutletLabel(outletId) : null;
+    const description = body.description?.trim() || null;
 
     let posts = await prisma.teamDailyChecklist.findFirst({
-      where: { ownerId, kind: "posts", outletId: null },
+      where: { ownerId, kind: "posts", outletId },
       include: { items: true },
     });
 
@@ -129,9 +157,9 @@ export async function POST(req: NextRequest) {
         data: {
           ownerId,
           kind: "posts",
-          title: postsChecklistTitle(),
+          title: outletLabel ? `${outletLabel} Posts` : postsChecklistTitle(),
           description: null,
-          outletId: null,
+          outletId,
           createdBy,
         },
         include: { items: true },
@@ -143,7 +171,7 @@ export async function POST(req: NextRequest) {
       data: {
         checklistId: posts.id,
         title,
-        description: description || null,
+        description,
         instructions: body.instructions?.trim() || null,
         dayOfWeek: null,
         platforms: [...SOCIAL_BOARD_PLATFORMS],

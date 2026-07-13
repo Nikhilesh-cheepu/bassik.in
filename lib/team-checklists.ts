@@ -9,17 +9,24 @@ import {
   CHECKLIST_DAY_LABELS,
   CHECKLIST_DEFAULT_OWNER_ID,
   SOCIAL_BOARD_PLATFORMS,
+  WEEKEND_POST_DAY_IDS,
+  WEEKEND_POST_LEAD_DAYS,
   type ChecklistDayId,
   type ChecklistKind,
+  type WeekendPostDayId,
 } from "@/lib/team-checklist-templates";
+import { TEAM_AD_OUTLETS, teamOutletLabel } from "@/lib/team-outlets";
 
 export {
   CHECKLIST_DAY_IDS,
   CHECKLIST_DAY_LABELS,
   CHECKLIST_DEFAULT_OWNER_ID,
   SOCIAL_BOARD_PLATFORMS,
+  WEEKEND_POST_DAY_IDS,
+  WEEKEND_POST_LEAD_DAYS,
   type ChecklistDayId,
   type ChecklistKind,
+  type WeekendPostDayId,
 };
 
 export const CHECKLIST_PLATFORM_IDS = SOCIAL_BOARD_PLATFORMS;
@@ -27,8 +34,11 @@ export const CHECKLIST_PLATFORM_IDS = SOCIAL_BOARD_PLATFORMS;
 export type ChecklistPlatformId = (typeof CHECKLIST_PLATFORM_IDS)[number];
 
 export const CHECKLIST_PLATFORM_LABELS: Record<ChecklistPlatformId, string> = {
-  instagram: "Instagram",
+  meta: "Meta",
   youtube: "YouTube",
+  google: "Google",
+  linkedin: "LinkedIn",
+  x: "X",
 };
 
 const TZ = "Asia/Kolkata";
@@ -74,6 +84,16 @@ export type TeamDailyChecklistDto = {
   updatedAt: string;
 };
 
+export type BoardWeekDay = {
+  date: string;
+  dayId: ChecklistDayId;
+  /** Mon, Tue, … */
+  dayLabel: string;
+  /** 13 Jul */
+  dateLabel: string;
+  isToday: boolean;
+};
+
 export type BoardDayMeta = {
   focusDate: string;
   today: string;
@@ -81,17 +101,59 @@ export type BoardDayMeta = {
   tomorrow: string;
   focusDayId: ChecklistDayId;
   label: string;
+  weekDays: BoardWeekDay[];
+};
+
+export type OutletBoardSection = {
+  outletId: string;
+  outletLabel: string;
+  /** Selected day's stories only (no past overdue backlog). */
+  stories: TeamChecklistItemDto[];
+  openPosts: TeamChecklistItemDto[];
+  /** Selected day's weekly ads. */
+  ads: TeamChecklistItemDto[];
 };
 
 export type ChecklistBoardDto = {
   day: BoardDayMeta;
   enabledOutletIds: string[];
+  outlets: OutletBoardSection[];
+  /** Posts not tied to an enabled outlet */
+  generalPosts: TeamChecklistItemDto[];
+  /** Sticky instructions for Postings / Ads tabs */
+  boardNotes: { postings: string; ads: string };
   overdueStories: TeamChecklistItemDto[];
   focusStories: TeamChecklistItemDto[];
   habit: TeamChecklistItemDto | null;
   openPosts: TeamChecklistItemDto[];
   checklists: TeamDailyChecklistDto[];
 };
+
+export const BOARD_NOTES_CHECKLIST_TITLE = "Daily Checklist Notes";
+
+export function parseBoardNotesDescription(raw: string | null | undefined): {
+  postings: string;
+  ads: string;
+} {
+  if (!raw?.trim()) return { postings: "", ads: "" };
+  try {
+    const parsed = JSON.parse(raw) as { postings?: unknown; ads?: unknown };
+    return {
+      postings: typeof parsed.postings === "string" ? parsed.postings : "",
+      ads: typeof parsed.ads === "string" ? parsed.ads : "",
+    };
+  } catch {
+    // Legacy plain text → postings
+    return { postings: raw, ads: "" };
+  }
+}
+
+export function serializeBoardNotes(notes: { postings: string; ads: string }): string {
+  return JSON.stringify({
+    postings: notes.postings.trim(),
+    ads: notes.ads.trim(),
+  });
+}
 
 export function getTodayKey(now = new Date()): string {
   return now.toLocaleDateString("en-CA", { timeZone: TZ });
@@ -156,31 +218,86 @@ export function storyDueAtMs(targetDateYmd: string): number {
 
 export function storyDueLabel(targetDateYmd: string): string {
   const dueDay = previousDayYmd(targetDateYmd);
-  const dueDayId = dayIdForYmd(dueDay);
   const targetDayId = dayIdForYmd(targetDateYmd);
-  return `${CHECKLIST_DAY_LABELS[targetDayId]} story · due ${CHECKLIST_DAY_LABELS[dueDayId]} 10 PM`;
+  return `${CHECKLIST_DAY_LABELS[targetDayId].slice(0, 3)} ${formatBoardDateLabel(targetDateYmd)} · due ${formatBoardDateLabel(dueDay)} 10 PM`;
 }
 
 export function isStoryOverdue(targetDateYmd: string, now = new Date()): boolean {
   return now.getTime() > storyDueAtMs(targetDateYmd);
 }
 
+/** Weekend post target date → due date (4 days earlier). */
+export function weekendPostDueYmd(targetDateYmd: string): string {
+  return addDaysYmd(targetDateYmd, -WEEKEND_POST_LEAD_DAYS);
+}
+
+export function weekendPostDueAtMs(targetDateYmd: string): number {
+  const dueDay = weekendPostDueYmd(targetDateYmd);
+  const [y, m, d] = dueDay.split("-").map(Number);
+  // 22:00 IST = 16:30 UTC
+  return Date.UTC(y!, m! - 1, d!, 16, 30, 0);
+}
+
+export function weekendPostDueLabel(targetDateYmd: string): string {
+  const dueDay = weekendPostDueYmd(targetDateYmd);
+  const targetDayId = dayIdForYmd(targetDateYmd);
+  return `${CHECKLIST_DAY_LABELS[targetDayId].slice(0, 3)} ${formatBoardDateLabel(targetDateYmd)} · due ${formatBoardDateLabel(dueDay)}`;
+}
+
+export function isWeekendPostOverdue(targetDateYmd: string, now = new Date()): boolean {
+  return now.getTime() > weekendPostDueAtMs(targetDateYmd);
+}
+
+export function isWeekendPostDayId(v: string): v is WeekendPostDayId {
+  return (WEEKEND_POST_DAY_IDS as readonly string[]).includes(v);
+}
+
+export function mondayOfWeekContaining(ymd: string): string {
+  const dayId = dayIdForYmd(ymd);
+  const idx = CHECKLIST_DAY_IDS.indexOf(dayId);
+  return addDaysYmd(ymd, -idx);
+}
+
+export function formatBoardDateLabel(ymd: string): string {
+  const d = parseYmd(ymd);
+  return d.toLocaleDateString("en-GB", {
+    timeZone: "UTC",
+    day: "numeric",
+    month: "short",
+  });
+}
+
+export function buildWeekDays(today: string, weekAnchorYmd = today): BoardWeekDay[] {
+  const monday = mondayOfWeekContaining(weekAnchorYmd);
+  return CHECKLIST_DAY_IDS.map((dayId, i) => {
+    const date = addDaysYmd(monday, i);
+    return {
+      date,
+      dayId,
+      dayLabel: CHECKLIST_DAY_LABELS[dayId].slice(0, 3),
+      dateLabel: formatBoardDateLabel(date),
+      isToday: date === today,
+    };
+  });
+}
+
 export function buildBoardDayMeta(focusDate: string, now = new Date()): BoardDayMeta {
   const today = getTodayKey(now);
+  const focusDayId = dayIdForYmd(focusDate);
+  const weekDays = buildWeekDays(today, today);
+  const focusInWeek = weekDays.find((d) => d.date === focusDate);
+  const label = focusInWeek
+    ? `${CHECKLIST_DAY_LABELS[focusDayId]} · ${focusInWeek.dateLabel}`
+    : `${CHECKLIST_DAY_LABELS[focusDayId]} · ${formatBoardDateLabel(focusDate)}`;
+
   return {
     focusDate,
     today,
     yesterday: addDaysYmd(today, -1),
     tomorrow: addDaysYmd(today, 1),
-    focusDayId: dayIdForYmd(focusDate),
-    label:
-      focusDate === today
-        ? "Today"
-        : focusDate === addDaysYmd(today, -1)
-          ? "Yesterday"
-          : focusDate === addDaysYmd(today, 1)
-            ? "Tomorrow"
-            : focusDate,
+    focusDayId,
+    label,
+    weekDays,
   };
 }
 
@@ -193,15 +310,14 @@ export function lookbackDateKeys(focusDate: string, days = OVERDUE_LOOKBACK_DAYS
 }
 
 export function boardDateWindow(focusDate: string): string[] {
-  const today = focusDate;
+  // Keep the window tight — only the focus week (+ neighbors for due dates).
   const keys = new Set<string>();
-  keys.add(today);
-  keys.add(addDaysYmd(today, -1));
-  keys.add(addDaysYmd(today, 1));
-  for (const k of lookbackDateKeys(today)) keys.add(k);
-  // also include next 7 days for early story targets mapped from dayOfWeek
-  for (let i = 0; i < 7; i++) keys.add(addDaysYmd(today, i));
-  for (let i = 1; i <= 7; i++) keys.add(addDaysYmd(today, -i));
+  const monday = mondayOfWeekContaining(focusDate);
+  for (let i = 0; i < 7; i++) keys.add(addDaysYmd(monday, i));
+  // Weekend posts are due 4 days before Fri/Sat/Sun (Mon/Tue/Wed) — already in week.
+  // Stories due previous day may fall on prior Sunday when focus is Monday.
+  keys.add(addDaysYmd(monday, -1));
+  keys.add(focusDate);
   return [...keys];
 }
 
@@ -223,7 +339,7 @@ export function isChecklistPlatformId(v: string): v is ChecklistPlatformId {
 }
 
 export function isChecklistKind(v: string): v is ChecklistKind {
-  return v === "stories" || v === "posts" || v === "habits";
+  return v === "stories" || v === "posts" || v === "habits" || v === "ads";
 }
 
 export function parsePlatforms(raw: unknown): string[] {
@@ -232,11 +348,10 @@ export function parsePlatforms(raw: unknown): string[] {
   const seen = new Set<string>();
   for (const item of raw) {
     if (typeof item !== "string") continue;
-    const id = item.trim().toLowerCase();
-    if (!isChecklistPlatformId(id) && id !== "instagram" && id !== "youtube") {
-      // only allow board platforms
-      if (!(SOCIAL_BOARD_PLATFORMS as readonly string[]).includes(id)) continue;
-    }
+    let id = item.trim().toLowerCase();
+    // Legacy ids from earlier IG/FB boards
+    if (id === "instagram" || id === "facebook") id = "meta";
+    if (id === "twitter") id = "x";
     if (!(SOCIAL_BOARD_PLATFORMS as readonly string[]).includes(id) || seen.has(id)) continue;
     seen.add(id);
     out.push(id);
@@ -352,56 +467,62 @@ export function buildChecklistBoard(
   const today = day.today;
   const dtos = sortTeamChecklists(checklists).map((c) => toTeamDailyChecklistDto(c, today));
 
-  const storyLists = dtos.filter((c) => c.kind === "stories");
+  const storyLists = dtos.filter((c) => c.kind === "stories" && c.outletId);
   const enabledOutletIds = storyLists
     .map((c) => c.outletId)
     .filter((id): id is string => Boolean(id));
 
   const overdueStories: TeamChecklistItemDto[] = [];
   const focusStories: TeamChecklistItemDto[] = [];
-  const pastDates = lookbackDateKeys(focusDate);
+  const focusAds: TeamChecklistItemDto[] = [];
 
   for (const list of storyLists) {
     for (const item of list.items) {
       if (!item.dayOfWeek || !isChecklistDayId(item.dayOfWeek)) continue;
+      if (item.dayOfWeek !== day.focusDayId) continue;
 
-      // Focus-day stories: item's weekday matches focus date
-      if (item.dayOfWeek === day.focusDayId) {
-        const targetDate = focusDate;
-        const done = Boolean(item.completionsByDate[targetDate]);
-        focusStories.push({
-          ...item,
-          targetDate,
-          dueLabel: storyDueLabel(targetDate),
-          isOverdue: !done && isStoryOverdue(targetDate, now),
-          outletId: list.outletId,
-          outletTitle: list.title,
-          kind: "stories",
-        });
-      }
-
-      // Overdue: any past occurrence of this weekday in lookback, incomplete after due
-      for (const pastDate of pastDates) {
-        if (dayIdForYmd(pastDate) !== item.dayOfWeek) continue;
-        const done = Boolean(item.completionsByDate[pastDate]);
-        if (done || !isStoryOverdue(pastDate, now)) continue;
-        overdueStories.push({
-          ...item,
-          targetDate: pastDate,
-          dueLabel: storyDueLabel(pastDate),
-          isOverdue: true,
-          outletId: list.outletId,
-          outletTitle: list.title,
-          kind: "stories",
-        });
-      }
+      const targetDate = focusDate;
+      const done = Boolean(item.completionsByDate[targetDate]);
+      focusStories.push({
+        ...item,
+        targetDate,
+        dueLabel: storyDueLabel(targetDate),
+        isOverdue: !done && isStoryOverdue(targetDate, now),
+        outletId: list.outletId,
+        outletTitle: list.title,
+        kind: "stories",
+      });
     }
   }
 
-  overdueStories.sort((a, b) => (a.targetDate ?? "").localeCompare(b.targetDate ?? ""));
   focusStories.sort((a, b) => a.sortOrder - b.sortOrder);
 
-  const habits = dtos.find((c) => c.kind === "habits");
+  const adLists = dtos.filter((c) => c.kind === "ads" && c.outletId);
+  const monday = mondayOfWeekContaining(focusDate);
+  for (const list of adLists) {
+    for (const item of list.items) {
+      // Only Fri / Sat / Sun ads — shown on Mon / Tue / Wed (due day)
+      if (!item.dayOfWeek || !isWeekendPostDayId(item.dayOfWeek)) continue;
+      const wantIdx = CHECKLIST_DAY_IDS.indexOf(item.dayOfWeek);
+      const targetDate = addDaysYmd(monday, wantIdx);
+      const dueDate = weekendPostDueYmd(targetDate);
+      if (focusDate !== dueDate) continue;
+      const done = Boolean(item.completionsByDate[targetDate]);
+      if (done) continue;
+      focusAds.push({
+        ...item,
+        targetDate,
+        dueLabel: weekendPostDueLabel(targetDate),
+        isOverdue: isWeekendPostOverdue(targetDate, now),
+        outletId: list.outletId,
+        outletTitle: list.title,
+        kind: "ads",
+      });
+    }
+  }
+  focusAds.sort((a, b) => a.sortOrder - b.sortOrder);
+
+  const habits = dtos.find((c) => c.kind === "habits" && c.title !== BOARD_NOTES_CHECKLIST_TITLE);
   const habitItem = habits?.items[0] ?? null;
   const habit: TeamChecklistItemDto | null = habitItem
     ? {
@@ -413,23 +534,101 @@ export function buildChecklistBoard(
       }
     : null;
 
-  const postsList = dtos.find((c) => c.kind === "posts");
-  const openPosts: TeamChecklistItemDto[] = (postsList?.items ?? [])
-    .filter((item) => Object.keys(item.completionsByDate).length === 0)
-    .map((item) => ({
-      ...item,
-      kind: "posts" as const,
-      outletTitle: postsList?.title,
-    }))
-    .sort((a, b) => b.sortOrder - a.sortOrder);
+  const postLists = dtos.filter((c) => c.kind === "posts");
+  const allOpenPosts: TeamChecklistItemDto[] = [];
+
+  for (const postsList of postLists) {
+    for (const item of postsList.items) {
+      const fromChecklist = postsList.outletId;
+      const fromDesc = outletIdFromPostText(item.description);
+      const outletId = fromChecklist || fromDesc || null;
+
+      // Recurring Fri/Sat/Sun posts — due 4 days before target
+      if (item.dayOfWeek && isWeekendPostDayId(item.dayOfWeek)) {
+        const wantIdx = CHECKLIST_DAY_IDS.indexOf(item.dayOfWeek);
+        const targetDate = addDaysYmd(monday, wantIdx);
+        const dueDate = weekendPostDueYmd(targetDate);
+        const done = Boolean(item.completionsByDate[targetDate]);
+        // Show from due day through post day while incomplete; hide once done
+        if (done) continue;
+        if (focusDate < dueDate || focusDate > targetDate) continue;
+        allOpenPosts.push({
+          ...item,
+          kind: "posts",
+          outletId,
+          outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
+          targetDate,
+          dueLabel: weekendPostDueLabel(targetDate),
+          isOverdue: isWeekendPostOverdue(targetDate, now),
+        });
+        continue;
+      }
+
+      // Ad-hoc one-shot posts
+      if (Object.keys(item.completionsByDate).length > 0) continue;
+      allOpenPosts.push({
+        ...item,
+        kind: "posts",
+        outletId,
+        outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
+      });
+    }
+  }
+  allOpenPosts.sort((a, b) => {
+    const ad = a.targetDate ?? "";
+    const bd = b.targetDate ?? "";
+    if (ad && bd && ad !== bd) return ad.localeCompare(bd);
+    return a.sortOrder - b.sortOrder;
+  });
+
+  const outletOrder: string[] = TEAM_AD_OUTLETS.map((o) => o.id).filter((id) =>
+    enabledOutletIds.includes(id)
+  );
+  // include any enabled ids not in the static list
+  for (const id of enabledOutletIds) {
+    if (!outletOrder.includes(id)) outletOrder.push(id);
+  }
+
+  const outlets: OutletBoardSection[] = outletOrder.map((outletId) => {
+    const outletLabel = teamOutletLabel(outletId);
+    const stories = focusStories.filter((s) => s.outletId === outletId);
+    const openPosts = allOpenPosts.filter((p) => p.outletId === outletId);
+    const ads = focusAds.filter((a) => a.outletId === outletId);
+    return { outletId, outletLabel, stories, openPosts, ads };
+  });
+
+  const generalPosts = allOpenPosts.filter(
+    (p) => !p.outletId || !enabledOutletIds.includes(p.outletId)
+  );
+
+  const notesList = dtos.find((c) => c.kind === "habits" && !c.outletId);
+  const notesReady =
+    notesList &&
+    (notesList.title === BOARD_NOTES_CHECKLIST_TITLE ||
+      Boolean(notesList.description?.trim().startsWith("{")));
+  const boardNotes = notesReady
+    ? parseBoardNotesDescription(notesList.description)
+    : { postings: "", ads: "" };
 
   return {
     day,
     enabledOutletIds,
+    outlets,
+    generalPosts,
+    boardNotes,
     overdueStories,
     focusStories,
     habit,
-    openPosts,
+    openPosts: allOpenPosts,
     checklists: dtos,
   };
+}
+
+function outletIdFromPostText(description: string | null | undefined): string | null {
+  if (!description) return null;
+  const match = description.match(/(?:^|\n)Outlet:\s*(.+?)(?:\n|$)/i);
+  const label = match?.[1]?.trim();
+  if (!label) return null;
+  const hit = TEAM_AD_OUTLETS.find((o) => o.label.toLowerCase() === label.toLowerCase());
+  return hit?.id ?? null;
 }

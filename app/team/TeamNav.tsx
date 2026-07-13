@@ -2,7 +2,7 @@
 
 export const TEAM_TABS = [
   { id: "ads", label: "Ads", short: "Ads & creatives" },
-  { id: "tasks", label: "Checklists", short: "Stories & posts" },
+  { id: "tasks", label: "Daily", short: "Daily Checklist" },
   { id: "shoots", label: "Shoots", short: "Shoot calendar" },
   { id: "raw-files", label: "Raw", short: "Raw files" },
   { id: "edit-files", label: "Edit", short: "Editing files" },
