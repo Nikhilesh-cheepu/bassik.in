@@ -624,6 +624,24 @@ model TeamReminder {
   @@index([createdAt])
 }
 
+/// Personal HQ brain — Apple Notes–style checklist + daily reminders (owner-scoped).
+model TeamBrainItem {
+  id        String   @id @default(cuid())
+  ownerId   String
+  kind      String   // note | reminder
+  body      String
+  tags      String[] @default([])
+  done      Boolean  @default(false)
+  remindOn  String?  // YYYY-MM-DD for reminders
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId, kind])
+  @@index([ownerId, done])
+  @@index([ownerId, remindOn])
+  @@index([createdAt])
+}
+
 /// Personal notes on /team Notes tab — title, outlet, sharing, attachments.
 model TeamPersonalNote {
   id          String   @id @default(cuid())

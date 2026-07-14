@@ -29,6 +29,7 @@ import TeamCalendarView from "./TeamCalendarView";
 import TeamShootsView from "./TeamShootsView";
 import TeamContentFilesView from "./TeamContentFilesView";
 import TeamTasksView from "./TeamTasksView";
+import TeamBrainView from "./TeamBrainView";
 import { canCreateShoots } from "@/lib/team-shoots";
 import { readCachedTeamUser, writeCachedTeamUser } from "@/lib/team-session-cache";
 import { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
@@ -1198,6 +1199,7 @@ export default function TeamClient() {
         hideEditFiles={!isContent}
         hideAds={isContent}
         hideTasks={isViewer}
+        hideBrain={isViewer}
         userLabel={userLabel}
         onLogout={() => void logout()}
       />
@@ -1294,6 +1296,8 @@ export default function TeamClient() {
             viewerId={notesViewerId}
             members={members}
           />
+        ) : tab === "brain" && !isViewer ? (
+          <TeamBrainView />
         ) : tab === "shoots" && !isViewer ? (
           <TeamShootsView
             members={members}
@@ -1462,6 +1466,7 @@ export default function TeamClient() {
         onVault={!isViewer && !isContent ? () => setTab("vault") : undefined}
         onCalendar={!isViewer && !isContent ? () => setTab("calendar") : undefined}
         onChecklists={!isViewer ? () => setTab("tasks") : undefined}
+        onBrain={!isViewer ? () => setTab("brain") : undefined}
         onAi={!isContent ? () => setTab("ai") : undefined}
         onExport={!isContent ? exportExcel : undefined}
         onWhatsApp={user.role === "admin" ? shareWhatsApp : undefined}

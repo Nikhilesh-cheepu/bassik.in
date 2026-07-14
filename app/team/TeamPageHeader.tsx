@@ -8,6 +8,7 @@ import { TEAM_PAGE, type TeamTab } from "./TeamNav";
 const TAB_TITLES: Record<TeamTab, string> = {
   ads: "Ads & creatives",
   tasks: "Daily Checklist",
+  brain: "My Brain",
   shoots: "Shoot calendar",
   "raw-files": "Raw files",
   "edit-files": "Editing files",
@@ -20,7 +21,7 @@ const TAB_TITLES: Record<TeamTab, string> = {
 const MOBILE_TITLES: Record<TeamTab, string> = {
   ads: "Tasks",
   tasks: "Daily",
-
+  brain: "HQ",
   shoots: "Shoots",
   "raw-files": "Raw files",
   "edit-files": "Editing files",
