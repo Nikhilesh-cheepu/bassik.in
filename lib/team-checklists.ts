@@ -44,6 +44,11 @@ export const CHECKLIST_PLATFORM_LABELS: Record<ChecklistPlatformId, string> = {
 const TZ = "Asia/Kolkata";
 /** Rolling window: today + up to 6 prior days of unfinished work (7 days total). */
 const OVERDUE_LOOKBACK_DAYS = 6;
+/**
+ * Board go-live for overdue stacking — ignore synthetic missed work from before
+ * the team started using Daily Checklist (no last-week Jul 8–12 backlog).
+ */
+const OVERDUE_EPOCH_YMD = "2026-07-13";
 
 export type TeamChecklistCompletionDto = {
   date: string;
@@ -195,6 +200,12 @@ export function addDaysYmd(ymd: string, delta: number): string {
   const d = parseYmd(ymd);
   d.setUTCDate(d.getUTCDate() + delta);
   return formatYmdUtc(d);
+}
+
+/** Earliest due date that may stack as overdue on this focus day. */
+function earliestOverdueDueYmd(focusDate: string): string {
+  const windowStart = addDaysYmd(focusDate, -OVERDUE_LOOKBACK_DAYS);
+  return windowStart < OVERDUE_EPOCH_YMD ? OVERDUE_EPOCH_YMD : windowStart;
 }
 
 export function dayIdForYmd(ymd: string): ChecklistDayId {
@@ -477,10 +488,11 @@ export function buildChecklistBoard(
   const focusStories: TeamChecklistItemDto[] = [];
   const focusAds: TeamChecklistItemDto[] = [];
 
-  // Stories due day-before flyer: today = tomorrow's story; unfinished from the past 6 days stack in.
-  // 7-day window total (dueOffset 0..6) — ignore older backlog.
+  // Stories: today = tomorrow's flyer; unfinished stack only from go-live (13 Jul) within 7 days.
+  const overdueDueFloor = earliestOverdueDueYmd(focusDate);
   for (let dueOffset = 0; dueOffset <= OVERDUE_LOOKBACK_DAYS; dueOffset++) {
     const dueDate = addDaysYmd(focusDate, -dueOffset);
+    if (dueDate < overdueDueFloor) continue;
     const targetDate = addDaysYmd(dueDate, 1);
     const targetDayId = dayIdForYmd(targetDate);
 
@@ -529,6 +541,7 @@ export function buildChecklistBoard(
         const targetDate = addDaysYmd(weekMonday, wantIdx);
         const dueDate = weekendPostDueYmd(targetDate);
         if (focusDate < dueDate) continue;
+        if (dueDate < overdueDueFloor) continue;
         const done = Boolean(item.completionsByDate[targetDate]);
         if (done) continue;
         // Stack past the due day until completed (within lookback from due)
@@ -584,6 +597,7 @@ export function buildChecklistBoard(
           const done = Boolean(item.completionsByDate[targetDate]);
           if (done) continue;
           if (focusDate < dueDate) continue;
+          if (dueDate < overdueDueFloor) continue;
           if (focusDate > addDaysYmd(dueDate, OVERDUE_LOOKBACK_DAYS)) continue;
           const pastDue =
             focusDate > targetDate || isWeekendPostOverdue(targetDate, now);
