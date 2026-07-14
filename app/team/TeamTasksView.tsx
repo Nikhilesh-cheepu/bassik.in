@@ -189,6 +189,98 @@ function isItemDone(item: TeamChecklistItemDto, dateKey: string): boolean {
   return Boolean(item.completionsByDate[dateKey]);
 }
 
+function collectBoardPendingItems(
+  board: ChecklistBoardDto,
+  ready: boolean
+): TeamChecklistItemDto[] {
+  const focus = board.day.focusDate;
+  const out: TeamChecklistItemDto[] = [];
+  const seen = new Set<string>();
+  const push = (item: TeamChecklistItemDto) => {
+    if (Boolean(item.creativeReady) !== ready) return;
+    const dateKey = item.targetDate ?? focus;
+    if (isItemDone(item, dateKey)) return;
+    const key = `${item.id}:${dateKey}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(item);
+  };
+  for (const section of board.outlets) {
+    section.stories.forEach(push);
+    section.openPosts.forEach(push);
+    (section.ads ?? []).forEach(push);
+  }
+  (board.generalPosts ?? []).forEach(push);
+  return out;
+}
+
+function collectReadyItems(board: ChecklistBoardDto): TeamChecklistItemDto[] {
+  return collectBoardPendingItems(board, true);
+}
+
+function collectWaitItems(board: ChecklistBoardDto): TeamChecklistItemDto[] {
+  return collectBoardPendingItems(board, false);
+}
+
+function formatReadyGroupLines(items: TeamChecklistItemDto[]): string[] {
+  const lines: string[] = [];
+  const byOutlet = new Map<string, TeamChecklistItemDto[]>();
+  for (const item of items) {
+    const outlet = item.outletTitle || item.outletId || "General";
+    const list = byOutlet.get(outlet) ?? [];
+    list.push(item);
+    byOutlet.set(outlet, list);
+  }
+  for (const [outlet, group] of byOutlet) {
+    lines.push(`*${outlet}*`);
+    for (const item of group) {
+      const due = item.dueLabel ? ` · ${item.dueLabel}` : "";
+      const overdue = item.isOverdue ? " · OVERDUE" : "";
+      lines.push(`• ${item.title}${due}${overdue}`);
+    }
+    lines.push("");
+  }
+  return lines;
+}
+
+function buildAllReadyWhatsAppMessage(items: TeamChecklistItemDto[]): string {
+  return [
+    "✅ Content is READY",
+    "",
+    ...formatReadyGroupLines(items),
+    "Please check the group and update on the website.",
+    "",
+    "— Bassik HQ",
+    "https://bassik.in/team",
+  ].join("\n");
+}
+
+function buildWaitNudgeWhatsAppMessage(
+  items: TeamChecklistItemDto[],
+  fromName?: string
+): string {
+  const overdue = items.filter((i) => i.isOverdue);
+  const waiting = items.filter((i) => !i.isOverdue);
+  const lines: string[] = [
+    "Hey — these creatives are still WAIT / not Ready 🔴",
+    "",
+    "Some are overdue or the deadline is near. Please make them Ready when done so I can post.",
+    "",
+  ];
+  if (overdue.length > 0) {
+    lines.push("*OVERDUE*");
+    lines.push(...formatReadyGroupLines(overdue));
+  }
+  if (waiting.length > 0) {
+    lines.push(overdue.length > 0 ? "*NOT READY / DEADLINE COMING*" : "*NOT READY*");
+    lines.push(...formatReadyGroupLines(waiting));
+  }
+  lines.push("Thanks!");
+  if (fromName) lines.push(`— ${fromName}`);
+  lines.push("https://bassik.in/team");
+  return lines.join("\n");
+}
+
 function CreativeReadyToggle({
   ready,
   canToggle,
@@ -626,8 +718,9 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
   const [notesDraft, setNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
-  const [waReady, setWaReady] = useState<{
-    item: TeamChecklistItemDto;
+  const [waShare, setWaShare] = useState<{
+    title: string;
+    count: number;
     message: string;
   } | null>(null);
   const [waFallbackUrl, setWaFallbackUrl] = useState<string | null>(null);
@@ -706,6 +799,48 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
     await loadBoard();
   };
 
+  const openWhatsAppMessage = (message: string, count: number, title: string) => {
+    setError(null);
+    const url = whatsAppShareUrl(message);
+    setWaFallbackUrl(null);
+    const result = openWhatsAppShareUrl(url);
+    if (result === "popup-blocked" || result === false) {
+      setWaShare({ title, count, message });
+      setWaFallbackUrl(url);
+    }
+  };
+
+  const sendAllReadyWhatsApp = () => {
+    if (!isAdmin || !board) return;
+    const readyItems = collectReadyItems(board);
+    if (readyItems.length === 0) {
+      setError("Mark at least one item Ready (green) first.");
+      return;
+    }
+    openWhatsAppMessage(
+      buildAllReadyWhatsAppMessage(readyItems),
+      readyItems.length,
+      "Ready list for WhatsApp"
+    );
+  };
+
+  const sendWaitNudgeWhatsApp = () => {
+    if (isAdmin || !board) return;
+    const waitItems = collectWaitItems(board);
+    if (waitItems.length === 0) {
+      setError("Nothing on Wait — all greens are Ready.");
+      return;
+    }
+    openWhatsAppMessage(
+      buildWaitNudgeWhatsAppMessage(
+        waitItems,
+        members.find((m) => m.id === viewerId)?.name
+      ),
+      waitItems.length,
+      "Need Ready — WhatsApp"
+    );
+  };
+
   const toggleCreativeReady = async (item: TeamChecklistItemDto, ready: boolean) => {
     if (!isAdmin) return;
     const date = item.targetDate ?? focusDate;
@@ -718,24 +853,6 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
       });
       await readTeamApiJson(res);
       await loadBoard();
-      if (ready) {
-        const outlet = item.outletTitle || item.outletId || "Outlet";
-        const message = [
-          "✅ Content is READY",
-          "",
-          `${outlet} · ${item.title}`,
-          item.dueLabel ? `Schedule: ${item.dueLabel}` : null,
-          "",
-          "Please check the group and update on the website.",
-          "",
-          "— Bassik HQ",
-          "https://bassik.in/team",
-        ]
-          .filter(Boolean)
-          .join("\n");
-        setWaFallbackUrl(null);
-        setWaReady({ item, message });
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update ready status");
     } finally {
@@ -854,6 +971,9 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
     if (aOpen === bOpen) return 0;
     return aOpen ? -1 : 1;
   });
+
+  const readyCount = board ? collectReadyItems(board).length : 0;
+  const waitCount = board ? collectWaitItems(board).length : 0;
 
   if (loading && !board) {
     return (
@@ -1095,7 +1215,38 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
             </div>
           )}
 
-          <div className="mt-6 pb-2 text-center">
+          <div className="mt-6 flex flex-col items-center gap-2.5 pb-2 text-center">
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={sendAllReadyWhatsApp}
+                disabled={readyCount === 0}
+                title={
+                  readyCount === 0
+                    ? "Flip items to Ready (green) first"
+                    : `Send ${readyCount} ready item${readyCount === 1 ? "" : "s"} on WhatsApp`
+                }
+                className="text-[13px] font-medium text-[#25D366]/80 underline decoration-[#25D366]/35 underline-offset-4 hover:text-[#25D366] disabled:cursor-not-allowed disabled:text-white/25 disabled:no-underline"
+              >
+                WhatsApp ready list
+                {readyCount > 0 ? ` (${readyCount})` : ""}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={sendWaitNudgeWhatsApp}
+                disabled={waitCount === 0}
+                title={
+                  waitCount === 0
+                    ? "No Wait items — everything Ready"
+                    : `Ping HQ about ${waitCount} not-ready item${waitCount === 1 ? "" : "s"}`
+                }
+                className="text-[13px] font-medium text-[#25D366]/80 underline decoration-[#25D366]/35 underline-offset-4 hover:text-[#25D366] disabled:cursor-not-allowed disabled:text-white/25 disabled:no-underline"
+              >
+                WhatsApp need ready
+                {waitCount > 0 ? ` (${waitCount})` : ""}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setDoneOpen(true)}
@@ -1297,8 +1448,8 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
         </div>
       ) : null}
 
-      {waReady ? (
-        <div className={TEAM_SHEET_OVERLAY} onClick={() => setWaReady(null)}>
+      {waShare ? (
+        <div className={TEAM_SHEET_OVERLAY} onClick={() => setWaShare(null)}>
           <div
             className={`${TEAM_SHEET_PANEL} max-w-lg space-y-4`}
             onClick={(e) => e.stopPropagation()}
@@ -1308,15 +1459,15 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                 <IconWhatsApp className="h-6 w-6 text-emerald-300" />
               </div>
               <div>
-                <h2 className="text-base font-semibold text-white">Tell the team — Ready</h2>
+                <h2 className="text-base font-semibold text-white">{waShare.title}</h2>
                 <p className="mt-0.5 text-[12px] text-white/45">
-                  {waReady.item.outletTitle || "Outlet"} · {waReady.item.title}
+                  {waShare.count} item{waShare.count === 1 ? "" : "s"} · popup was blocked
                 </p>
               </div>
             </div>
-            <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.06] px-3.5 py-3">
+            <div className="max-h-[40vh] overflow-y-auto rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.06] px-3.5 py-3">
               <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-white/80">
-                {waReady.message}
+                {waShare.message}
               </p>
             </div>
             {waFallbackUrl ? (
@@ -1332,26 +1483,26 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => setWaReady(null)}
+                onClick={() => setWaShare(null)}
                 className="min-h-[48px] flex-1 rounded-xl border border-white/10 text-sm text-white/60"
               >
-                Skip
+                Close
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  const url = whatsAppShareUrl(waReady.message);
+                  const url = whatsAppShareUrl(waShare.message);
                   const result = openWhatsAppShareUrl(url);
                   if (result === "popup-blocked" || result === false) {
                     setWaFallbackUrl(url);
                   } else {
-                    setWaReady(null);
+                    setWaShare(null);
                   }
                 }}
                 className="flex min-h-[48px] flex-[1.4] items-center justify-center gap-2 rounded-xl bg-[#25D366] text-sm font-semibold text-black"
               >
                 <IconWhatsApp className="h-5 w-5" />
-                Send WhatsApp
+                Open WhatsApp
               </button>
             </div>
           </div>
