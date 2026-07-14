@@ -12,6 +12,8 @@ import {
 } from "@/lib/team-checklists";
 import { CHECKLIST_DEFAULT_OWNER_ID } from "@/lib/team-checklist-templates";
 import { TEAM_AD_OUTLETS } from "@/lib/team-outlets";
+import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
+import { whatsAppShareUrl } from "@/lib/team-whatsapp-report";
 import { TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL } from "./TeamNav";
 import {
   IconAds,
@@ -20,6 +22,7 @@ import {
   IconMeta,
   IconNotes,
   IconPostings,
+  IconWhatsApp,
   IconX,
   IconYoutube,
 } from "./TeamIcons";
@@ -186,7 +189,7 @@ function isItemDone(item: TeamChecklistItemDto, dateKey: string): boolean {
   return Boolean(item.completionsByDate[dateKey]);
 }
 
-function CreativeReadyDot({
+function CreativeReadyToggle({
   ready,
   canToggle,
   busy,
@@ -197,22 +200,37 @@ function CreativeReadyDot({
   busy: boolean;
   onToggle?: () => void;
 }) {
-  const className = `h-3 w-3 shrink-0 rounded-full ring-2 ${
+  const label = ready ? "Ready" : "Wait";
+  const base = `inline-flex min-h-11 min-w-[3.25rem] shrink-0 items-center justify-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold uppercase tracking-wide touch-manipulation select-none ${
     ready
-      ? "bg-emerald-400 ring-emerald-400/30"
-      : "bg-red-500 ring-red-500/25"
-  } ${canToggle ? "cursor-pointer hover:scale-110" : ""} ${busy ? "opacity-50" : ""}`;
+      ? "bg-emerald-400/20 text-emerald-200 ring-1 ring-emerald-400/40"
+      : "bg-red-500/20 text-red-200 ring-1 ring-red-400/40"
+  } ${busy ? "opacity-50" : ""}`;
+
+  const dot = (
+    <span
+      className={`h-2.5 w-2.5 rounded-full ${ready ? "bg-emerald-400" : "bg-red-500"}`}
+      aria-hidden
+    />
+  );
 
   if (canToggle && onToggle) {
     return (
       <button
         type="button"
         disabled={busy}
-        onClick={onToggle}
-        title={ready ? "Creatives ready — click to mark not ready" : "Not ready — click to mark ready"}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggle();
+        }}
+        title={ready ? "Creatives ready — tap to mark not ready" : "Not ready — tap to mark ready"}
         aria-label={ready ? "Creatives ready" : "Creatives not ready"}
-        className={className}
-      />
+        className={`${base} active:scale-95`}
+      >
+        {dot}
+        {label}
+      </button>
     );
   }
 
@@ -220,8 +238,11 @@ function CreativeReadyDot({
     <span
       title={ready ? "Creatives ready" : "Creatives not ready"}
       aria-label={ready ? "Creatives ready" : "Creatives not ready"}
-      className={`inline-block ${className}`}
-    />
+      className={base}
+    >
+      {dot}
+      {label}
+    </span>
   );
 }
 
@@ -256,7 +277,7 @@ function ItemRow({
   return (
     <div className="py-1">
       <div className="flex min-h-9 items-center gap-2">
-        <CreativeReadyDot
+        <CreativeReadyToggle
           ready={ready}
           canToggle={isAdmin}
           busy={busy}
@@ -350,7 +371,7 @@ function AdItemRow({
   return (
     <div className="border-b border-white/[0.04] py-2 last:border-0">
       <div className="flex items-start gap-2">
-        <CreativeReadyDot
+        <CreativeReadyToggle
           ready={ready}
           canToggle={isAdmin}
           busy={busy}
@@ -604,6 +625,12 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+  const [doneOpen, setDoneOpen] = useState(false);
+  const [waReady, setWaReady] = useState<{
+    item: TeamChecklistItemDto;
+    message: string;
+  } | null>(null);
+  const [waFallbackUrl, setWaFallbackUrl] = useState<string | null>(null);
 
   const today = todayKey;
   const weekDays = board?.day.weekDays ?? [];
@@ -613,6 +640,18 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
     setTodayKey(t);
     setFocusDate(t);
   }, []);
+
+  // Keep focus on today if somehow shifted to a past day.
+  useEffect(() => {
+    if (!todayKey || !focusDate) return;
+    if (focusDate < todayKey) setFocusDate(todayKey);
+  }, [todayKey, focusDate]);
+
+  useEffect(() => {
+    if (!board?.day.today) return;
+    if (board.day.today !== todayKey) setTodayKey(board.day.today);
+    if (focusDate && focusDate < board.day.today) setFocusDate(board.day.today);
+  }, [board?.day.today, focusDate, todayKey]);
 
   const loadBoard = useCallback(async () => {
     if (!focusDate) return;
@@ -679,6 +718,24 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
       });
       await readTeamApiJson(res);
       await loadBoard();
+      if (ready) {
+        const outlet = item.outletTitle || item.outletId || "Outlet";
+        const message = [
+          "✅ Content is READY",
+          "",
+          `${outlet} · ${item.title}`,
+          item.dueLabel ? `Schedule: ${item.dueLabel}` : null,
+          "",
+          "Please check the group and update on the website.",
+          "",
+          "— Bassik HQ",
+          "https://bassik.in/team",
+        ]
+          .filter(Boolean)
+          .join("\n");
+        setWaFallbackUrl(null);
+        setWaReady({ item, message });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update ready status");
     } finally {
@@ -897,11 +954,13 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                   ? "Stories + weekend posts · Meta · YT · Google · LinkedIn · X"
                   : "Fri/Sat/Sun ads on Mon/Tue/Wed · edit brief anytime"}
                 {" · "}
-                <span className="inline-flex items-center gap-1">
-                  <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
-                  not ready
-                  <span className="ml-1 inline-block h-2 w-2 rounded-full bg-emerald-400" />
-                  ready
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-200">
+                    Wait
+                  </span>
+                  <span className="rounded-full bg-emerald-400/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200">
+                    Ready
+                  </span>
                 </span>
               </p>
             </div>
@@ -1037,6 +1096,19 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
               )}
             </div>
           )}
+
+          <div className="mt-6 pb-2 text-center">
+            <button
+              type="button"
+              onClick={() => setDoneOpen(true)}
+              className="text-[13px] font-medium text-white/45 underline decoration-white/20 underline-offset-4 hover:text-white/70"
+            >
+              View done list
+              {(board?.doneItems?.length ?? 0) > 0
+                ? ` (${board?.doneItems?.length})`
+                : ""}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1180,6 +1252,109 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                   {savingNotes ? "Saving…" : "Save notes"}
                 </button>
               ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {doneOpen ? (
+        <div className={TEAM_SHEET_OVERLAY} onClick={() => setDoneOpen(false)}>
+          <div className={`${TEAM_SHEET_PANEL} max-w-lg space-y-3`} onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-base font-semibold text-white">Done list</h2>
+            <p className="text-[12px] text-white/40">Recently completed stories, posts & ads.</p>
+            {(board?.doneItems?.length ?? 0) === 0 ? (
+              <p className="py-8 text-center text-[13px] text-white/35">Nothing marked done yet.</p>
+            ) : (
+              <ul className="max-h-[55vh] space-y-2 overflow-y-auto">
+                {(board?.doneItems ?? [])
+                  .filter((d) =>
+                    mode === "ads" ? d.kind === "ads" : d.kind === "stories" || d.kind === "posts"
+                  )
+                  .map((d) => (
+                    <li
+                      key={`${d.id}-${d.targetDate}-${d.kind}`}
+                      className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[13px] font-medium text-white/88">{d.title}</span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-300/70">
+                          Done
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-white/40">
+                        {[d.outletTitle, d.kind, d.targetDate].filter(Boolean).join(" · ")}
+                      </p>
+                    </li>
+                  ))}
+              </ul>
+            )}
+            <button
+              type="button"
+              onClick={() => setDoneOpen(false)}
+              className="w-full rounded-xl border border-white/10 py-3 text-sm text-white/60"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {waReady ? (
+        <div className={TEAM_SHEET_OVERLAY} onClick={() => setWaReady(null)}>
+          <div
+            className={`${TEAM_SHEET_PANEL} max-w-lg space-y-4`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-400/15 ring-1 ring-emerald-400/30">
+                <IconWhatsApp className="h-6 w-6 text-emerald-300" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold text-white">Tell the team — Ready</h2>
+                <p className="mt-0.5 text-[12px] text-white/45">
+                  {waReady.item.outletTitle || "Outlet"} · {waReady.item.title}
+                </p>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.06] px-3.5 py-3">
+              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-white/80">
+                {waReady.message}
+              </p>
+            </div>
+            {waFallbackUrl ? (
+              <a
+                href={waFallbackUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-center text-[13px] font-medium text-emerald-300 underline"
+              >
+                Tap here if WhatsApp didn&apos;t open
+              </a>
+            ) : null}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setWaReady(null)}
+                className="min-h-[48px] flex-1 rounded-xl border border-white/10 text-sm text-white/60"
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = whatsAppShareUrl(waReady.message);
+                  const result = openWhatsAppShareUrl(url);
+                  if (result === "popup-blocked" || result === false) {
+                    setWaFallbackUrl(url);
+                  } else {
+                    setWaReady(null);
+                  }
+                }}
+                className="flex min-h-[48px] flex-[1.4] items-center justify-center gap-2 rounded-xl bg-[#25D366] text-sm font-semibold text-black"
+              >
+                <IconWhatsApp className="h-5 w-5" />
+                Send WhatsApp
+              </button>
             </div>
           </div>
         </div>

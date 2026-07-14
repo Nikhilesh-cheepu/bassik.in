@@ -132,6 +132,8 @@ export type ChecklistBoardDto = {
   generalPosts: TeamChecklistItemDto[];
   /** Sticky instructions for Postings / Ads tabs */
   boardNotes: { postings: string; ads: string };
+  /** Recently completed items (summary popup). */
+  doneItems: TeamChecklistItemDto[];
   overdueStories: TeamChecklistItemDto[];
   focusStories: TeamChecklistItemDto[];
   habit: TeamChecklistItemDto | null;
@@ -283,10 +285,11 @@ export function formatBoardDateLabel(ymd: string): string {
   });
 }
 
-export function buildWeekDays(today: string, weekAnchorYmd = today): BoardWeekDay[] {
-  const monday = mondayOfWeekContaining(weekAnchorYmd);
-  return CHECKLIST_DAY_IDS.map((dayId, i) => {
-    const date = addDaysYmd(monday, i);
+export function buildWeekDays(today: string, _weekAnchorYmd = today): BoardWeekDay[] {
+  // Today + next 7 days only (no past dates on the strip).
+  return Array.from({ length: 8 }, (_, i) => {
+    const date = addDaysYmd(today, i);
+    const dayId = dayIdForYmd(date);
     return {
       date,
       dayId,
@@ -299,15 +302,17 @@ export function buildWeekDays(today: string, weekAnchorYmd = today): BoardWeekDa
 
 export function buildBoardDayMeta(focusDate: string, now = new Date()): BoardDayMeta {
   const today = getTodayKey(now);
-  const focusDayId = dayIdForYmd(focusDate);
+  // Never keep focus in the past — snap to today.
+  const safeFocus = focusDate < today ? today : focusDate;
+  const focusDayId = dayIdForYmd(safeFocus);
   const weekDays = buildWeekDays(today, today);
-  const focusInWeek = weekDays.find((d) => d.date === focusDate);
+  const focusInWeek = weekDays.find((d) => d.date === safeFocus);
   const label = focusInWeek
     ? `${CHECKLIST_DAY_LABELS[focusDayId]} · ${focusInWeek.dateLabel}`
-    : `${CHECKLIST_DAY_LABELS[focusDayId]} · ${formatBoardDateLabel(focusDate)}`;
+    : `${CHECKLIST_DAY_LABELS[focusDayId]} · ${formatBoardDateLabel(safeFocus)}`;
 
   return {
-    focusDate,
+    focusDate: safeFocus,
     today,
     yesterday: addDaysYmd(today, -1),
     tomorrow: addDaysYmd(today, 1),
@@ -511,6 +516,7 @@ export function buildChecklistBoard(
 ): ChecklistBoardDto {
   const day = buildBoardDayMeta(focusDate, now);
   const today = day.today;
+  const focus = day.focusDate;
   const dtos = sortTeamChecklists(checklists).map((c) => toTeamDailyChecklistDto(c, today));
 
   const storyLists = dtos.filter((c) => c.kind === "stories" && c.outletId);
@@ -521,11 +527,12 @@ export function buildChecklistBoard(
   const overdueStories: TeamChecklistItemDto[] = [];
   const focusStories: TeamChecklistItemDto[] = [];
   const focusAds: TeamChecklistItemDto[] = [];
+  const doneItems: TeamChecklistItemDto[] = [];
 
-  // Stories: today = tomorrow's flyer; unfinished stack only from go-live (13 Jul) within 7 days.
-  const overdueDueFloor = earliestOverdueDueYmd(focusDate);
+  // Stories: today = tomorrow's flyer; unfinished stack only from go-live within 7 days.
+  const overdueDueFloor = earliestOverdueDueYmd(focus);
   for (let dueOffset = 0; dueOffset <= OVERDUE_LOOKBACK_DAYS; dueOffset++) {
-    const dueDate = addDaysYmd(focusDate, -dueOffset);
+    const dueDate = addDaysYmd(focus, -dueOffset);
     if (dueDate < overdueDueFloor) continue;
     const targetDate = addDaysYmd(dueDate, 1);
     const targetDayId = dayIdForYmd(targetDate);
@@ -536,19 +543,24 @@ export function buildChecklistBoard(
         if (item.dayOfWeek !== targetDayId) continue;
 
         const done = Boolean(item.completionsByDate[targetDate]);
-        if (done) continue;
-
-        const pastDue = dueOffset > 0 || isStoryOverdue(targetDate, now);
-        const row: TeamChecklistItemDto = {
+        const rowBase = {
           ...item,
           targetDate,
           dueLabel: storyDueLabel(targetDate),
-          isOverdue: pastDue,
           creativeReady: isCreativeReadyForDate(item.readyDates, targetDate),
           outletId: list.outletId,
           outletTitle: list.title,
-          kind: "stories",
+          kind: "stories" as const,
         };
+        if (done) {
+          if (dueOffset === 0 || dueDate >= overdueDueFloor) {
+            doneItems.push({ ...rowBase, isOverdue: false });
+          }
+          continue;
+        }
+
+        const pastDue = dueOffset > 0 || isStoryOverdue(targetDate, now);
+        const row: TeamChecklistItemDto = { ...rowBase, isOverdue: pastDue };
         focusStories.push(row);
         if (pastDue) overdueStories.push(row);
       }
@@ -565,7 +577,7 @@ export function buildChecklistBoard(
   overdueStories.sort((a, b) => (a.targetDate ?? "").localeCompare(b.targetDate ?? ""));
 
   const adLists = dtos.filter((c) => c.kind === "ads" && c.outletId);
-  const monday = mondayOfWeekContaining(focusDate);
+  const monday = mondayOfWeekContaining(focus);
   // Only this week + prior week (stays inside ~7-day overdue window)
   const adWeekMondays = [monday, addDaysYmd(monday, -7)];
   for (const weekMonday of adWeekMondays) {
@@ -575,22 +587,27 @@ export function buildChecklistBoard(
         const wantIdx = CHECKLIST_DAY_IDS.indexOf(item.dayOfWeek);
         const targetDate = addDaysYmd(weekMonday, wantIdx);
         const dueDate = weekendPostDueYmd(targetDate);
-        if (focusDate < dueDate) continue;
+        if (focus < dueDate) continue;
         if (dueDate < overdueDueFloor) continue;
         const done = Boolean(item.completionsByDate[targetDate]);
-        if (done) continue;
-        // Stack past the due day until completed (within lookback from due)
-        if (focusDate > addDaysYmd(dueDate, OVERDUE_LOOKBACK_DAYS)) continue;
-        const pastDue = focusDate > dueDate || isWeekendPostOverdue(targetDate, now);
-        focusAds.push({
+        const pastDue = focus > dueDate || isWeekendPostOverdue(targetDate, now);
+        const rowBase = {
           ...item,
           targetDate,
           dueLabel: weekendPostDueLabel(targetDate),
-          isOverdue: pastDue,
           creativeReady: isCreativeReadyForDate(item.readyDates, targetDate),
           outletId: list.outletId,
           outletTitle: list.title,
-          kind: "ads",
+          kind: "ads" as const,
+        };
+        if (done) {
+          doneItems.push({ ...rowBase, isOverdue: false });
+          continue;
+        }
+        if (focus > addDaysYmd(dueDate, OVERDUE_LOOKBACK_DAYS)) continue;
+        focusAds.push({
+          ...rowBase,
+          isOverdue: pastDue,
         });
       }
     }
@@ -607,10 +624,10 @@ export function buildChecklistBoard(
   const habit: TeamChecklistItemDto | null = habitItem
     ? {
         ...habitItem,
-        targetDate: focusDate,
+        targetDate: focus,
         kind: "habits",
-        completedToday: Boolean(habitItem.completionsByDate[focusDate]),
-        completedPlatformsToday: habitItem.completionsByDate[focusDate]?.completedPlatforms ?? [],
+        completedToday: Boolean(habitItem.completionsByDate[focus]),
+        completedPlatformsToday: habitItem.completionsByDate[focus]?.completedPlatforms ?? [],
       }
     : null;
 
@@ -631,34 +648,51 @@ export function buildChecklistBoard(
           const targetDate = addDaysYmd(weekMonday, wantIdx);
           const dueDate = weekendPostDueYmd(targetDate);
           const done = Boolean(item.completionsByDate[targetDate]);
-          if (done) continue;
-          if (focusDate < dueDate) continue;
+          if (focus < dueDate) continue;
           if (dueDate < overdueDueFloor) continue;
-          if (focusDate > addDaysYmd(dueDate, OVERDUE_LOOKBACK_DAYS)) continue;
-          const pastDue =
-            focusDate > targetDate || isWeekendPostOverdue(targetDate, now);
-          allOpenPosts.push({
+          const rowBase = {
             ...item,
-            kind: "posts",
+            kind: "posts" as const,
             outletId,
             outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
             targetDate,
             dueLabel: weekendPostDueLabel(targetDate),
-            isOverdue: pastDue,
             creativeReady: isCreativeReadyForDate(item.readyDates, targetDate),
+          };
+          if (done) {
+            doneItems.push({ ...rowBase, isOverdue: false });
+            continue;
+          }
+          if (focus > addDaysYmd(dueDate, OVERDUE_LOOKBACK_DAYS)) continue;
+          const pastDue = focus > targetDate || isWeekendPostOverdue(targetDate, now);
+          allOpenPosts.push({
+            ...rowBase,
+            isOverdue: pastDue,
           });
         }
         continue;
       }
 
       // Ad-hoc one-shot posts
-      if (Object.keys(item.completionsByDate).length > 0) continue;
+      if (Object.keys(item.completionsByDate).length > 0) {
+        const doneDate = Object.keys(item.completionsByDate).sort().pop()!;
+        doneItems.push({
+          ...item,
+          kind: "posts",
+          outletId,
+          outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
+          targetDate: doneDate,
+          creativeReady: isCreativeReadyForDate(item.readyDates, doneDate),
+          isOverdue: false,
+        });
+        continue;
+      }
       allOpenPosts.push({
         ...item,
         kind: "posts",
         outletId,
         outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
-        creativeReady: isCreativeReadyForDate(item.readyDates, focusDate),
+        creativeReady: isCreativeReadyForDate(item.readyDates, focus),
       });
     }
   }
@@ -668,6 +702,8 @@ export function buildChecklistBoard(
     if (ad && bd && ad !== bd) return ad.localeCompare(bd);
     return a.sortOrder - b.sortOrder;
   });
+
+  doneItems.sort((a, b) => (b.targetDate ?? "").localeCompare(a.targetDate ?? ""));
 
   const outletOrder: string[] = TEAM_AD_OUTLETS.map((o) => o.id).filter((id) =>
     enabledOutletIds.includes(id)
@@ -704,6 +740,7 @@ export function buildChecklistBoard(
     outlets,
     generalPosts,
     boardNotes,
+    doneItems,
     overdueStories,
     focusStories,
     habit,
