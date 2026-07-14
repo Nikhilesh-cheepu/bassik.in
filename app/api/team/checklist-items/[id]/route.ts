@@ -5,6 +5,7 @@ import {
   getTodayKey,
   parseDayOfWeek,
   parsePlatforms,
+  readyDatesFromJson,
   toTeamChecklistItemDto,
 } from "@/lib/team-checklists";
 
@@ -33,6 +34,9 @@ export async function PATCH(
       dayOfWeek?: string;
       platforms?: unknown;
       sortOrder?: number;
+      /** Mark creatives ready (green) for this target date */
+      creativeReady?: boolean;
+      date?: string;
     };
 
     const updates: {
@@ -42,6 +46,7 @@ export async function PATCH(
       dayOfWeek?: string | null;
       platforms?: string[];
       sortOrder?: number;
+      readyDates?: string[];
     } = {};
 
     if (body.title !== undefined) {
@@ -70,6 +75,19 @@ export async function PATCH(
 
     if (typeof body.sortOrder === "number" && Number.isFinite(body.sortOrder)) {
       updates.sortOrder = Math.round(body.sortOrder);
+    }
+
+    if (typeof body.creativeReady === "boolean") {
+      const dateRaw = typeof body.date === "string" ? body.date.trim() : getTodayKey();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)) {
+        return NextResponse.json({ error: "Valid date required" }, { status: 400 });
+      }
+      const current = readyDatesFromJson(item.readyDates);
+      if (body.creativeReady) {
+        updates.readyDates = current.includes(dateRaw) ? current : [...current, dateRaw];
+      } else {
+        updates.readyDates = current.filter((d) => d !== dateRaw);
+      }
     }
 
     const updated = await prisma.teamChecklistItem.update({

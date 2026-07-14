@@ -186,18 +186,62 @@ function isItemDone(item: TeamChecklistItemDto, dateKey: string): boolean {
   return Boolean(item.completionsByDate[dateKey]);
 }
 
+function CreativeReadyDot({
+  ready,
+  canToggle,
+  busy,
+  onToggle,
+}: {
+  ready: boolean;
+  canToggle: boolean;
+  busy: boolean;
+  onToggle?: () => void;
+}) {
+  const className = `h-3 w-3 shrink-0 rounded-full ring-2 ${
+    ready
+      ? "bg-emerald-400 ring-emerald-400/30"
+      : "bg-red-500 ring-red-500/25"
+  } ${canToggle ? "cursor-pointer hover:scale-110" : ""} ${busy ? "opacity-50" : ""}`;
+
+  if (canToggle && onToggle) {
+    return (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onToggle}
+        title={ready ? "Creatives ready — click to mark not ready" : "Not ready — click to mark ready"}
+        aria-label={ready ? "Creatives ready" : "Creatives not ready"}
+        className={className}
+      />
+    );
+  }
+
+  return (
+    <span
+      title={ready ? "Creatives ready" : "Creatives not ready"}
+      aria-label={ready ? "Creatives ready" : "Creatives not ready"}
+      className={`inline-block ${className}`}
+    />
+  );
+}
+
 function ItemRow({
   item,
   dateKey,
   busy,
+  isAdmin,
   onComplete,
+  onToggleReady,
 }: {
   item: TeamChecklistItemDto;
   dateKey: string;
   busy: boolean;
+  isAdmin: boolean;
   onComplete: (item: TeamChecklistItemDto, platforms: ChecklistPlatformId[]) => void;
+  onToggleReady: (item: TeamChecklistItemDto, ready: boolean) => void;
 }) {
   const [draftPlatforms, setDraftPlatforms] = useState<ChecklistPlatformId[]>([]);
+  const ready = Boolean(item.creativeReady);
 
   useEffect(() => {
     setDraftPlatforms([]);
@@ -212,6 +256,12 @@ function ItemRow({
   return (
     <div className="py-1">
       <div className="flex min-h-9 items-center gap-2">
+        <CreativeReadyDot
+          ready={ready}
+          canToggle={isAdmin}
+          busy={busy}
+          onToggle={() => onToggleReady(item, !ready)}
+        />
         <div className="min-w-0 flex-1 truncate">
           <span className="text-[13px] font-medium text-white/88">{item.title}</span>
           {item.isOverdue ? (
@@ -249,6 +299,7 @@ function AdItemRow({
   isAdmin,
   onComplete,
   onSaveDescription,
+  onToggleReady,
 }: {
   item: TeamChecklistItemDto;
   dateKey: string;
@@ -256,8 +307,10 @@ function AdItemRow({
   isAdmin: boolean;
   onComplete: (item: TeamChecklistItemDto, platforms: ChecklistPlatformId[]) => void;
   onSaveDescription: (item: TeamChecklistItemDto, description: string) => Promise<void>;
+  onToggleReady: (item: TeamChecklistItemDto, ready: boolean) => void;
 }) {
   const done = isItemDone(item, dateKey);
+  const ready = Boolean(item.creativeReady);
   const [draftPlatforms, setDraftPlatforms] = useState<ChecklistPlatformId[]>([]);
   const [editing, setEditing] = useState(false);
   const [desc, setDesc] = useState(item.description ?? "");
@@ -297,6 +350,12 @@ function AdItemRow({
   return (
     <div className="border-b border-white/[0.04] py-2 last:border-0">
       <div className="flex items-start gap-2">
+        <CreativeReadyDot
+          ready={ready}
+          canToggle={isAdmin}
+          busy={busy}
+          onToggle={() => onToggleReady(item, !ready)}
+        />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
             <span className="text-[13px] font-medium text-white/90">{item.title}</span>
@@ -371,12 +430,16 @@ function OutletSection({
   section,
   focusDate,
   busyItemId,
+  isAdmin,
   onComplete,
+  onToggleReady,
 }: {
   section: OutletBoardSection;
   focusDate: string;
   busyItemId: string | null;
+  isAdmin: boolean;
   onComplete: (item: TeamChecklistItemDto, platforms: ChecklistPlatformId[]) => void;
+  onToggleReady: (item: TeamChecklistItemDto, ready: boolean) => void;
 }) {
   const pendingStories = section.stories.filter((s) => !isItemDone(s, s.targetDate ?? focusDate));
   const pendingPosts = section.openPosts;
@@ -447,7 +510,9 @@ function OutletSection({
             item={item}
             dateKey={item.targetDate ?? focusDate}
             busy={busyItemId === item.id}
+            isAdmin={isAdmin}
             onComplete={onComplete}
+            onToggleReady={onToggleReady}
           />
         ))}
       </div>
@@ -462,6 +527,7 @@ function AdsOutletSection({
   isAdmin,
   onComplete,
   onSaveDescription,
+  onToggleReady,
 }: {
   section: OutletBoardSection;
   focusDate: string;
@@ -469,6 +535,7 @@ function AdsOutletSection({
   isAdmin: boolean;
   onComplete: (item: TeamChecklistItemDto, platforms: ChecklistPlatformId[]) => void;
   onSaveDescription: (item: TeamChecklistItemDto, description: string) => Promise<void>;
+  onToggleReady: (item: TeamChecklistItemDto, ready: boolean) => void;
 }) {
   const ads = section.ads ?? [];
   const pending = ads.filter((a) => !isItemDone(a, a.targetDate ?? focusDate));
@@ -509,6 +576,7 @@ function AdsOutletSection({
             isAdmin={isAdmin}
             onComplete={onComplete}
             onSaveDescription={onSaveDescription}
+            onToggleReady={onToggleReady}
           />
         ))}
       </div>
@@ -597,6 +665,25 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
     });
     await readTeamApiJson(res);
     await loadBoard();
+  };
+
+  const toggleCreativeReady = async (item: TeamChecklistItemDto, ready: boolean) => {
+    if (!isAdmin) return;
+    const date = item.targetDate ?? focusDate;
+    setBusyItemId(item.id);
+    try {
+      const res = await fetch(`/api/team/checklist-items/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ creativeReady: ready, date }),
+      });
+      await readTeamApiJson(res);
+      await loadBoard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update ready status");
+    } finally {
+      setBusyItemId(null);
+    }
   };
 
   const openBoardNotes = () => {
@@ -809,6 +896,13 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                 {mode === "postings"
                   ? "Stories + weekend posts · Meta · YT · Google · LinkedIn · X"
                   : "Fri/Sat/Sun ads on Mon/Tue/Wed · edit brief anytime"}
+                {" · "}
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
+                  not ready
+                  <span className="ml-1 inline-block h-2 w-2 rounded-full bg-emerald-400" />
+                  ready
+                </span>
               </p>
             </div>
             {isAdmin ? (
@@ -898,7 +992,9 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                       section={section}
                       focusDate={focusDate}
                       busyItemId={busyItemId}
+                      isAdmin={isAdmin}
                       onComplete={markComplete}
+                      onToggleReady={toggleCreativeReady}
                     />
                   ))}
 
@@ -916,7 +1012,9 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                             item={item}
                             dateKey={focusDate}
                             busy={busyItemId === item.id}
+                            isAdmin={isAdmin}
                             onComplete={markComplete}
+                            onToggleReady={toggleCreativeReady}
                           />
                         ))}
                       </div>
@@ -933,6 +1031,7 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                     isAdmin={isAdmin}
                     onComplete={markComplete}
                     onSaveDescription={saveAdDescription}
+                    onToggleReady={toggleCreativeReady}
                   />
                 ))
               )}

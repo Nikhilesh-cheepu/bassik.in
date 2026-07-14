@@ -869,6 +869,8 @@ model TeamChecklistItem {
   instructions String? // Team leader instructions
   dayOfWeek   String?  // mon | tue | wed | thu | fri | sat | sun | null (for any day)
   platforms   Json?    // ["instagram", "youtube", "linkedin"] - platforms to post on
+  /// Target dates (YYYY-MM-DD) where admin marked creatives ready (green) for Amit.
+  readyDates  Json?
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
 

@@ -68,6 +68,10 @@ export type TeamChecklistItemDto = {
   completionsByDate: Record<string, TeamChecklistCompletionDto>;
   completedToday: boolean;
   completedPlatformsToday: string[];
+  /** Target dates where admin marked creatives ready (green). */
+  readyDates: string[];
+  /** For this row's targetDate — creatives approved for Amit to post. */
+  creativeReady?: boolean;
   /** Story target date or habit/post date this row is about */
   targetDate?: string;
   dueLabel?: string;
@@ -375,6 +379,29 @@ export function platformsFromJson(raw: Prisma.JsonValue | null | undefined): str
   return parsePlatforms(raw);
 }
 
+/** Dates where admin marked creatives ready (green) for Amit. */
+export function readyDatesFromJson(raw: Prisma.JsonValue | null | undefined): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const d = item.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || seen.has(d)) continue;
+    seen.add(d);
+    out.push(d);
+  }
+  return out;
+}
+
+export function isCreativeReadyForDate(
+  readyDates: string[] | null | undefined,
+  dateKey: string | null | undefined
+): boolean {
+  if (!dateKey || !readyDates?.length) return false;
+  return readyDates.includes(dateKey);
+}
+
 export function parseDayOfWeek(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const v = raw.trim().toLowerCase();
@@ -401,7 +428,8 @@ export function toTeamChecklistItemDto(
     completionsByDate[c.date] = completionDto(c);
   }
   const todayRow = completionsByDate[today];
-  return {
+  const readyDates = readyDatesFromJson(item.readyDates);
+  const merged = {
     id: item.id,
     checklistId: item.checklistId,
     title: item.title,
@@ -415,7 +443,13 @@ export function toTeamChecklistItemDto(
     completionsByDate,
     completedToday: Boolean(todayRow),
     completedPlatformsToday: todayRow?.completedPlatforms ?? [],
+    readyDates,
     ...extras,
+  };
+  const dateKey = merged.targetDate ?? today;
+  return {
+    ...merged,
+    creativeReady: isCreativeReadyForDate(readyDates, dateKey),
   };
 }
 
@@ -510,6 +544,7 @@ export function buildChecklistBoard(
           targetDate,
           dueLabel: storyDueLabel(targetDate),
           isOverdue: pastDue,
+          creativeReady: isCreativeReadyForDate(item.readyDates, targetDate),
           outletId: list.outletId,
           outletTitle: list.title,
           kind: "stories",
@@ -552,6 +587,7 @@ export function buildChecklistBoard(
           targetDate,
           dueLabel: weekendPostDueLabel(targetDate),
           isOverdue: pastDue,
+          creativeReady: isCreativeReadyForDate(item.readyDates, targetDate),
           outletId: list.outletId,
           outletTitle: list.title,
           kind: "ads",
@@ -609,6 +645,7 @@ export function buildChecklistBoard(
             targetDate,
             dueLabel: weekendPostDueLabel(targetDate),
             isOverdue: pastDue,
+            creativeReady: isCreativeReadyForDate(item.readyDates, targetDate),
           });
         }
         continue;
@@ -621,6 +658,7 @@ export function buildChecklistBoard(
         kind: "posts",
         outletId,
         outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
+        creativeReady: isCreativeReadyForDate(item.readyDates, focusDate),
       });
     }
   }
