@@ -42,7 +42,8 @@ export const CHECKLIST_PLATFORM_LABELS: Record<ChecklistPlatformId, string> = {
 };
 
 const TZ = "Asia/Kolkata";
-const OVERDUE_LOOKBACK_DAYS = 14;
+/** Rolling window: today + up to 6 prior days of unfinished work (7 days total). */
+const OVERDUE_LOOKBACK_DAYS = 6;
 
 export type TeamChecklistCompletionDto = {
   date: string;
@@ -476,7 +477,8 @@ export function buildChecklistBoard(
   const focusStories: TeamChecklistItemDto[] = [];
   const focusAds: TeamChecklistItemDto[] = [];
 
-  // Stories due day-before flyer: on focusDate show tomorrow's story + stack past incomplete.
+  // Stories due day-before flyer: today = tomorrow's story; unfinished from the past 6 days stack in.
+  // 7-day window total (dueOffset 0..6) — ignore older backlog.
   for (let dueOffset = 0; dueOffset <= OVERDUE_LOOKBACK_DAYS; dueOffset++) {
     const dueDate = addDaysYmd(focusDate, -dueOffset);
     const targetDate = addDaysYmd(dueDate, 1);
@@ -517,12 +519,8 @@ export function buildChecklistBoard(
 
   const adLists = dtos.filter((c) => c.kind === "ads" && c.outletId);
   const monday = mondayOfWeekContaining(focusDate);
-  // Include prior week Mondays for overdue weekend ads that still aren't done
-  const adWeekMondays = [
-    monday,
-    addDaysYmd(monday, -7),
-    addDaysYmd(monday, -14),
-  ];
+  // Only this week + prior week (stays inside ~7-day overdue window)
+  const adWeekMondays = [monday, addDaysYmd(monday, -7)];
   for (const weekMonday of adWeekMondays) {
     for (const list of adLists) {
       for (const item of list.items) {
@@ -580,7 +578,7 @@ export function buildChecklistBoard(
       if (item.dayOfWeek && isWeekendPostDayId(item.dayOfWeek)) {
         const wantIdx = CHECKLIST_DAY_IDS.indexOf(item.dayOfWeek);
         // Check this week and prior weeks for stacked overdues
-        for (const weekMonday of [monday, addDaysYmd(monday, -7), addDaysYmd(monday, -14)]) {
+        for (const weekMonday of [monday, addDaysYmd(monday, -7)]) {
           const targetDate = addDaysYmd(weekMonday, wantIdx);
           const dueDate = weekendPostDueYmd(targetDate);
           const done = Boolean(item.completionsByDate[targetDate]);
