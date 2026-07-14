@@ -200,18 +200,19 @@ function CreativeReadyToggle({
   busy: boolean;
   onToggle?: () => void;
 }) {
-  const label = ready ? "Ready" : "Wait";
-  const base = `inline-flex min-h-11 min-w-[3.25rem] shrink-0 items-center justify-center gap-1.5 rounded-full px-2.5 text-[11px] font-bold uppercase tracking-wide touch-manipulation select-none ${
-    ready
-      ? "bg-emerald-400/20 text-emerald-200 ring-1 ring-emerald-400/40"
-      : "bg-red-500/20 text-red-200 ring-1 ring-red-400/40"
-  } ${busy ? "opacity-50" : ""}`;
-
-  const dot = (
+  const switchEl = (
     <span
-      className={`h-2.5 w-2.5 rounded-full ${ready ? "bg-emerald-400" : "bg-red-500"}`}
+      className={`relative inline-flex h-[22px] w-[40px] shrink-0 items-center rounded-full p-[2px] transition-colors ${
+        ready ? "bg-emerald-400" : "bg-red-500"
+      } ${busy ? "opacity-50" : ""}`}
       aria-hidden
-    />
+    >
+      <span
+        className={`h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform ${
+          ready ? "translate-x-[18px]" : "translate-x-0"
+        }`}
+      />
+    </span>
   );
 
   if (canToggle && onToggle) {
@@ -224,12 +225,12 @@ function CreativeReadyToggle({
           e.stopPropagation();
           onToggle();
         }}
-        title={ready ? "Creatives ready — tap to mark not ready" : "Not ready — tap to mark ready"}
+        title={ready ? "Ready — tap to set Wait" : "Wait — tap to set Ready"}
         aria-label={ready ? "Creatives ready" : "Creatives not ready"}
-        className={`${base} active:scale-95`}
+        aria-pressed={ready}
+        className="-ml-1 flex min-h-11 min-w-11 shrink-0 items-center justify-center touch-manipulation active:opacity-80"
       >
-        {dot}
-        {label}
+        {switchEl}
       </button>
     );
   }
@@ -238,10 +239,9 @@ function CreativeReadyToggle({
     <span
       title={ready ? "Creatives ready" : "Creatives not ready"}
       aria-label={ready ? "Creatives ready" : "Creatives not ready"}
-      className={base}
+      className="flex min-h-8 shrink-0 items-center"
     >
-      {dot}
-      {label}
+      {switchEl}
     </span>
   );
 }
@@ -954,13 +954,11 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                   ? "Stories + weekend posts · Meta · YT · Google · LinkedIn · X"
                   : "Fri/Sat/Sun ads on Mon/Tue/Wed · edit brief anytime"}
                 {" · "}
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="rounded-full bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-red-200">
-                    Wait
-                  </span>
-                  <span className="rounded-full bg-emerald-400/20 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-200">
-                    Ready
-                  </span>
+                <span className="inline-flex items-center gap-1 text-[11px] text-white/35">
+                  <span className="inline-block h-[14px] w-[24px] rounded-full bg-red-500/90" />
+                  wait
+                  <span className="ml-0.5 inline-block h-[14px] w-[24px] rounded-full bg-emerald-400" />
+                  ready
                 </span>
               </p>
             </div>
@@ -1261,7 +1259,7 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
         <div className={TEAM_SHEET_OVERLAY} onClick={() => setDoneOpen(false)}>
           <div className={`${TEAM_SHEET_PANEL} max-w-lg space-y-3`} onClick={(e) => e.stopPropagation()}>
             <h2 className="text-base font-semibold text-white">Done list</h2>
-            <p className="text-[12px] text-white/40">Recently completed stories, posts & ads.</p>
+            <p className="text-[12px] text-white/40">Done in the last 7 days.</p>
             {(board?.doneItems?.length ?? 0) === 0 ? (
               <p className="py-8 text-center text-[13px] text-white/35">Nothing marked done yet.</p>
             ) : (
