@@ -45,10 +45,10 @@ const TZ = "Asia/Kolkata";
 /** Rolling window: today + up to 6 prior days of unfinished work (7 days total). */
 const OVERDUE_LOOKBACK_DAYS = 6;
 /**
- * Board go-live for overdue stacking — ignore synthetic missed work from before
- * the team started using Daily Checklist (no last-week Jul 8–12 backlog).
+ * Board go-live for overdue stacking — only unfinished work from this day
+ * forward stacks (7-day rolling window). Earlier synthetic backlog is ignored.
  */
-const OVERDUE_EPOCH_YMD = "2026-07-13";
+const OVERDUE_EPOCH_YMD = "2026-07-14";
 
 export type TeamChecklistCompletionDto = {
   date: string;
