@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { BRANDS } from "@/lib/brands";
 import { loadChatLandingPageProps } from "@/lib/chat-landing-server";
+import { isPublicVenueBookingLive } from "@/lib/site-mode";
 import { resolveBrandId } from "@/lib/venue-chat-session";
 import ChatLandingClient from "./ChatLandingClient";
 
@@ -16,9 +17,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const brandId = resolveBrandId(outlet);
   const brand = BRANDS.find((b) => b.id === brandId);
   const name = brand?.shortName ?? "Venue";
+  const live = isPublicVenueBookingLive();
   return {
     title: `Chat with ${name}`,
     description: `Message ${name} — book a table, see events, and get help instantly.`,
+    robots: live ? { index: true, follow: true } : { index: false, follow: false },
   };
 }
 

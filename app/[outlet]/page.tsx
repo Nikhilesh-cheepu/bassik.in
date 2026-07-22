@@ -1,6 +1,8 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import { getVenueDataByBrandId } from "@/lib/venue-data";
 import { BRANDS } from "@/lib/brands";
+import { isPublicVenueBookingLive } from "@/lib/site-mode";
 import OutletPageClient from "./OutletPageClient";
 
 interface PageProps {
@@ -9,6 +11,17 @@ interface PageProps {
 }
 
 export const revalidate = 30;
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { outlet: outletSlug } = await params;
+  const brand = BRANDS.find((b) => b.id === outletSlug);
+  const live = isPublicVenueBookingLive();
+  return {
+    title: brand?.name ?? "Venue",
+    description: brand?.description,
+    robots: live ? { index: true, follow: true } : { index: false, follow: false },
+  };
+}
 
 export default async function OutletPage({ params, searchParams }: PageProps) {
   const { outlet: outletSlug } = await params;

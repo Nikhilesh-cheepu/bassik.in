@@ -1,11 +1,27 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { BRANDS, HIDDEN_BRAND_IDS } from "@/lib/brands";
 import { isClubRogueBrand } from "@/lib/club-rogue";
+import { isPublicVenueBookingLive } from "@/lib/site-mode";
 import ReservationForm from "@/components/ReservationForm";
 import AppBackLink from "@/components/AppBackLink";
 
 function pickParam(v: string | string[] | undefined): string | undefined {
   return typeof v === "string" ? v : undefined;
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ outlet: string }>;
+}): Promise<Metadata> {
+  const { outlet: outletSlug } = await params;
+  const brand = BRANDS.find((b) => b.id === outletSlug);
+  const live = isPublicVenueBookingLive();
+  return {
+    title: brand ? `Book ${brand.shortName}` : "Book a table",
+    robots: live ? { index: true, follow: true } : { index: false, follow: false },
+  };
 }
 
 export default async function OutletBookPage({

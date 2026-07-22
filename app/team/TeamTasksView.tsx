@@ -191,13 +191,16 @@ function isItemDone(item: TeamChecklistItemDto, dateKey: string): boolean {
 
 function collectBoardPendingItems(
   board: ChecklistBoardDto,
-  ready: boolean
+  ready: boolean,
+  kinds?: Array<NonNullable<TeamChecklistItemDto["kind"]>>
 ): TeamChecklistItemDto[] {
   const focus = board.day.focusDate;
+  const kindSet = kinds?.length ? new Set(kinds) : null;
   const out: TeamChecklistItemDto[] = [];
   const seen = new Set<string>();
   const push = (item: TeamChecklistItemDto) => {
     if (Boolean(item.creativeReady) !== ready) return;
+    if (kindSet && (!item.kind || !kindSet.has(item.kind))) return;
     const dateKey = item.targetDate ?? focus;
     if (isItemDone(item, dateKey)) return;
     const key = `${item.id}:${dateKey}`;
@@ -214,70 +217,58 @@ function collectBoardPendingItems(
   return out;
 }
 
+/** Admin Ready WA: stories + posts + ads. */
 function collectReadyItems(board: ChecklistBoardDto): TeamChecklistItemDto[] {
-  return collectBoardPendingItems(board, true);
+  return collectBoardPendingItems(board, true, ["stories", "posts", "ads"]);
 }
 
+/** Amit Need Ready WA: stories + posts only (no ads). */
 function collectWaitItems(board: ChecklistBoardDto): TeamChecklistItemDto[] {
-  return collectBoardPendingItems(board, false);
+  return collectBoardPendingItems(board, false, ["stories", "posts"]);
 }
 
-function formatReadyGroupLines(items: TeamChecklistItemDto[]): string[] {
-  const lines: string[] = [];
-  const byOutlet = new Map<string, TeamChecklistItemDto[]>();
-  for (const item of items) {
-    const outlet = item.outletTitle || item.outletId || "General";
-    const list = byOutlet.get(outlet) ?? [];
-    list.push(item);
-    byOutlet.set(outlet, list);
-  }
-  for (const [outlet, group] of byOutlet) {
-    lines.push(`*${outlet}*`);
-    for (const item of group) {
-      const due = item.dueLabel ? ` · ${item.dueLabel}` : "";
-      const overdue = item.isOverdue ? " · OVERDUE" : "";
-      lines.push(`• ${item.title}${due}${overdue}`);
-    }
-    lines.push("");
-  }
-  return lines;
+function shortOutletLabel(raw: string | null | undefined): string {
+  const t = (raw || "gen").trim();
+  if (!t) return "gen";
+  const parts = t.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return parts.map((p) => p[0] ?? "").join("").toLowerCase();
+  return t.toLowerCase();
+}
+
+function simpleWaItemLine(item: TeamChecklistItemDto): string {
+  const outlet = shortOutletLabel(item.outletTitle || item.outletId);
+  const day = (item.dayOfWeek || "").toLowerCase();
+  const kind =
+    item.kind === "stories"
+      ? "story"
+      : item.kind === "ads"
+        ? "ad"
+        : item.kind === "posts"
+          ? "post"
+          : item.title.toLowerCase().includes("story")
+            ? "story"
+            : item.title.toLowerCase().includes("ad")
+              ? "ad"
+              : "post";
+  if (day) return `${outlet} ${day} ${kind}`;
+  return `${outlet} ${item.title.toLowerCase()}`;
 }
 
 function buildAllReadyWhatsAppMessage(items: TeamChecklistItemDto[]): string {
-  return [
-    "✅ Content is READY",
-    "",
-    ...formatReadyGroupLines(items),
-    "Please check the group and update on the website.",
-    "",
-    "— Bassik HQ",
-    "https://bassik.in/team",
-  ].join("\n");
+  return ["ready to post", ...items.map(simpleWaItemLine)].join("\n");
 }
 
-function buildWaitNudgeWhatsAppMessage(
-  items: TeamChecklistItemDto[],
-  fromName?: string
-): string {
+function buildWaitNudgeWhatsAppMessage(items: TeamChecklistItemDto[]): string {
   const overdue = items.filter((i) => i.isOverdue);
   const waiting = items.filter((i) => !i.isOverdue);
-  const lines: string[] = [
-    "Hey — these creatives are still WAIT / not Ready 🔴",
-    "",
-    "Some are overdue or the deadline is near. Please make them Ready when done so I can post.",
-    "",
-  ];
+  const lines: string[] = [];
   if (overdue.length > 0) {
-    lines.push("*OVERDUE*");
-    lines.push(...formatReadyGroupLines(overdue));
+    lines.push("overdue", ...overdue.map(simpleWaItemLine));
   }
   if (waiting.length > 0) {
-    lines.push(overdue.length > 0 ? "*NOT READY / DEADLINE COMING*" : "*NOT READY*");
-    lines.push(...formatReadyGroupLines(waiting));
+    if (lines.length) lines.push("");
+    lines.push("need ready", ...waiting.map(simpleWaItemLine));
   }
-  lines.push("Thanks!");
-  if (fromName) lines.push(`— ${fromName}`);
-  lines.push("https://bassik.in/team");
   return lines.join("\n");
 }
 
@@ -832,10 +823,7 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
       return;
     }
     openWhatsAppMessage(
-      buildWaitNudgeWhatsAppMessage(
-        waitItems,
-        members.find((m) => m.id === viewerId)?.name
-      ),
+      buildWaitNudgeWhatsAppMessage(waitItems),
       waitItems.length,
       "Need Ready — WhatsApp"
     );

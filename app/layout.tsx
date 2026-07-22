@@ -1,25 +1,66 @@
-import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import type { Metadata } from "next";
+import { Syne, DM_Sans } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import RouteProgressBar from "@/components/RouteProgressBar";
+import { AGENCY_SEO } from "@/lib/bassik-agency";
+import { isPublicVenueBookingLive } from "@/lib/site-mode";
 
-const inter = Inter({ subsets: ["latin"] });
+const agencyDisplay = Syne({
+  subsets: ["latin"],
+  variable: "--font-agency-display",
+  weight: ["500", "600", "700"],
+});
 
-export const metadata: Metadata = {
-  title: "Bassik Reservations",
-  description: "Book your table at any of our venues in one place.",
-  icons: {
-    icon: "/logos/bassik.png",
-    shortcut: "/logos/bassik.png",
-    apple: "/logos/bassik.png",
-  },
-};
+const agencyBody = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-agency-body",
+  weight: ["400", "500", "600", "700"],
+});
 
-export const viewport: Viewport = {
+const bookingLive = isPublicVenueBookingLive();
+
+export const metadata: Metadata = bookingLive
+  ? {
+      title: "Bassik Reservations",
+      description: "Book your table at any of our venues in one place.",
+      icons: {
+        icon: "/logos/bassik.png",
+        shortcut: "/logos/bassik.png",
+        apple: "/logos/bassik.png",
+      },
+    }
+  : {
+      title: {
+        default: AGENCY_SEO.title,
+        template: "%s | Bassik",
+      },
+      description: AGENCY_SEO.description,
+      keywords: [...AGENCY_SEO.keywords],
+      applicationName: "Bassik",
+      icons: {
+        icon: "/logos/bassik.png",
+        shortcut: "/logos/bassik.png",
+        apple: "/logos/bassik.png",
+      },
+      openGraph: {
+        type: "website",
+        siteName: "Bassik",
+        title: AGENCY_SEO.title,
+        description: AGENCY_SEO.description,
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: AGENCY_SEO.title,
+        description: AGENCY_SEO.description,
+      },
+      robots: { index: true, follow: true },
+    };
+
+export const viewport = {
   width: "device-width",
   initialScale: 1,
-  viewportFit: "cover",
+  viewportFit: "cover" as const,
 };
 
 export default function RootLayout({
@@ -28,12 +69,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${agencyDisplay.variable} ${agencyBody.variable}`}>
       <head>
         <link rel="icon" href="/logos/bassik.png" />
       </head>
       <body
-        className={`${inter.className} antialiased overflow-x-hidden`}
+        className={`${agencyBody.className} antialiased overflow-x-hidden`}
         style={{ margin: 0, padding: 0 }}
       >
         <RouteProgressBar />
@@ -43,4 +84,3 @@ export default function RootLayout({
     </html>
   );
 }
-

@@ -26,8 +26,16 @@ export const OUTLET_CONTACTS: Record<
     whatsappMessage: `Hi! I'd like to know more about Boiler Room — reservations, events, or menu.`,
   },
   "club-rogue-gachibowli": {
-    phone: "8328576564",
+    phone: "7287984440",
     whatsappMessage: `Hi! I'd like to book a table at Club Rogue Gachibowli. I understand there's a mandatory ₹2000 cover charge — fully redeemable at the venue.`,
+  },
+  "club-rogue-kondapur": {
+    phone: "7287984440",
+    whatsappMessage: `Hi! I'd like to book a table at Club Rogue Kondapur. I understand there's a mandatory ₹2000 cover charge — fully redeemable at the venue.`,
+  },
+  "club-rogue-jubilee-hills": {
+    phone: "7287984441",
+    whatsappMessage: `Hi! I'd like to book a table at Club Rogue Jubilee Hills. I understand there's a mandatory ₹2000 cover charge — fully redeemable at the venue.`,
   },
   "the-hub": {
     phone: "7013884485",
