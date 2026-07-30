@@ -35,6 +35,8 @@ type Action =
   | "brief-waiting"
   | "start"
   | "upload-close"
+  | "set-upload"
+  | "mark-done"
   | "replace-upload"
   | "clear-upload"
   | "force-clear"
@@ -43,6 +45,9 @@ type Action =
   | "approve-edit"
   | "reject-edit"
   | "reopen";
+
+/** Designers must wait this long after Start before Upload & close. Admin bypasses. */
+const DESIGNER_UPLOAD_WAIT_MS = 2 * 60 * 1000;
 
 export async function PATCH(
   req: NextRequest,
@@ -236,6 +241,20 @@ export async function PATCH(
           { status: 400 }
         );
       }
+      if (!isAdmin) {
+        const startedMs = job.startedAt?.getTime() ?? 0;
+        const remaining = DESIGNER_UPLOAD_WAIT_MS - (Date.now() - startedMs);
+        if (!startedMs || remaining > 0) {
+          const sec = Math.max(1, Math.ceil(remaining / 1000));
+          return NextResponse.json(
+            {
+              error: `Please wait ${sec}s before you upload`,
+              waitRemainingSec: sec,
+            },
+            { status: 429 }
+          );
+        }
+      }
       const fileUrl =
         typeof body.fileUrl === "string" && body.fileUrl.trim()
           ? body.fileUrl.trim()
@@ -281,6 +300,97 @@ export async function PATCH(
       }
 
       return NextResponse.json({ job: await jobDtoWithLinks(updated) });
+    }
+
+    // Admin: attach creative without closing the job
+    if (action === "set-upload") {
+      if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      const fileUrl =
+        typeof body.fileUrl === "string" && body.fileUrl.trim()
+          ? body.fileUrl.trim()
+          : null;
+      if (!fileUrl) {
+        return NextResponse.json({ error: "File URL required" }, { status: 400 });
+      }
+      const uploadedAt = new Date();
+      const updated = await prisma.teamDesignerJob.update({
+        where: { id },
+        data: {
+          fileUrl,
+          postingNotes:
+            typeof body.postingNotes === "string"
+              ? body.postingNotes.trim() || null
+              : job.postingNotes,
+          scheduleNote:
+            typeof body.scheduleNote === "string"
+              ? body.scheduleNote.trim() || null
+              : job.scheduleNote,
+          uploadedAt,
+          waApproved: true,
+          ...(job.status === "WAITING_BRIEF" || job.status === "READY_TO_DESIGN"
+            ? { status: "IN_PROGRESS" as const, startedAt: job.startedAt ?? uploadedAt }
+            : {}),
+          ...(typeof body.format === "string" && body.format.trim()
+            ? { format: body.format.trim() }
+            : {}),
+        },
+      });
+      try {
+        await syncDesignerJobToChecklistHandoff(updated);
+      } catch (e) {
+        console.error("[designer-jobs] checklist sync on set-upload", e);
+      }
+      return NextResponse.json({
+        job: await jobDtoWithLinks(updated),
+        message: "Upload saved — job still open until you Mark done",
+      });
+    }
+
+    // Admin: mark done with or without a file
+    if (action === "mark-done") {
+      if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      if (
+        job.status !== "IN_PROGRESS" &&
+        job.status !== "READY_TO_DESIGN" &&
+        job.status !== "WAITING_BRIEF"
+      ) {
+        return NextResponse.json({ error: "Job is already done" }, { status: 400 });
+      }
+      const fileUrl =
+        typeof body.fileUrl === "string" && body.fileUrl.trim()
+          ? body.fileUrl.trim()
+          : job.fileUrl;
+      const uploadedAt = fileUrl ? job.uploadedAt ?? new Date() : null;
+      const updated = await prisma.teamDesignerJob.update({
+        where: { id },
+        data: {
+          status: "DESIGN_DONE",
+          fileUrl,
+          uploadedAt,
+          waApproved: Boolean(fileUrl) || job.waApproved,
+          startedAt: job.startedAt ?? new Date(),
+          postingNotes:
+            typeof body.postingNotes === "string"
+              ? body.postingNotes.trim() || null
+              : job.postingNotes,
+          scheduleNote:
+            typeof body.scheduleNote === "string"
+              ? body.scheduleNote.trim() || null
+              : job.scheduleNote,
+        },
+      });
+      await setDesignerEditRequest(id, { at: null, note: null });
+      if (fileUrl) {
+        try {
+          await syncDesignerJobToChecklistHandoff(updated);
+        } catch (e) {
+          console.error("[designer-jobs] checklist sync on mark-done", e);
+        }
+      }
+      return NextResponse.json({
+        job: await jobDtoWithLinks(updated),
+        message: fileUrl ? "Marked done — Amit Ready synced" : "Marked done (no upload)",
+      });
     }
 
     // Done job → designer/admin replace file in place (stays Done, re-syncs Amit Ready)

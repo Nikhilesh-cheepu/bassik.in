@@ -19,6 +19,22 @@ import { teamDownloadHref } from "@/lib/team-download";
 import { teamOutletLabel } from "@/lib/team-outlets";
 
 const HANDOFF_TTL_DAYS = 7;
+/** Designers wait this long after Start before Upload & close. Admin bypasses. */
+const DESIGNER_UPLOAD_WAIT_MS = 2 * 60 * 1000;
+
+function formatWaitClock(totalSec: number): string {
+  const s = Math.max(0, Math.ceil(totalSec));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return m > 0 ? `${m}:${String(r).padStart(2, "0")}` : `${r}s`;
+}
+
+function designerUploadUnlockAt(startedAt: string | null | undefined): number | null {
+  if (!startedAt) return null;
+  const t = Date.parse(startedAt);
+  if (!Number.isFinite(t)) return null;
+  return t + DESIGNER_UPLOAD_WAIT_MS;
+}
 
 function todayYmdLocal(): string {
   const t = new Date();
@@ -108,6 +124,14 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [uploadJobId, setUploadJobId] = useState<string | null>(null);
+  /** Admin upload form mode: attach only vs attach+close. Designer always close. */
+  const [uploadMode, setUploadMode] = useState<"close" | "attach">("close");
+  /** Shown when designer clicks Upload too early — countdown until unlock. */
+  const [uploadGate, setUploadGate] = useState<{
+    jobId: string;
+    unlockAt: number;
+  } | null>(null);
+  const [, setUploadGateTick] = useState(0);
   /** Only one brief editor open — avoids 40+ textareas killing the UI. */
   const [briefJobId, setBriefJobId] = useState<string | null>(null);
   const [briefDrafts, setBriefDrafts] = useState<Record<string, string>>({});
@@ -330,6 +354,41 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
 
   const startJob = (job: DesignerJobDto) => void patchJob(job.id, { action: "start" });
 
+  useEffect(() => {
+    if (!uploadGate) return;
+    const id = window.setInterval(() => {
+      if (Date.now() >= uploadGate.unlockAt) {
+        setUploadGate(null);
+        return;
+      }
+      setUploadGateTick((n) => n + 1);
+    }, 500);
+    return () => window.clearInterval(id);
+  }, [uploadGate]);
+
+  const tryOpenUpload = (job: DesignerJobDto, mode: "close" | "attach") => {
+    if (!isAdmin && job.status === "IN_PROGRESS" && mode === "close") {
+      const unlockAt = designerUploadUnlockAt(job.startedAt);
+      if (!unlockAt || Date.now() < unlockAt) {
+        setUploadGate({
+          jobId: job.id,
+          unlockAt: unlockAt ?? Date.now() + DESIGNER_UPLOAD_WAIT_MS,
+        });
+        setError(null);
+        return;
+      }
+    }
+    setUploadGate(null);
+    setUploadMode(mode);
+    setUploadJobId(job.id);
+    setUploadForm({
+      postingNotes: job.postingNotes ?? "",
+      scheduleNote: job.scheduleNote ?? "",
+      waApproved: isAdmin,
+      fileUrl: job.fileUrl ?? "",
+    });
+  };
+
   const onFile = async (file: File | null) => {
     if (!file) return;
     setUploading(true);
@@ -356,13 +415,14 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     const id = uploadJobId;
     const current = allJobs.find((j) => j.id === id);
     const replacing = current?.status === "DESIGN_DONE";
+    const attachOnly = isAdmin && uploadMode === "attach" && !replacing;
     setBusyId(id);
     try {
       const res = await fetch(`/api/team/designer-jobs/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: replacing ? "replace-upload" : "upload-close",
+          action: replacing ? "replace-upload" : attachOnly ? "set-upload" : "upload-close",
           fileUrl: uploadForm.fileUrl,
           postingNotes: uploadForm.postingNotes,
           scheduleNote: uploadForm.scheduleNote,
@@ -371,8 +431,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       });
       const data = await readJson(res);
       const updated = data.job as DesignerJobDto | undefined;
-      if (replacing && updated) {
+      if ((replacing || attachOnly) && updated) {
         setAllJobs((prev) => prev.map((j) => (j.id === id ? updated : j)));
+      } else if (updated) {
+        setAllJobs((prev) => prev.filter((j) => j.id !== id));
       } else {
         setAllJobs((prev) => prev.filter((j) => j.id !== id));
       }
@@ -380,7 +442,13 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       setUploadForm({ postingNotes: "", scheduleNote: "", waApproved: false, fileUrl: "" });
       if (typeof data.message === "string") setError(data.message);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Close failed");
+      const msg = err instanceof Error ? err.message : "Close failed";
+      const waitMatch = /wait (\d+)s/i.exec(msg);
+      if (waitMatch && current) {
+        const unlockAt = Date.now() + Number(waitMatch[1]) * 1000;
+        setUploadGate({ jobId: id, unlockAt });
+      }
+      setError(msg);
     } finally {
       setBusyId(null);
     }
@@ -774,12 +842,12 @@ https://instagram.com/…"
           <article
             key={job.id}
             className={`rounded-xl border px-3.5 py-3 ${
-              selected
-                ? "border-cyan-400/40 bg-cyan-400/[0.07]"
-                : job.status === "IN_PROGRESS"
-                  ? "border-amber-400/35 bg-amber-400/[0.07]"
-                  : job.isOverdue
-                    ? "border-red-400/30 bg-red-400/[0.05]"
+              job.isOverdue
+                ? "border-red-500/55 bg-red-500/[0.12] ring-1 ring-red-400/25"
+                : selected
+                  ? "border-cyan-400/40 bg-cyan-400/[0.07]"
+                  : job.status === "IN_PROGRESS"
+                    ? "border-amber-400/35 bg-amber-400/[0.07]"
                     : "border-white/[0.08] bg-white/[0.03]"
             }`}
           >
@@ -876,23 +944,46 @@ https://instagram.com/…"
                     Start Job
                   </button>
                 ) : null}
-                {job.status === "IN_PROGRESS" &&
-                (isAdmin || job.assigneeId === memberId) ? (
+                {job.status === "IN_PROGRESS" && job.assigneeId === memberId && !isAdmin ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      setUploadJobId(job.id);
-                      setUploadForm({
-                        postingNotes: job.postingNotes ?? "",
-                        scheduleNote: job.scheduleNote ?? "",
-                        waApproved: false,
-                        fileUrl: job.fileUrl ?? "",
-                      });
-                    }}
+                    onClick={() => tryOpenUpload(job, "close")}
                     className="h-9 rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
                   >
-                    {job.fileUrl ? "Edit / upload & close" : "Upload & close"}
+                    Upload & close
                   </button>
+                ) : null}
+                {isAdmin &&
+                (job.status === "IN_PROGRESS" ||
+                  job.status === "READY_TO_DESIGN" ||
+                  job.status === "WAITING_BRIEF") ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => tryOpenUpload(job, "attach")}
+                      className="h-9 rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
+                    >
+                      {job.fileUrl ? "Edit upload" : "Upload"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === job.id}
+                      onClick={() =>
+                        void patchJob(job.id, { action: "mark-done" }).then((ok) => {
+                          if (ok) setError("Marked done (upload optional).");
+                        })
+                      }
+                      className="h-9 rounded-lg bg-white px-3 text-[12px] font-semibold text-black disabled:opacity-40"
+                    >
+                      Mark done
+                    </button>
+                  </>
+                ) : null}
+                {uploadGate?.jobId === job.id ? (
+                  <p className="max-w-[10rem] text-right text-[11px] font-semibold leading-snug text-amber-200">
+                    Please wait {formatWaitClock((uploadGate.unlockAt - Date.now()) / 1000)} before
+                    you upload
+                  </p>
                 ) : null}
                 {/* Leftover file on Open (e.g. old reopen) — admin delete / force clear */}
                 {isAdmin &&
@@ -949,15 +1040,7 @@ https://instagram.com/…"
                     <button
                       type="button"
                       disabled={busyId === job.id}
-                      onClick={() => {
-                        setUploadJobId(job.id);
-                        setUploadForm({
-                          postingNotes: job.postingNotes ?? "",
-                          scheduleNote: job.scheduleNote ?? "",
-                          waApproved: isAdmin,
-                          fileUrl: job.fileUrl ?? "",
-                        });
-                      }}
+                      onClick={() => tryOpenUpload(job, isAdmin ? "attach" : "close")}
                       className="h-9 rounded-lg bg-amber-400 px-3 text-[12px] font-semibold text-black disabled:opacity-40"
                     >
                       Edit upload
@@ -1135,7 +1218,9 @@ https://instagram.com/…"
                 <p className="text-[11px] text-emerald-100/90">
                   {job.status === "DESIGN_DONE"
                     ? "Replace the creative — Amit Ready updates with the new file."
-                    : "After WhatsApp OK — upload final, then close. Amit gets Ready on Daily."}
+                    : uploadMode === "attach"
+                      ? "Admin upload only — job stays Open until you Mark done."
+                      : "After WhatsApp OK — upload final, then close. Amit gets Ready on Daily."}
                 </p>
                 <label className="flex items-center gap-2 text-[11px] text-white/70">
                   <input
@@ -1193,7 +1278,11 @@ https://instagram.com/…"
                     onClick={() => void closeUpload()}
                     className="h-7 rounded bg-emerald-400 px-3 text-[11px] font-semibold text-black disabled:opacity-40"
                   >
-                    {job.status === "DESIGN_DONE" ? "Save new upload" : "Upload & close job"}
+                    {job.status === "DESIGN_DONE"
+                      ? "Save new upload"
+                      : uploadMode === "attach"
+                        ? "Save upload"
+                        : "Upload & close job"}
                   </button>
                   <button
                     type="button"
