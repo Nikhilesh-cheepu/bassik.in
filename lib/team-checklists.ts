@@ -970,15 +970,17 @@ export function buildChecklistBoard(
   for (const wd of day.weekDays) {
     readyCountByDate[wd.date] = 0;
   }
+  // Date-strip badges = Amit-ready stories/posts with a file (never ads).
   const bumpReady = (targetDate: string, item: TeamChecklistItemDto) => {
     if (!(targetDate in readyCountByDate)) return;
     if (item.completionsByDate[targetDate]) return;
     const h = handoffForDate(item.handoffByDate, item.readyDates, targetDate);
     if (h.status !== "ready") return;
+    if (!h.fileUrl?.trim()) return;
     readyCountByDate[targetDate] = (readyCountByDate[targetDate] ?? 0) + 1;
   };
   for (const list of dtos) {
-    if (list.kind !== "stories" && list.kind !== "posts" && list.kind !== "ads") continue;
+    if (list.kind !== "stories" && list.kind !== "posts") continue;
     for (const item of list.items) {
       if (!item.dayOfWeek || !isChecklistDayId(item.dayOfWeek)) continue;
       for (const wd of day.weekDays) {

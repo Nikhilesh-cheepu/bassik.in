@@ -139,20 +139,6 @@ function countNoteLines(text: string | null | undefined): number {
     .filter(Boolean).length;
 }
 
-function countPendingPostings(
-  outlets: OutletBoardSection[],
-  generalPosts: TeamChecklistItemDto[],
-  focusDate: string
-): number {
-  let n = 0;
-  for (const section of outlets) {
-    n += section.stories.filter((s) => !isItemDone(s, s.targetDate ?? focusDate)).length;
-    n += section.openPosts.filter((p) => !isItemDone(p, p.targetDate ?? focusDate)).length;
-  }
-  n += generalPosts.filter((p) => !isItemDone(p, p.targetDate ?? focusDate)).length;
-  return n;
-}
-
 function countPendingAds(outlets: OutletBoardSection[], focusDate: string): number {
   let n = 0;
   for (const section of outlets) {
@@ -205,20 +191,32 @@ function isItemDone(item: TeamChecklistItemDto, dateKey: string): boolean {
   return Boolean(item.completionsByDate[dateKey]);
 }
 
+/** Ready for Amit = marked ready after upload with a downloadable file. */
+function isDownloadReady(item: TeamChecklistItemDto): boolean {
+  const status = item.handoff?.status ?? (item.creativeReady ? "ready" : "wait");
+  const fileUrl = item.handoff?.fileUrl?.trim();
+  return status === "ready" && Boolean(fileUrl);
+}
+
 function collectBoardPendingItems(
   board: ChecklistBoardDto,
-  ready: boolean,
-  kinds?: Array<NonNullable<TeamChecklistItemDto["kind"]>>
+  opts: {
+    kinds: Array<NonNullable<TeamChecklistItemDto["kind"]>>;
+    /** "ready" = downloadable for Amit; "wait" = still need upload; "any" = both */
+    readiness: "ready" | "wait" | "any";
+  }
 ): TeamChecklistItemDto[] {
   const focus = board.day.focusDate;
-  const kindSet = kinds?.length ? new Set(kinds) : null;
+  const kindSet = new Set(opts.kinds);
   const out: TeamChecklistItemDto[] = [];
   const seen = new Set<string>();
   const push = (item: TeamChecklistItemDto) => {
-    if (Boolean(item.creativeReady) !== ready) return;
-    if (kindSet && (!item.kind || !kindSet.has(item.kind))) return;
+    if (!item.kind || !kindSet.has(item.kind)) return;
     const dateKey = item.targetDate ?? focus;
     if (isItemDone(item, dateKey)) return;
+    const downloadReady = isDownloadReady(item);
+    if (opts.readiness === "ready" && !downloadReady) return;
+    if (opts.readiness === "wait" && downloadReady) return;
     const key = `${item.id}:${dateKey}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -233,14 +231,20 @@ function collectBoardPendingItems(
   return out;
 }
 
-/** Admin Ready WA: stories + posts + ads. */
+/** Amit Ready tab + WA: stories/posts with uploaded file only — never ads. */
 function collectReadyItems(board: ChecklistBoardDto): TeamChecklistItemDto[] {
-  return collectBoardPendingItems(board, true, ["stories", "posts", "ads"]);
+  return collectBoardPendingItems(board, {
+    kinds: ["stories", "posts"],
+    readiness: "ready",
+  });
 }
 
-/** Amit Need Ready WA: stories + posts only (no ads). */
+/** Waiting tab: stories/posts still needing designer upload — never ads. */
 function collectWaitItems(board: ChecklistBoardDto): TeamChecklistItemDto[] {
-  return collectBoardPendingItems(board, false, ["stories", "posts"]);
+  return collectBoardPendingItems(board, {
+    kinds: ["stories", "posts"],
+    readiness: "wait",
+  });
 }
 
 function shortOutletLabel(raw: string | null | undefined): string {
@@ -941,126 +945,6 @@ function goLiveGroupTitle(ymd: string): string {
   });
 }
 
-function OutletSection({
-  section,
-  focusDate,
-  busyItemId,
-  isAdmin,
-  canUploadHandoff,
-  onComplete,
-  onAdminToggleReady,
-  onHandoffUpload,
-}: {
-  section: OutletBoardSection;
-  focusDate: string;
-  busyItemId: string | null;
-  isAdmin: boolean;
-  canUploadHandoff: boolean;
-  onComplete: (item: TeamChecklistItemDto, platforms: ChecklistPlatformId[]) => void;
-  onAdminToggleReady: (item: TeamChecklistItemDto) => void;
-  onHandoffUpload: (
-    item: TeamChecklistItemDto,
-    payload: {
-      format: HandoffFormat;
-      fileUrl: string;
-      postingNotes: string;
-      scheduleNote: string;
-    }
-  ) => Promise<void>;
-}) {
-  const pendingStories = section.stories.filter((s) => !isItemDone(s, s.targetDate ?? focusDate));
-  const pendingPosts = section.openPosts;
-  const pendingAds = (section.ads ?? []).filter((a) => !isItemDone(a, a.targetDate ?? focusDate));
-  const allItems = [...pendingStories, ...pendingPosts, ...pendingAds];
-  const allClear = allItems.length === 0;
-
-  if (allClear) {
-    return (
-      <div className="flex h-9 items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 opacity-45">
-        <span className="truncate text-[13px] font-semibold text-white/70">{section.outletLabel}</span>
-        <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-300/70">Done</span>
-      </div>
-    );
-  }
-
-  const byDate = new Map<string, TeamChecklistItemDto[]>();
-  for (const item of allItems) {
-    const key = item.targetDate ?? focusDate;
-    const list = byDate.get(key) ?? [];
-    list.push(item);
-    byDate.set(key, list);
-  }
-  const dateKeys = [...byDate.keys()].sort();
-
-  const kindRank = (k?: string | null) =>
-    k === "stories" ? 0 : k === "posts" ? 1 : k === "ads" ? 2 : 3;
-
-  return (
-    <section className="overflow-hidden rounded-xl border border-white/[0.1] bg-white/[0.035]">
-      <div className="flex items-center justify-between gap-2 border-b border-white/[0.08] bg-white/[0.04] px-3 py-2.5">
-        <h3 className="truncate text-[14px] font-semibold tracking-tight text-white">
-          {section.outletLabel}
-        </h3>
-        <span className="text-[11px] text-white/40">
-          {pendingStories.length} story · {pendingPosts.length} post · {pendingAds.length} ad
-        </span>
-      </div>
-
-      <div className="space-y-1 px-2.5 py-2">
-        {dateKeys.map((dateKey) => {
-          const rows = (byDate.get(dateKey) ?? []).slice().sort((a, b) => {
-            const kr = kindRank(a.kind) - kindRank(b.kind);
-            if (kr !== 0) return kr;
-            return a.sortOrder - b.sortOrder;
-          });
-          const urls = rows
-            .map((r) => r.handoff?.fileUrl?.trim())
-            .filter((u): u is string => Boolean(u));
-          const sharedUrl =
-            urls.length > 0 && urls.every((u) => u === urls[0]) ? urls[0]! : null;
-          const anyReady = rows.some((r) => handoffStatusOf(r) === "ready");
-
-          return (
-            <div
-              key={dateKey}
-              className="rounded-lg border border-white/[0.06] bg-black/20 px-2 py-1.5"
-            >
-              <div className="mb-1 flex flex-wrap items-center justify-between gap-2 px-0.5">
-                <p className="text-[12px] font-semibold text-white/85">
-                  {goLiveGroupTitle(dateKey)}
-                </p>
-                {sharedUrl && anyReady ? (
-                  <a
-                    href={`/api/team/download?url=${encodeURIComponent(sharedUrl)}`}
-                    className="text-[11px] font-semibold text-cyan-300/90 underline-offset-2 hover:underline"
-                  >
-                    Download creative
-                  </a>
-                ) : null}
-              </div>
-              <div className="divide-y divide-white/[0.05]">
-                {rows.map((item) => (
-                  <ItemRow
-                    key={`${item.id}-${item.targetDate ?? "x"}-${item.kind}`}
-                    item={item}
-                    dateKey={item.targetDate ?? focusDate}
-                    busy={busyItemId === item.id}
-                    isAdmin={isAdmin}
-                    canUploadHandoff={canUploadHandoff}
-                    onComplete={onComplete}
-                    onAdminToggleReady={onAdminToggleReady}
-                    onHandoffUpload={onHandoffUpload}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
 function AdsOutletSection({
   section,
   focusDate,
@@ -1160,7 +1044,7 @@ export default function TeamTasksView({
   const [postTitle, setPostTitle] = useState("");
   const [postDescription, setPostDescription] = useState("");
   const [postOutletId, setPostOutletId] = useState("");
-  const [mode, setMode] = useState<"ready" | "postings" | "ads" | "done">("ready");
+  const [mode, setMode] = useState<"ready" | "waiting" | "ads" | "done">("ready");
   /** "all" or outletId / "__general__" */
   const [outletFilter, setOutletFilter] = useState<string>("all");
   const [notesOpen, setNotesOpen] = useState(false);
@@ -1451,11 +1335,6 @@ export default function TeamTasksView({
 
   const enabled = new Set(board?.enabledOutletIds ?? []);
   const boardOutlets = board?.outlets ?? [];
-  const postingsCount = countPendingPostings(
-    boardOutlets,
-    board?.generalPosts ?? [],
-    focusDate
-  );
   const adsCount = countPendingAds(boardOutlets, focusDate);
   const activeNotesText =
     mode === "ads" ? board?.boardNotes?.ads : board?.boardNotes?.postings;
@@ -1480,7 +1359,8 @@ export default function TeamTasksView({
 
   const readyItemsAll = board ? collectReadyItems(board) : [];
   const readyCount = readyItemsAll.length;
-  const waitCount = board ? collectWaitItems(board).length : 0;
+  const waitingItemsAll = board ? collectWaitItems(board) : [];
+  const waitCount = waitingItemsAll.length;
   const doneItemsAll = board?.doneItems ?? [];
   const doneCount = doneItemsAll.length;
 
@@ -1489,6 +1369,8 @@ export default function TeamTasksView({
     const bump = (key: string) => map.set(key, (map.get(key) ?? 0) + 1);
     if (mode === "ready") {
       for (const item of readyItemsAll) bump(itemOutletKey(item));
+    } else if (mode === "waiting") {
+      for (const item of waitingItemsAll) bump(itemOutletKey(item));
     } else if (mode === "done") {
       for (const item of doneItemsAll) bump(itemOutletKey(item));
     } else if (mode === "ads") {
@@ -1497,14 +1379,6 @@ export default function TeamTasksView({
           if (!isItemDone(ad, ad.targetDate ?? focusDate)) bump(section.outletId);
         }
       }
-    } else {
-      for (const section of boardOutlets) {
-        for (const s of section.stories) {
-          if (!isItemDone(s, s.targetDate ?? focusDate)) bump(section.outletId);
-        }
-        for (const p of section.openPosts) bump(section.outletId);
-      }
-      for (const p of board?.generalPosts ?? []) bump("__general__");
     }
     return map;
   })();
@@ -1523,6 +1397,10 @@ export default function TeamTasksView({
     outletFilter === "all"
       ? readyItemsAll
       : readyItemsAll.filter((i) => matchesOutletFilter(itemOutletKey(i)));
+  const waitingItems =
+    outletFilter === "all"
+      ? waitingItemsAll
+      : waitingItemsAll.filter((i) => matchesOutletFilter(itemOutletKey(i)));
   const doneItems =
     outletFilter === "all"
       ? doneItemsAll
@@ -1565,10 +1443,10 @@ export default function TeamTasksView({
                     badgeOff: "bg-emerald-400/20 text-emerald-100",
                   },
                   {
-                    id: "postings" as const,
-                    label: "All",
+                    id: "waiting" as const,
+                    label: "Waiting",
                     Icon: IconPostings,
-                    count: postingsCount,
+                    count: waitCount,
                     active: "bg-cyan-400 text-black shadow-[0_0_18px_rgba(34,211,238,0.35)]",
                     idle: "text-cyan-200/70 hover:text-cyan-100",
                     badgeOn: "bg-black/25 text-black",
@@ -1651,11 +1529,11 @@ export default function TeamTasksView({
               <h2 className="text-[18px] font-semibold tracking-tight text-white">Daily Checklist</h2>
               <p className="text-[12px] text-white/40">
                 {mode === "ready"
-                  ? "Ready creatives only · Download → wait 1 min → Done. Deadline highlighted."
-                  : mode === "postings"
-                    ? "Full board. Sat story on Fri = POST TODAY by 11 PM (night before)."
+                  ? "Stories & posts with uploaded file only · Download → wait 1 min → Done. Ads stay in Ads."
+                  : mode === "waiting"
+                    ? "Stories & posts still waiting on designer upload. Nothing here goes to Amit yet."
                     : mode === "ads"
-                      ? "Ads · start 4 days before go-live · upload sets Ready automatically"
+                      ? "Ads only · start 4 days before go-live · never mixed with Ready posts/stories"
                       : "Posted / closed · reopen if something went wrong. Download still available."}
               </p>
             </div>
@@ -1710,7 +1588,7 @@ export default function TeamTasksView({
                 >
                   Outlets
                 </button>
-                {mode === "postings" ? (
+                {mode === "waiting" ? (
                   <button
                     type="button"
                     onClick={() => setPostOpen(true)}
@@ -1776,11 +1654,11 @@ export default function TeamTasksView({
                 >
                   {mode === "ready"
                     ? readyCount
-                    : mode === "done"
-                      ? doneCount
-                      : mode === "ads"
-                        ? adsCount
-                        : postingsCount}
+                    : mode === "waiting"
+                      ? waitCount
+                      : mode === "done"
+                        ? doneCount
+                        : adsCount}
                 </span>
               </button>
               {outletChips.map(([key, count]) => {
@@ -1890,7 +1768,7 @@ export default function TeamTasksView({
               {mode === "ready" ? (
                 readyItemsAll.length === 0 ? (
                   <p className="py-10 text-center text-[13px] text-white/35">
-                    Nothing Ready yet — when Mahesh/Jeslyn upload, it shows here with Download + deadline.
+                    Nothing for Amit yet — when a designer uploads a story/post file and marks Ready, it shows here.
                   </p>
                 ) : readyItems.length === 0 ? (
                   <p className="py-10 text-center text-[13px] text-white/35">
@@ -1900,11 +1778,11 @@ export default function TeamTasksView({
                   <section className="overflow-hidden rounded-xl border border-emerald-400/25 bg-emerald-400/[0.04]">
                     <div className="border-b border-emerald-400/20 px-3 py-2.5">
                       <h3 className="text-[14px] font-semibold text-emerald-100">
-                        Ready to post ({readyItems.length}
+                        Ready for Amit ({readyItems.length}
                         {outletFilter !== "all" ? ` · ${outletFilterLabel(outletFilter)}` : ""})
                       </h3>
                       <p className="text-[11px] text-white/40">
-                        Date · day · type · outlet · Download · deadline. Amit: Done after Download + 1 min. Admin: Done anytime.
+                        Uploaded stories & posts only (no ads). Download → Done. Admin: Done anytime.
                       </p>
                     </div>
                     <div className="divide-y divide-white/[0.06] px-2.5 py-1">
@@ -1924,47 +1802,42 @@ export default function TeamTasksView({
                     </div>
                   </section>
                 )
-              ) : mode === "postings" ? (
-                <>
-                  {filteredOutlets.map((section) => (
-                    <OutletSection
-                      key={section.outletId}
-                      section={section}
-                      focusDate={focusDate}
-                      busyItemId={busyItemId}
-                      isAdmin={isAdmin}
-                      canUploadHandoff={canUploadHandoff}
-                      onComplete={markComplete}
-                      onAdminToggleReady={adminToggleReady}
-                      onHandoffUpload={submitHandoffUpload}
-                    />
-                  ))}
-
-                  {(board.generalPosts?.length ?? 0) > 0 &&
-                  matchesOutletFilter("__general__") ? (
-                    <section className="overflow-hidden rounded-xl border border-white/[0.1] bg-white/[0.035]">
-                      <div className="border-b border-white/[0.08] bg-white/[0.04] px-3 py-2.5">
-                        <h3 className="text-[14px] font-semibold tracking-tight text-white">
-                          General posts
-                        </h3>
-                      </div>
-                      <div className="divide-y divide-white/[0.06] px-2.5 py-1">
-                        {board.generalPosts.map((item) => (
-                          <ItemRow
-                            key={item.id}
-                            item={item}
-                            dateKey={focusDate}
-                            busy={busyItemId === item.id}
-                            isAdmin={isAdmin}
-                            canUploadHandoff={canUploadHandoff}
-                            onComplete={markComplete}
-                            onHandoffUpload={submitHandoffUpload}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  ) : null}
-                </>
+              ) : mode === "waiting" ? (
+                waitingItemsAll.length === 0 ? (
+                  <p className="py-10 text-center text-[13px] text-white/35">
+                    Nothing waiting — all open stories/posts are Ready for Amit (or Done).
+                  </p>
+                ) : waitingItems.length === 0 ? (
+                  <p className="py-10 text-center text-[13px] text-white/35">
+                    No Waiting items for {outletFilterLabel(outletFilter)}. Tap All or another outlet.
+                  </p>
+                ) : (
+                  <section className="overflow-hidden rounded-xl border border-cyan-400/25 bg-cyan-400/[0.04]">
+                    <div className="border-b border-cyan-400/20 px-3 py-2.5">
+                      <h3 className="text-[14px] font-semibold text-cyan-100">
+                        Waiting on design ({waitingItems.length}
+                        {outletFilter !== "all" ? ` · ${outletFilterLabel(outletFilter)}` : ""})
+                      </h3>
+                      <p className="text-[11px] text-white/40">
+                        Stories & posts without a Ready upload yet. Ads are only under the Ads tab.
+                      </p>
+                    </div>
+                    <div className="divide-y divide-white/[0.06] px-2.5 py-1">
+                      {waitingItems.map((item) => (
+                        <ItemRow
+                          key={`${item.id}-${item.targetDate}-${item.kind}`}
+                          item={item}
+                          dateKey={item.targetDate ?? focusDate}
+                          busy={busyItemId === item.id}
+                          isAdmin={isAdmin}
+                          canUploadHandoff={canUploadHandoff}
+                          onComplete={markComplete}
+                          onHandoffUpload={submitHandoffUpload}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )
               ) : (
                 filteredOutlets.map((section) => (
                   <AdsOutletSection
