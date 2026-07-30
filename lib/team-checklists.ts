@@ -348,15 +348,21 @@ export function previousDayYmd(ymd: string): string {
   return addDaysYmd(ymd, -1);
 }
 
-/** 23:00 IST = 17:30 UTC */
-function amitDueAtMsOnYmd(dueDayYmd: string): number {
+/** IST wall clock → UTC ms on that calendar YMD. */
+function amitDueAtMsOnYmd(dueDayYmd: string, hourIst: number, minuteIst = 0): number {
   const [y, m, d] = dueDayYmd.split("-").map(Number);
-  return Date.UTC(y!, m! - 1, d!, 17, 30, 0);
+  // IST = UTC+5:30
+  const utcMinutes = hourIst * 60 + minuteIst - (5 * 60 + 30);
+  const utcHour = Math.floor(utcMinutes / 60);
+  const utcMin = ((utcMinutes % 60) + 60) % 60;
+  const dayAdjust = utcMinutes < 0 ? -1 : 0;
+  const base = Date.UTC(y!, m! - 1, d!, 0, 0, 0);
+  return base + dayAdjust * 86_400_000 + utcHour * 3_600_000 + utcMin * 60_000;
 }
 
 /** Story for `targetDate` is due at 11:00 PM IST on the previous calendar day. */
 export function storyDueAtMs(targetDateYmd: string): number {
-  return amitDueAtMsOnYmd(previousDayYmd(targetDateYmd));
+  return amitDueAtMsOnYmd(previousDayYmd(targetDateYmd), 23, 0);
 }
 
 export function storyDueLabel(targetDateYmd: string, today = getTodayKey()): string {
@@ -386,27 +392,30 @@ export function weekendPublishDueYmd(targetDateYmd: string): string {
 }
 
 export function weekendPublishDueAtMs(targetDateYmd: string): number {
-  return amitDueAtMsOnYmd(weekendPublishDueYmd(targetDateYmd));
+  return amitDueAtMsOnYmd(weekendPublishDueYmd(targetDateYmd), 23, 0);
 }
 
 /** Ad start deadline — 4 days before go-live at 11 PM. */
 export function weekendAdDueAtMs(targetDateYmd: string): number {
-  return amitDueAtMsOnYmd(weekendPostDueYmd(targetDateYmd));
+  return amitDueAtMsOnYmd(weekendPostDueYmd(targetDateYmd), 23, 0);
 }
 
-/** @deprecated use weekendPublishDueAtMs for posting overdue */
+/**
+ * Weekend post creative deadline — always 4 days before go-live at 10 PM IST.
+ * Fri → Mon 10 PM, Sat → Tue 10 PM, Sun → Wed 10 PM.
+ */
 export function weekendPostDueAtMs(targetDateYmd: string): number {
-  return weekendPublishDueAtMs(targetDateYmd);
+  return amitDueAtMsOnYmd(weekendPostDueYmd(targetDateYmd), 22, 0);
 }
 
 export function weekendPostDueLabel(targetDateYmd: string, today = getTodayKey()): string {
-  const publishBy = weekendPublishDueYmd(targetDateYmd);
+  const dueBy = weekendPostDueYmd(targetDateYmd);
   const targetDayId = dayIdForYmd(targetDateYmd);
   const when =
-    publishBy === today
-      ? "POST TODAY by 11 PM"
-      : `post by ${formatBoardDateLabel(publishBy)} 11 PM`;
-  return `${CHECKLIST_DAY_LABELS[targetDayId]} post · ${when}`;
+    dueBy === today
+      ? "DUE TODAY by 10 PM"
+      : `due ${formatBoardDateLabel(dueBy)} by 10 PM`;
+  return `${CHECKLIST_DAY_LABELS[targetDayId]} post · ${when} (4 days before)`;
 }
 
 export function weekendAdDueLabel(targetDateYmd: string, today = getTodayKey()): string {
@@ -419,8 +428,9 @@ export function weekendAdDueLabel(targetDateYmd: string, today = getTodayKey()):
   return `${CHECKLIST_DAY_LABELS[targetDayId]} ad · ${when}`;
 }
 
+/** True after creative due (go-live − 4 days @ 10 PM IST). */
 export function isWeekendPostOverdue(targetDateYmd: string, now = new Date()): boolean {
-  return now.getTime() > weekendPublishDueAtMs(targetDateYmd);
+  return now.getTime() > weekendPostDueAtMs(targetDateYmd);
 }
 
 export function isWeekendAdOverdue(targetDateYmd: string, now = new Date()): boolean {
