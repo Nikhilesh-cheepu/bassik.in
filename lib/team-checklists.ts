@@ -15,7 +15,7 @@ import {
   type ChecklistKind,
   type WeekendPostDayId,
 } from "@/lib/team-checklist-templates";
-import { TEAM_AD_OUTLETS, teamOutletLabel } from "@/lib/team-outlets";
+import { TEAM_AD_OUTLETS, outletKindTitle, teamOutletLabel } from "@/lib/team-outlets";
 
 export {
   CHECKLIST_DAY_IDS,
@@ -747,7 +747,7 @@ export function buildChecklistBoard(
             dueLabel: storyDueLabel(targetDate, focus),
             isOverdue: pastDue,
             outletId: list.outletId,
-            outletTitle: list.title,
+            outletTitle: outletKindTitle(list.outletId ?? list.title, "stories"),
             kind: "stories",
           },
           targetDate
@@ -791,7 +791,7 @@ export function buildChecklistBoard(
             dueLabel: weekendAdDueLabel(targetDate, focus),
             isOverdue: pastDue,
             outletId: list.outletId,
-            outletTitle: list.title,
+            outletTitle: outletKindTitle(list.outletId ?? list.title, "ads"),
             kind: "ads",
           },
           targetDate
@@ -854,7 +854,7 @@ export function buildChecklistBoard(
               ...item,
               kind: "posts",
               outletId,
-              outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
+              outletTitle: outletKindTitle(outletId ?? postsList.title, "posts"),
               targetDate,
               dueLabel: weekendPostDueLabel(targetDate, focus),
               isOverdue: focus > targetDate || isWeekendPostOverdue(targetDate, now),
@@ -875,7 +875,7 @@ export function buildChecklistBoard(
             ...item,
             kind: "posts",
             outletId,
-            outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
+            outletTitle: outletKindTitle(outletId ?? postsList.title, "posts"),
             targetDate: focus,
           },
           focus
@@ -915,7 +915,7 @@ export function buildChecklistBoard(
               targetDate: date,
               dueLabel: storyDueLabel(date),
               outletId: list.outletId,
-              outletTitle: list.title,
+              outletTitle: outletKindTitle(list.outletId ?? list.title, "stories"),
               kind: "stories",
             },
             date
@@ -936,7 +936,7 @@ export function buildChecklistBoard(
               targetDate: date,
               dueLabel: weekendPostDueLabel(date),
               outletId: list.outletId,
-              outletTitle: list.title,
+              outletTitle: outletKindTitle(list.outletId ?? list.title, "ads"),
               kind: "ads",
             },
             date
@@ -958,7 +958,7 @@ export function buildChecklistBoard(
               ...item,
               kind: "posts",
               outletId,
-              outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
+              outletTitle: outletKindTitle(outletId ?? postsList.title, "posts"),
               targetDate: date,
               dueLabel: item.dayOfWeek ? weekendPostDueLabel(date) : undefined,
             },

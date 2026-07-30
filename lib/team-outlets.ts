@@ -21,6 +21,27 @@ export function teamOutletLabel(outletId: string | null | undefined): string {
   return TEAM_AD_OUTLETS.find((o) => o.id === outletId)?.label ?? outletId;
 }
 
+/**
+ * Chip label for Daily Checklist: "C53 Story" / "Boiler Room Post" / "Firefly Ad".
+ * Accepts outlet id or a title like "C53 Stories".
+ */
+export function outletKindTitle(
+  outletIdOrTitle: string | null | undefined,
+  kind: "stories" | "posts" | "ads" | string | null | undefined
+): string {
+  const raw = (outletIdOrTitle || "").trim();
+  if (!raw) return "";
+  const asId = TEAM_AD_OUTLETS.find((o) => o.id === raw);
+  const base = (asId ? asId.label : raw)
+    .replace(/\s+(Stories|Posts|Ads|Story|Post|Ad)$/i, "")
+    .trim();
+  const name = base || raw;
+  if (kind === "stories") return `${name} Story`;
+  if (kind === "posts") return `${name} Post`;
+  if (kind === "ads") return `${name} Ad`;
+  return name;
+}
+
 export function parseTaskOutletId(raw: unknown): string | null {
   const id = typeof raw === "string" ? raw.trim() : "";
   if (!id) return null;

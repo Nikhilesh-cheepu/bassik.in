@@ -16,7 +16,7 @@ import {
 } from "@/lib/team-checklists";
 import { CHECKLIST_DEFAULT_OWNER_ID } from "@/lib/team-checklist-templates";
 import { uploadTeamFile } from "@/lib/team-client-upload";
-import { TEAM_AD_OUTLETS, teamOutletLabel } from "@/lib/team-outlets";
+import { TEAM_AD_OUTLETS, outletKindTitle, teamOutletLabel } from "@/lib/team-outlets";
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { whatsAppShareUrl } from "@/lib/team-whatsapp-report";
 import { TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL } from "./TeamNav";
@@ -515,18 +515,15 @@ function KindBadge({ kind }: { kind?: string | null }) {
   );
 }
 
-/** "C53 Stories" / "C53" → "C53 Story" | "C53 Post" | "C53 Ad" */
+/** Prefer kind + outlet id so posts always show "C53 Post", not bare "C53". */
 function outletKindChipLabel(item: TeamChecklistItemDto): string {
-  const raw =
-    item.outletTitle?.trim() ||
-    (item.outletId ? teamOutletLabel(item.outletId) : "") ||
-    "";
-  if (!raw) return "";
-  const name = raw.replace(/\s+(Stories|Posts|Ads|Story|Post|Ad)$/i, "").trim() || raw;
-  if (item.kind === "stories") return `${name} Story`;
-  if (item.kind === "ads") return `${name} Ad`;
-  if (item.kind === "posts") return `${name} Post`;
-  return name;
+  const kind =
+    item.kind ||
+    (/story/i.test(item.title) ? "stories" : /ad\b/i.test(item.title) ? "ads" : "posts");
+  return (
+    outletKindTitle(item.outletId || item.outletTitle, kind) ||
+    outletKindTitle(item.outletTitle, kind)
+  );
 }
 
 /** e.g. date / weekday / kind / outlet for Ready + Done rows */
@@ -685,7 +682,7 @@ function ItemRow({
               </span>
             )}
             {item.isOverdue ? (
-              <span className="text-[10px] font-bold uppercase tracking-wide text-red-400">
+              <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-400 ring-1 ring-red-400/40">
                 Overdue
               </span>
             ) : null}
