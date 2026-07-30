@@ -52,7 +52,9 @@ type Action =
   | "approve-pause"
   | "reject-pause"
   | "pause"
-  | "resume";
+  | "resume"
+  | "unsend"
+  | "delete";
 
 /** Designers must wait this long after Start before Upload & close. Admin bypasses. */
 const DESIGNER_UPLOAD_WAIT_MS = 2 * 60 * 1000;
@@ -604,6 +606,55 @@ export async function PATCH(
         job: await jobDtoWithLinks(updated),
         message: "Reopened — upload cleared; designer must Start Job and upload again",
       });
+    }
+
+    /**
+     * Admin Unsend — reverse of Send: off designer queue, clear upload + Amit Ready.
+     * Works from Ready / In progress / Paused / Done.
+     */
+    if (action === "unsend") {
+      if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      if (job.status === "WAITING_BRIEF") {
+        return NextResponse.json(
+          { error: "Already unsent — waiting on brief / Send" },
+          { status: 400 }
+        );
+      }
+      try {
+        await clearDesignerJobChecklistHandoff(job);
+      } catch (e) {
+        console.error("[designer-jobs] clear handoff on unsend", e);
+      }
+      const updated = await prisma.teamDesignerJob.update({
+        where: { id },
+        data: {
+          status: "WAITING_BRIEF",
+          startedAt: null,
+          uploadedAt: null,
+          fileUrl: null,
+          postingNotes: null,
+          scheduleNote: null,
+          waApproved: false,
+        },
+      });
+      await setDesignerEditRequest(id, { at: null, note: null });
+      await setDesignerPauseRequest(id, { at: null, note: null });
+      return NextResponse.json({
+        job: await jobDtoWithLinks(updated),
+        message: "Unsent — off designer queue; Amit Ready cleared",
+      });
+    }
+
+    /** Admin hard-delete job (and clear Amit Ready if synced). */
+    if (action === "delete") {
+      if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      try {
+        await clearDesignerJobChecklistHandoff(job);
+      } catch (e) {
+        console.error("[designer-jobs] clear handoff on delete", e);
+      }
+      await prisma.teamDesignerJob.delete({ where: { id } });
+      return NextResponse.json({ ok: true, deleted: true, message: "Job deleted" });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });

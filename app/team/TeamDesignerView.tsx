@@ -18,6 +18,7 @@ import {
 import { uploadTeamFile } from "@/lib/team-client-upload";
 import { teamDownloadHref } from "@/lib/team-download";
 import { teamOutletLabel } from "@/lib/team-outlets";
+import { IconTrash, IconUnsend } from "./TeamIcons";
 
 const HANDOFF_TTL_DAYS = 7;
 /** Designers wait this long after Start before Upload & close. Admin bypasses. */
@@ -257,6 +258,17 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         body: JSON.stringify(body),
       });
       const data = await readJson(res);
+      if (data.deleted === true) {
+        setAllJobs((prev) => prev.filter((j) => j.id !== id));
+        setSelectedIds((prev) => {
+          if (!prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+        if (typeof data.message === "string") setError(data.message);
+        return true;
+      }
       const updated = data.job as DesignerJobDto | undefined;
       if (updated) {
         setAllJobs((prev) => {
@@ -276,6 +288,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
             return next;
           });
         }
+        if (typeof data.message === "string" && body.action === "unsend") {
+          setError(data.message);
+        }
       } else {
         await load({ soft: true });
       }
@@ -286,6 +301,28 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     } finally {
       if (!opts?.quiet) setBusyId(null);
     }
+  };
+
+  const unsendJob = (job: DesignerJobDto) => {
+    if (
+      !window.confirm(
+        `Unsend “${job.title}”?\n\nPulls it off ${designerDisplayName(job.assigneeId)}’s queue and clears Amit Ready if uploaded.`
+      )
+    ) {
+      return;
+    }
+    void patchJob(job.id, { action: "unsend" });
+  };
+
+  const deleteJob = (job: DesignerJobDto) => {
+    if (
+      !window.confirm(
+        `Delete “${job.title}” permanently?\n\nThis cannot be undone. Amit Ready for this slot is cleared too.`
+      )
+    ) {
+      return;
+    }
+    void patchJob(job.id, { action: "delete" });
   };
 
   const sendToDesigner = async (job: DesignerJobDto) => {
@@ -952,6 +989,36 @@ https://instagram.com/…"
                     Download
                   </a>
                 ) : null}
+                {isAdmin ? (
+                  <div className="flex gap-2">
+                    {job.status !== "WAITING_BRIEF" ? (
+                      <button
+                        type="button"
+                        disabled={busyId === job.id}
+                        title="Unsend — off designer queue, clear Amit Ready"
+                        aria-label="Unsend"
+                        onClick={() => unsendJob(job)}
+                        className="inline-flex h-11 min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-300/40 bg-amber-400/15 text-[12px] font-semibold text-amber-100 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0"
+                      >
+                        <IconUnsend className="h-4 w-4" />
+                        Unsend
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={busyId === job.id}
+                      title="Delete job permanently"
+                      aria-label="Delete"
+                      onClick={() => deleteJob(job)}
+                      className={`inline-flex h-11 min-h-[44px] items-center justify-center gap-1.5 rounded-lg border border-red-400/40 bg-red-500/15 text-[12px] font-semibold text-red-200 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 ${
+                        job.status === "WAITING_BRIEF" ? "flex-1" : "px-3"
+                      }`}
+                    >
+                      <IconTrash className="h-4 w-4" />
+                      {job.status === "WAITING_BRIEF" ? "Delete" : null}
+                    </button>
+                  </div>
+                ) : null}
                 {canSend ? (
                   <button
                     type="button"
@@ -1330,6 +1397,30 @@ https://instagram.com/…"
                       >
                         {job.urgent ? "Clear urgent" : "Mark urgent"}
                       </button>
+                      {job.status !== "WAITING_BRIEF" ? (
+                        <button
+                          type="button"
+                          disabled={busyId === job.id}
+                          title="Unsend — off designer queue, clear Amit Ready"
+                          aria-label="Unsend"
+                          onClick={() => unsendJob(job)}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-300/35 bg-amber-400/10 px-2.5 text-[11px] font-semibold text-amber-100 disabled:opacity-40"
+                        >
+                          <IconUnsend className="h-3.5 w-3.5" />
+                          Unsend
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={busyId === job.id}
+                        title="Delete job permanently"
+                        aria-label="Delete"
+                        onClick={() => deleteJob(job)}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-400/35 bg-red-500/10 px-2.5 text-[11px] font-semibold text-red-200 disabled:opacity-40"
+                      >
+                        <IconTrash className="h-3.5 w-3.5" />
+                        Delete
+                      </button>
                     </div>
                   </div>
                 ) : (
@@ -1353,6 +1444,30 @@ https://instagram.com/…"
                       className="h-9 rounded-lg px-2.5 text-[11px] text-amber-200/80"
                     >
                       {job.urgent ? "Clear urgent" : "Mark urgent"}
+                    </button>
+                    {job.status !== "WAITING_BRIEF" ? (
+                      <button
+                        type="button"
+                        disabled={busyId === job.id}
+                        title="Unsend — off designer queue, clear Amit Ready"
+                        aria-label="Unsend"
+                        onClick={() => unsendJob(job)}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-300/35 bg-amber-400/10 px-2.5 text-[11px] font-semibold text-amber-100 disabled:opacity-40"
+                      >
+                        <IconUnsend className="h-3.5 w-3.5" />
+                        Unsend
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      disabled={busyId === job.id}
+                      title="Delete job permanently"
+                      aria-label="Delete"
+                      onClick={() => deleteJob(job)}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-400/35 bg-red-500/10 px-2.5 text-[11px] font-semibold text-red-200 disabled:opacity-40"
+                    >
+                      <IconTrash className="h-3.5 w-3.5" />
+                      Delete
                     </button>
                   </div>
                 )}

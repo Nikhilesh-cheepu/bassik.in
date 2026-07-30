@@ -152,6 +152,16 @@ export function IconTrash({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+/** Undo / unsend — curved arrow back. */
+export function IconUnsend({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <path d="M9 14L4 9l5-5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 9h10.5a5.5 5.5 0 110 11H12" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 /** Brand icons for checklist platforms (fill currentColor). */
 export function IconMeta({ className = "h-3.5 w-3.5" }: { className?: string }) {
   return (
