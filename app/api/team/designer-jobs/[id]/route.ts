@@ -431,7 +431,7 @@ export async function PATCH(
       });
     }
 
-    // Admin: mark done with or without a file
+    // Admin: mark done only with an uploaded file (syncs weekend story+post+ad).
     if (action === "mark-done") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       if (
@@ -446,14 +446,23 @@ export async function PATCH(
         typeof body.fileUrl === "string" && body.fileUrl.trim()
           ? body.fileUrl.trim()
           : job.fileUrl;
-      const uploadedAt = fileUrl ? job.uploadedAt ?? new Date() : null;
+      if (!fileUrl) {
+        return NextResponse.json(
+          {
+            error:
+              "Upload a creative before Mark done — Done without a file is not allowed. Use Force clear / reopen if you need to reset.",
+          },
+          { status: 400 }
+        );
+      }
+      const uploadedAt = job.uploadedAt ?? new Date();
       const updated = await prisma.teamDesignerJob.update({
         where: { id },
         data: {
           status: "DESIGN_DONE",
           fileUrl,
           uploadedAt,
-          waApproved: Boolean(fileUrl) || job.waApproved,
+          waApproved: true,
           startedAt: job.startedAt ?? new Date(),
           postingNotes:
             typeof body.postingNotes === "string"
@@ -466,16 +475,14 @@ export async function PATCH(
         },
       });
       await setDesignerEditRequest(id, { at: null, note: null });
-      if (fileUrl) {
-        try {
-          await syncDesignerJobToChecklistHandoff(updated);
-        } catch (e) {
-          console.error("[designer-jobs] checklist sync on mark-done", e);
-        }
+      try {
+        await syncDesignerJobToChecklistHandoff(updated);
+      } catch (e) {
+        console.error("[designer-jobs] checklist sync on mark-done", e);
       }
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
-        message: fileUrl ? "Marked done — Amit Ready synced" : "Marked done (no upload)",
+        message: "Marked done — Amit Ready synced (weekend: story + post + ad)",
       });
     }
 

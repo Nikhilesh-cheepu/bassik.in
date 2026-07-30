@@ -293,7 +293,9 @@ function buildWaitNudgeWhatsAppMessage(items: TeamChecklistItemDto[]): string {
 }
 
 function handoffStatusOf(item: TeamChecklistItemDto): HandoffStatus {
-  return item.handoff?.status ?? (item.creativeReady ? "ready" : "wait");
+  if (isDownloadReady(item)) return "ready";
+  if (item.handoff?.status === "approved") return "approved";
+  return "wait";
 }
 
 /** Display-only: green when file uploaded. No wait/ready toggle. */
@@ -591,6 +593,8 @@ function ItemRow({
   canUploadHandoff,
   requireDownloadGate = false,
   onComplete,
+  onCloseSkip,
+  onUnready,
   onHandoffUpload,
 }: {
   item: TeamChecklistItemDto;
@@ -598,10 +602,11 @@ function ItemRow({
   busy: boolean;
   isAdmin: boolean;
   canUploadHandoff: boolean;
-  /** Amit Ready tab: must download, then wait 1 min before Done */
+  /** Ready tab: download + 1 min before Done (everyone, including admin). */
   requireDownloadGate?: boolean;
   onComplete: (item: TeamChecklistItemDto, platforms: ChecklistPlatformId[]) => void;
-  onAdminToggleReady?: (item: TeamChecklistItemDto) => void;
+  onCloseSkip?: (item: TeamChecklistItemDto) => void;
+  onUnready?: (item: TeamChecklistItemDto) => void;
   onHandoffUpload: (
     item: TeamChecklistItemDto,
     payload: {
@@ -619,14 +624,12 @@ function ItemRow({
   const ready = status === "ready";
   const dlAt = readDownloadAt(item.id, dateKey);
   const remainingSec =
-    requireDownloadGate && ready && dlAt
+    ready && dlAt
       ? Math.max(0, Math.ceil((dlAt + DOWNLOAD_UNLOCK_MS - Date.now()) / 1000))
       : null;
   const gateBlocks =
-    requireDownloadGate &&
-    ready &&
-    !isAdmin &&
-    (!dlAt || (remainingSec != null && remainingSec > 0));
+    ready && (!dlAt || (remainingSec != null && remainingSec > 0));
+  const canMarkDone = ready && !gateBlocks;
 
   useEffect(() => {
     setDraftPlatforms([]);
@@ -634,10 +637,10 @@ function ItemRow({
   }, [item.id, dateKey]);
 
   useEffect(() => {
-    if (!requireDownloadGate || !ready || !dlAt || (remainingSec ?? 0) <= 0) return;
+    if (!ready || !dlAt || (remainingSec ?? 0) <= 0) return;
     const t = window.setInterval(() => setTick((n) => n + 1), 1000);
     return () => window.clearInterval(t);
-  }, [requireDownloadGate, ready, dlAt, remainingSec]);
+  }, [ready, dlAt, remainingSec]);
 
   const toggleDraft = (platform: ChecklistPlatformId) => {
     setDraftPlatforms((prev) =>
@@ -697,21 +700,26 @@ function ItemRow({
               onDownloaded={() => setTick((n) => n + 1)}
             />
           ) : null}
-          {requireDownloadGate && ready && !dlAt && !isAdmin ? (
-            <p className="mt-1 text-[10px] text-white/40">Download first — then Done unlocks in 1 min.</p>
+          {ready && !dlAt ? (
+            <p className="mt-1 text-[10px] text-white/40">
+              Download first — then Done unlocks in 1 min. No Done without download.
+            </p>
           ) : null}
-          {requireDownloadGate && remainingSec != null && remainingSec > 0 && !isAdmin ? (
+          {remainingSec != null && remainingSec > 0 ? (
             <p className="mt-1 text-[10px] text-amber-200/70">
               Done unlocks in {remainingSec}s…
             </p>
           ) : null}
-          {isAdmin && requireDownloadGate ? (
-            <p className="mt-1 text-[10px] text-emerald-200/60">Admin — Done anytime (no download wait).</p>
+          {!ready ? (
+            <p className="mt-1 text-[10px] text-white/35">
+              Waiting on upload — not sent to Amit until a file is Ready.
+              {isAdmin ? " Admin can Close to skip, or Unready if wrongly marked." : ""}
+            </p>
           ) : null}
         </div>
 
         <div className="flex shrink-0 flex-col items-stretch gap-1.5">
-          {requireDownloadGate && ready && fileUrl ? (
+          {ready && fileUrl ? (
             <a
               href={`/api/team/download?url=${encodeURIComponent(fileUrl)}`}
               onClick={() => {
@@ -730,10 +738,10 @@ function ItemRow({
               onClick={() => setShowUpload((v) => !v)}
               className="h-7 rounded bg-white/10 px-2 text-[10px] font-semibold text-white/80"
             >
-              {showUpload ? "Close" : "Upload"}
+              {showUpload ? "Hide" : "Upload"}
             </button>
           ) : null}
-          {!requireDownloadGate ? (
+          {!requireDownloadGate && ready ? (
             <PlatformToggles
               selected={draftPlatforms}
               busy={busy}
@@ -742,20 +750,33 @@ function ItemRow({
           ) : null}
           <button
             type="button"
-            disabled={
-              busy ||
-              gateBlocks ||
-              (!requireDownloadGate && draftPlatforms.length === 0)
-            }
+            disabled={busy || !canMarkDone}
             onClick={markDone}
-            className={`h-9 rounded-lg px-3 text-[12px] font-bold disabled:opacity-30 ${
-              isAdmin && requireDownloadGate
-                ? "bg-emerald-400 text-black"
-                : "bg-white/15 text-white"
-            }`}
+            className="h-9 rounded-lg bg-emerald-400 px-3 text-[12px] font-bold text-black disabled:opacity-30"
           >
-            {busy ? "…" : isAdmin && requireDownloadGate ? "Done" : "Done"}
+            {busy ? "…" : "Done"}
           </button>
+          {isAdmin && ready && onUnready ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onUnready(item)}
+              className="h-8 rounded-lg border border-amber-300/40 bg-amber-400/10 px-2 text-[11px] font-semibold text-amber-100 disabled:opacity-40"
+            >
+              Unready
+            </button>
+          ) : null}
+          {isAdmin && onCloseSkip ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onCloseSkip(item)}
+              title="Skip posting — close without download"
+              className="h-8 rounded-lg border border-white/15 px-2 text-[11px] font-semibold text-white/55 disabled:opacity-40"
+            >
+              Close
+            </button>
+          ) : null}
         </div>
       </div>
       {canUploadHandoff && !ready && showUpload ? (
@@ -776,8 +797,9 @@ function AdItemRow({
   isAdmin,
   canUploadHandoff,
   onComplete,
+  onCloseSkip,
+  onUnready,
   onSaveDescription,
-  onAdminToggleReady,
   onHandoffUpload,
 }: {
   item: TeamChecklistItemDto;
@@ -786,8 +808,9 @@ function AdItemRow({
   isAdmin: boolean;
   canUploadHandoff: boolean;
   onComplete: (item: TeamChecklistItemDto, platforms: ChecklistPlatformId[]) => void;
+  onCloseSkip?: (item: TeamChecklistItemDto) => void;
+  onUnready?: (item: TeamChecklistItemDto) => void;
   onSaveDescription: (item: TeamChecklistItemDto, description: string) => Promise<void>;
-  onAdminToggleReady: (item: TeamChecklistItemDto) => void;
   onHandoffUpload: (
     item: TeamChecklistItemDto,
     payload: {
@@ -801,11 +824,20 @@ function AdItemRow({
   const done = isItemDone(item, dateKey);
   const status = handoffStatusOf(item);
   const ready = status === "ready";
+  const fileUrl = item.handoff?.fileUrl?.trim() || "";
   const [draftPlatforms, setDraftPlatforms] = useState<ChecklistPlatformId[]>([]);
   const [editing, setEditing] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [desc, setDesc] = useState(item.description ?? "");
   const [savingDesc, setSavingDesc] = useState(false);
+  const [, setTick] = useState(0);
+  const dlAt = readDownloadAt(item.id, dateKey);
+  const remainingSec =
+    ready && dlAt
+      ? Math.max(0, Math.ceil((dlAt + DOWNLOAD_UNLOCK_MS - Date.now()) / 1000))
+      : null;
+  const gateBlocks = ready && (!dlAt || (remainingSec != null && remainingSec > 0));
+  const canMarkDone = ready && !gateBlocks && draftPlatforms.length > 0;
 
   useEffect(() => {
     setDraftPlatforms([]);
@@ -813,6 +845,12 @@ function AdItemRow({
     setEditing(false);
     setShowUpload(false);
   }, [item.id, dateKey, item.description]);
+
+  useEffect(() => {
+    if (!ready || !dlAt || (remainingSec ?? 0) <= 0) return;
+    const t = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [ready, dlAt, remainingSec]);
 
   if (done) {
     return (
@@ -846,6 +884,11 @@ function AdItemRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
             <span className="text-[13px] font-medium text-white/90">{item.title}</span>
+            {item.outletTitle ? (
+              <span className="rounded bg-cyan-400/15 px-1.5 py-0.5 text-[11px] font-bold text-cyan-100">
+                {item.outletTitle}
+              </span>
+            ) : null}
             {item.dueLabel ? (
               <span className="text-[11px] font-semibold text-amber-100/80">{item.dueLabel}</span>
             ) : null}
@@ -894,7 +937,17 @@ function AdItemRow({
               <ExpandableText text={item.description ?? ""} empty="No brief yet." />
             </div>
           )}
-          <HandoffDetails item={item} />
+          <HandoffDetails
+            item={item}
+            dateKey={dateKey}
+            onDownloaded={() => setTick((n) => n + 1)}
+          />
+          {ready && !dlAt ? (
+            <p className="mt-1 text-[10px] text-white/40">Download first — then Done unlocks in 1 min.</p>
+          ) : null}
+          {remainingSec != null && remainingSec > 0 ? (
+            <p className="mt-1 text-[10px] text-amber-200/70">Done unlocks in {remainingSec}s…</p>
+          ) : null}
           {canUploadHandoff && !ready && showUpload ? (
             <HandoffUploadForm
               item={item}
@@ -903,7 +956,19 @@ function AdItemRow({
             />
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-1 pt-0.5">
+        <div className="flex shrink-0 flex-col items-stretch gap-1 pt-0.5">
+          {ready && fileUrl ? (
+            <a
+              href={`/api/team/download?url=${encodeURIComponent(fileUrl)}`}
+              onClick={() => {
+                markDownloaded(item.id, dateKey);
+                setTick((n) => n + 1);
+              }}
+              className="inline-flex h-8 items-center justify-center rounded-lg bg-cyan-400 px-2 text-[11px] font-bold text-black"
+            >
+              Download
+            </a>
+          ) : null}
           {canUploadHandoff && !ready ? (
             <button
               type="button"
@@ -911,22 +976,44 @@ function AdItemRow({
               onClick={() => setShowUpload((v) => !v)}
               className="h-7 rounded bg-white/10 px-2 text-[10px] font-semibold text-white/80"
             >
-              {showUpload ? "Close" : "Upload"}
+              {showUpload ? "Hide" : "Upload"}
             </button>
           ) : null}
-          <PlatformToggles
-            selected={draftPlatforms}
-            busy={busy}
-            onToggle={toggleDraft}
-          />
+          {ready ? (
+            <PlatformToggles
+              selected={draftPlatforms}
+              busy={busy}
+              onToggle={toggleDraft}
+            />
+          ) : null}
           <button
             type="button"
-            disabled={busy || draftPlatforms.length === 0}
+            disabled={busy || !canMarkDone}
             onClick={() => onComplete(item, draftPlatforms)}
-            className="h-7 rounded bg-cyan-500 px-2 text-[10px] font-semibold text-black disabled:opacity-30"
+            className="h-7 rounded bg-emerald-400 px-2 text-[10px] font-semibold text-black disabled:opacity-30"
           >
             {busy ? "…" : "Done"}
           </button>
+          {isAdmin && ready && onUnready ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onUnready(item)}
+              className="h-7 rounded border border-amber-300/40 bg-amber-400/10 px-2 text-[10px] font-semibold text-amber-100"
+            >
+              Unready
+            </button>
+          ) : null}
+          {isAdmin && onCloseSkip ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onCloseSkip(item)}
+              className="h-7 rounded border border-white/15 px-2 text-[10px] font-semibold text-white/55"
+            >
+              Close
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
@@ -952,8 +1039,9 @@ function AdsOutletSection({
   isAdmin,
   canUploadHandoff,
   onComplete,
+  onCloseSkip,
+  onUnready,
   onSaveDescription,
-  onAdminToggleReady,
   onHandoffUpload,
 }: {
   section: OutletBoardSection;
@@ -962,8 +1050,9 @@ function AdsOutletSection({
   isAdmin: boolean;
   canUploadHandoff: boolean;
   onComplete: (item: TeamChecklistItemDto, platforms: ChecklistPlatformId[]) => void;
+  onCloseSkip?: (item: TeamChecklistItemDto) => void;
+  onUnready?: (item: TeamChecklistItemDto) => void;
   onSaveDescription: (item: TeamChecklistItemDto, description: string) => Promise<void>;
-  onAdminToggleReady: (item: TeamChecklistItemDto) => void;
   onHandoffUpload: (
     item: TeamChecklistItemDto,
     payload: {
@@ -1013,8 +1102,9 @@ function AdsOutletSection({
             isAdmin={isAdmin}
             canUploadHandoff={canUploadHandoff}
             onComplete={onComplete}
+            onCloseSkip={onCloseSkip}
+            onUnready={onUnready}
             onSaveDescription={onSaveDescription}
-            onAdminToggleReady={onAdminToggleReady}
             onHandoffUpload={onHandoffUpload}
           />
         ))}
@@ -1190,11 +1280,10 @@ export default function TeamTasksView({
     );
   };
 
-  /** Admin override: wait ↔ ready (WhatsApp approval is offline). */
-  const adminToggleReady = async (item: TeamChecklistItemDto) => {
+  /** Admin: pull Ready back — weekend clears story+post+ad and resets designer job. */
+  const adminUnready = async (item: TeamChecklistItemDto) => {
     if (!isAdmin) return;
     const date = item.targetDate ?? focusDate;
-    const ready = handoffStatusOf(item) === "ready";
     setBusyItemId(item.id);
     try {
       const res = await fetch(`/api/team/checklist-items/${item.id}`, {
@@ -1202,13 +1291,40 @@ export default function TeamTasksView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           date,
-          handoff: { action: ready ? "clear" : "set-ready" },
+          handoff: { action: "clear" },
         }),
       });
       await readTeamApiJson(res);
+      clearDownloadAt(item.id, date);
       await loadBoard();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update ready status");
+      setError(err instanceof Error ? err.message : "Failed to mark Unready");
+    } finally {
+      setBusyItemId(null);
+    }
+  };
+
+  /** Admin: skip posting — close without Ready/download. */
+  const adminCloseSkip = async (item: TeamChecklistItemDto) => {
+    if (!isAdmin) return;
+    const date = item.targetDate ?? focusDate;
+    setBusyItemId(item.id);
+    try {
+      const res = await fetch(`/api/team/checklist-items/${item.id}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date,
+          markComplete: true,
+          closeWithoutCreative: true,
+          platforms: [...CHECKLIST_PLATFORM_IDS],
+        }),
+      });
+      await readTeamApiJson(res);
+      clearDownloadAt(item.id, date);
+      await loadBoard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to Close item");
     } finally {
       setBusyItemId(null);
     }
@@ -1782,7 +1898,7 @@ export default function TeamTasksView({
                         {outletFilter !== "all" ? ` · ${outletFilterLabel(outletFilter)}` : ""})
                       </h3>
                       <p className="text-[11px] text-white/40">
-                        Uploaded stories & posts only (no ads). Download → Done. Admin: Done anytime.
+                        Uploaded stories & posts only (no ads). Download → wait 1 min → Done. Admin: Unready or Close to skip.
                       </p>
                     </div>
                     <div className="divide-y divide-white/[0.06] px-2.5 py-1">
@@ -1796,6 +1912,8 @@ export default function TeamTasksView({
                           canUploadHandoff={canUploadHandoff}
                           requireDownloadGate
                           onComplete={markComplete}
+                          onCloseSkip={isAdmin ? adminCloseSkip : undefined}
+                          onUnready={isAdmin ? adminUnready : undefined}
                           onHandoffUpload={submitHandoffUpload}
                         />
                       ))}
@@ -1832,6 +1950,8 @@ export default function TeamTasksView({
                           isAdmin={isAdmin}
                           canUploadHandoff={canUploadHandoff}
                           onComplete={markComplete}
+                          onCloseSkip={isAdmin ? adminCloseSkip : undefined}
+                          onUnready={isAdmin ? adminUnready : undefined}
                           onHandoffUpload={submitHandoffUpload}
                         />
                       ))}
@@ -1848,8 +1968,9 @@ export default function TeamTasksView({
                     isAdmin={isAdmin}
                     canUploadHandoff={canUploadHandoff}
                     onComplete={markComplete}
+                    onCloseSkip={isAdmin ? adminCloseSkip : undefined}
+                    onUnready={isAdmin ? adminUnready : undefined}
                     onSaveDescription={saveAdDescription}
-                    onAdminToggleReady={adminToggleReady}
                     onHandoffUpload={submitHandoffUpload}
                   />
                 ))

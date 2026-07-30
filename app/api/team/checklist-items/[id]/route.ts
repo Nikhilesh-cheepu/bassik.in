@@ -14,6 +14,7 @@ import {
   type ChecklistHandoffDto,
   type HandoffStatus,
 } from "@/lib/team-checklists";
+import { unreadyOutletGoLiveHandoff } from "@/lib/team-designer-jobs";
 
 type HandoffAction = "approve" | "unapprove" | "set-ready" | "clear";
 
@@ -190,9 +191,40 @@ export async function PATCH(
         if (!isAdmin) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
+        // Weekend: same creative on story+post+ad — clear all + reset designer job.
+        const checklist = await prisma.teamDailyChecklist.findUnique({
+          where: { id: item.checklistId },
+          select: { outletId: true },
+        });
+        if (checklist?.outletId) {
+          try {
+            await unreadyOutletGoLiveHandoff({
+              outletId: checklist.outletId,
+              postDate: dateRaw,
+              dayId: item.dayOfWeek,
+            });
+          } catch (e) {
+            console.error("[checklist-items] unreadyOutletGoLiveHandoff", e);
+            return NextResponse.json(
+              { error: "Failed to mark Unready across story/post/ad" },
+              { status: 500 }
+            );
+          }
+          const refreshed = await prisma.teamChecklistItem.findUnique({
+            where: { id },
+            include: { completions: true },
+          });
+          if (!refreshed) {
+            return NextResponse.json({ error: "Item not found" }, { status: 404 });
+          }
+          return NextResponse.json({
+            item: toTeamChecklistItemDto(refreshed, getTodayKey()),
+            message: "Marked Unready — removed from Amit Ready and designer Done",
+          });
+        }
         next = { status: "wait" };
       } else if (action === "set-ready") {
-        // WhatsApp approval is offline — designer uploads final → Amit gets it immediately.
+        // Anyone (admin or designer): Ready requires an uploaded file.
         const format = parseHandoffFormat(body.handoff?.format) ?? prev.format ?? null;
         const fileUrl =
           typeof body.handoff?.fileUrl === "string" && body.handoff.fileUrl.trim()
@@ -207,16 +239,17 @@ export async function PATCH(
             ? body.handoff.scheduleNote.trim() || null
             : prev.scheduleNote ?? null;
 
-        if (!isAdmin) {
-          if (!fileUrl) {
-            return NextResponse.json({ error: "File URL required" }, { status: 400 });
-          }
-          if (!format) {
-            return NextResponse.json(
-              { error: "Format required (story / post / reel / ad)" },
-              { status: 400 }
-            );
-          }
+        if (!fileUrl) {
+          return NextResponse.json(
+            { error: "Upload a file before marking Ready — Ready without download is not allowed" },
+            { status: 400 }
+          );
+        }
+        if (!format) {
+          return NextResponse.json(
+            { error: "Format required (story / post / reel / ad)" },
+            { status: 400 }
+          );
         }
 
         next = {
@@ -226,9 +259,9 @@ export async function PATCH(
           postingNotes,
           scheduleNote,
           uploadedAt:
-            fileUrl && fileUrl !== prev.fileUrl
+            fileUrl !== prev.fileUrl
               ? new Date().toISOString()
-              : prev.uploadedAt ?? (fileUrl ? new Date().toISOString() : null),
+              : prev.uploadedAt ?? new Date().toISOString(),
         };
       }
 

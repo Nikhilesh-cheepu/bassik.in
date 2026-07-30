@@ -5,7 +5,9 @@ import { prisma } from "@/lib/db";
 import {
   getTodayKey,
   handoffByDateFromJson,
+  handoffForDate,
   isChecklistPlatformId,
+  isHandoffDownloadReady,
   parsePlatforms,
   platformsFromJson,
   readyDatesFromJson,
@@ -14,6 +16,43 @@ import {
 } from "@/lib/team-checklists";
 import { SOCIAL_BOARD_PLATFORMS } from "@/lib/team-checklist-templates";
 import { teamPersonalNoteOwnerId } from "@/lib/team-personal-notes";
+
+function creativeKindsNeedingFile(kind: string): boolean {
+  return kind === "stories" || kind === "posts" || kind === "ads";
+}
+
+function assertDownloadReadyOrClose(params: {
+  kind: string;
+  handoff: Prisma.JsonValue | null;
+  readyDates: Prisma.JsonValue | null;
+  date: string;
+  closeWithoutCreative: boolean;
+  isAdmin: boolean;
+}): NextResponse | null {
+  if (!creativeKindsNeedingFile(params.kind)) return null;
+  if (params.closeWithoutCreative) {
+    if (!params.isAdmin) {
+      return NextResponse.json(
+        { error: "Only admin can Close without a creative" },
+        { status: 403 }
+      );
+    }
+    return null;
+  }
+  const map = handoffByDateFromJson(params.handoff);
+  const readyList = readyDatesFromJson(params.readyDates);
+  const resolved = handoffForDate(map, readyList, params.date);
+  if (!isHandoffDownloadReady(resolved)) {
+    return NextResponse.json(
+      {
+        error:
+          "Done requires a Ready creative with a file. Admin can use Close to skip posting.",
+      },
+      { status: 400 }
+    );
+  }
+  return null;
+}
 
 function serializeHandoffMap(
   map: Record<string, ChecklistHandoffDto>
@@ -91,6 +130,8 @@ export async function POST(
       togglePlatform?: string;
       platforms?: unknown;
       markComplete?: boolean;
+      /** Admin skip — close without Ready/download */
+      closeWithoutCreative?: boolean;
     };
 
     const item = await prisma.teamChecklistItem.findUnique({
@@ -106,6 +147,8 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const isAdmin = session.role === "admin";
+    const closeWithoutCreative = Boolean(body.closeWithoutCreative);
     const kind = item.checklist.kind;
     const isPost = kind === "posts";
     const isRecurringPost = isPost && Boolean(item.dayOfWeek);
@@ -119,6 +162,15 @@ export async function POST(
 
       if (typeof body.markComplete === "boolean" && body.togglePlatform === undefined) {
         if (body.markComplete) {
+          const deny = assertDownloadReadyOrClose({
+            kind,
+            handoff: item.handoff,
+            readyDates: item.readyDates,
+            date,
+            closeWithoutCreative,
+            isAdmin,
+          });
+          if (deny) return deny;
           const platforms = [...SOCIAL_BOARD_PLATFORMS];
           const row = existing
             ? await prisma.teamChecklistCompletion.update({
@@ -137,6 +189,7 @@ export async function POST(
             completed: true,
             date: row.date,
             completedPlatforms: platformsFromJson(row.completedPlatforms),
+            closedWithoutCreative: closeWithoutCreative || undefined,
           });
         }
         if (existing) {
@@ -177,6 +230,17 @@ export async function POST(
         await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
         return NextResponse.json({ completed: false, date, completedPlatforms: [] });
       }
+      {
+        const deny = assertDownloadReadyOrClose({
+          kind,
+          handoff: item.handoff,
+          readyDates: item.readyDates,
+          date: today,
+          closeWithoutCreative,
+          isAdmin,
+        });
+        if (deny) return deny;
+      }
       const row = await prisma.teamChecklistCompletion.create({
         data: {
           itemId: id,
@@ -205,6 +269,15 @@ export async function POST(
       body.platforms === undefined
     ) {
       if (body.markComplete) {
+        const deny = assertDownloadReadyOrClose({
+          kind,
+          handoff: item.handoff,
+          readyDates: item.readyDates,
+          date,
+          closeWithoutCreative,
+          isAdmin,
+        });
+        if (deny) return deny;
         const platforms =
           existing && platformsFromJson(existing.completedPlatforms).length
             ? platformsFromJson(existing.completedPlatforms)
@@ -218,6 +291,7 @@ export async function POST(
           completed: true,
           date,
           completedPlatforms: platformsFromJson(row.completedPlatforms),
+          closedWithoutCreative: closeWithoutCreative || undefined,
         });
       }
       if (existing) {
@@ -271,6 +345,18 @@ export async function POST(
     if (existing) {
       await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
       return NextResponse.json({ completed: false, date, completedPlatforms: [] });
+    }
+
+    {
+      const deny = assertDownloadReadyOrClose({
+        kind,
+        handoff: item.handoff,
+        readyDates: item.readyDates,
+        date,
+        closeWithoutCreative,
+        isAdmin,
+      });
+      if (deny) return deny;
     }
 
     const row = await prisma.teamChecklistCompletion.create({

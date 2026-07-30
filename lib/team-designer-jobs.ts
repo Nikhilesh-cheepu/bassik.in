@@ -6,6 +6,7 @@ import {
   dayIdForYmd,
   getTodayKey,
   handoffByDateFromJson,
+  isWeekendPostDayId,
   previousDayYmd,
   WEEKEND_POST_LEAD_DAYS,
 } from "@/lib/team-checklists";
@@ -718,4 +719,52 @@ export async function clearDesignerJobChecklistHandoff(job: TeamDesignerJob): Pr
   }
 
   await clearChecklistHandoffReady({ ...base, kind: "stories" });
+}
+
+/**
+ * Admin Unready from Daily: clear Story/Post/Ad for that go-live (weekend shares one creative),
+ * and reset matching designer job so it leaves Done and needs a real upload again.
+ */
+export async function unreadyOutletGoLiveHandoff(params: {
+  outletId: string;
+  postDate: string;
+  dayId?: string | null;
+}): Promise<void> {
+  const dayId = params.dayId && params.dayId.trim()
+    ? params.dayId.trim()
+    : dayIdForYmd(params.postDate);
+  const base = {
+    outletId: params.outletId,
+    dayId,
+    postDate: params.postDate,
+  };
+
+  if (isWeekendPostDayId(dayId)) {
+    await Promise.all([
+      clearChecklistHandoffReady({ ...base, kind: "stories" }),
+      clearChecklistHandoffReady({ ...base, kind: "posts" }),
+      clearChecklistHandoffReady({ ...base, kind: "ads" }),
+    ]);
+  } else {
+    await clearChecklistHandoffReady({ ...base, kind: "stories" });
+  }
+
+  const job = await prisma.teamDesignerJob.findFirst({
+    where: { outletId: params.outletId, postDate: params.postDate },
+  });
+  if (!job) return;
+  if (!job.fileUrl && job.status !== "DESIGN_DONE") return;
+
+  await prisma.teamDesignerJob.update({
+    where: { id: job.id },
+    data: {
+      status: "READY_TO_DESIGN",
+      startedAt: null,
+      uploadedAt: null,
+      fileUrl: null,
+      postingNotes: null,
+      scheduleNote: null,
+      waApproved: false,
+    },
+  });
 }

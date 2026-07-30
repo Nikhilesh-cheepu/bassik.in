@@ -156,35 +156,37 @@ export function handoffForDate(
 ): ChecklistHandoffDto {
   if (!dateKey) return { status: "wait" };
   const entry = handoffByDate?.[dateKey];
-  if (entry?.status === "ready" || entry?.status === "approved") {
-    return {
-      status: entry.status,
-      format: entry.format ?? null,
-      fileUrl: entry.fileUrl ?? null,
-      postingNotes: entry.postingNotes ?? null,
-      scheduleNote: entry.scheduleNote ?? null,
-      uploadedAt: entry.uploadedAt ?? null,
-    };
-  }
-  // Legacy: green readyDates without handoff entry
-  if (isCreativeReadyForDate(readyDates, dateKey)) {
-    return {
-      status: "ready",
-      format: entry?.format ?? null,
-      fileUrl: entry?.fileUrl ?? null,
-      postingNotes: entry?.postingNotes ?? null,
-      scheduleNote: entry?.scheduleNote ?? null,
-      uploadedAt: entry?.uploadedAt ?? null,
-    };
-  }
-  return {
-    status: "wait",
+  const base = {
     format: entry?.format ?? null,
     fileUrl: entry?.fileUrl ?? null,
     postingNotes: entry?.postingNotes ?? null,
     scheduleNote: entry?.scheduleNote ?? null,
     uploadedAt: entry?.uploadedAt ?? null,
   };
+  const hasFile = Boolean(entry?.fileUrl?.trim());
+
+  if (entry?.status === "ready") {
+    // Never treat Ready-without-file as Ready (old bad data / admin bypass).
+    if (!hasFile) {
+      return { status: "wait", ...base, fileUrl: null };
+    }
+    return { status: "ready", ...base };
+  }
+  if (entry?.status === "approved") {
+    return { status: "approved", ...base };
+  }
+  // Legacy readyDates only count when a file exists
+  if (isCreativeReadyForDate(readyDates, dateKey) && hasFile) {
+    return { status: "ready", ...base };
+  }
+  return { status: "wait", ...base };
+}
+
+/** True only when Amit can download a creative. */
+export function isHandoffDownloadReady(
+  handoff: ChecklistHandoffDto | null | undefined
+): boolean {
+  return handoff?.status === "ready" && Boolean(handoff.fileUrl?.trim());
 }
 
 export function applyHandoffToRow(
@@ -739,6 +741,7 @@ export function buildChecklistBoard(
   const monday = mondayOfWeekContaining(focus);
   // Only this week + prior week (stays inside ~7-day overdue window)
   const adWeekMondays = [monday, addDaysYmd(monday, -7)];
+  const adsSeen = new Set<string>();
   for (const weekMonday of adWeekMondays) {
     for (const list of adLists) {
       for (const item of list.items) {
@@ -746,7 +749,6 @@ export function buildChecklistBoard(
         const wantIdx = CHECKLIST_DAY_IDS.indexOf(item.dayOfWeek);
         const targetDate = addDaysYmd(weekMonday, wantIdx);
         const dueDate = weekendPostDueYmd(targetDate);
-        if (focus < dueDate) continue;
         if (dueDate < overdueDueFloor) continue;
         const done = Boolean(item.completionsByDate[targetDate]);
         if (done) continue;
@@ -764,8 +766,12 @@ export function buildChecklistBoard(
           },
           targetDate
         );
-        // Ads: show once start-day has arrived, or file already Ready.
-        if (focus < dueDate && adRow.handoff?.status !== "ready") continue;
+        // Before start day: only show if downloadable Ready (same creative as story/post).
+        if (focus < dueDate && !isHandoffDownloadReady(adRow.handoff)) continue;
+        // Dedupe: one row per outlet+go-live (avoids double lists / old orphans).
+        const dedupeKey = `${list.outletId ?? ""}:${targetDate}:${item.dayOfWeek}`;
+        if (adsSeen.has(dedupeKey)) continue;
+        adsSeen.add(dedupeKey);
         focusAds.push(adRow);
       }
     }
@@ -825,8 +831,7 @@ export function buildChecklistBoard(
             },
             targetDate
           );
-          const isReady = row.handoff?.status === "ready";
-          if (focus < publishDue && !isReady) continue;
+          if (focus < publishDue && !isHandoffDownloadReady(row.handoff)) continue;
           allOpenPosts.push(row);
         }
         continue;
@@ -975,8 +980,7 @@ export function buildChecklistBoard(
     if (!(targetDate in readyCountByDate)) return;
     if (item.completionsByDate[targetDate]) return;
     const h = handoffForDate(item.handoffByDate, item.readyDates, targetDate);
-    if (h.status !== "ready") return;
-    if (!h.fileUrl?.trim()) return;
+    if (!isHandoffDownloadReady(h)) return;
     readyCountByDate[targetDate] = (readyCountByDate[targetDate] ?? 0) + 1;
   };
   for (const list of dtos) {

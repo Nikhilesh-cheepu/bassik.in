@@ -1025,10 +1025,11 @@ https://instagram.com/…"
                     </button>
                     <button
                       type="button"
-                      disabled={busyId === job.id}
+                      disabled={busyId === job.id || !job.fileUrl}
+                      title={!job.fileUrl ? "Upload a creative first" : undefined}
                       onClick={() =>
                         void patchJob(job.id, { action: "mark-done" }).then((ok) => {
-                          if (ok) setError("Marked done (upload optional).");
+                          if (ok) setError("Marked done — Amit Ready synced.");
                         })
                       }
                       className="h-11 min-h-[44px] rounded-lg bg-white px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
@@ -1085,10 +1086,11 @@ https://instagram.com/…"
                     </button>
                     <button
                       type="button"
-                      disabled={busyId === job.id}
+                      disabled={busyId === job.id || !job.fileUrl}
+                      title={!job.fileUrl ? "Upload a creative first" : undefined}
                       onClick={() =>
                         void patchJob(job.id, { action: "mark-done" }).then((ok) => {
-                          if (ok) setError("Marked done (upload optional).");
+                          if (ok) setError("Marked done — Amit Ready synced.");
                         })
                       }
                       className="h-11 min-h-[44px] rounded-lg bg-white px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
@@ -1101,10 +1103,11 @@ https://instagram.com/…"
                   <>
                     <button
                       type="button"
-                      disabled={busyId === job.id}
+                      disabled={busyId === job.id || !job.fileUrl}
+                      title={!job.fileUrl ? "Upload a creative first" : undefined}
                       onClick={() =>
                         void patchJob(job.id, { action: "mark-done" }).then((ok) => {
-                          if (ok) setError("Marked done.");
+                          if (ok) setError("Marked done — Amit Ready synced.");
                         })
                       }
                       className="h-9 rounded-lg bg-white px-3 text-[12px] font-semibold text-black disabled:opacity-40"
