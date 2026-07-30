@@ -15,6 +15,7 @@ import {
   type TeamChecklistItemDto,
 } from "@/lib/team-checklists";
 import { CHECKLIST_DEFAULT_OWNER_ID } from "@/lib/team-checklist-templates";
+import { uploadTeamFile } from "@/lib/team-client-upload";
 import { TEAM_AD_OUTLETS } from "@/lib/team-outlets";
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { whatsAppShareUrl } from "@/lib/team-whatsapp-report";
@@ -408,14 +409,11 @@ function HandoffUploadForm({
     setUploading(true);
     setLocalError(null);
     try {
-      const fd = new FormData();
-      fd.set("file", file);
-      fd.set("kind", "handoff");
-      if (item.outletId) fd.set("outletId", item.outletId);
-      const res = await fetch("/api/team/upload", { method: "POST", body: fd });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok || !data.url) throw new Error(data.error || "Upload failed");
-      setFileUrl(data.url);
+      const url = await uploadTeamFile(file, {
+        kind: "handoff",
+        outletId: item.outletId,
+      });
+      setFileUrl(url);
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : "Upload failed");
     } finally {

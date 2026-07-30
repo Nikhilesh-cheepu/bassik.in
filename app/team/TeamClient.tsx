@@ -35,6 +35,7 @@ import TeamContentFilesView from "./TeamContentFilesView";
 import TeamTasksView from "./TeamTasksView";
 import TeamDesignerView from "./TeamDesignerView";
 import TeamBrainView from "./TeamBrainView";
+import { uploadTeamFile } from "@/lib/team-client-upload";
 import { canCreateShoots } from "@/lib/team-shoots";
 import { readCachedTeamUser, writeCachedTeamUser } from "@/lib/team-session-cache";
 import { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
@@ -515,16 +516,10 @@ export default function TeamClient() {
   }, [showTaskForm, showMemberRecordForm, showActionSheet, showMoreSheet, showWhatsAppSheet, showDoneReportSheet]);
 
   const uploadBlob = async (file: File, kind: "creative" | "reference") => {
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("outletId", taskForm.outletId || "general");
-    fd.append("kind", kind);
-    const res = await fetch("/api/team/upload", { method: "POST", body: fd });
-    const data = await readTeamApiJson(res);
-    if (!res.ok) throw new Error(teamApiError(data, "Upload failed"));
-    const url = teamApiString(data, "url");
-    if (!url) throw new Error("Upload failed");
-    return url;
+    return uploadTeamFile(file, {
+      kind,
+      outletId: taskForm.outletId || "general",
+    });
   };
 
   const login = async (e: React.FormEvent) => {
@@ -677,21 +672,18 @@ export default function TeamClient() {
     setNoteUploading(true);
     setError(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("outletId", noteForm.outletId || "general");
-      fd.append("kind", "note");
-      const res = await fetch("/api/team/upload", { method: "POST", body: fd });
-      const data = await readTeamApiJson(res);
-      if (!res.ok) throw new Error(teamApiError(data, "Upload failed"));
+      const url = await uploadTeamFile(file, {
+        kind: "note",
+        outletId: noteForm.outletId || "general",
+      });
       setNoteForm((f) => ({
         ...f,
         attachments: [
           ...f.attachments,
           {
-            url: teamApiString(data, "url") ?? "",
-            fileName: teamApiString(data, "fileName") ?? file.name,
-            mimeType: teamApiString(data, "mimeType") ?? file.type,
+            url,
+            fileName: file.name,
+            mimeType: file.type || "application/octet-stream",
           },
         ],
       }));

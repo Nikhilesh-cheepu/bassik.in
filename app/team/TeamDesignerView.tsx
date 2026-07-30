@@ -15,6 +15,7 @@ import {
   type DesignerJobDto,
   type DesignerMetricsDto,
 } from "@/lib/team-designer-jobs-shared";
+import { uploadTeamFile } from "@/lib/team-client-upload";
 import { teamDownloadHref } from "@/lib/team-download";
 import { teamOutletLabel } from "@/lib/team-outlets";
 
@@ -108,9 +109,25 @@ function designerDisplayName(assigneeId: string): string {
 }
 
 async function readJson(res: Response) {
-  const data = (await res.json()) as Record<string, unknown>;
+  const text = await res.text();
+  let data: Record<string, unknown> = {};
+  if (text) {
+    try {
+      data = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      if (res.status === 413) {
+        throw new Error(
+          "File too large for this upload path (Vercel max ~4.5 MB). Try again — large files now upload directly."
+        );
+      }
+      const snippet = text.replace(/\s+/g, " ").trim().slice(0, 140);
+      throw new Error(snippet || `Request failed (${res.status})`);
+    }
+  }
   if (!res.ok) {
-    throw new Error(typeof data.error === "string" ? data.error : `Request failed (${res.status})`);
+    throw new Error(
+      typeof data.error === "string" ? data.error : `Request failed (${res.status})`
+    );
   }
   return data;
 }
@@ -397,17 +414,14 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const onFile = async (file: File | null) => {
     if (!file) return;
     setUploading(true);
+    setError(null);
     try {
-      const fd = new FormData();
-      fd.set("file", file);
-      fd.set("kind", "handoff");
       const job = jobs.find((j) => j.id === uploadJobId);
-      if (job?.outletId) fd.set("outletId", job.outletId);
-      const res = await fetch("/api/team/upload", { method: "POST", body: fd });
-      const data = await readJson(res);
-      if (typeof data.url === "string") {
-        setUploadForm((f) => ({ ...f, fileUrl: data.url as string }));
-      }
+      const url = await uploadTeamFile(file, {
+        kind: "handoff",
+        outletId: job?.outletId,
+      });
+      setUploadForm((f) => ({ ...f, fileUrl: url }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
