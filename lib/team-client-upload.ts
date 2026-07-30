@@ -20,7 +20,7 @@ function safeFilename(name: string) {
  */
 export async function uploadTeamFile(
   file: File,
-  opts: { kind: TeamUploadKind; outletId?: string }
+  opts: { kind: TeamUploadKind; outletId?: string | null }
 ): Promise<string> {
   if (file.size === 0) {
     throw new Error("File is empty — pick another.");

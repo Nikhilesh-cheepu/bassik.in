@@ -411,7 +411,7 @@ function HandoffUploadForm({
     try {
       const url = await uploadTeamFile(file, {
         kind: "handoff",
-        outletId: item.outletId,
+        outletId: item.outletId ?? undefined,
       });
       setFileUrl(url);
     } catch (err) {
