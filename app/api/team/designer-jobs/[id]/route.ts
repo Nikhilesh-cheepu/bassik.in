@@ -137,9 +137,13 @@ export async function PATCH(
 
     if (action === "force-clear") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      if (job.status !== "IN_PROGRESS" && job.status !== "DESIGN_DONE") {
+      const canForceClear =
+        job.status === "IN_PROGRESS" ||
+        job.status === "DESIGN_DONE" ||
+        (job.status === "READY_TO_DESIGN" && Boolean(job.fileUrl));
+      if (!canForceClear) {
         return NextResponse.json(
-          { error: "Only in-progress or done jobs can be force-cleared" },
+          { error: "Nothing to force-clear on this job" },
           { status: 400 }
         );
       }
@@ -169,7 +173,7 @@ export async function PATCH(
 
     if (action === "clear-upload") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      if (!job.fileUrl && job.status !== "DESIGN_DONE") {
+      if (!job.fileUrl) {
         return NextResponse.json({ error: "No upload to delete" }, { status: 400 });
       }
       try {
@@ -371,24 +375,31 @@ export async function PATCH(
       });
     }
 
-    // Admin approves edit → reopen to IN_PROGRESS so designer can re-upload & close
+    // Admin reopen → wipe upload + Amit Ready, back to Start Job (no leftover Download)
     if (action === "approve-edit" || action === "reopen") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       if (job.status !== "DESIGN_DONE") {
         return NextResponse.json({ error: "Only closed jobs can be reopened" }, { status: 400 });
       }
+      try {
+        await clearDesignerJobChecklistHandoff(job);
+      } catch (e) {
+        console.error("[designer-jobs] clear handoff on reopen", e);
+      }
       const updated = await prisma.teamDesignerJob.update({
         where: { id },
         data: {
-          status: "IN_PROGRESS",
-          startedAt: new Date(),
+          status: "READY_TO_DESIGN",
+          startedAt: null,
+          uploadedAt: null,
+          fileUrl: null,
           waApproved: false,
         },
       });
       await setDesignerEditRequest(id, { at: null, note: null });
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
-        message: "Reopened — designer can edit and re-upload",
+        message: "Reopened — upload cleared; designer must Start Job and upload again",
       });
     }
 

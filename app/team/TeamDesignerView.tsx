@@ -847,7 +847,8 @@ https://instagram.com/…"
                 </div>
               </div>
               <div className="flex shrink-0 flex-col gap-1.5">
-                {job.fileUrl ? (
+                {/* Download only on Done — Open must not keep a leftover file after reopen */}
+                {job.status === "DESIGN_DONE" && job.fileUrl ? (
                   <a
                     href={teamDownloadHref(job.fileUrl, `${job.outletLabel}-${job.postDate}`)}
                     className="inline-flex h-9 items-center justify-center rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
@@ -890,10 +891,41 @@ https://instagram.com/…"
                     }}
                     className="h-9 rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
                   >
-                    Upload & close
+                    {job.fileUrl ? "Edit / upload & close" : "Upload & close"}
                   </button>
                 ) : null}
-                {isAdmin && job.status === "IN_PROGRESS" ? (
+                {/* Leftover file on Open (e.g. old reopen) — admin delete / force clear */}
+                {isAdmin &&
+                job.fileUrl &&
+                (job.status === "READY_TO_DESIGN" || job.status === "IN_PROGRESS") ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busyId === job.id}
+                      onClick={() =>
+                        void patchJob(job.id, { action: "clear-upload" }).then((ok) => {
+                          if (ok) setError("Upload deleted from this Open job.");
+                        })
+                      }
+                      className="h-9 rounded-lg border border-red-400/35 bg-red-400/10 px-3 text-[12px] font-semibold text-red-100 disabled:opacity-40"
+                    >
+                      Delete upload
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === job.id}
+                      onClick={() =>
+                        void patchJob(job.id, { action: "force-clear" }).then((ok) => {
+                          if (ok) setError("Force cleared — Start Job + upload again.");
+                        })
+                      }
+                      className="h-8 rounded px-2 text-[11px] text-white/45"
+                    >
+                      Force clear
+                    </button>
+                  </>
+                ) : null}
+                {isAdmin && job.status === "IN_PROGRESS" && !job.fileUrl ? (
                   <button
                     type="button"
                     disabled={busyId === job.id}
@@ -969,13 +1001,15 @@ https://instagram.com/…"
                         onClick={() =>
                           void patchJob(job.id, { action: "reopen" }).then((ok) => {
                             if (ok) {
-                              setError("Reopened to In progress — designer can re-upload from Open.");
+                              setError(
+                                "Reopened — Download cleared. Designer Start Job + upload again."
+                              );
                             }
                           })
                         }
                         className="h-9 rounded-lg bg-cyan-500 px-3 text-[12px] font-semibold text-black disabled:opacity-40"
                       >
-                        Reopen to Open
+                        Reopen (clear upload)
                       </button>
                     </>
                   ) : null}
