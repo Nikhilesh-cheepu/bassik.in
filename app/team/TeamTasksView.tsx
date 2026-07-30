@@ -515,14 +515,25 @@ function KindBadge({ kind }: { kind?: string | null }) {
   );
 }
 
+/** "C53 Stories" / "C53" → "C53 Story" | "C53 Post" | "C53 Ad" */
+function outletKindChipLabel(item: TeamChecklistItemDto): string {
+  const raw =
+    item.outletTitle?.trim() ||
+    (item.outletId ? teamOutletLabel(item.outletId) : "") ||
+    "";
+  if (!raw) return "";
+  const name = raw.replace(/\s+(Stories|Posts|Ads|Story|Post|Ad)$/i, "").trim() || raw;
+  if (item.kind === "stories") return `${name} Story`;
+  if (item.kind === "ads") return `${name} Ad`;
+  if (item.kind === "posts") return `${name} Post`;
+  return name;
+}
+
 /** e.g. date / weekday / kind / outlet for Ready + Done rows */
 function readyGoLiveParts(item: TeamChecklistItemDto, dateKey: string) {
   const ymd = item.targetDate ?? dateKey;
   const [y, m, d] = ymd.split("-").map(Number);
-  const outlet =
-    item.outletTitle?.trim() ||
-    (item.outletId ? teamOutletLabel(item.outletId) : "") ||
-    "";
+  const outlet = outletKindChipLabel(item);
   if (!y || !m || !d) {
     return { datePart: item.title, weekday: "", kind: "", outlet };
   }
@@ -655,6 +666,7 @@ function ItemRow({
   };
 
   const fileUrl = item.handoff?.fileUrl?.trim() || "";
+  const outletChip = outletKindChipLabel(item);
 
   return (
     <div className="py-1.5">
@@ -673,13 +685,15 @@ function ItemRow({
               </span>
             )}
             {item.isOverdue ? (
-              <span className="text-[10px] font-medium uppercase text-amber-300/75">Overdue</span>
+              <span className="text-[10px] font-bold uppercase tracking-wide text-red-400">
+                Overdue
+              </span>
             ) : null}
           </div>
-          {!requireDownloadGate && item.outletTitle ? (
+          {!requireDownloadGate && outletChip ? (
             <p className="mt-0.5">
               <span className="inline-flex rounded-md bg-cyan-400/15 px-1.5 py-0.5 text-[12px] font-bold text-cyan-100 ring-1 ring-cyan-400/25">
-                {item.outletTitle}
+                {outletChip}
               </span>
             </p>
           ) : null}
@@ -884,9 +898,9 @@ function AdItemRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
             <span className="text-[13px] font-medium text-white/90">{item.title}</span>
-            {item.outletTitle ? (
+            {outletKindChipLabel(item) ? (
               <span className="rounded bg-cyan-400/15 px-1.5 py-0.5 text-[11px] font-bold text-cyan-100">
-                {item.outletTitle}
+                {outletKindChipLabel(item)}
               </span>
             ) : null}
             {item.dueLabel ? (
