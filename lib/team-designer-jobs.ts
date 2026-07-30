@@ -141,6 +141,8 @@ type DesignerJobRow = Omit<
   links?: unknown;
   editRequestedAt?: Date | string | null;
   editRequestNote?: string | null;
+  pauseRequestedAt?: Date | string | null;
+  pauseRequestNote?: string | null;
 };
 
 /** Raw SQL — safe when a stale Prisma client hasn't learned the `links` column yet. */
@@ -166,18 +168,28 @@ export async function setDesignerJobLinks(id: string, links: string[]): Promise<
   );
 }
 
+export type DesignerRequestMeta = {
+  editRequestedAt: string | null;
+  editRequestNote: string | null;
+  pauseRequestedAt: string | null;
+  pauseRequestNote: string | null;
+};
+
 export async function loadDesignerEditMetaByIds(
   ids: string[]
-): Promise<Map<string, { editRequestedAt: string | null; editRequestNote: string | null }>> {
-  const map = new Map<
-    string,
-    { editRequestedAt: string | null; editRequestNote: string | null }
-  >();
+): Promise<Map<string, DesignerRequestMeta>> {
+  const map = new Map<string, DesignerRequestMeta>();
   if (ids.length === 0) return map;
   const rows = await prisma.$queryRaw<
-    Array<{ id: string; editRequestedAt: Date | null; editRequestNote: string | null }>
+    Array<{
+      id: string;
+      editRequestedAt: Date | null;
+      editRequestNote: string | null;
+      pauseRequestedAt: Date | null;
+      pauseRequestNote: string | null;
+    }>
   >`
-    SELECT id, "editRequestedAt", "editRequestNote"
+    SELECT id, "editRequestedAt", "editRequestNote", "pauseRequestedAt", "pauseRequestNote"
     FROM "TeamDesignerJob"
     WHERE id IN (${Prisma.join(ids)})
   `;
@@ -185,6 +197,8 @@ export async function loadDesignerEditMetaByIds(
     map.set(row.id, {
       editRequestedAt: row.editRequestedAt ? row.editRequestedAt.toISOString() : null,
       editRequestNote: row.editRequestNote ?? null,
+      pauseRequestedAt: row.pauseRequestedAt ? row.pauseRequestedAt.toISOString() : null,
+      pauseRequestNote: row.pauseRequestNote ?? null,
     });
   }
   return map;
@@ -202,11 +216,24 @@ export async function setDesignerEditRequest(
   );
 }
 
+export async function setDesignerPauseRequest(
+  id: string,
+  opts: { at: Date | null; note: string | null }
+): Promise<void> {
+  await prisma.$executeRawUnsafe(
+    `UPDATE "TeamDesignerJob" SET "pauseRequestedAt" = $1, "pauseRequestNote" = $2, "updatedAt" = NOW() WHERE id = $3`,
+    opts.at,
+    opts.note,
+    id
+  );
+}
+
 export function toDesignerJobDto(job: DesignerJobRow, today = getTodayKey()): DesignerJobDto {
   const open =
     job.status === "WAITING_BRIEF" ||
     job.status === "READY_TO_DESIGN" ||
-    job.status === "IN_PROGRESS";
+    job.status === "IN_PROGRESS" ||
+    job.status === "PAUSED";
   const isDueToday = open && job.dueDate === today;
   const isOverdue = open && job.dueDate < today;
   return {
@@ -237,6 +264,12 @@ export function toDesignerJobDto(job: DesignerJobRow, today = getTodayKey()): De
         : job.editRequestedAt.toISOString()
       : null,
     editRequestNote: job.editRequestNote ?? null,
+    pauseRequestedAt: job.pauseRequestedAt
+      ? typeof job.pauseRequestedAt === "string"
+        ? job.pauseRequestedAt
+        : job.pauseRequestedAt.toISOString()
+      : null,
+    pauseRequestNote: job.pauseRequestNote ?? null,
     createdBy: job.createdBy,
     createdAt: job.createdAt.toISOString(),
     updatedAt: job.updatedAt.toISOString(),
@@ -250,7 +283,8 @@ export function sortDesignerJobs(jobs: DesignerJobDto[], today = getTodayKey()):
   const outletRank = new Map(DESIGNER_MONTH_OUTLET_IDS.map((id, i) => [id, i]));
   const statusRank = (s: DesignerJobStatus) => {
     if (s === "IN_PROGRESS") return 0;
-    if (s === "READY_TO_DESIGN") return 1;
+    if (s === "PAUSED") return 1;
+    if (s === "READY_TO_DESIGN") return 2;
     if (s === "WAITING_BRIEF") return 3;
     return 4;
   };
@@ -468,7 +502,7 @@ export async function computeDesignerMetrics(assigneeId?: string): Promise<Desig
       prisma.teamDesignerJob.count({
         where: {
           ...whereAssignee,
-          status: { in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS"] },
+          status: { in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS", "PAUSED"] },
           dueDate: { lt: today },
         },
       }),

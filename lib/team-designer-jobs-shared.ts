@@ -16,6 +16,7 @@ export type DesignerJobStatus =
   | "WAITING_BRIEF"
   | "READY_TO_DESIGN"
   | "IN_PROGRESS"
+  | "PAUSED"
   | "DESIGN_DONE";
 
 export type DesignerJobDto = {
@@ -44,6 +45,9 @@ export type DesignerJobDto = {
   /** ISO time when designer requested admin approve-to-edit; null if none */
   editRequestedAt: string | null;
   editRequestNote: string | null;
+  /** ISO time when designer requested admin approve-to-pause; null if none */
+  pauseRequestedAt: string | null;
+  pauseRequestNote: string | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

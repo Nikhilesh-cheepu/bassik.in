@@ -11,6 +11,7 @@ import {
   parseDesignerLinks,
   setDesignerEditRequest,
   setDesignerJobLinks,
+  setDesignerPauseRequest,
   syncDesignerJobToChecklistHandoff,
   toDesignerJobDto,
 } from "@/lib/team-designer-jobs";
@@ -26,6 +27,8 @@ async function jobDtoWithLinks(job: Parameters<typeof toDesignerJobDto>[0]) {
     links: linksMap.get(job.id) ?? [],
     editRequestedAt: edit?.editRequestedAt ?? null,
     editRequestNote: edit?.editRequestNote ?? null,
+    pauseRequestedAt: edit?.pauseRequestedAt ?? null,
+    pauseRequestNote: edit?.pauseRequestNote ?? null,
   });
 }
 
@@ -44,7 +47,12 @@ type Action =
   | "request-edit"
   | "approve-edit"
   | "reject-edit"
-  | "reopen";
+  | "reopen"
+  | "request-pause"
+  | "approve-pause"
+  | "reject-pause"
+  | "pause"
+  | "resume";
 
 /** Designers must wait this long after Start before Upload & close. Admin bypasses. */
 const DESIGNER_UPLOAD_WAIT_MS = 2 * 60 * 1000;
@@ -144,6 +152,7 @@ export async function PATCH(
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       const canForceClear =
         job.status === "IN_PROGRESS" ||
+        job.status === "PAUSED" ||
         job.status === "DESIGN_DONE" ||
         (job.status === "READY_TO_DESIGN" && Boolean(job.fileUrl));
       if (!canForceClear) {
@@ -170,6 +179,7 @@ export async function PATCH(
         },
       });
       await setDesignerEditRequest(id, { at: null, note: null });
+      await setDesignerPauseRequest(id, { at: null, note: null });
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
         message: "Cleared — designer must Start Job and upload again",
@@ -204,13 +214,13 @@ export async function PATCH(
       });
     }
 
-    if (action === "start") {
+    if (action === "start" || action === "resume") {
       if (!isAdmin && !canDesignerAct) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      if (job.status !== "READY_TO_DESIGN") {
+      if (job.status !== "READY_TO_DESIGN" && job.status !== "PAUSED") {
         return NextResponse.json(
-          { error: "Only Ready-to-design jobs can be started" },
+          { error: "Only Ready or Paused jobs can be started" },
           { status: 400 }
         );
       }
@@ -218,7 +228,7 @@ export async function PATCH(
       if (active && active.id !== job.id) {
         return NextResponse.json(
           {
-            error: `Finish current job first: ${active.title}`,
+            error: `Finish or pause current job first: ${active.title}`,
             activeJobId: active.id,
           },
           { status: 409 }
@@ -228,7 +238,82 @@ export async function PATCH(
         where: { id },
         data: { status: "IN_PROGRESS", startedAt: new Date() },
       });
-      return NextResponse.json({ job: await jobDtoWithLinks(updated) });
+      await setDesignerPauseRequest(id, { at: null, note: null });
+      return NextResponse.json({
+        job: await jobDtoWithLinks(updated),
+        message: job.status === "PAUSED" ? "Resumed — timer restarted" : "Started",
+      });
+    }
+
+    // Admin pauses immediately; designer must request → admin approve
+    if (action === "pause") {
+      if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      if (job.status !== "IN_PROGRESS") {
+        return NextResponse.json({ error: "Only in-progress jobs can be paused" }, { status: 400 });
+      }
+      const updated = await prisma.teamDesignerJob.update({
+        where: { id },
+        data: { status: "PAUSED" },
+      });
+      await setDesignerPauseRequest(id, { at: null, note: null });
+      return NextResponse.json({
+        job: await jobDtoWithLinks(updated),
+        message: "Paused — Start again when ready",
+      });
+    }
+
+    if (action === "request-pause") {
+      if (!isAdmin && !canDesignerAct) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (job.status !== "IN_PROGRESS") {
+        return NextResponse.json({ error: "Only in-progress jobs can request pause" }, { status: 400 });
+      }
+      if (isAdmin) {
+        const updated = await prisma.teamDesignerJob.update({
+          where: { id },
+          data: { status: "PAUSED" },
+        });
+        await setDesignerPauseRequest(id, { at: null, note: null });
+        return NextResponse.json({
+          job: await jobDtoWithLinks(updated),
+          message: "Paused",
+        });
+      }
+      const note =
+        typeof body.note === "string" && body.note.trim()
+          ? body.note.trim().slice(0, 500)
+          : null;
+      await setDesignerPauseRequest(id, { at: new Date(), note });
+      return NextResponse.json({
+        job: await jobDtoWithLinks(job),
+        message: "Pause requested — waiting on admin",
+      });
+    }
+
+    if (action === "approve-pause") {
+      if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      if (job.status !== "IN_PROGRESS") {
+        return NextResponse.json({ error: "Job is not in progress" }, { status: 400 });
+      }
+      const updated = await prisma.teamDesignerJob.update({
+        where: { id },
+        data: { status: "PAUSED" },
+      });
+      await setDesignerPauseRequest(id, { at: null, note: null });
+      return NextResponse.json({
+        job: await jobDtoWithLinks(updated),
+        message: "Pause approved",
+      });
+    }
+
+    if (action === "reject-pause") {
+      if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      await setDesignerPauseRequest(id, { at: null, note: null });
+      return NextResponse.json({
+        job: await jobDtoWithLinks(job),
+        message: "Pause request rejected",
+      });
     }
 
     if (action === "upload-close") {
@@ -351,6 +436,7 @@ export async function PATCH(
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       if (
         job.status !== "IN_PROGRESS" &&
+        job.status !== "PAUSED" &&
         job.status !== "READY_TO_DESIGN" &&
         job.status !== "WAITING_BRIEF"
       ) {

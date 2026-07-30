@@ -59,6 +59,8 @@ function statusLabel(s: DesignerJobDto["status"]): string {
       return "Ready for designer";
     case "IN_PROGRESS":
       return "In progress";
+    case "PAUSED":
+      return "Paused";
     case "DESIGN_DONE":
       return "Done";
     default:
@@ -74,6 +76,8 @@ function statusColor(s: DesignerJobDto["status"]): string {
       return "text-cyan-300/90";
     case "IN_PROGRESS":
       return "text-amber-300";
+    case "PAUSED":
+      return "text-violet-300";
     case "DESIGN_DONE":
       return "text-emerald-300/80";
     default:
@@ -136,6 +140,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const [briefJobId, setBriefJobId] = useState<string | null>(null);
   const [briefDrafts, setBriefDrafts] = useState<Record<string, string>>({});
   const [linkDrafts, setLinkDrafts] = useState<Record<string, string>>({});
+  const [pauseNoteDrafts, setPauseNoteDrafts] = useState<Record<string, string>>({});
   const [uploadForm, setUploadForm] = useState({
     postingNotes: "",
     scheduleNote: "",
@@ -848,7 +853,9 @@ https://instagram.com/…"
                   ? "border-cyan-400/40 bg-cyan-400/[0.07]"
                   : job.status === "IN_PROGRESS"
                     ? "border-amber-400/35 bg-amber-400/[0.07]"
-                    : "border-white/[0.08] bg-white/[0.03]"
+                    : job.status === "PAUSED"
+                      ? "border-violet-400/35 bg-violet-400/[0.07]"
+                      : "border-white/[0.08] bg-white/[0.03]"
             }`}
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -944,19 +951,114 @@ https://instagram.com/…"
                     Start Job
                   </button>
                 ) : null}
-                {job.status === "IN_PROGRESS" && job.assigneeId === memberId && !isAdmin ? (
+                {job.status === "PAUSED" && (isAdmin || job.assigneeId === memberId) ? (
                   <button
                     type="button"
-                    onClick={() => tryOpenUpload(job, "close")}
-                    className="h-9 rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
+                    disabled={busyId === job.id}
+                    onClick={() =>
+                      void patchJob(job.id, { action: "resume" }).then((ok) => {
+                        if (ok) setError("Started again — upload wait timer restarted.");
+                      })
+                    }
+                    className="h-9 rounded-lg bg-cyan-500 px-3 text-[12px] font-semibold text-black disabled:opacity-40"
                   >
-                    Upload & close
+                    Start again
                   </button>
                 ) : null}
+                {/* Started: pause (+ designer upload & close). No force-clear while in progress. */}
+                {job.status === "IN_PROGRESS" && job.assigneeId === memberId && !isAdmin ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => tryOpenUpload(job, "close")}
+                      className="h-9 rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
+                    >
+                      Upload & close
+                    </button>
+                    {!job.pauseRequestedAt ? (
+                      <button
+                        type="button"
+                        disabled={busyId === job.id}
+                        onClick={() =>
+                          void patchJob(job.id, {
+                            action: "request-pause",
+                            note: pauseNoteDrafts[job.id] ?? "",
+                          }).then((ok) => {
+                            if (ok) setError("Pause requested — waiting on admin.");
+                          })
+                        }
+                        className="h-9 rounded-lg border border-violet-400/40 bg-violet-400/15 px-3 text-[12px] font-semibold text-violet-100 disabled:opacity-40"
+                      >
+                        Request pause
+                      </button>
+                    ) : (
+                      <span className="text-[11px] font-semibold text-violet-200/90">
+                        Pause pending admin
+                      </span>
+                    )}
+                  </>
+                ) : null}
+                {isAdmin && job.status === "IN_PROGRESS" ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => tryOpenUpload(job, "attach")}
+                      className="h-9 rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
+                    >
+                      {job.fileUrl ? "Edit upload" : "Upload"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === job.id}
+                      onClick={() =>
+                        void patchJob(job.id, { action: "mark-done" }).then((ok) => {
+                          if (ok) setError("Marked done (upload optional).");
+                        })
+                      }
+                      className="h-9 rounded-lg bg-white px-3 text-[12px] font-semibold text-black disabled:opacity-40"
+                    >
+                      Mark done
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === job.id}
+                      onClick={() =>
+                        void patchJob(job.id, { action: "pause" }).then((ok) => {
+                          if (ok) setError("Paused — Start again when ready.");
+                        })
+                      }
+                      className="h-9 rounded-lg border border-violet-400/40 bg-violet-400/15 px-3 text-[12px] font-semibold text-violet-100 disabled:opacity-40"
+                    >
+                      Pause
+                    </button>
+                    {job.pauseRequestedAt ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={busyId === job.id}
+                          onClick={() =>
+                            void patchJob(job.id, { action: "approve-pause" }).then((ok) => {
+                              if (ok) setError("Pause approved.");
+                            })
+                          }
+                          className="h-9 rounded-lg bg-violet-400 px-3 text-[12px] font-semibold text-black disabled:opacity-40"
+                        >
+                          Approve pause
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busyId === job.id}
+                          onClick={() => void patchJob(job.id, { action: "reject-pause" })}
+                          className="h-8 rounded px-2 text-[11px] text-white/45"
+                        >
+                          Reject pause
+                        </button>
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
                 {isAdmin &&
-                (job.status === "IN_PROGRESS" ||
-                  job.status === "READY_TO_DESIGN" ||
-                  job.status === "WAITING_BRIEF") ? (
+                (job.status === "READY_TO_DESIGN" || job.status === "WAITING_BRIEF") ? (
                   <>
                     <button
                       type="button"
@@ -979,35 +1081,26 @@ https://instagram.com/…"
                     </button>
                   </>
                 ) : null}
-                {uploadGate?.jobId === job.id ? (
-                  <p className="max-w-[10rem] text-right text-[11px] font-semibold leading-snug text-amber-200">
-                    Please wait {formatWaitClock((uploadGate.unlockAt - Date.now()) / 1000)} before
-                    you upload
-                  </p>
-                ) : null}
-                {/* Leftover file on Open (e.g. old reopen) — admin delete / force clear */}
-                {isAdmin &&
-                job.fileUrl &&
-                (job.status === "READY_TO_DESIGN" || job.status === "IN_PROGRESS") ? (
+                {isAdmin && job.status === "PAUSED" ? (
                   <>
                     <button
                       type="button"
                       disabled={busyId === job.id}
                       onClick={() =>
-                        void patchJob(job.id, { action: "clear-upload" }).then((ok) => {
-                          if (ok) setError("Upload deleted from this Open job.");
+                        void patchJob(job.id, { action: "mark-done" }).then((ok) => {
+                          if (ok) setError("Marked done.");
                         })
                       }
-                      className="h-9 rounded-lg border border-red-400/35 bg-red-400/10 px-3 text-[12px] font-semibold text-red-100 disabled:opacity-40"
+                      className="h-9 rounded-lg bg-white px-3 text-[12px] font-semibold text-black disabled:opacity-40"
                     >
-                      Delete upload
+                      Mark done
                     </button>
                     <button
                       type="button"
                       disabled={busyId === job.id}
                       onClick={() =>
                         void patchJob(job.id, { action: "force-clear" }).then((ok) => {
-                          if (ok) setError("Force cleared — Start Job + upload again.");
+                          if (ok) setError("Force cleared — back to Ready.");
                         })
                       }
                       className="h-8 rounded px-2 text-[11px] text-white/45"
@@ -1016,22 +1109,51 @@ https://instagram.com/…"
                     </button>
                   </>
                 ) : null}
-                {isAdmin && job.status === "IN_PROGRESS" && !job.fileUrl ? (
+                {uploadGate?.jobId === job.id ? (
+                  <p className="max-w-[10rem] text-right text-[11px] font-semibold leading-snug text-amber-200">
+                    Please wait {formatWaitClock((uploadGate.unlockAt - Date.now()) / 1000)} before
+                    you upload
+                  </p>
+                ) : null}
+                {isAdmin && job.fileUrl && job.status === "READY_TO_DESIGN" ? (
                   <button
                     type="button"
                     disabled={busyId === job.id}
                     onClick={() =>
-                      void patchJob(job.id, { action: "force-clear" }).then((ok) => {
-                        if (ok) setError("Force cleared — Start Job + upload again.");
+                      void patchJob(job.id, { action: "clear-upload" }).then((ok) => {
+                        if (ok) setError("Upload deleted from this Open job.");
                       })
                     }
-                    className="h-8 rounded px-2 text-[11px] text-white/45"
+                    className="h-9 rounded-lg border border-red-400/35 bg-red-400/10 px-3 text-[12px] font-semibold text-red-100 disabled:opacity-40"
                   >
-                    Force clear
+                    Delete upload
                   </button>
                 ) : null}
               </div>
             </div>
+
+            {job.status === "IN_PROGRESS" &&
+            job.assigneeId === memberId &&
+            !isAdmin &&
+            !job.pauseRequestedAt ? (
+              <div className="mt-2">
+                <input
+                  value={pauseNoteDrafts[job.id] ?? ""}
+                  onChange={(e) =>
+                    setPauseNoteDrafts((d) => ({ ...d, [job.id]: e.target.value }))
+                  }
+                  placeholder="Why pause? (optional — for admin)"
+                  className="h-8 w-full rounded-lg border border-white/10 bg-black/35 px-2 text-[12px] text-white"
+                />
+              </div>
+            ) : null}
+            {job.pauseRequestedAt && job.status === "IN_PROGRESS" ? (
+              <p className="mt-2 text-[12px] text-violet-200/90">
+                Pause requested
+                {job.pauseRequestNote ? ` — ${job.pauseRequestNote}` : ""}
+                {isAdmin ? "" : " · waiting on admin"}
+              </p>
+            ) : null}
 
             {queueView === "closed" && job.status === "DESIGN_DONE" ? (
               <div className="mt-3 space-y-2 border-t border-white/[0.08] pt-3">

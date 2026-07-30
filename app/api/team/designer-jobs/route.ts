@@ -96,6 +96,8 @@ export async function GET(req: NextRequest) {
             links: linksMap.get(r.id) ?? [],
             editRequestedAt: edit?.editRequestedAt ?? null,
             editRequestNote: edit?.editRequestNote ?? null,
+            pauseRequestedAt: edit?.pauseRequestedAt ?? null,
+            pauseRequestNote: edit?.pauseRequestNote ?? null,
           },
           today
         );
@@ -114,11 +116,13 @@ export async function GET(req: NextRequest) {
     const where: {
       postDate: { gte: string; lte: string };
       assigneeId?: string;
-      status: { in: Array<"WAITING_BRIEF" | "READY_TO_DESIGN" | "IN_PROGRESS"> };
+      status: {
+        in: Array<"WAITING_BRIEF" | "READY_TO_DESIGN" | "IN_PROGRESS" | "PAUSED">;
+      };
       OR: Array<{ dueDate: { gte: string } } | { postDate: { gte: string } }>;
     } = {
       postDate: { gte: fromDate, lte: toDate },
-      status: { in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS"] },
+      status: { in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS", "PAUSED"] },
       OR: [{ dueDate: { gte: today } }, { postDate: { gte: today } }],
     };
 
@@ -146,6 +150,8 @@ export async function GET(req: NextRequest) {
             links: linksMap.get(r.id) ?? [],
             editRequestedAt: edit?.editRequestedAt ?? null,
             editRequestNote: edit?.editRequestNote ?? null,
+            pauseRequestedAt: edit?.pauseRequestedAt ?? null,
+            pauseRequestNote: edit?.pauseRequestNote ?? null,
           },
           today
         );

@@ -551,6 +551,7 @@ enum TeamDesignerJobStatus {
   WAITING_BRIEF
   READY_TO_DESIGN
   IN_PROGRESS
+  PAUSED
   DESIGN_DONE
 }
 
@@ -585,6 +586,9 @@ model TeamDesignerJob {
   /// Designer asked admin to reopen a closed job for edit / re-upload
   editRequestedAt  DateTime?
   editRequestNote  String?
+  /// Designer asked admin to pause an in-progress job
+  pauseRequestedAt DateTime?
+  pauseRequestNote String?
   createdBy        String
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
@@ -599,6 +603,7 @@ model TeamDesignerJob {
   @@index([urgent])
   @@index([createdAt])
   @@index([editRequestedAt])
+  @@index([pauseRequestedAt])
 }
 
 /// SEO & performance marketing ad/creative tasks (internal /team board).
