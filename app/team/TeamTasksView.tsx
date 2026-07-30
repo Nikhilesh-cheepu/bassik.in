@@ -16,7 +16,7 @@ import {
 } from "@/lib/team-checklists";
 import { CHECKLIST_DEFAULT_OWNER_ID } from "@/lib/team-checklist-templates";
 import { uploadTeamFile } from "@/lib/team-client-upload";
-import { TEAM_AD_OUTLETS } from "@/lib/team-outlets";
+import { TEAM_AD_OUTLETS, teamOutletLabel } from "@/lib/team-outlets";
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { whatsAppShareUrl } from "@/lib/team-whatsapp-report";
 import { TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL } from "./TeamNav";
@@ -509,11 +509,17 @@ function KindBadge({ kind }: { kind?: string | null }) {
   );
 }
 
-/** e.g. "31 Jul · Friday · Story" */
-function readyGoLiveHeadline(item: TeamChecklistItemDto, dateKey: string): string {
+/** e.g. date / weekday / kind / outlet for Ready + Done rows */
+function readyGoLiveParts(item: TeamChecklistItemDto, dateKey: string) {
   const ymd = item.targetDate ?? dateKey;
   const [y, m, d] = ymd.split("-").map(Number);
-  if (!y || !m || !d) return item.title;
+  const outlet =
+    item.outletTitle?.trim() ||
+    (item.outletId ? teamOutletLabel(item.outletId) : "") ||
+    "";
+  if (!y || !m || !d) {
+    return { datePart: item.title, weekday: "", kind: "", outlet };
+  }
   const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
   const datePart = dt.toLocaleDateString("en-GB", {
     day: "numeric",
@@ -526,7 +532,51 @@ function readyGoLiveHeadline(item: TeamChecklistItemDto, dateKey: string): strin
   });
   const kind =
     item.kind === "stories" ? "Story" : item.kind === "ads" ? "Ad" : "Post";
-  return `${datePart} · ${weekday} · ${kind}`;
+  return { datePart, weekday, kind, outlet };
+}
+
+function ReadyHeadline({
+  item,
+  dateKey,
+}: {
+  item: TeamChecklistItemDto;
+  dateKey: string;
+}) {
+  const { datePart, weekday, kind, outlet } = readyGoLiveParts(item, dateKey);
+  return (
+    <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[15px] font-semibold leading-tight">
+      <span className="text-white">{datePart}</span>
+      {weekday ? (
+        <>
+          <span className="text-white/35">·</span>
+          <span className="text-white">{weekday}</span>
+        </>
+      ) : null}
+      {kind ? (
+        <>
+          <span className="text-white/35">·</span>
+          <span className="text-white">{kind}</span>
+        </>
+      ) : null}
+      {outlet ? (
+        <>
+          <span className="text-white/35">·</span>
+          <span className="rounded-md bg-cyan-400/20 px-1.5 py-0.5 text-[13px] font-bold text-cyan-100 ring-1 ring-cyan-400/30">
+            {outlet}
+          </span>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
+function itemOutletKey(item: TeamChecklistItemDto): string {
+  return item.outletId?.trim() || "__general__";
+}
+
+function outletFilterLabel(key: string): string {
+  if (key === "__general__") return "General";
+  return teamOutletLabel(key);
 }
 
 function ItemRow({
@@ -598,9 +648,6 @@ function ItemRow({
   };
 
   const fileUrl = item.handoff?.fileUrl?.trim() || "";
-  const headline = requireDownloadGate
-    ? readyGoLiveHeadline(item, dateKey)
-    : item.title;
 
   return (
     <div className="py-1.5">
@@ -611,15 +658,23 @@ function ItemRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
             <KindBadge kind={item.kind} />
-            <span className="text-[15px] font-semibold leading-tight text-white">
-              {headline}
-            </span>
+            {requireDownloadGate ? (
+              <ReadyHeadline item={item} dateKey={dateKey} />
+            ) : (
+              <span className="text-[15px] font-semibold leading-tight text-white">
+                {item.title}
+              </span>
+            )}
             {item.isOverdue ? (
               <span className="text-[10px] font-medium uppercase text-amber-300/75">Overdue</span>
             ) : null}
           </div>
-          {requireDownloadGate && item.outletTitle ? (
-            <p className="mt-0.5 text-[11px] text-white/40">{item.outletTitle}</p>
+          {!requireDownloadGate && item.outletTitle ? (
+            <p className="mt-0.5">
+              <span className="inline-flex rounded-md bg-cyan-400/15 px-1.5 py-0.5 text-[12px] font-bold text-cyan-100 ring-1 ring-cyan-400/25">
+                {item.outletTitle}
+              </span>
+            </p>
           ) : null}
           {item.dueLabel ? (
             <p className="mt-1 text-[12px] font-semibold leading-snug text-amber-100/90">
@@ -1106,6 +1161,8 @@ export default function TeamTasksView({
   const [postDescription, setPostDescription] = useState("");
   const [postOutletId, setPostOutletId] = useState("");
   const [mode, setMode] = useState<"ready" | "postings" | "ads" | "done">("ready");
+  /** "all" or outletId / "__general__" */
+  const [outletFilter, setOutletFilter] = useState<string>("all");
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
@@ -1421,9 +1478,59 @@ export default function TeamTasksView({
     return aOpen ? -1 : 1;
   });
 
-  const readyCount = board ? collectReadyItems(board).length : 0;
+  const readyItemsAll = board ? collectReadyItems(board) : [];
+  const readyCount = readyItemsAll.length;
   const waitCount = board ? collectWaitItems(board).length : 0;
-  const doneCount = board?.doneItems?.length ?? 0;
+  const doneItemsAll = board?.doneItems ?? [];
+  const doneCount = doneItemsAll.length;
+
+  const outletChipCounts = (() => {
+    const map = new Map<string, number>();
+    const bump = (key: string) => map.set(key, (map.get(key) ?? 0) + 1);
+    if (mode === "ready") {
+      for (const item of readyItemsAll) bump(itemOutletKey(item));
+    } else if (mode === "done") {
+      for (const item of doneItemsAll) bump(itemOutletKey(item));
+    } else if (mode === "ads") {
+      for (const section of boardOutlets) {
+        for (const ad of section.ads ?? []) {
+          if (!isItemDone(ad, ad.targetDate ?? focusDate)) bump(section.outletId);
+        }
+      }
+    } else {
+      for (const section of boardOutlets) {
+        for (const s of section.stories) {
+          if (!isItemDone(s, s.targetDate ?? focusDate)) bump(section.outletId);
+        }
+        for (const p of section.openPosts) bump(section.outletId);
+      }
+      for (const p of board?.generalPosts ?? []) bump("__general__");
+    }
+    return map;
+  })();
+
+  const outletChips = Array.from(outletChipCounts.entries())
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return outletFilterLabel(a[0]).localeCompare(outletFilterLabel(b[0]));
+    });
+
+  const matchesOutletFilter = (key: string) =>
+    outletFilter === "all" || outletFilter === key;
+
+  const readyItems =
+    outletFilter === "all"
+      ? readyItemsAll
+      : readyItemsAll.filter((i) => matchesOutletFilter(itemOutletKey(i)));
+  const doneItems =
+    outletFilter === "all"
+      ? doneItemsAll
+      : doneItemsAll.filter((i) => matchesOutletFilter(itemOutletKey(i)));
+  const filteredOutlets =
+    outletFilter === "all"
+      ? outlets
+      : outlets.filter((s) => matchesOutletFilter(s.outletId));
 
   if (loading && !board) {
     return (
@@ -1494,7 +1601,10 @@ export default function TeamTasksView({
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => setMode(t.id)}
+                    onClick={() => {
+                      setMode(t.id);
+                      setOutletFilter("all");
+                    }}
                     className={`flex h-10 min-w-[4.5rem] flex-1 items-center justify-center gap-1.5 rounded-lg px-1.5 text-[12px] font-semibold transition sm:gap-2 sm:text-[13px] ${
                       on ? t.active : t.idle
                     }`}
@@ -1614,7 +1724,7 @@ export default function TeamTasksView({
           </div>
 
           {mode !== "done" ? (
-            <div className="mb-4 flex gap-0.5 overflow-x-auto rounded-lg bg-white/[0.03] p-0.5">
+            <div className="mb-3 flex gap-0.5 overflow-x-auto rounded-lg bg-white/[0.03] p-0.5">
               {(weekDays.length > 0
                 ? weekDays
                 : [{ date: today, dayId: "mon" as const, dayLabel: "Today", dateLabel: today, isToday: true }]
@@ -1647,19 +1757,75 @@ export default function TeamTasksView({
             </div>
           ) : null}
 
+          {outletChips.length > 0 ? (
+            <div className="mb-4 flex gap-1.5 overflow-x-auto pb-0.5">
+              <button
+                type="button"
+                onClick={() => setOutletFilter("all")}
+                className={`relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-semibold transition ${
+                  outletFilter === "all"
+                    ? "bg-white text-black"
+                    : "bg-white/[0.06] text-white/65 ring-1 ring-white/10 hover:text-white"
+                }`}
+              >
+                All
+                <span
+                  className={`min-w-[1.15rem] rounded-md px-1 py-0.5 text-center text-[11px] font-bold tabular-nums ${
+                    outletFilter === "all" ? "bg-black/20 text-black" : "bg-white/10 text-white/80"
+                  }`}
+                >
+                  {mode === "ready"
+                    ? readyCount
+                    : mode === "done"
+                      ? doneCount
+                      : mode === "ads"
+                        ? adsCount
+                        : postingsCount}
+                </span>
+              </button>
+              {outletChips.map(([key, count]) => {
+                const on = outletFilter === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setOutletFilter(on ? "all" : key)}
+                    className={`relative flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-semibold transition ${
+                      on
+                        ? "bg-cyan-400 text-black shadow-[0_0_14px_rgba(34,211,238,0.3)]"
+                        : "bg-white/[0.06] text-white/70 ring-1 ring-white/10 hover:text-white"
+                    }`}
+                  >
+                    {outletFilterLabel(key)}
+                    <span
+                      className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums ${
+                        on ? "bg-black/25 text-black" : "bg-cyan-400/25 text-cyan-100"
+                      }`}
+                    >
+                      {count > 9 ? "9+" : count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
           {mode === "done" ? (
             <section className="overflow-hidden rounded-xl border border-white/[0.1] bg-white/[0.03]">
               <div className="border-b border-white/[0.08] px-3 py-2.5">
-                <h3 className="text-[14px] font-semibold text-white">Done ({doneCount})</h3>
+                <h3 className="text-[14px] font-semibold text-white">
+                  Done ({doneItems.length}
+                  {outletFilter !== "all" ? ` · ${outletFilterLabel(outletFilter)}` : ""})
+                </h3>
                 <p className="text-[11px] text-white/40">
                   Reopen removes Done and Ready for Amit — it shows again only after a new Ready upload.
                 </p>
               </div>
-              {doneCount === 0 ? (
+              {doneItems.length === 0 ? (
                 <p className="py-10 text-center text-[13px] text-white/35">Nothing done yet.</p>
               ) : (
                 <ul className="divide-y divide-white/[0.06]">
-                  {(board?.doneItems ?? []).map((d) => {
+                  {doneItems.map((d) => {
                     const fileUrl = d.handoff?.fileUrl?.trim() || null;
                     const dateKey = d.targetDate ?? focusDate;
                     return (
@@ -1672,12 +1838,9 @@ export default function TeamTasksView({
                               </span>
                               <KindBadge kind={d.kind} />
                             </div>
-                            <p className="mt-1 text-[15px] font-semibold leading-snug text-white">
-                              {readyGoLiveHeadline(d, dateKey)}
-                            </p>
-                            {d.outletTitle ? (
-                              <p className="mt-0.5 text-[12px] text-white/45">{d.outletTitle}</p>
-                            ) : null}
+                            <div className="mt-1">
+                              <ReadyHeadline item={d} dateKey={dateKey} />
+                            </div>
                           </div>
                           <div className="flex shrink-0 flex-col items-stretch gap-1.5">
                             {fileUrl ? (
@@ -1725,46 +1888,45 @@ export default function TeamTasksView({
           ) : (
             <div className="space-y-3">
               {mode === "ready" ? (
-                (() => {
-                  const readyItems = collectReadyItems(board);
-                  if (readyItems.length === 0) {
-                    return (
-                      <p className="py-10 text-center text-[13px] text-white/35">
-                        Nothing Ready yet — when Mahesh/Jeslyn upload, it shows here with Download + deadline.
+                readyItemsAll.length === 0 ? (
+                  <p className="py-10 text-center text-[13px] text-white/35">
+                    Nothing Ready yet — when Mahesh/Jeslyn upload, it shows here with Download + deadline.
+                  </p>
+                ) : readyItems.length === 0 ? (
+                  <p className="py-10 text-center text-[13px] text-white/35">
+                    No Ready items for {outletFilterLabel(outletFilter)}. Tap All or another outlet.
+                  </p>
+                ) : (
+                  <section className="overflow-hidden rounded-xl border border-emerald-400/25 bg-emerald-400/[0.04]">
+                    <div className="border-b border-emerald-400/20 px-3 py-2.5">
+                      <h3 className="text-[14px] font-semibold text-emerald-100">
+                        Ready to post ({readyItems.length}
+                        {outletFilter !== "all" ? ` · ${outletFilterLabel(outletFilter)}` : ""})
+                      </h3>
+                      <p className="text-[11px] text-white/40">
+                        Date · day · type · outlet · Download · deadline. Amit: Done after Download + 1 min. Admin: Done anytime.
                       </p>
-                    );
-                  }
-                  return (
-                    <section className="overflow-hidden rounded-xl border border-emerald-400/25 bg-emerald-400/[0.04]">
-                      <div className="border-b border-emerald-400/20 px-3 py-2.5">
-                        <h3 className="text-[14px] font-semibold text-emerald-100">
-                          Ready to post ({readyItems.length})
-                        </h3>
-                        <p className="text-[11px] text-white/40">
-                          Date · day · Story/Post/Ad · Download · deadline. Amit: Done after Download + 1 min. Admin: Done anytime.
-                        </p>
-                      </div>
-                      <div className="divide-y divide-white/[0.06] px-2.5 py-1">
-                        {readyItems.map((item) => (
-                          <ItemRow
-                            key={`${item.id}-${item.targetDate}-${item.kind}`}
-                            item={item}
-                            dateKey={item.targetDate ?? focusDate}
-                            busy={busyItemId === item.id}
-                            isAdmin={isAdmin}
-                            canUploadHandoff={canUploadHandoff}
-                            requireDownloadGate
-                            onComplete={markComplete}
-                            onHandoffUpload={submitHandoffUpload}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  );
-                })()
+                    </div>
+                    <div className="divide-y divide-white/[0.06] px-2.5 py-1">
+                      {readyItems.map((item) => (
+                        <ItemRow
+                          key={`${item.id}-${item.targetDate}-${item.kind}`}
+                          item={item}
+                          dateKey={item.targetDate ?? focusDate}
+                          busy={busyItemId === item.id}
+                          isAdmin={isAdmin}
+                          canUploadHandoff={canUploadHandoff}
+                          requireDownloadGate
+                          onComplete={markComplete}
+                          onHandoffUpload={submitHandoffUpload}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )
               ) : mode === "postings" ? (
                 <>
-                  {outlets.map((section) => (
+                  {filteredOutlets.map((section) => (
                     <OutletSection
                       key={section.outletId}
                       section={section}
@@ -1778,7 +1940,8 @@ export default function TeamTasksView({
                     />
                   ))}
 
-                  {(board.generalPosts?.length ?? 0) > 0 ? (
+                  {(board.generalPosts?.length ?? 0) > 0 &&
+                  matchesOutletFilter("__general__") ? (
                     <section className="overflow-hidden rounded-xl border border-white/[0.1] bg-white/[0.035]">
                       <div className="border-b border-white/[0.08] bg-white/[0.04] px-3 py-2.5">
                         <h3 className="text-[14px] font-semibold tracking-tight text-white">
@@ -1803,7 +1966,7 @@ export default function TeamTasksView({
                   ) : null}
                 </>
               ) : (
-                outlets.map((section) => (
+                filteredOutlets.map((section) => (
                   <AdsOutletSection
                     key={section.outletId}
                     section={section}
