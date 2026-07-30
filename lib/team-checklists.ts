@@ -56,6 +56,20 @@ export type TeamChecklistCompletionDto = {
   markedComplete: boolean;
 };
 
+export type HandoffFormat = "story" | "post" | "reel" | "ad";
+/** wait = not approved · approved = admin OK, designer must upload · ready = file live for Amit */
+export type HandoffStatus = "wait" | "approved" | "ready";
+
+export type ChecklistHandoffDto = {
+  status: HandoffStatus;
+  format?: HandoffFormat | null;
+  fileUrl?: string | null;
+  postingNotes?: string | null;
+  scheduleNote?: string | null;
+  /** ISO time when file was sent to Amit (for ~7 day blob cleanup). */
+  uploadedAt?: string | null;
+};
+
 export type TeamChecklistItemDto = {
   id: string;
   checklistId: string;
@@ -68,10 +82,14 @@ export type TeamChecklistItemDto = {
   completionsByDate: Record<string, TeamChecklistCompletionDto>;
   completedToday: boolean;
   completedPlatformsToday: string[];
-  /** Target dates where admin marked creatives ready (green). */
+  /** Target dates where creatives are ready (green) for Amit. */
   readyDates: string[];
-  /** For this row's targetDate — creatives approved for Amit to post. */
+  /** Raw per-date handoff map (server). */
+  handoffByDate?: Record<string, ChecklistHandoffDto>;
+  /** For this row's targetDate — file uploaded & ready for Amit to post. */
   creativeReady?: boolean;
+  /** For this row's targetDate — approve → upload → ready. */
+  handoff?: ChecklistHandoffDto;
   /** Story target date or habit/post date this row is about */
   targetDate?: string;
   dueLabel?: string;
@@ -80,6 +98,106 @@ export type TeamChecklistItemDto = {
   outletTitle?: string;
   kind?: ChecklistKind;
 };
+
+export const HANDOFF_FORMATS: HandoffFormat[] = ["story", "post", "reel", "ad"];
+
+export function defaultHandoffFormat(kind?: ChecklistKind | null): HandoffFormat {
+  if (kind === "stories") return "story";
+  if (kind === "ads") return "ad";
+  return "post";
+}
+
+export function parseHandoffFormat(raw: unknown): HandoffFormat | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.trim().toLowerCase();
+  return HANDOFF_FORMATS.includes(v as HandoffFormat) ? (v as HandoffFormat) : null;
+}
+
+function parseHandoffEntry(raw: unknown): ChecklistHandoffDto | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const statusRaw = typeof o.status === "string" ? o.status.trim().toLowerCase() : "";
+  const status: HandoffStatus =
+    statusRaw === "ready" || statusRaw === "approved" ? statusRaw : "wait";
+  if (status === "wait" && !o.fileUrl && !o.format && !o.postingNotes && !o.scheduleNote) {
+    return { status: "wait" };
+  }
+  return {
+    status,
+    format: parseHandoffFormat(o.format),
+    fileUrl: typeof o.fileUrl === "string" && o.fileUrl.trim() ? o.fileUrl.trim() : null,
+    postingNotes:
+      typeof o.postingNotes === "string" && o.postingNotes.trim() ? o.postingNotes.trim() : null,
+    scheduleNote:
+      typeof o.scheduleNote === "string" && o.scheduleNote.trim() ? o.scheduleNote.trim() : null,
+    uploadedAt:
+      typeof o.uploadedAt === "string" && o.uploadedAt.trim() ? o.uploadedAt.trim() : null,
+  };
+}
+
+/** Parse TeamChecklistItem.handoff JSON → per-date map. */
+export function handoffByDateFromJson(
+  raw: Prisma.JsonValue | null | undefined
+): Record<string, ChecklistHandoffDto> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, ChecklistHandoffDto> = {};
+  for (const [date, entry] of Object.entries(raw as Record<string, unknown>)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const parsed = parseHandoffEntry(entry);
+    if (parsed) out[date] = parsed;
+  }
+  return out;
+}
+
+export function handoffForDate(
+  handoffByDate: Record<string, ChecklistHandoffDto> | undefined,
+  readyDates: string[] | null | undefined,
+  dateKey: string | null | undefined
+): ChecklistHandoffDto {
+  if (!dateKey) return { status: "wait" };
+  const entry = handoffByDate?.[dateKey];
+  if (entry?.status === "ready" || entry?.status === "approved") {
+    return {
+      status: entry.status,
+      format: entry.format ?? null,
+      fileUrl: entry.fileUrl ?? null,
+      postingNotes: entry.postingNotes ?? null,
+      scheduleNote: entry.scheduleNote ?? null,
+      uploadedAt: entry.uploadedAt ?? null,
+    };
+  }
+  // Legacy: green readyDates without handoff entry
+  if (isCreativeReadyForDate(readyDates, dateKey)) {
+    return {
+      status: "ready",
+      format: entry?.format ?? null,
+      fileUrl: entry?.fileUrl ?? null,
+      postingNotes: entry?.postingNotes ?? null,
+      scheduleNote: entry?.scheduleNote ?? null,
+      uploadedAt: entry?.uploadedAt ?? null,
+    };
+  }
+  return {
+    status: "wait",
+    format: entry?.format ?? null,
+    fileUrl: entry?.fileUrl ?? null,
+    postingNotes: entry?.postingNotes ?? null,
+    scheduleNote: entry?.scheduleNote ?? null,
+    uploadedAt: entry?.uploadedAt ?? null,
+  };
+}
+
+export function applyHandoffToRow(
+  item: TeamChecklistItemDto,
+  dateKey: string
+): TeamChecklistItemDto {
+  const handoff = handoffForDate(item.handoffByDate, item.readyDates, dateKey);
+  return {
+    ...item,
+    handoff,
+    creativeReady: handoff.status === "ready",
+  };
+}
 
 export type TeamDailyChecklistDto = {
   id: string;
@@ -139,6 +257,8 @@ export type ChecklistBoardDto = {
   habit: TeamChecklistItemDto | null;
   openPosts: TeamChecklistItemDto[];
   checklists: TeamDailyChecklistDto[];
+  /** Ready (undone) item counts keyed by go-live date — for date-strip badges */
+  readyCountByDate: Record<string, number>;
 };
 
 export const BOARD_NOTES_CHECKLIST_TITLE = "Daily Checklist Notes";
@@ -226,44 +346,83 @@ export function previousDayYmd(ymd: string): string {
   return addDaysYmd(ymd, -1);
 }
 
-/** Story for `targetDate` is due at 22:00 IST on the previous calendar day. */
-export function storyDueAtMs(targetDateYmd: string): number {
-  const dueDay = previousDayYmd(targetDateYmd);
-  const [y, m, d] = dueDay.split("-").map(Number);
-  // 22:00 IST = 16:30 UTC
-  return Date.UTC(y!, m! - 1, d!, 16, 30, 0);
+/** 23:00 IST = 17:30 UTC */
+function amitDueAtMsOnYmd(dueDayYmd: string): number {
+  const [y, m, d] = dueDayYmd.split("-").map(Number);
+  return Date.UTC(y!, m! - 1, d!, 17, 30, 0);
 }
 
-export function storyDueLabel(targetDateYmd: string): string {
+/** Story for `targetDate` is due at 11:00 PM IST on the previous calendar day. */
+export function storyDueAtMs(targetDateYmd: string): number {
+  return amitDueAtMsOnYmd(previousDayYmd(targetDateYmd));
+}
+
+export function storyDueLabel(targetDateYmd: string, today = getTodayKey()): string {
   const dueDay = previousDayYmd(targetDateYmd);
   const targetDayId = dayIdForYmd(targetDateYmd);
-  return `${CHECKLIST_DAY_LABELS[targetDayId].slice(0, 3)} ${formatBoardDateLabel(targetDateYmd)} · due ${formatBoardDateLabel(dueDay)} 10 PM`;
+  const when =
+    dueDay === today
+      ? "POST TODAY by 11 PM"
+      : `post by ${formatBoardDateLabel(dueDay)} 11 PM`;
+  return `${CHECKLIST_DAY_LABELS[targetDayId]} story · ${when} · aim ~10 PM (not before 8 PM)`;
 }
 
 export function isStoryOverdue(targetDateYmd: string, now = new Date()): boolean {
   return now.getTime() > storyDueAtMs(targetDateYmd);
 }
 
-/** Weekend post target date → due date (4 days earlier). */
+/**
+ * Weekend creative / ad start day (Fri → Mon). When Mahesh delivers and ads should start.
+ */
 export function weekendPostDueYmd(targetDateYmd: string): string {
   return addDaysYmd(targetDateYmd, -WEEKEND_POST_LEAD_DAYS);
 }
 
-export function weekendPostDueAtMs(targetDateYmd: string): number {
-  const dueDay = weekendPostDueYmd(targetDateYmd);
-  const [y, m, d] = dueDay.split("-").map(Number);
-  // 22:00 IST = 16:30 UTC
-  return Date.UTC(y!, m! - 1, d!, 16, 30, 0);
+/** When Amit must have the weekend post live — day before go-live at 11 PM. */
+export function weekendPublishDueYmd(targetDateYmd: string): string {
+  return previousDayYmd(targetDateYmd);
 }
 
-export function weekendPostDueLabel(targetDateYmd: string): string {
-  const dueDay = weekendPostDueYmd(targetDateYmd);
+export function weekendPublishDueAtMs(targetDateYmd: string): number {
+  return amitDueAtMsOnYmd(weekendPublishDueYmd(targetDateYmd));
+}
+
+/** Ad start deadline — 4 days before go-live at 11 PM. */
+export function weekendAdDueAtMs(targetDateYmd: string): number {
+  return amitDueAtMsOnYmd(weekendPostDueYmd(targetDateYmd));
+}
+
+/** @deprecated use weekendPublishDueAtMs for posting overdue */
+export function weekendPostDueAtMs(targetDateYmd: string): number {
+  return weekendPublishDueAtMs(targetDateYmd);
+}
+
+export function weekendPostDueLabel(targetDateYmd: string, today = getTodayKey()): string {
+  const publishBy = weekendPublishDueYmd(targetDateYmd);
   const targetDayId = dayIdForYmd(targetDateYmd);
-  return `${CHECKLIST_DAY_LABELS[targetDayId].slice(0, 3)} ${formatBoardDateLabel(targetDateYmd)} · due ${formatBoardDateLabel(dueDay)}`;
+  const when =
+    publishBy === today
+      ? "POST TODAY by 11 PM"
+      : `post by ${formatBoardDateLabel(publishBy)} 11 PM`;
+  return `${CHECKLIST_DAY_LABELS[targetDayId]} post · ${when}`;
+}
+
+export function weekendAdDueLabel(targetDateYmd: string, today = getTodayKey()): string {
+  const startBy = weekendPostDueYmd(targetDateYmd);
+  const targetDayId = dayIdForYmd(targetDateYmd);
+  const when =
+    startBy === today
+      ? "START ADS TODAY by 11 PM"
+      : `start ads by ${formatBoardDateLabel(startBy)} 11 PM`;
+  return `${CHECKLIST_DAY_LABELS[targetDayId]} ad · ${when}`;
 }
 
 export function isWeekendPostOverdue(targetDateYmd: string, now = new Date()): boolean {
-  return now.getTime() > weekendPostDueAtMs(targetDateYmd);
+  return now.getTime() > weekendPublishDueAtMs(targetDateYmd);
+}
+
+export function isWeekendAdOverdue(targetDateYmd: string, now = new Date()): boolean {
+  return now.getTime() > weekendAdDueAtMs(targetDateYmd);
 }
 
 export function isWeekendPostDayId(v: string): v is WeekendPostDayId {
@@ -434,6 +593,7 @@ export function toTeamChecklistItemDto(
   }
   const todayRow = completionsByDate[today];
   const readyDates = readyDatesFromJson(item.readyDates);
+  const handoffByDate = handoffByDateFromJson(item.handoff);
   const merged = {
     id: item.id,
     checklistId: item.checklistId,
@@ -449,12 +609,15 @@ export function toTeamChecklistItemDto(
     completedToday: Boolean(todayRow),
     completedPlatformsToday: todayRow?.completedPlatforms ?? [],
     readyDates,
+    handoffByDate,
     ...extras,
   };
   const dateKey = merged.targetDate ?? today;
+  const handoff = handoffForDate(handoffByDate, readyDates, dateKey);
   return {
     ...merged,
-    creativeReady: isCreativeReadyForDate(readyDates, dateKey),
+    handoff,
+    creativeReady: handoff.status === "ready",
   };
 }
 
@@ -545,16 +708,18 @@ export function buildChecklistBoard(
         if (done) continue;
 
         const pastDue = dueOffset > 0 || isStoryOverdue(targetDate, now);
-        const row: TeamChecklistItemDto = {
-          ...item,
-          targetDate,
-          dueLabel: storyDueLabel(targetDate),
-          isOverdue: pastDue,
-          creativeReady: isCreativeReadyForDate(item.readyDates, targetDate),
-          outletId: list.outletId,
-          outletTitle: list.title,
-          kind: "stories",
-        };
+        const row = applyHandoffToRow(
+          {
+            ...item,
+            targetDate,
+            dueLabel: storyDueLabel(targetDate, focus),
+            isOverdue: pastDue,
+            outletId: list.outletId,
+            outletTitle: list.title,
+            kind: "stories",
+          },
+          targetDate
+        );
         focusStories.push(row);
         if (pastDue) overdueStories.push(row);
       }
@@ -586,17 +751,22 @@ export function buildChecklistBoard(
         const done = Boolean(item.completionsByDate[targetDate]);
         if (done) continue;
         if (focus > addDaysYmd(dueDate, OVERDUE_LOOKBACK_DAYS)) continue;
-        const pastDue = focus > dueDate || isWeekendPostOverdue(targetDate, now);
-        focusAds.push({
-          ...item,
-          targetDate,
-          dueLabel: weekendPostDueLabel(targetDate),
-          isOverdue: pastDue,
-          creativeReady: isCreativeReadyForDate(item.readyDates, targetDate),
-          outletId: list.outletId,
-          outletTitle: list.title,
-          kind: "ads",
-        });
+        const pastDue = focus > dueDate || isWeekendAdOverdue(targetDate, now);
+        const adRow = applyHandoffToRow(
+          {
+            ...item,
+            targetDate,
+            dueLabel: weekendAdDueLabel(targetDate, focus),
+            isOverdue: pastDue,
+            outletId: list.outletId,
+            outletTitle: list.title,
+            kind: "ads",
+          },
+          targetDate
+        );
+        // Ads: show once start-day has arrived, or file already Ready.
+        if (focus < dueDate && adRow.handoff?.status !== "ready") continue;
+        focusAds.push(adRow);
       }
     }
   }
@@ -634,36 +804,48 @@ export function buildChecklistBoard(
         // Check this week and prior weeks for stacked overdues
         for (const weekMonday of [monday, addDaysYmd(monday, -7)]) {
           const targetDate = addDaysYmd(weekMonday, wantIdx);
-          const dueDate = weekendPostDueYmd(targetDate);
+          const readyFrom = weekendPostDueYmd(targetDate);
+          const publishDue = weekendPublishDueYmd(targetDate);
           const done = Boolean(item.completionsByDate[targetDate]);
           if (done) continue;
-          if (focus < dueDate) continue;
-          if (dueDate < overdueDueFloor) continue;
-          if (focus > addDaysYmd(dueDate, OVERDUE_LOOKBACK_DAYS)) continue;
-          const pastDue = focus > targetDate || isWeekendPostOverdue(targetDate, now);
-          allOpenPosts.push({
-            ...item,
-            kind: "posts",
-            outletId,
-            outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
-            targetDate,
-            dueLabel: weekendPostDueLabel(targetDate),
-            isOverdue: pastDue,
-            creativeReady: isCreativeReadyForDate(item.readyDates, targetDate),
-          });
+          // Creative window opens 4 days early, but don't clutter board until
+          // publish-due day (or file is already Ready).
+          if (focus < readyFrom) continue;
+          if (readyFrom < overdueDueFloor) continue;
+          if (focus > addDaysYmd(readyFrom, OVERDUE_LOOKBACK_DAYS)) continue;
+          const row = applyHandoffToRow(
+            {
+              ...item,
+              kind: "posts",
+              outletId,
+              outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
+              targetDate,
+              dueLabel: weekendPostDueLabel(targetDate, focus),
+              isOverdue: focus > targetDate || isWeekendPostOverdue(targetDate, now),
+            },
+            targetDate
+          );
+          const isReady = row.handoff?.status === "ready";
+          if (focus < publishDue && !isReady) continue;
+          allOpenPosts.push(row);
         }
         continue;
       }
 
       // Ad-hoc one-shot posts
       if (Object.keys(item.completionsByDate).length > 0) continue;
-      allOpenPosts.push({
-        ...item,
-        kind: "posts",
-        outletId,
-        outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
-        creativeReady: isCreativeReadyForDate(item.readyDates, focus),
-      });
+      allOpenPosts.push(
+        applyHandoffToRow(
+          {
+            ...item,
+            kind: "posts",
+            outletId,
+            outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
+            targetDate: focus,
+          },
+          focus
+        )
+      );
     }
   }
   allOpenPosts.sort((a, b) => {
@@ -673,13 +855,14 @@ export function buildChecklistBoard(
     return a.sortOrder - b.sortOrder;
   });
 
-  // Done list: anything marked done in the last 7 days (today inclusive).
+  // Done list: completions from 6 days ago through next 7 days (covers night-before posts).
   const doneWindowStart = addDaysYmd(today, -6);
+  const doneWindowEnd = addDaysYmd(today, 7);
   const doneSeen = new Set<string>();
   const doneItems: TeamChecklistItemDto[] = [];
   const pushDone = (row: TeamChecklistItemDto) => {
     const d = row.targetDate;
-    if (!d || d < doneWindowStart || d > today) return;
+    if (!d || d < doneWindowStart || d > doneWindowEnd) return;
     const key = `${row.id}:${d}:${row.kind ?? ""}`;
     if (doneSeen.has(key)) return;
     doneSeen.add(key);
@@ -690,15 +873,19 @@ export function buildChecklistBoard(
     for (const item of list.items) {
       if (!item.dayOfWeek || !isChecklistDayId(item.dayOfWeek)) continue;
       for (const date of Object.keys(item.completionsByDate)) {
-        pushDone({
-          ...item,
-          targetDate: date,
-          dueLabel: storyDueLabel(date),
-          creativeReady: isCreativeReadyForDate(item.readyDates, date),
-          outletId: list.outletId,
-          outletTitle: list.title,
-          kind: "stories",
-        });
+        pushDone(
+          applyHandoffToRow(
+            {
+              ...item,
+              targetDate: date,
+              dueLabel: storyDueLabel(date),
+              outletId: list.outletId,
+              outletTitle: list.title,
+              kind: "stories",
+            },
+            date
+          )
+        );
       }
     }
   }
@@ -707,15 +894,19 @@ export function buildChecklistBoard(
     for (const item of list.items) {
       if (!item.dayOfWeek || !isWeekendPostDayId(item.dayOfWeek)) continue;
       for (const date of Object.keys(item.completionsByDate)) {
-        pushDone({
-          ...item,
-          targetDate: date,
-          dueLabel: weekendPostDueLabel(date),
-          creativeReady: isCreativeReadyForDate(item.readyDates, date),
-          outletId: list.outletId,
-          outletTitle: list.title,
-          kind: "ads",
-        });
+        pushDone(
+          applyHandoffToRow(
+            {
+              ...item,
+              targetDate: date,
+              dueLabel: weekendPostDueLabel(date),
+              outletId: list.outletId,
+              outletTitle: list.title,
+              kind: "ads",
+            },
+            date
+          )
+        );
       }
     }
   }
@@ -726,15 +917,19 @@ export function buildChecklistBoard(
       const fromDesc = outletIdFromPostText(item.description);
       const outletId = fromChecklist || fromDesc || null;
       for (const date of Object.keys(item.completionsByDate)) {
-        pushDone({
-          ...item,
-          kind: "posts",
-          outletId,
-          outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
-          targetDate: date,
-          dueLabel: item.dayOfWeek ? weekendPostDueLabel(date) : undefined,
-          creativeReady: isCreativeReadyForDate(item.readyDates, date),
-        });
+        pushDone(
+          applyHandoffToRow(
+            {
+              ...item,
+              kind: "posts",
+              outletId,
+              outletTitle: outletId ? teamOutletLabel(outletId) : postsList.title,
+              targetDate: date,
+              dueLabel: item.dayOfWeek ? weekendPostDueLabel(date) : undefined,
+            },
+            date
+          )
+        );
       }
     }
   }
@@ -770,6 +965,30 @@ export function buildChecklistBoard(
     ? parseBoardNotesDescription(notesList.description)
     : { postings: "", ads: "" };
 
+  // Ready counts for today → +7 strip (go-live date), so Amit can jump ahead.
+  const readyCountByDate: Record<string, number> = {};
+  for (const wd of day.weekDays) {
+    readyCountByDate[wd.date] = 0;
+  }
+  const bumpReady = (targetDate: string, item: TeamChecklistItemDto) => {
+    if (!(targetDate in readyCountByDate)) return;
+    if (item.completionsByDate[targetDate]) return;
+    const h = handoffForDate(item.handoffByDate, item.readyDates, targetDate);
+    if (h.status !== "ready") return;
+    readyCountByDate[targetDate] = (readyCountByDate[targetDate] ?? 0) + 1;
+  };
+  for (const list of dtos) {
+    if (list.kind !== "stories" && list.kind !== "posts" && list.kind !== "ads") continue;
+    for (const item of list.items) {
+      if (!item.dayOfWeek || !isChecklistDayId(item.dayOfWeek)) continue;
+      for (const wd of day.weekDays) {
+        if (wd.dayId !== item.dayOfWeek) continue;
+        if (list.kind !== "stories" && !isWeekendPostDayId(item.dayOfWeek)) continue;
+        bumpReady(wd.date, item);
+      }
+    }
+  }
+
   return {
     day,
     enabledOutletIds,
@@ -782,6 +1001,7 @@ export function buildChecklistBoard(
     habit,
     openPosts: allOpenPosts,
     checklists: dtos,
+    readyCountByDate,
   };
 }
 

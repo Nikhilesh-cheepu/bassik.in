@@ -7,23 +7,24 @@ export type TeamMember = {
   name: string;
   /** e.g. SEO, Designer — shown in forms, not on admin tabs */
   role?: string;
-  /** poc = admin assistant (e.g. Shravya) — can assign tasks to delegateAssignees */
+  /** poc = admin assistant — can assign tasks to delegateAssignees */
   kind?: TeamMemberKind;
   delegateAssignees?: string[];
 };
 
+/**
+ * Operating roster (Bassik content ops):
+ * - Amit: posting, ads, GBP, performance (Mahesh → approve → upload → Amit lane)
+ * - Mahesh: design + edit + upload finals after approve
+ * - Jeslyn: designer (Mon–Thu stories lane)
+ * - Srinath: separate shoots / own content lane (not in Mahesh→Amit pipeline)
+ * Admin: approve creatives
+ */
 const DEFAULT_ROSTER: TeamMember[] = [
-  { id: "amit", name: "Amit", role: "SEO" },
-  { id: "jeslyn", name: "Jeslyn", role: "Designer 1" },
-  { id: "mahesh", name: "Mahesh", role: "Designer 2" },
-  {
-    id: "shravya",
-    name: "Shravya",
-    role: "POC",
-    kind: "poc",
-    delegateAssignees: ["mahesh"],
-  },
-  { id: "srinath", name: "Srinath", role: "Content Creator", kind: "content" },
+  { id: "amit", name: "Amit", role: "Posting + Ads + GBP" },
+  { id: "mahesh", name: "Mahesh", role: "Designer & Editor" },
+  { id: "jeslyn", name: "Jeslyn", role: "Designer" },
+  { id: "srinath", name: "Srinath", role: "Shoots", kind: "content" },
 ];
 
 function normalizeMember(raw: unknown): TeamMember | null {
@@ -66,10 +67,9 @@ export function getTeamMemberRoster(): TeamMember[] {
 
 const DEFAULT_PASSWORDS: Record<string, string> = {
   amit: "amit01",
-  jeslyn: "jeslyn01",
   mahesh: "mahesh01",
-  shravya: "shravya2026",
   srinath: "srinath123",
+  jeslyn: "jeslyn01",
 };
 
 /** Member login passwords — defined in repo (not env). */
@@ -89,7 +89,14 @@ export function isTeamContentMember(id: string): boolean {
   return getTeamMember(id)?.kind === "content";
 }
 
-/** Members a POC can assign ad tasks to (e.g. Mahesh for Shravya). */
+/** Designers who upload finals after admin approve (Mahesh / Jeslyn). */
+export function isTeamDesignerMember(id: string): boolean {
+  const m = getTeamMember(id);
+  if (!m?.role) return false;
+  return /designer/i.test(m.role);
+}
+
+/** Members a POC can assign ad tasks to (from delegateAssignees). */
 export function pocDelegateAssigneeIds(pocId: string): string[] {
   const m = getTeamMember(pocId);
   if (!m || m.kind !== "poc") return [];

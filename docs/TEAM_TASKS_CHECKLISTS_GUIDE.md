@@ -40,18 +40,20 @@ Daily checklists are created by managers and contain recurring tasks that need t
 
 **Example Checklists:**
 
-**For Amit (SEO + Social Media):**
+**For Amit (Posting + Ads + GBP):**
 - Client 1 Social Media
   - Mon flyer - post (appears only on Monday)
   - Tue flyer - post (appears only on Tuesday)
   - Check engagement metrics (appears every day)
   - Respond to comments (appears every day)
 
-**For Designers (Jeslyn, Mahesh):**
+**For Designers (Mahesh, Jeslyn):**
 - Client 1 Design Tasks
   - Mon flyer - create
   - Tue flyer - create
   - Review daily brief (appears every day)
+
+See also: [TEAM_CONTENT_OPS.md](./TEAM_CONTENT_OPS.md) for role ownership and handoff rules.
 
 ## For Managers (Admin)
 
@@ -84,7 +86,7 @@ Daily checklists are created by managers and contain recurring tasks that need t
 
 ### Example Setup for Different Roles
 
-**Social Media Manager (Amit):**
+**Posting + Ads (Amit):**
 ```
 Checklist 1: Client 1 - Social Posts
 - Mon flyer - post (Monday only)
@@ -93,32 +95,25 @@ Checklist 1: Client 1 - Social Posts
 - Thu flyer - post (Thursday only)
 - Fri flyer - post (Friday only)
 - Check engagement (Every day)
-- Respond to comments (Every day)
-
-Checklist 2: Client 2 - Social Posts
-- [Similar structure for Client 2]
+- GBP update / review reply (Every day)
 ```
 
-**Designer (Jeslyn):**
+**Designer & Editor (Mahesh):**
 ```
 Checklist 1: Client 1 - Design Tasks
 - Mon flyer design (Monday only)
 - Tue flyer design (Tuesday only)
 - Wed flyer design (Wednesday only)
-- Check brief (Every day)
-- Review feedback (Every day)
-
-Checklist 2: Client 2 - Design Tasks
-- [Similar structure for Client 2]
+- Upload finals to /team Content Files (Every day)
+- Mark pending approval (Every day)
 ```
 
-**Content Creator (Srinath):**
+**Content Planner (Srinath):**
 ```
-Checklist 1: Shoot Preparation
-- Check equipment (Every day)
-- Review shoot schedule (Every day)
-- Upload raw files (Every day)
-- Edit videos (Every day)
+Checklist 1: Planning
+- Fill tomorrow’s briefs in Planning (Every day)
+- Set Amit post deadlines (Every day)
+- Caption + CTA ready before design starts (Every day)
 ```
 
 ## Tips & Best Practices

@@ -17,9 +17,19 @@ export const CHECKLIST_DEFAULT_OWNER_ID = "amit";
 /** Platforms on this board (Stories / Posts / Ads). */
 export const SOCIAL_BOARD_PLATFORMS = ["meta", "youtube", "google", "linkedin", "x"] as const;
 
-export const STORY_DUE_HOUR_IST = 22;
+/** Amit must finish posting by this hour IST (day before go-live for stories/posts). */
+export const AMIT_POST_DUE_HOUR_IST = 23;
+/** @deprecated use AMIT_POST_DUE_HOUR_IST — kept for older imports */
+export const STORY_DUE_HOUR_IST = AMIT_POST_DUE_HOUR_IST;
+/** Soft tip: posting a story before this hour wastes 24h visibility for the target day. */
+export const AMIT_STORY_EARLY_WARN_HOUR_IST = 20;
+/** Ideal story posting window tip (display only). */
+export const AMIT_STORY_IDEAL_HOUR_IST = 22;
 
-/** Fri/Sat/Sun posts are due this many days before the post day (Fri → Mon). */
+/**
+ * Fri/Sat/Sun creatives & ads become available this many days before go-live
+ * (Fri → Mon). Mahesh upload target; also when ads should start running.
+ */
 export const WEEKEND_POST_LEAD_DAYS = 4;
 
 export const WEEKEND_POST_DAY_IDS = ["fri", "sat", "sun"] as const;
@@ -44,7 +54,7 @@ export function defaultStoryItems(): StoryTemplateItem[] {
     title: `${CHECKLIST_DAY_LABELS[day]} Story`,
     dayOfWeek: day,
     platforms: [...SOCIAL_BOARD_PLATFORMS],
-    instructions: `Post the ${CHECKLIST_DAY_LABELS[day]} story by 10:00 PM IST the day before.`,
+    instructions: `Post the ${CHECKLIST_DAY_LABELS[day]} story by 11:00 PM IST the day before (aim ~10 PM — not before 8 PM so it still shows next day).`,
     sortOrder: index,
   }));
 }
@@ -95,7 +105,7 @@ export function defaultWeeklyAdItems(): StoryTemplateItem[] {
       dayOfWeek: day,
       platforms: [...SOCIAL_BOARD_PLATFORMS],
       description: briefs[day],
-      instructions: `Prep ${CHECKLIST_DAY_LABELS[day]} ads by ${CHECKLIST_DAY_LABELS[dueDay]} (4 days before). Edit brief anytime.`,
+      instructions: `Start ${CHECKLIST_DAY_LABELS[day]} ads by ${CHECKLIST_DAY_LABELS[dueDay]} 11 PM (4 days before). Same creative as story + post when Mahesh uploads.`,
       sortOrder: index,
     };
   });

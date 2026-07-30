@@ -1,14 +1,75 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import { prisma } from "@/lib/db";
 import {
   getTodayKey,
+  handoffByDateFromJson,
   isChecklistPlatformId,
   parsePlatforms,
   platformsFromJson,
+  readyDatesFromJson,
+  type ChecklistHandoffDto,
+  type HandoffStatus,
 } from "@/lib/team-checklists";
 import { SOCIAL_BOARD_PLATFORMS } from "@/lib/team-checklist-templates";
 import { teamPersonalNoteOwnerId } from "@/lib/team-personal-notes";
+
+function serializeHandoffMap(
+  map: Record<string, ChecklistHandoffDto>
+): Prisma.InputJsonValue {
+  const out: Record<string, Record<string, string>> = {};
+  for (const [date, entry] of Object.entries(map)) {
+    if (
+      entry.status === "wait" &&
+      !entry.fileUrl &&
+      !entry.postingNotes &&
+      !entry.scheduleNote &&
+      !entry.format
+    ) {
+      continue;
+    }
+    const row: Record<string, string> = { status: entry.status };
+    if (entry.format) row.format = entry.format;
+    if (entry.fileUrl) row.fileUrl = entry.fileUrl;
+    if (entry.postingNotes) row.postingNotes = entry.postingNotes;
+    if (entry.scheduleNote) row.scheduleNote = entry.scheduleNote;
+    if (entry.uploadedAt) row.uploadedAt = entry.uploadedAt;
+    out[date] = row;
+  }
+  return out;
+}
+
+function syncReadyDates(
+  readyDates: string[],
+  dateKey: string,
+  status: HandoffStatus
+): string[] {
+  if (status === "ready") {
+    return readyDates.includes(dateKey) ? readyDates : [...readyDates, dateKey];
+  }
+  return readyDates.filter((d) => d !== dateKey);
+}
+
+/** Reopen Done → also drop Ready so Amit doesn’t see it until uploaded again. */
+async function clearReadyForDate(
+  item: {
+    id: string;
+    handoff: Prisma.JsonValue | null;
+    readyDates: Prisma.JsonValue | null;
+  },
+  date: string
+) {
+  const map = handoffByDateFromJson(item.handoff);
+  map[date] = { status: "wait" };
+  await prisma.teamChecklistItem.update({
+    where: { id: item.id },
+    data: {
+      handoff: serializeHandoffMap(map),
+      readyDates: syncReadyDates(readyDatesFromJson(item.readyDates), date, "wait"),
+    },
+  });
+}
 
 export async function POST(
   req: NextRequest,
@@ -48,11 +109,13 @@ export async function POST(
     const kind = item.checklist.kind;
     const isPost = kind === "posts";
     const isRecurringPost = isPost && Boolean(item.dayOfWeek);
+    const bodyDateRaw = typeof body.date === "string" ? body.date.trim() : "";
+    const bodyDate = /^\d{4}-\d{2}-\d{2}$/.test(bodyDateRaw) ? bodyDateRaw : null;
 
     // One-shot posts (no dayOfWeek): single completion
     if (isPost && !isRecurringPost) {
       const existing = item.completions[0] ?? null;
-      const date = existing?.date ?? today;
+      const date = bodyDate ?? existing?.date ?? today;
 
       if (typeof body.markComplete === "boolean" && body.togglePlatform === undefined) {
         if (body.markComplete) {
@@ -79,7 +142,8 @@ export async function POST(
         if (existing) {
           await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
         }
-        return NextResponse.json({ completed: false, date, completedPlatforms: [] });
+        await clearReadyForDate(item, date);
+        return NextResponse.json({ completed: false, date, completedPlatforms: [], readyCleared: true });
       }
 
       if (typeof body.togglePlatform === "string") {
@@ -129,8 +193,7 @@ export async function POST(
     }
 
     // Stories / habits / recurring weekend posts: date-keyed
-    const dateRaw = typeof body.date === "string" ? body.date.trim() : "";
-    const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : today;
+    const date = bodyDate ?? today;
 
     const existing = await prisma.teamChecklistCompletion.findUnique({
       where: { itemId_date: { itemId: id, date } },
@@ -160,7 +223,8 @@ export async function POST(
       if (existing) {
         await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
       }
-      return NextResponse.json({ completed: false, date, completedPlatforms: [] });
+      await clearReadyForDate(item, date);
+      return NextResponse.json({ completed: false, date, completedPlatforms: [], readyCleared: true });
     }
 
     if (typeof body.togglePlatform === "string") {

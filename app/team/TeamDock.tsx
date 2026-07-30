@@ -32,6 +32,7 @@ export default function TeamDock({
   isMember,
   isContent,
   isViewer,
+  showDesigner,
   onAdd,
   onWhatsApp,
   onMore,
@@ -42,6 +43,8 @@ export default function TeamDock({
   isMember: boolean;
   isContent?: boolean;
   isViewer: boolean;
+  /** Mahesh / Jeslyn (and admin via other dock). */
+  showDesigner?: boolean;
   onAdd: () => void;
   onWhatsApp?: () => void;
   onMore?: () => void;
@@ -114,10 +117,17 @@ export default function TeamDock({
             <IconTasks className="h-[22px] w-[22px]" />
             Tasks
           </button>
-          <button type="button" onClick={() => onTab("tasks")} className={dockItem(tab === "tasks")}>
-            <IconPlan className="h-[22px] w-[22px]" />
-            Lists
-          </button>
+          {showDesigner ? (
+            <button type="button" onClick={() => onTab("designer")} className={dockItem(tab === "designer")}>
+              <IconEdit className="h-[22px] w-[22px]" />
+              Design
+            </button>
+          ) : (
+            <button type="button" onClick={() => onTab("tasks")} className={dockItem(tab === "tasks")}>
+              <IconPlan className="h-[22px] w-[22px]" />
+              Lists
+            </button>
+          )}
           <button
             type="button"
             onClick={onAdd}
@@ -128,13 +138,33 @@ export default function TeamDock({
               <IconPlus className="h-6 w-6" />
             </span>
           </button>
-          <button type="button" onClick={() => onTab("reminders")} className={dockItem(tab === "reminders")}>
-            <IconBell className="h-[22px] w-[22px]" />
-            Notes
-          </button>
-          <button type="button" onClick={() => onTab("vault")} className={dockItem(tab === "vault")}>
-            <IconKey className="h-[22px] w-[22px]" />
-            Passwords
+          {showDesigner ? (
+            <button type="button" onClick={() => onTab("tasks")} className={dockItem(tab === "tasks")}>
+              <IconPlan className="h-[22px] w-[22px]" />
+              Daily
+            </button>
+          ) : (
+            <button type="button" onClick={() => onTab("reminders")} className={dockItem(tab === "reminders")}>
+              <IconBell className="h-[22px] w-[22px]" />
+              Notes
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onTab(showDesigner ? "reminders" : "vault")}
+            className={dockItem(tab === (showDesigner ? "reminders" : "vault"))}
+          >
+            {showDesigner ? (
+              <>
+                <IconBell className="h-[22px] w-[22px]" />
+                Notes
+              </>
+            ) : (
+              <>
+                <IconKey className="h-[22px] w-[22px]" />
+                Passwords
+              </>
+            )}
           </button>
         </div>
       </nav>
@@ -243,6 +273,7 @@ export function TeamMoreSheet({
   onVault,
   onCalendar,
   onChecklists,
+  onDesigner,
   onBrain,
   onAi,
   onExport,
@@ -257,6 +288,7 @@ export function TeamMoreSheet({
   onVault?: () => void;
   onCalendar?: () => void;
   onChecklists?: () => void;
+  onDesigner?: () => void;
   onBrain?: () => void;
   onAi?: () => void;
   onExport?: () => void;
@@ -268,6 +300,7 @@ export function TeamMoreSheet({
     ...(onRawFiles ? [{ label: "Raw files", icon: IconFilm, onClick: onRawFiles }] : []),
     ...(onEditFiles ? [{ label: "Editing files", icon: IconScissors, onClick: onEditFiles }] : []),
     ...(onCalendar ? [{ label: "Calendar", icon: IconCalendar, onClick: onCalendar }] : []),
+    ...(onDesigner ? [{ label: "Design queue", icon: IconEdit, onClick: onDesigner }] : []),
     ...(onChecklists ? [{ label: "Daily", icon: IconPlan, onClick: onChecklists }] : []),
     ...(onBrain ? [{ label: "My Brain", icon: IconEdit, onClick: onBrain }] : []),
     ...(onReminders ? [{ label: "My notes", icon: IconBell, onClick: onReminders }] : []),

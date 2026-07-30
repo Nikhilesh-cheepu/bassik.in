@@ -547,6 +547,60 @@ model TeamContentFile {
   @@index([createdAt])
 }
 
+enum TeamDesignerJobStatus {
+  WAITING_BRIEF
+  READY_TO_DESIGN
+  IN_PROGRESS
+  DESIGN_DONE
+}
+
+enum TeamDesignerJobLane {
+  WEEKEND
+  WEEKDAY
+}
+
+/// Monthly designer queue — weekend posts (Mahesh) + weekday stories (Jeslyn).
+model TeamDesignerJob {
+  id            String                 @id @default(cuid())
+  monthKey      String                 // YYYY-MM
+  postDate      String                 // YYYY-MM-DD go-live
+  dueDate       String                 // YYYY-MM-DD design due (IST calendar day)
+  dueTime       String                 @default("20:00") // HH:mm IST hard Upload-by
+  outletId      String
+  lane          TeamDesignerJobLane
+  format        String                 // post | story
+  title         String
+  description   String?                // artist / brief
+  /// Reference links (Drive, Instagram, etc.) — string[]
+  links         Json?
+  assigneeId    String
+  status        TeamDesignerJobStatus  @default(WAITING_BRIEF)
+  urgent        Boolean                @default(false)
+  startedAt     DateTime?
+  uploadedAt    DateTime?
+  fileUrl       String?
+  postingNotes  String?
+  scheduleNote  String?
+  waApproved       Boolean                @default(false)
+  /// Designer asked admin to reopen a closed job for edit / re-upload
+  editRequestedAt  DateTime?
+  editRequestNote  String?
+  createdBy        String
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@unique([monthKey, postDate, outletId, lane, format])
+  @@index([assigneeId, status])
+  @@index([monthKey])
+  @@index([dueDate])
+  @@index([postDate])
+  @@index([outletId])
+  @@index([lane])
+  @@index([urgent])
+  @@index([createdAt])
+  @@index([editRequestedAt])
+}
+
 /// SEO & performance marketing ad/creative tasks (internal /team board).
 model TeamAdTask {
   id              String              @id @default(cuid())
@@ -869,8 +923,10 @@ model TeamChecklistItem {
   instructions String? // Team leader instructions
   dayOfWeek   String?  // mon | tue | wed | thu | fri | sat | sun | null (for any day)
   platforms   Json?    // ["instagram", "youtube", "linkedin"] - platforms to post on
-  /// Target dates (YYYY-MM-DD) where admin marked creatives ready (green) for Amit.
+  /// Target dates (YYYY-MM-DD) where creatives are ready (green) for Amit.
   readyDates  Json?
+  /// Per-date handoff: { "YYYY-MM-DD": { status, format, fileUrl, postingNotes, scheduleNote } }
+  handoff     Json?
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
 

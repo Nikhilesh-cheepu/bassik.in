@@ -4,9 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 import {
   CHECKLIST_PLATFORM_IDS,
   CHECKLIST_PLATFORM_LABELS,
+  defaultHandoffFormat,
   getTodayKey,
+  HANDOFF_FORMATS,
   type ChecklistBoardDto,
   type ChecklistPlatformId,
+  type HandoffFormat,
+  type HandoffStatus,
   type OutletBoardSection,
   type TeamChecklistItemDto,
 } from "@/lib/team-checklists";
@@ -22,6 +26,7 @@ import {
   IconMeta,
   IconNotes,
   IconPostings,
+  IconTasks,
   IconWhatsApp,
   IconX,
   IconYoutube,
@@ -177,8 +182,18 @@ type Member = { id: string; name: string };
 
 type TeamTasksViewProps = {
   isAdmin: boolean;
+  /** Designer can upload finals after admin approve. */
+  canUploadHandoff?: boolean;
   viewerId: string;
   members: Member[];
+};
+
+type HandoffPayload = {
+  action: "approve" | "unapprove" | "set-ready" | "clear";
+  format?: HandoffFormat;
+  fileUrl?: string;
+  postingNotes?: string;
+  scheduleNote?: string;
 };
 
 function isItemDone(item: TeamChecklistItemDto, dateKey: string): boolean {
@@ -272,61 +287,248 @@ function buildWaitNudgeWhatsAppMessage(items: TeamChecklistItemDto[]): string {
   return lines.join("\n");
 }
 
-function CreativeReadyToggle({
-  ready,
-  canToggle,
-  busy,
-  onToggle,
+function handoffStatusOf(item: TeamChecklistItemDto): HandoffStatus {
+  return item.handoff?.status ?? (item.creativeReady ? "ready" : "wait");
+}
+
+/** Display-only: green when file uploaded. No wait/ready toggle. */
+function HandoffStatusToggle({
+  status,
 }: {
-  ready: boolean;
-  canToggle: boolean;
-  busy: boolean;
+  status: HandoffStatus;
+  canToggle?: boolean;
+  busy?: boolean;
   onToggle?: () => void;
 }) {
-  const switchEl = (
-    <span
-      className={`relative inline-flex h-[22px] w-[40px] shrink-0 items-center rounded-full p-[2px] transition-colors ${
-        ready ? "bg-emerald-400" : "bg-red-500"
-      } ${busy ? "opacity-50" : ""}`}
-      aria-hidden
-    >
-      <span
-        className={`h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform ${
-          ready ? "translate-x-[18px]" : "translate-x-0"
-        }`}
-      />
-    </span>
-  );
-
-  if (canToggle && onToggle) {
-    return (
-      <button
-        type="button"
-        disabled={busy}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onToggle();
-        }}
-        title={ready ? "Ready — tap to set Wait" : "Wait — tap to set Ready"}
-        aria-label={ready ? "Creatives ready" : "Creatives not ready"}
-        aria-pressed={ready}
-        className="-ml-1 flex min-h-11 min-w-11 shrink-0 items-center justify-center touch-manipulation active:opacity-80"
-      >
-        {switchEl}
-      </button>
-    );
-  }
+  const ready = status === "ready";
+  const label = ready ? "Ready" : "Waiting upload";
 
   return (
     <span
-      title={ready ? "Creatives ready" : "Creatives not ready"}
-      aria-label={ready ? "Creatives ready" : "Creatives not ready"}
-      className="flex min-h-8 shrink-0 items-center"
+      title={label}
+      aria-label={label}
+      className={`inline-flex h-7 shrink-0 items-center rounded-md px-2 text-[10px] font-bold uppercase tracking-wide ${
+        ready
+          ? "bg-emerald-400/20 text-emerald-200"
+          : "bg-white/[0.06] text-white/40"
+      }`}
     >
-      {switchEl}
+      {ready ? "Ready" : "Wait"}
     </span>
   );
+}
+
+const DOWNLOAD_UNLOCK_MS = 60_000;
+
+function downloadKey(itemId: string, dateKey: string): string {
+  return `team-dl:${itemId}:${dateKey}`;
+}
+
+function clearDownloadAt(itemId: string, dateKey: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(downloadKey(itemId, dateKey));
+}
+
+function readDownloadAt(itemId: string, dateKey: string): number | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(downloadKey(itemId, dateKey));
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function markDownloaded(itemId: string, dateKey: string): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(downloadKey(itemId, dateKey), String(Date.now()));
+}
+
+function HandoffDetails({
+  item,
+  dateKey,
+  onDownloaded,
+}: {
+  item: TeamChecklistItemDto;
+  dateKey?: string;
+  onDownloaded?: () => void;
+}) {
+  const h = item.handoff;
+  if (!h || h.status !== "ready" || !h.fileUrl) return null;
+  const dk = dateKey ?? item.targetDate ?? "";
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-white/55">
+      {h.scheduleNote ? <span>Schedule: {h.scheduleNote}</span> : null}
+      {h.postingNotes ? <span className="w-full text-white/45">{h.postingNotes}</span> : null}
+      <a
+        href={`/api/team/download?url=${encodeURIComponent(h.fileUrl)}`}
+        onClick={() => {
+          if (dk) markDownloaded(item.id, dk);
+          onDownloaded?.();
+        }}
+        className="rounded-md bg-cyan-500 px-2.5 py-1 text-[12px] font-bold text-black"
+      >
+        Download
+      </a>
+    </div>
+  );
+}
+
+function HandoffUploadForm({
+  item,
+  busy,
+  onSubmit,
+}: {
+  item: TeamChecklistItemDto;
+  busy: boolean;
+  onSubmit: (payload: {
+    format: HandoffFormat;
+    fileUrl: string;
+    postingNotes: string;
+    scheduleNote: string;
+  }) => Promise<void>;
+}) {
+  const [format, setFormat] = useState<HandoffFormat>(
+    () => item.handoff?.format ?? defaultHandoffFormat(item.kind)
+  );
+  const [postingNotes, setPostingNotes] = useState(item.handoff?.postingNotes ?? "");
+  const [scheduleNote, setScheduleNote] = useState(item.handoff?.scheduleNote ?? "");
+  const [fileUrl, setFileUrl] = useState(item.handoff?.fileUrl ?? "");
+  const [uploading, setUploading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFormat(item.handoff?.format ?? defaultHandoffFormat(item.kind));
+    setPostingNotes(item.handoff?.postingNotes ?? "");
+    setScheduleNote(item.handoff?.scheduleNote ?? "");
+    setFileUrl(item.handoff?.fileUrl ?? "");
+    setLocalError(null);
+  }, [item.id, item.targetDate, item.handoff?.format, item.handoff?.fileUrl, item.handoff?.postingNotes, item.handoff?.scheduleNote, item.kind]);
+
+  const onFile = async (file: File | null) => {
+    if (!file) return;
+    setUploading(true);
+    setLocalError(null);
+    try {
+      const fd = new FormData();
+      fd.set("file", file);
+      fd.set("kind", "handoff");
+      if (item.outletId) fd.set("outletId", item.outletId);
+      const res = await fetch("/api/team/upload", { method: "POST", body: fd });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !data.url) throw new Error(data.error || "Upload failed");
+      setFileUrl(data.url);
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 space-y-2 rounded-lg border border-cyan-400/25 bg-cyan-400/[0.06] p-2.5">
+      <p className="text-[11px] font-medium text-cyan-100/90">
+        After WhatsApp OK — upload final + posting details for Amit
+      </p>
+      <div className="flex flex-wrap gap-1">
+        {HANDOFF_FORMATS.map((f) => (
+          <button
+            key={f}
+            type="button"
+            disabled={busy || uploading}
+            onClick={() => setFormat(f)}
+            className={`h-6 rounded px-2 text-[10px] font-semibold uppercase ${
+              format === f ? "bg-cyan-500 text-black" : "bg-black/30 text-white/55"
+            }`}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+      <input
+        type="file"
+        accept="image/*,video/*,.pdf"
+        disabled={busy || uploading}
+        onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
+        className="block w-full text-[11px] text-white/60 file:mr-2 file:rounded file:border-0 file:bg-white/10 file:px-2 file:py-1 file:text-[11px] file:text-white"
+      />
+      {fileUrl ? (
+        <a
+          href={fileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block truncate text-[11px] text-cyan-300/90"
+        >
+          File ready · {fileUrl}
+        </a>
+      ) : null}
+      <input
+        value={scheduleNote}
+        onChange={(e) => setScheduleNote(e.target.value)}
+        placeholder="When to post (e.g. today 7pm)"
+        className="w-full rounded-md border border-white/10 bg-black/35 px-2 py-1.5 text-[12px] text-white outline-none"
+      />
+      <textarea
+        value={postingNotes}
+        onChange={(e) => setPostingNotes(e.target.value)}
+        rows={2}
+        placeholder="Caption / hashtags / posting notes for Amit"
+        className="w-full resize-none rounded-md border border-white/10 bg-black/35 px-2 py-1.5 text-[12px] text-white outline-none"
+      />
+      {localError ? <p className="text-[11px] text-red-300">{localError}</p> : null}
+      <button
+        type="button"
+        disabled={busy || uploading || !fileUrl}
+        onClick={() =>
+          void onSubmit({
+            format,
+            fileUrl,
+            postingNotes,
+            scheduleNote,
+          })
+        }
+        className="h-7 rounded bg-emerald-400 px-3 text-[11px] font-semibold text-black disabled:opacity-40"
+      >
+        {uploading ? "Uploading…" : busy ? "…" : "Send to Amit"}
+      </button>
+    </div>
+  );
+}
+
+function KindBadge({ kind }: { kind?: string | null }) {
+  const label =
+    kind === "stories" ? "Story" : kind === "ads" ? "Ad" : kind === "posts" ? "Post" : "Task";
+  const cls =
+    kind === "stories"
+      ? "bg-violet-400/15 text-violet-200"
+      : kind === "ads"
+        ? "bg-amber-400/15 text-amber-100"
+        : "bg-sky-400/15 text-sky-100";
+  return (
+    <span
+      className={`inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${cls}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+/** e.g. "31 Jul · Friday · Story" */
+function readyGoLiveHeadline(item: TeamChecklistItemDto, dateKey: string): string {
+  const ymd = item.targetDate ?? dateKey;
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m || !d) return item.title;
+  const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  const datePart = dt.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+  const weekday = dt.toLocaleDateString("en-GB", {
+    weekday: "long",
+    timeZone: "UTC",
+  });
+  const kind =
+    item.kind === "stories" ? "Story" : item.kind === "ads" ? "Ad" : "Post";
+  return `${datePart} · ${weekday} · ${kind}`;
 }
 
 function ItemRow({
@@ -334,22 +536,56 @@ function ItemRow({
   dateKey,
   busy,
   isAdmin,
+  canUploadHandoff,
+  requireDownloadGate = false,
   onComplete,
-  onToggleReady,
+  onHandoffUpload,
 }: {
   item: TeamChecklistItemDto;
   dateKey: string;
   busy: boolean;
   isAdmin: boolean;
+  canUploadHandoff: boolean;
+  /** Amit Ready tab: must download, then wait 1 min before Done */
+  requireDownloadGate?: boolean;
   onComplete: (item: TeamChecklistItemDto, platforms: ChecklistPlatformId[]) => void;
-  onToggleReady: (item: TeamChecklistItemDto, ready: boolean) => void;
+  onAdminToggleReady?: (item: TeamChecklistItemDto) => void;
+  onHandoffUpload: (
+    item: TeamChecklistItemDto,
+    payload: {
+      format: HandoffFormat;
+      fileUrl: string;
+      postingNotes: string;
+      scheduleNote: string;
+    }
+  ) => Promise<void>;
 }) {
   const [draftPlatforms, setDraftPlatforms] = useState<ChecklistPlatformId[]>([]);
-  const ready = Boolean(item.creativeReady);
+  const [showUpload, setShowUpload] = useState(false);
+  const [, setTick] = useState(0);
+  const status = handoffStatusOf(item);
+  const ready = status === "ready";
+  const dlAt = readDownloadAt(item.id, dateKey);
+  const remainingSec =
+    requireDownloadGate && ready && dlAt
+      ? Math.max(0, Math.ceil((dlAt + DOWNLOAD_UNLOCK_MS - Date.now()) / 1000))
+      : null;
+  const gateBlocks =
+    requireDownloadGate &&
+    ready &&
+    !isAdmin &&
+    (!dlAt || (remainingSec != null && remainingSec > 0));
 
   useEffect(() => {
     setDraftPlatforms([]);
+    setShowUpload(false);
   }, [item.id, dateKey]);
+
+  useEffect(() => {
+    if (!requireDownloadGate || !ready || !dlAt || (remainingSec ?? 0) <= 0) return;
+    const t = window.setInterval(() => setTick((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [requireDownloadGate, ready, dlAt, remainingSec]);
 
   const toggleDraft = (platform: ChecklistPlatformId) => {
     setDraftPlatforms((prev) =>
@@ -357,41 +593,121 @@ function ItemRow({
     );
   };
 
+  const markDone = () => {
+    const platforms =
+      draftPlatforms.length > 0 ? draftPlatforms : [...CHECKLIST_PLATFORM_IDS];
+    onComplete(item, platforms);
+  };
+
+  const fileUrl = item.handoff?.fileUrl?.trim() || "";
+  const headline = requireDownloadGate
+    ? readyGoLiveHeadline(item, dateKey)
+    : item.title;
+
   return (
-    <div className="py-1">
-      <div className="flex min-h-9 items-center gap-2">
-        <CreativeReadyToggle
-          ready={ready}
-          canToggle={isAdmin}
-          busy={busy}
-          onToggle={() => onToggleReady(item, !ready)}
-        />
-        <div className="min-w-0 flex-1 truncate">
-          <span className="text-[13px] font-medium text-white/88">{item.title}</span>
-          {item.isOverdue ? (
-            <span className="ml-1.5 text-[10px] font-medium uppercase text-amber-300/75">Overdue</span>
+    <div className="py-1.5">
+      <div className="flex min-h-9 items-start gap-2">
+        {!requireDownloadGate ? (
+          <HandoffStatusToggle status={status === "approved" ? "wait" : status} />
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <KindBadge kind={item.kind} />
+            <span className="text-[15px] font-semibold leading-tight text-white">
+              {headline}
+            </span>
+            {item.isOverdue ? (
+              <span className="text-[10px] font-medium uppercase text-amber-300/75">Overdue</span>
+            ) : null}
+          </div>
+          {requireDownloadGate && item.outletTitle ? (
+            <p className="mt-0.5 text-[11px] text-white/40">{item.outletTitle}</p>
           ) : null}
           {item.dueLabel ? (
-            <span className="ml-1.5 text-[11px] text-white/30">{item.dueLabel}</span>
+            <p className="mt-1 text-[12px] font-semibold leading-snug text-amber-100/90">
+              {item.dueLabel}
+            </p>
+          ) : null}
+          {item.kind === "stories" && ready ? (
+            <p className="mt-0.5 text-[10px] text-cyan-200/55">
+              Post ~10 PM (before 11 PM). Avoid before 8 PM — story only lasts 24h.
+            </p>
+          ) : null}
+          {!requireDownloadGate ? (
+            <HandoffDetails
+              item={item}
+              dateKey={dateKey}
+              onDownloaded={() => setTick((n) => n + 1)}
+            />
+          ) : null}
+          {requireDownloadGate && ready && !dlAt && !isAdmin ? (
+            <p className="mt-1 text-[10px] text-white/40">Download first — then Done unlocks in 1 min.</p>
+          ) : null}
+          {requireDownloadGate && remainingSec != null && remainingSec > 0 && !isAdmin ? (
+            <p className="mt-1 text-[10px] text-amber-200/70">
+              Done unlocks in {remainingSec}s…
+            </p>
+          ) : null}
+          {isAdmin && requireDownloadGate ? (
+            <p className="mt-1 text-[10px] text-emerald-200/60">Admin — Done anytime (no download wait).</p>
           ) : null}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
-          <PlatformToggles
-            selected={draftPlatforms}
-            busy={busy}
-            onToggle={toggleDraft}
-          />
+        <div className="flex shrink-0 flex-col items-stretch gap-1.5">
+          {requireDownloadGate && ready && fileUrl ? (
+            <a
+              href={`/api/team/download?url=${encodeURIComponent(fileUrl)}`}
+              onClick={() => {
+                markDownloaded(item.id, dateKey);
+                setTick((n) => n + 1);
+              }}
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-cyan-400 px-3 text-[12px] font-bold text-black"
+            >
+              Download
+            </a>
+          ) : null}
+          {canUploadHandoff && !ready ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setShowUpload((v) => !v)}
+              className="h-7 rounded bg-white/10 px-2 text-[10px] font-semibold text-white/80"
+            >
+              {showUpload ? "Close" : "Upload"}
+            </button>
+          ) : null}
+          {!requireDownloadGate ? (
+            <PlatformToggles
+              selected={draftPlatforms}
+              busy={busy}
+              onToggle={toggleDraft}
+            />
+          ) : null}
           <button
             type="button"
-            disabled={busy || draftPlatforms.length === 0}
-            onClick={() => onComplete(item, draftPlatforms)}
-            className="h-7 rounded bg-cyan-500 px-2 text-[10px] font-semibold text-black disabled:opacity-30"
+            disabled={
+              busy ||
+              gateBlocks ||
+              (!requireDownloadGate && draftPlatforms.length === 0)
+            }
+            onClick={markDone}
+            className={`h-9 rounded-lg px-3 text-[12px] font-bold disabled:opacity-30 ${
+              isAdmin && requireDownloadGate
+                ? "bg-emerald-400 text-black"
+                : "bg-white/15 text-white"
+            }`}
           >
-            {busy ? "…" : "Done"}
+            {busy ? "…" : isAdmin && requireDownloadGate ? "Done" : "Done"}
           </button>
         </div>
       </div>
+      {canUploadHandoff && !ready && showUpload ? (
+        <HandoffUploadForm
+          item={item}
+          busy={busy}
+          onSubmit={(payload) => onHandoffUpload(item, payload)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -401,22 +717,36 @@ function AdItemRow({
   dateKey,
   busy,
   isAdmin,
+  canUploadHandoff,
   onComplete,
   onSaveDescription,
-  onToggleReady,
+  onAdminToggleReady,
+  onHandoffUpload,
 }: {
   item: TeamChecklistItemDto;
   dateKey: string;
   busy: boolean;
   isAdmin: boolean;
+  canUploadHandoff: boolean;
   onComplete: (item: TeamChecklistItemDto, platforms: ChecklistPlatformId[]) => void;
   onSaveDescription: (item: TeamChecklistItemDto, description: string) => Promise<void>;
-  onToggleReady: (item: TeamChecklistItemDto, ready: boolean) => void;
+  onAdminToggleReady: (item: TeamChecklistItemDto) => void;
+  onHandoffUpload: (
+    item: TeamChecklistItemDto,
+    payload: {
+      format: HandoffFormat;
+      fileUrl: string;
+      postingNotes: string;
+      scheduleNote: string;
+    }
+  ) => Promise<void>;
 }) {
   const done = isItemDone(item, dateKey);
-  const ready = Boolean(item.creativeReady);
+  const status = handoffStatusOf(item);
+  const ready = status === "ready";
   const [draftPlatforms, setDraftPlatforms] = useState<ChecklistPlatformId[]>([]);
   const [editing, setEditing] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
   const [desc, setDesc] = useState(item.description ?? "");
   const [savingDesc, setSavingDesc] = useState(false);
 
@@ -424,6 +754,7 @@ function AdItemRow({
     setDraftPlatforms([]);
     setDesc(item.description ?? "");
     setEditing(false);
+    setShowUpload(false);
   }, [item.id, dateKey, item.description]);
 
   if (done) {
@@ -454,16 +785,13 @@ function AdItemRow({
   return (
     <div className="border-b border-white/[0.04] py-2 last:border-0">
       <div className="flex items-start gap-2">
-        <CreativeReadyToggle
-          ready={ready}
-          canToggle={isAdmin}
-          busy={busy}
-          onToggle={() => onToggleReady(item, !ready)}
-        />
+        <HandoffStatusToggle status={status === "approved" ? "wait" : status} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
             <span className="text-[13px] font-medium text-white/90">{item.title}</span>
-            {item.dueLabel ? <span className="text-[11px] text-white/30">{item.dueLabel}</span> : null}
+            {item.dueLabel ? (
+              <span className="text-[11px] font-semibold text-amber-100/80">{item.dueLabel}</span>
+            ) : null}
             {isAdmin ? (
               <button
                 type="button"
@@ -509,8 +837,26 @@ function AdItemRow({
               <ExpandableText text={item.description ?? ""} empty="No brief yet." />
             </div>
           )}
+          <HandoffDetails item={item} />
+          {canUploadHandoff && !ready && showUpload ? (
+            <HandoffUploadForm
+              item={item}
+              busy={busy}
+              onSubmit={(payload) => onHandoffUpload(item, payload)}
+            />
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1 pt-0.5">
+          {canUploadHandoff && !ready ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setShowUpload((v) => !v)}
+              className="h-7 rounded bg-white/10 px-2 text-[10px] font-semibold text-white/80"
+            >
+              {showUpload ? "Close" : "Upload"}
+            </button>
+          ) : null}
           <PlatformToggles
             selected={draftPlatforms}
             busy={busy}
@@ -530,33 +876,50 @@ function AdItemRow({
   );
 }
 
+function goLiveGroupTitle(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  if (!y || !m || !d) return ymd;
+  const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  return dt.toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+
 function OutletSection({
   section,
   focusDate,
   busyItemId,
   isAdmin,
+  canUploadHandoff,
   onComplete,
-  onToggleReady,
+  onAdminToggleReady,
+  onHandoffUpload,
 }: {
   section: OutletBoardSection;
   focusDate: string;
   busyItemId: string | null;
   isAdmin: boolean;
+  canUploadHandoff: boolean;
   onComplete: (item: TeamChecklistItemDto, platforms: ChecklistPlatformId[]) => void;
-  onToggleReady: (item: TeamChecklistItemDto, ready: boolean) => void;
+  onAdminToggleReady: (item: TeamChecklistItemDto) => void;
+  onHandoffUpload: (
+    item: TeamChecklistItemDto,
+    payload: {
+      format: HandoffFormat;
+      fileUrl: string;
+      postingNotes: string;
+      scheduleNote: string;
+    }
+  ) => Promise<void>;
 }) {
   const pendingStories = section.stories.filter((s) => !isItemDone(s, s.targetDate ?? focusDate));
   const pendingPosts = section.openPosts;
-  const allClear = pendingStories.length === 0 && pendingPosts.length === 0;
-
-  const [tab, setTab] = useState<"story" | "post">(() =>
-    pendingStories.length === 0 && pendingPosts.length > 0 ? "post" : "story"
-  );
-
-  useEffect(() => {
-    if (pendingStories.length === 0 && pendingPosts.length > 0) setTab("post");
-    else if (pendingPosts.length === 0 && pendingStories.length > 0) setTab("story");
-  }, [pendingStories.length, pendingPosts.length]);
+  const pendingAds = (section.ads ?? []).filter((a) => !isItemDone(a, a.targetDate ?? focusDate));
+  const allItems = [...pendingStories, ...pendingPosts, ...pendingAds];
+  const allClear = allItems.length === 0;
 
   if (allClear) {
     return (
@@ -567,11 +930,17 @@ function OutletSection({
     );
   }
 
-  const showStoryTab = pendingStories.length > 0;
-  const showPostTab = pendingPosts.length > 0;
-  const showTabs = showStoryTab && showPostTab;
-  const activeTab = showTabs ? tab : showPostTab ? "post" : "story";
-  const rows = activeTab === "post" ? pendingPosts : pendingStories;
+  const byDate = new Map<string, TeamChecklistItemDto[]>();
+  for (const item of allItems) {
+    const key = item.targetDate ?? focusDate;
+    const list = byDate.get(key) ?? [];
+    list.push(item);
+    byDate.set(key, list);
+  }
+  const dateKeys = [...byDate.keys()].sort();
+
+  const kindRank = (k?: string | null) =>
+    k === "stories" ? 0 : k === "posts" ? 1 : k === "ads" ? 2 : 3;
 
   return (
     <section className="overflow-hidden rounded-xl border border-white/[0.1] bg-white/[0.035]">
@@ -579,46 +948,61 @@ function OutletSection({
         <h3 className="truncate text-[14px] font-semibold tracking-tight text-white">
           {section.outletLabel}
         </h3>
-        {showTabs ? (
-          <div className="flex rounded-md bg-black/30 p-0.5">
-            <button
-              type="button"
-              onClick={() => setTab("story")}
-              className={`h-6 rounded px-2 text-[10px] font-semibold ${
-                activeTab === "story" ? "bg-white/12 text-white" : "text-white/35"
-              }`}
-            >
-              Story {pendingStories.length}
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("post")}
-              className={`h-6 rounded px-2 text-[10px] font-semibold ${
-                activeTab === "post" ? "bg-white/12 text-white" : "text-white/35"
-              }`}
-            >
-              Post {pendingPosts.length}
-            </button>
-          </div>
-        ) : (
-          <span className="rounded-md bg-black/25 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/40">
-            {showPostTab ? "Post" : "Story"}
-          </span>
-        )}
+        <span className="text-[11px] text-white/40">
+          {pendingStories.length} story · {pendingPosts.length} post · {pendingAds.length} ad
+        </span>
       </div>
 
-      <div className="divide-y divide-white/[0.06] px-2.5 py-1">
-        {rows.map((item) => (
-          <ItemRow
-            key={`${item.id}-${item.targetDate ?? "post"}`}
-            item={item}
-            dateKey={item.targetDate ?? focusDate}
-            busy={busyItemId === item.id}
-            isAdmin={isAdmin}
-            onComplete={onComplete}
-            onToggleReady={onToggleReady}
-          />
-        ))}
+      <div className="space-y-1 px-2.5 py-2">
+        {dateKeys.map((dateKey) => {
+          const rows = (byDate.get(dateKey) ?? []).slice().sort((a, b) => {
+            const kr = kindRank(a.kind) - kindRank(b.kind);
+            if (kr !== 0) return kr;
+            return a.sortOrder - b.sortOrder;
+          });
+          const urls = rows
+            .map((r) => r.handoff?.fileUrl?.trim())
+            .filter((u): u is string => Boolean(u));
+          const sharedUrl =
+            urls.length > 0 && urls.every((u) => u === urls[0]) ? urls[0]! : null;
+          const anyReady = rows.some((r) => handoffStatusOf(r) === "ready");
+
+          return (
+            <div
+              key={dateKey}
+              className="rounded-lg border border-white/[0.06] bg-black/20 px-2 py-1.5"
+            >
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-2 px-0.5">
+                <p className="text-[12px] font-semibold text-white/85">
+                  {goLiveGroupTitle(dateKey)}
+                </p>
+                {sharedUrl && anyReady ? (
+                  <a
+                    href={`/api/team/download?url=${encodeURIComponent(sharedUrl)}`}
+                    className="text-[11px] font-semibold text-cyan-300/90 underline-offset-2 hover:underline"
+                  >
+                    Download creative
+                  </a>
+                ) : null}
+              </div>
+              <div className="divide-y divide-white/[0.05]">
+                {rows.map((item) => (
+                  <ItemRow
+                    key={`${item.id}-${item.targetDate ?? "x"}-${item.kind}`}
+                    item={item}
+                    dateKey={item.targetDate ?? focusDate}
+                    busy={busyItemId === item.id}
+                    isAdmin={isAdmin}
+                    canUploadHandoff={canUploadHandoff}
+                    onComplete={onComplete}
+                    onAdminToggleReady={onAdminToggleReady}
+                    onHandoffUpload={onHandoffUpload}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -629,17 +1013,29 @@ function AdsOutletSection({
   focusDate,
   busyItemId,
   isAdmin,
+  canUploadHandoff,
   onComplete,
   onSaveDescription,
-  onToggleReady,
+  onAdminToggleReady,
+  onHandoffUpload,
 }: {
   section: OutletBoardSection;
   focusDate: string;
   busyItemId: string | null;
   isAdmin: boolean;
+  canUploadHandoff: boolean;
   onComplete: (item: TeamChecklistItemDto, platforms: ChecklistPlatformId[]) => void;
   onSaveDescription: (item: TeamChecklistItemDto, description: string) => Promise<void>;
-  onToggleReady: (item: TeamChecklistItemDto, ready: boolean) => void;
+  onAdminToggleReady: (item: TeamChecklistItemDto) => void;
+  onHandoffUpload: (
+    item: TeamChecklistItemDto,
+    payload: {
+      format: HandoffFormat;
+      fileUrl: string;
+      postingNotes: string;
+      scheduleNote: string;
+    }
+  ) => Promise<void>;
 }) {
   const ads = section.ads ?? [];
   const pending = ads.filter((a) => !isItemDone(a, a.targetDate ?? focusDate));
@@ -678,9 +1074,11 @@ function AdsOutletSection({
             dateKey={item.targetDate ?? focusDate}
             busy={busyItemId === item.id}
             isAdmin={isAdmin}
+            canUploadHandoff={canUploadHandoff}
             onComplete={onComplete}
             onSaveDescription={onSaveDescription}
-            onToggleReady={onToggleReady}
+            onAdminToggleReady={onAdminToggleReady}
+            onHandoffUpload={onHandoffUpload}
           />
         ))}
       </div>
@@ -688,7 +1086,12 @@ function AdsOutletSection({
   );
 }
 
-export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksViewProps) {
+export default function TeamTasksView({
+  isAdmin,
+  canUploadHandoff = false,
+  viewerId,
+  members,
+}: TeamTasksViewProps) {
   const [board, setBoard] = useState<ChecklistBoardDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -704,11 +1107,10 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
   const [postTitle, setPostTitle] = useState("");
   const [postDescription, setPostDescription] = useState("");
   const [postOutletId, setPostOutletId] = useState("");
-  const [mode, setMode] = useState<"postings" | "ads">("postings");
+  const [mode, setMode] = useState<"ready" | "postings" | "ads" | "done">("ready");
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
-  const [doneOpen, setDoneOpen] = useState(false);
   const [waShare, setWaShare] = useState<{
     title: string;
     count: number;
@@ -780,6 +1182,26 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
     }
   };
 
+  /** Undo Done + clear Ready — same board for Amit; returns when uploaded Ready again. */
+  const reopenDone = async (item: TeamChecklistItemDto) => {
+    const date = item.targetDate ?? focusDate;
+    setBusyItemId(item.id);
+    try {
+      const res = await fetch(`/api/team/checklist-items/${item.id}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, markComplete: false }),
+      });
+      await readTeamApiJson(res);
+      clearDownloadAt(item.id, date);
+      await loadBoard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reopen failed");
+    } finally {
+      setBusyItemId(null);
+    }
+  };
+
   const saveAdDescription = async (item: TeamChecklistItemDto, description: string) => {
     const res = await fetch(`/api/team/checklist-items/${item.id}`, {
       method: "PATCH",
@@ -829,20 +1251,61 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
     );
   };
 
-  const toggleCreativeReady = async (item: TeamChecklistItemDto, ready: boolean) => {
+  /** Admin override: wait ↔ ready (WhatsApp approval is offline). */
+  const adminToggleReady = async (item: TeamChecklistItemDto) => {
     if (!isAdmin) return;
+    const date = item.targetDate ?? focusDate;
+    const ready = handoffStatusOf(item) === "ready";
+    setBusyItemId(item.id);
+    try {
+      const res = await fetch(`/api/team/checklist-items/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date,
+          handoff: { action: ready ? "clear" : "set-ready" },
+        }),
+      });
+      await readTeamApiJson(res);
+      await loadBoard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update ready status");
+    } finally {
+      setBusyItemId(null);
+    }
+  };
+
+  const submitHandoffUpload = async (
+    item: TeamChecklistItemDto,
+    payload: {
+      format: HandoffFormat;
+      fileUrl: string;
+      postingNotes: string;
+      scheduleNote: string;
+    }
+  ) => {
     const date = item.targetDate ?? focusDate;
     setBusyItemId(item.id);
     try {
       const res = await fetch(`/api/team/checklist-items/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ creativeReady: ready, date }),
+        body: JSON.stringify({
+          date,
+          handoff: {
+            action: "set-ready",
+            format: payload.format,
+            fileUrl: payload.fileUrl,
+            postingNotes: payload.postingNotes,
+            scheduleNote: payload.scheduleNote,
+          } satisfies HandoffPayload,
+        }),
       });
       await readTeamApiJson(res);
       await loadBoard();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update ready status");
+      setError(err instanceof Error ? err.message : "Failed to send to Amit");
+      throw err;
     } finally {
       setBusyItemId(null);
     }
@@ -962,6 +1425,7 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
 
   const readyCount = board ? collectReadyItems(board).length : 0;
   const waitCount = board ? collectWaitItems(board).length : 0;
+  const doneCount = board?.doneItems?.length ?? 0;
 
   if (loading && !board) {
     return (
@@ -982,12 +1446,22 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-24 xl:pb-10">
         <div className="mx-auto max-w-3xl py-4">
           <div className="mb-3 flex items-center gap-2">
-            <div className="flex min-w-0 flex-1 rounded-xl bg-white/[0.06] p-1 ring-1 ring-white/10">
+            <div className="flex min-w-0 flex-1 overflow-x-auto rounded-xl bg-white/[0.06] p-1 ring-1 ring-white/10">
               {(
                 [
                   {
+                    id: "ready" as const,
+                    label: "Ready",
+                    Icon: IconPostings,
+                    count: readyCount,
+                    active: "bg-emerald-400 text-black shadow-[0_0_18px_rgba(52,211,153,0.35)]",
+                    idle: "text-emerald-200/70 hover:text-emerald-100",
+                    badgeOn: "bg-black/25 text-black",
+                    badgeOff: "bg-emerald-400/20 text-emerald-100",
+                  },
+                  {
                     id: "postings" as const,
-                    label: "Postings",
+                    label: "All",
                     Icon: IconPostings,
                     count: postingsCount,
                     active: "bg-cyan-400 text-black shadow-[0_0_18px_rgba(34,211,238,0.35)]",
@@ -1005,6 +1479,16 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                     badgeOn: "bg-black/25 text-black",
                     badgeOff: "bg-amber-400/20 text-amber-100",
                   },
+                  {
+                    id: "done" as const,
+                    label: "Done",
+                    Icon: IconTasks,
+                    count: doneCount,
+                    active: "bg-white text-black shadow-[0_0_18px_rgba(255,255,255,0.2)]",
+                    idle: "text-white/45 hover:text-white/75",
+                    badgeOn: "bg-black/25 text-black",
+                    badgeOff: "bg-white/10 text-white/70",
+                  },
                 ] as const
               ).map((t) => {
                 const on = mode === t.id;
@@ -1013,11 +1497,11 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                     key={t.id}
                     type="button"
                     onClick={() => setMode(t.id)}
-                    className={`flex h-10 flex-1 items-center justify-center gap-2 rounded-lg text-[13px] font-semibold transition ${
+                    className={`flex h-10 min-w-[4.5rem] flex-1 items-center justify-center gap-1.5 rounded-lg px-1.5 text-[12px] font-semibold transition sm:gap-2 sm:text-[13px] ${
                       on ? t.active : t.idle
                     }`}
                   >
-                    <t.Icon className="h-4 w-4" />
+                    <t.Icon className="h-4 w-4 shrink-0" />
                     {t.label}
                     <span
                       className={`min-w-[1.25rem] rounded-md px-1.5 py-0.5 text-center text-[11px] font-bold tabular-nums ${
@@ -1058,16 +1542,13 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
             <div>
               <h2 className="text-[18px] font-semibold tracking-tight text-white">Daily Checklist</h2>
               <p className="text-[12px] text-white/40">
-                {mode === "postings"
-                  ? "Stories + weekend posts · Meta · YT · Google · LinkedIn · X"
-                  : "Fri/Sat/Sun ads on Mon/Tue/Wed · edit brief anytime"}
-                {" · "}
-                <span className="inline-flex items-center gap-1 text-[11px] text-white/35">
-                  <span className="inline-block h-[14px] w-[24px] rounded-full bg-red-500/90" />
-                  wait
-                  <span className="ml-0.5 inline-block h-[14px] w-[24px] rounded-full bg-emerald-400" />
-                  ready
-                </span>
+                {mode === "ready"
+                  ? "Ready creatives only · Download → wait 1 min → Done. Deadline highlighted."
+                  : mode === "postings"
+                    ? "Full board. Sat story on Fri = POST TODAY by 11 PM (night before)."
+                    : mode === "ads"
+                      ? "Ads · start 4 days before go-live · upload sets Ready automatically"
+                      : "Posted / closed · reopen if something went wrong. Download still available."}
               </p>
             </div>
             {isAdmin ? (
@@ -1083,6 +1564,37 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                     </option>
                   ))}
                 </select>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() =>
+                    void (async () => {
+                      setSaving(true);
+                      try {
+                        const res = await fetch("/api/team/checklists/close-backlog", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            ownerId: manageMemberId || CHECKLIST_DEFAULT_OWNER_ID,
+                            daysAgo: 2,
+                          }),
+                        });
+                        const data = await readTeamApiJson(res);
+                        setError(
+                          `Closed ${data.closed ?? 0} story/post items through ${data.cutoffYmd} (ads kept open).`
+                        );
+                        await loadBoard();
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "Backlog close failed");
+                      } finally {
+                        setSaving(false);
+                      }
+                    })()
+                  }
+                  className="h-8 rounded-md border border-white/15 px-2 text-[11px] font-semibold text-white/70"
+                >
+                  Clear backlog (−2d)
+                </button>
                 <button
                   type="button"
                   onClick={() => setOutletsOpen(true)}
@@ -1103,33 +1615,98 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
             ) : null}
           </div>
 
-          <div className="mb-4 flex gap-0.5 overflow-x-auto rounded-lg bg-white/[0.03] p-0.5">
-            {(weekDays.length > 0
-              ? weekDays
-              : [{ date: today, dayId: "mon" as const, dayLabel: "Today", dateLabel: today, isToday: true }]
-            ).map((d) => {
-              const selected = focusDate === d.date;
-              return (
-                <button
-                  key={d.date}
-                  type="button"
-                  onClick={() => setFocusDate(d.date)}
-                  className={`flex min-h-[44px] min-w-[3.5rem] flex-1 flex-col items-center justify-center rounded-md px-1.5 ${
-                    selected ? "bg-white/10 text-white" : "text-white/40 hover:text-white/65"
-                  }`}
-                >
-                  <span className="text-[13px] font-semibold tabular-nums leading-none">
-                    {d.dateLabel || d.date.slice(8)}
-                  </span>
-                  <span className={`mt-0.5 text-[10px] uppercase tracking-wide ${d.isToday ? "text-cyan-300/80" : ""}`}>
-                    {d.isToday ? "Today" : d.dayLabel}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          {mode !== "done" ? (
+            <div className="mb-4 flex gap-0.5 overflow-x-auto rounded-lg bg-white/[0.03] p-0.5">
+              {(weekDays.length > 0
+                ? weekDays
+                : [{ date: today, dayId: "mon" as const, dayLabel: "Today", dateLabel: today, isToday: true }]
+              ).map((d) => {
+                const selected = focusDate === d.date;
+                const readyN = board?.readyCountByDate?.[d.date] ?? 0;
+                return (
+                  <button
+                    key={d.date}
+                    type="button"
+                    onClick={() => setFocusDate(d.date)}
+                    className={`relative flex min-h-[48px] min-w-[3.5rem] flex-1 flex-col items-center justify-center rounded-md px-1.5 ${
+                      selected ? "bg-white/10 text-white" : "text-white/40 hover:text-white/65"
+                    }`}
+                  >
+                    {readyN > 0 ? (
+                      <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-400 px-1 text-[9px] font-bold text-black">
+                        {readyN > 9 ? "9+" : readyN}
+                      </span>
+                    ) : null}
+                    <span className="text-[13px] font-semibold tabular-nums leading-none">
+                      {d.dateLabel || d.date.slice(8)}
+                    </span>
+                    <span className={`mt-0.5 text-[10px] uppercase tracking-wide ${d.isToday ? "text-cyan-300/80" : ""}`}>
+                      {d.isToday ? "Today" : d.dayLabel}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
 
-          {!board || (outlets.length === 0 && (board.generalPosts?.length ?? 0) === 0) ? (
+          {mode === "done" ? (
+            <section className="overflow-hidden rounded-xl border border-white/[0.1] bg-white/[0.03]">
+              <div className="border-b border-white/[0.08] px-3 py-2.5">
+                <h3 className="text-[14px] font-semibold text-white">Done ({doneCount})</h3>
+                <p className="text-[11px] text-white/40">
+                  Reopen removes Done and Ready for Amit — it shows again only after a new Ready upload.
+                </p>
+              </div>
+              {doneCount === 0 ? (
+                <p className="py-10 text-center text-[13px] text-white/35">Nothing done yet.</p>
+              ) : (
+                <ul className="divide-y divide-white/[0.06]">
+                  {(board?.doneItems ?? []).map((d) => {
+                    const fileUrl = d.handoff?.fileUrl?.trim() || null;
+                    const dateKey = d.targetDate ?? focusDate;
+                    return (
+                      <li key={`${d.id}-${d.targetDate}-${d.kind}`} className="px-3 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-emerald-400/15 text-emerald-200">
+                                Done
+                              </span>
+                              <KindBadge kind={d.kind} />
+                            </div>
+                            <p className="mt-1 text-[15px] font-semibold leading-snug text-white">
+                              {readyGoLiveHeadline(d, dateKey)}
+                            </p>
+                            {d.outletTitle ? (
+                              <p className="mt-0.5 text-[12px] text-white/45">{d.outletTitle}</p>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 flex-col items-stretch gap-1.5">
+                            {fileUrl ? (
+                              <a
+                                href={`/api/team/download?url=${encodeURIComponent(fileUrl)}`}
+                                className="inline-flex h-9 items-center justify-center rounded-lg bg-cyan-400 px-3 text-[12px] font-bold text-black"
+                              >
+                                Download
+                              </a>
+                            ) : null}
+                            <button
+                              type="button"
+                              disabled={busyItemId === d.id}
+                              onClick={() => void reopenDone(d)}
+                              className="inline-flex h-9 items-center justify-center rounded-lg border border-amber-300/35 bg-amber-400/10 px-3 text-[12px] font-semibold text-amber-100 disabled:opacity-40"
+                            >
+                              {busyItemId === d.id ? "…" : "Reopen"}
+                            </button>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          ) : !board || (outlets.length === 0 && (board.generalPosts?.length ?? 0) === 0) ? (
             <div className="border-y border-white/[0.06] py-10 text-center">
               <p className="text-[14px] text-white/40">No outlets enabled yet</p>
               <p className="mt-1 text-[12px] text-white/28">
@@ -1149,7 +1726,45 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
             </div>
           ) : (
             <div className="space-y-3">
-              {mode === "postings" ? (
+              {mode === "ready" ? (
+                (() => {
+                  const readyItems = collectReadyItems(board);
+                  if (readyItems.length === 0) {
+                    return (
+                      <p className="py-10 text-center text-[13px] text-white/35">
+                        Nothing Ready yet — when Mahesh/Jeslyn upload, it shows here with Download + deadline.
+                      </p>
+                    );
+                  }
+                  return (
+                    <section className="overflow-hidden rounded-xl border border-emerald-400/25 bg-emerald-400/[0.04]">
+                      <div className="border-b border-emerald-400/20 px-3 py-2.5">
+                        <h3 className="text-[14px] font-semibold text-emerald-100">
+                          Ready to post ({readyItems.length})
+                        </h3>
+                        <p className="text-[11px] text-white/40">
+                          Date · day · Story/Post/Ad · Download · deadline. Amit: Done after Download + 1 min. Admin: Done anytime.
+                        </p>
+                      </div>
+                      <div className="divide-y divide-white/[0.06] px-2.5 py-1">
+                        {readyItems.map((item) => (
+                          <ItemRow
+                            key={`${item.id}-${item.targetDate}-${item.kind}`}
+                            item={item}
+                            dateKey={item.targetDate ?? focusDate}
+                            busy={busyItemId === item.id}
+                            isAdmin={isAdmin}
+                            canUploadHandoff={canUploadHandoff}
+                            requireDownloadGate
+                            onComplete={markComplete}
+                            onHandoffUpload={submitHandoffUpload}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  );
+                })()
+              ) : mode === "postings" ? (
                 <>
                   {outlets.map((section) => (
                     <OutletSection
@@ -1158,8 +1773,10 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                       focusDate={focusDate}
                       busyItemId={busyItemId}
                       isAdmin={isAdmin}
+                      canUploadHandoff={canUploadHandoff}
                       onComplete={markComplete}
-                      onToggleReady={toggleCreativeReady}
+                      onAdminToggleReady={adminToggleReady}
+                      onHandoffUpload={submitHandoffUpload}
                     />
                   ))}
 
@@ -1178,8 +1795,9 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                             dateKey={focusDate}
                             busy={busyItemId === item.id}
                             isAdmin={isAdmin}
+                            canUploadHandoff={canUploadHandoff}
                             onComplete={markComplete}
-                            onToggleReady={toggleCreativeReady}
+                            onHandoffUpload={submitHandoffUpload}
                           />
                         ))}
                       </div>
@@ -1194,9 +1812,11 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                     focusDate={focusDate}
                     busyItemId={busyItemId}
                     isAdmin={isAdmin}
+                    canUploadHandoff={canUploadHandoff}
                     onComplete={markComplete}
                     onSaveDescription={saveAdDescription}
-                    onToggleReady={toggleCreativeReady}
+                    onAdminToggleReady={adminToggleReady}
+                    onHandoffUpload={submitHandoffUpload}
                   />
                 ))
               )}
@@ -1235,16 +1855,6 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                 {waitCount > 0 ? ` (${waitCount})` : ""}
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => setDoneOpen(true)}
-              className="text-[13px] font-medium text-white/45 underline decoration-white/20 underline-offset-4 hover:text-white/70"
-            >
-              View done list
-              {(board?.doneItems?.length ?? 0) > 0
-                ? ` (${board?.doneItems?.length})`
-                : ""}
-            </button>
           </div>
         </div>
       </div>
@@ -1390,48 +2000,6 @@ export default function TeamTasksView({ isAdmin, viewerId, members }: TeamTasksV
                 </button>
               ) : null}
             </div>
-          </div>
-        </div>
-      ) : null}
-
-      {doneOpen ? (
-        <div className={TEAM_SHEET_OVERLAY} onClick={() => setDoneOpen(false)}>
-          <div className={`${TEAM_SHEET_PANEL} max-w-lg space-y-3`} onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-base font-semibold text-white">Done list</h2>
-            <p className="text-[12px] text-white/40">Done in the last 7 days.</p>
-            {(board?.doneItems?.length ?? 0) === 0 ? (
-              <p className="py-8 text-center text-[13px] text-white/35">Nothing marked done yet.</p>
-            ) : (
-              <ul className="max-h-[55vh] space-y-2 overflow-y-auto">
-                {(board?.doneItems ?? [])
-                  .filter((d) =>
-                    mode === "ads" ? d.kind === "ads" : d.kind === "stories" || d.kind === "posts"
-                  )
-                  .map((d) => (
-                    <li
-                      key={`${d.id}-${d.targetDate}-${d.kind}`}
-                      className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[13px] font-medium text-white/88">{d.title}</span>
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-300/70">
-                          Done
-                        </span>
-                      </div>
-                      <p className="mt-0.5 text-[11px] text-white/40">
-                        {[d.outletTitle, d.kind, d.targetDate].filter(Boolean).join(" · ")}
-                      </p>
-                    </li>
-                  ))}
-              </ul>
-            )}
-            <button
-              type="button"
-              onClick={() => setDoneOpen(false)}
-              className="w-full rounded-xl border border-white/10 py-3 text-sm text-white/60"
-            >
-              Close
-            </button>
           </div>
         </div>
       ) : null}

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { getTeamFromRequest } from "@/lib/team-auth";
+import { isTeamDesignerMember } from "@/lib/team-members";
 import { isTeamOutletId } from "@/lib/team-outlets";
 
 export const runtime = "nodejs";
-
-const MAX_SIZE = 25 * 1024 * 1024;
 
 function resolveMime(file: File): string | null {
   const type = file.type?.trim();
@@ -60,9 +59,25 @@ export async function POST(req: NextRequest) {
   const isReference = kindField === "reference";
   const isPlanning = kindField === "planning";
   const isNote = kindField === "note";
+  const isHandoff = kindField === "handoff";
+  const memberId = session.memberId ?? session.username;
+  const canHandoffUpload =
+    session.role === "admin" ||
+    session.role === "poc" ||
+    isTeamDesignerMember(memberId);
 
-  if (!isReference && !isPlanning && !isNote && session.role !== "admin" && session.role !== "poc") {
+  if (
+    !isReference &&
+    !isPlanning &&
+    !isNote &&
+    !isHandoff &&
+    session.role !== "admin" &&
+    session.role !== "poc"
+  ) {
     return NextResponse.json({ error: "Only admin can upload creatives" }, { status: 403 });
+  }
+  if (isHandoff && !canHandoffUpload) {
+    return NextResponse.json({ error: "Only designers can upload posting handoff files" }, { status: 403 });
   }
 
   if (!(file instanceof File)) {
@@ -94,20 +109,23 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (file.size > MAX_SIZE) {
-    return NextResponse.json(
-      { error: `File is ${(file.size / (1024 * 1024)).toFixed(1)}MB — max 25MB.` },
-      { status: 400 }
-    );
-  }
+  // No app-level size cap — handoff files are purged after ~7 days (admin Expired tab).
   if (file.size === 0) {
-    return NextResponse.json({ error: "File is empty — try a smaller file or different format." }, { status: 400 });
+    return NextResponse.json({ error: "File is empty — try a different file." }, { status: 400 });
   }
 
   const slug = isTeamOutletId(outletId) ? outletId : "general";
   const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
   const safeName = (file.name || `creative.${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
-  const folder = isPlanning ? "planning" : isNote ? "notes" : isReference ? "references" : "creatives";
+  const folder = isPlanning
+    ? "planning"
+    : isNote
+      ? "notes"
+      : isReference
+        ? "references"
+        : isHandoff
+          ? "handoff"
+          : "creatives";
   const pathname = `team/${folder}/${slug}/${Date.now()}-${safeName}`;
 
   try {

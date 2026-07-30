@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TEAM_AD_OUTLETS } from "@/lib/team-outlets";
-import { pocDelegateAssigneeIds, teamMembersForClient } from "@/lib/team-members";
+import {
+  isTeamDesignerMember,
+  pocDelegateAssigneeIds,
+  teamMembersForClient,
+} from "@/lib/team-members";
 import {
   isAsapStartDate,
   TEAM_START_ASAP,
@@ -29,6 +33,7 @@ import TeamCalendarView from "./TeamCalendarView";
 import TeamShootsView from "./TeamShootsView";
 import TeamContentFilesView from "./TeamContentFilesView";
 import TeamTasksView from "./TeamTasksView";
+import TeamDesignerView from "./TeamDesignerView";
 import TeamBrainView from "./TeamBrainView";
 import { canCreateShoots } from "@/lib/team-shoots";
 import { readCachedTeamUser, writeCachedTeamUser } from "@/lib/team-session-cache";
@@ -465,9 +470,16 @@ export default function TeamClient() {
         tab === "shoots" ||
         tab === "raw-files" ||
         tab === "edit-files" ||
-        tab === "tasks")
+        tab === "tasks" ||
+        tab === "designer")
     ) {
       setTab("ads");
+    }
+    const canDesignerTab =
+      user.role === "admin" ||
+      isTeamDesignerMember(user.memberId ?? user.username);
+    if (!canDesignerTab && tab === "designer") {
+      setTab(user.role === "content" ? "shoots" : "ads");
     }
   }, [user, tab, isMemberLike, isViewer, isContent]);
 
@@ -1198,6 +1210,14 @@ export default function TeamClient() {
         hideRawFiles={!isContent}
         hideEditFiles={!isContent}
         hideAds={isContent}
+        hideDesigner={
+          isViewer ||
+          isContent ||
+          !(
+            user.role === "admin" ||
+            isTeamDesignerMember(user.memberId ?? user.username)
+          )
+        }
         hideTasks={isViewer}
         hideBrain={isViewer}
         userLabel={userLabel}
@@ -1236,7 +1256,8 @@ export default function TeamClient() {
           tab === "shoots" ||
           tab === "raw-files" ||
           tab === "edit-files" ||
-          tab === "tasks"
+          tab === "tasks" ||
+          tab === "designer"
             ? "flex flex-col overflow-hidden py-0 max-xl:px-0 max-xl:max-w-none md:py-4"
             : "overflow-y-auto overscroll-contain py-3 [-webkit-overflow-scrolling:touch] md:py-4"
         }`}
@@ -1293,9 +1314,23 @@ export default function TeamClient() {
         ) : tab === "tasks" && !isViewer ? (
           <TeamTasksView
             isAdmin={user.role === "admin"}
+            canUploadHandoff={
+              user.role === "admin" ||
+              isTeamDesignerMember(user.memberId ?? user.username)
+            }
             viewerId={notesViewerId}
             members={members}
           />
+        ) : tab === "designer" &&
+          !isViewer &&
+          (user.role === "admin" ||
+            isTeamDesignerMember(user.memberId ?? user.username)) ? (
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-3 [-webkit-overflow-scrolling:touch] md:py-4">
+            <TeamDesignerView
+              isAdmin={user.role === "admin"}
+              memberId={user.memberId ?? user.username}
+            />
+          </div>
         ) : tab === "brain" && !isViewer ? (
           <TeamBrainView />
         ) : tab === "shoots" && !isViewer ? (
@@ -1395,6 +1430,7 @@ export default function TeamClient() {
         isMember={isMemberLike}
         isContent={isContent}
         isViewer={isViewer}
+        showDesigner={isTeamDesignerMember(user.memberId ?? user.username)}
         onAdd={() => {
           if (tab === "shoots" && canCreateShoots(user)) {
             setShootAddSignal((n) => n + 1);
@@ -1466,6 +1502,12 @@ export default function TeamClient() {
         onVault={!isViewer && !isContent ? () => setTab("vault") : undefined}
         onCalendar={!isViewer && !isContent ? () => setTab("calendar") : undefined}
         onChecklists={!isViewer ? () => setTab("tasks") : undefined}
+        onDesigner={
+          user.role === "admin" ||
+          isTeamDesignerMember(user.memberId ?? user.username)
+            ? () => setTab("designer")
+            : undefined
+        }
         onBrain={!isViewer ? () => setTab("brain") : undefined}
         onAi={!isContent ? () => setTab("ai") : undefined}
         onExport={!isContent ? exportExcel : undefined}

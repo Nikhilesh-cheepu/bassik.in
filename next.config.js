@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   experimental: {
-    middlewareClientMaxBodySize: "30mb",
+    // Team handoff creatives can be large; no intentional app cap (platform still may limit).
+    middlewareClientMaxBodySize: "512mb",
   },
   async redirects() {
     return [

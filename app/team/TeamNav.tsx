@@ -2,6 +2,7 @@
 
 export const TEAM_TABS = [
   { id: "ads", label: "Ads", short: "Ads & creatives" },
+  { id: "designer", label: "Design", short: "Monthly designer queue" },
   { id: "tasks", label: "Daily", short: "Daily Checklist" },
   { id: "brain", label: "HQ", short: "My Brain" },
   { id: "shoots", label: "Shoots", short: "Shoot calendar" },
@@ -26,6 +27,7 @@ type NavProps = {
   hideRawFiles?: boolean;
   hideEditFiles?: boolean;
   hideAds?: boolean;
+  hideDesigner?: boolean;
   hideTasks?: boolean;
   hideBrain?: boolean;
 };
@@ -44,6 +46,7 @@ function visibleTabs({
   hideRawFiles,
   hideEditFiles,
   hideAds,
+  hideDesigner,
   hideTasks,
   hideBrain,
 }: Pick<
@@ -56,6 +59,7 @@ function visibleTabs({
   | "hideRawFiles"
   | "hideEditFiles"
   | "hideAds"
+  | "hideDesigner"
   | "hideTasks"
   | "hideBrain"
 >) {
@@ -68,6 +72,7 @@ function visibleTabs({
     if (hideRawFiles && t.id === "raw-files") return false;
     if (hideEditFiles && t.id === "edit-files") return false;
     if (hideAds && t.id === "ads") return false;
+    if (hideDesigner && t.id === "designer") return false;
     if (hideTasks && t.id === "tasks") return false;
     if (hideBrain && t.id === "brain") return false;
     return true;
@@ -85,6 +90,7 @@ export function TeamSidebarNav({
   hideRawFiles,
   hideEditFiles,
   hideAds,
+  hideDesigner,
   hideTasks,
   hideBrain,
   userLabel,
@@ -99,6 +105,7 @@ export function TeamSidebarNav({
     hideRawFiles,
     hideEditFiles,
     hideAds,
+    hideDesigner,
     hideTasks,
     hideBrain,
   });
@@ -156,6 +163,7 @@ export default function TeamBottomNav({
   hideRawFiles,
   hideEditFiles,
   hideAds,
+  hideDesigner,
   hideTasks,
   hideBrain,
 }: NavProps) {
@@ -168,6 +176,7 @@ export default function TeamBottomNav({
     hideRawFiles,
     hideEditFiles,
     hideAds,
+    hideDesigner,
     hideTasks,
     hideBrain,
   });

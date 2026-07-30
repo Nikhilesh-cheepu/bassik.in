@@ -3,7 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 
 /** Bump when Prisma models/fields change so HMR drops a stale global client. */
-const PRISMA_CLIENT_GENERATION = 4;
+const PRISMA_CLIENT_GENERATION = 7;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -54,10 +54,10 @@ function onRailwayRuntime(): boolean {
   return Boolean(process.env.RAILWAY_ENVIRONMENT);
 }
 
-// Create PostgreSQL connection pool (limit connections per serverless instance)
+// Serverless: keep pool tiny. Local/dev: allow a few so a long seed can't starve GETs.
 const pool = new Pool({
   connectionString,
-  max: 1,
+  max: process.env.VERCEL || process.env.RAILWAY_ENVIRONMENT ? 1 : 5,
   idleTimeoutMillis: 20000,
 });
 
@@ -78,7 +78,9 @@ function prismaClientIsStale(client: PrismaClient | undefined): boolean {
 }
 
 if (process.env.NODE_ENV !== "production" && prismaClientIsStale(globalForPrisma.prisma)) {
+  const old = globalForPrisma.prisma;
   globalForPrisma.prisma = undefined;
+  void old?.$disconnect().catch(() => undefined);
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
