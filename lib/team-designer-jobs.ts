@@ -502,7 +502,7 @@ export async function computeDesignerMetrics(assigneeId?: string): Promise<Desig
       prisma.teamDesignerJob.count({
         where: {
           ...whereAssignee,
-          status: { in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS", "PAUSED"] },
+          status: { not: "DESIGN_DONE" },
           dueDate: { lt: today },
         },
       }),

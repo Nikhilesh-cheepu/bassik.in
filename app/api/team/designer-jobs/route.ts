@@ -113,16 +113,15 @@ export async function GET(req: NextRequest) {
 
     // Open queue: still-open jobs in the window. Include go-live today/future even if
     // creative dueDate already passed (e.g. Sat/Sun posts due Tue–Wed still needed Fri).
+    // Use not DESIGN_DONE (includes PAUSED) so stale Prisma clients don't reject new enum values.
     const where: {
       postDate: { gte: string; lte: string };
       assigneeId?: string;
-      status: {
-        in: Array<"WAITING_BRIEF" | "READY_TO_DESIGN" | "IN_PROGRESS" | "PAUSED">;
-      };
+      status: { not: "DESIGN_DONE" };
       OR: Array<{ dueDate: { gte: string } } | { postDate: { gte: string } }>;
     } = {
       postDate: { gte: fromDate, lte: toDate },
-      status: { in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS", "PAUSED"] },
+      status: { not: "DESIGN_DONE" },
       OR: [{ dueDate: { gte: today } }, { postDate: { gte: today } }],
     };
 
