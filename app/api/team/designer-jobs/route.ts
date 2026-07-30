@@ -109,16 +109,17 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Open queue only. Past-due cleanup runs on seed, not every load.
+    // Open queue: still-open jobs in the window. Include go-live today/future even if
+    // creative dueDate already passed (e.g. Sat/Sun posts due Tue–Wed still needed Fri).
     const where: {
       postDate: { gte: string; lte: string };
-      dueDate: { gte: string };
       assigneeId?: string;
       status: { in: Array<"WAITING_BRIEF" | "READY_TO_DESIGN" | "IN_PROGRESS"> };
+      OR: Array<{ dueDate: { gte: string } } | { postDate: { gte: string } }>;
     } = {
       postDate: { gte: fromDate, lte: toDate },
-      dueDate: { gte: today },
       status: { in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS"] },
+      OR: [{ dueDate: { gte: today } }, { postDate: { gte: today } }],
     };
 
     if (!isAdmin) {
