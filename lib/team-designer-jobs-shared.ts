@@ -5,7 +5,14 @@ export const DESIGNER_MONTH_OUTLET_IDS = ["c53", "boiler-room", "firefly", "komm
 export const DESIGNER_ASSIGNEE_WEEKEND = "mahesh";
 export const DESIGNER_ASSIGNEE_WEEKDAY = "jeslyn";
 
+/**
+ * Designer upload deadlines (IST).
+ * - Jeslyn (Mon–Thu): day before go-live @ 20:00 (Mon flyer → Sun 8 PM).
+ * - Mahesh (Fri–Sat–Sun): go-live − 4 days @ 20:00 (Fri → Mon 8 PM).
+ */
 export const DESIGNER_UPLOAD_DUE_TIME = "20:00";
+export const DESIGNER_WEEKDAY_DUE_TIME = "20:00";
+export const DESIGNER_WEEKEND_DUE_TIME = "20:00";
 export const DESIGNER_LAST_WA_TIME = "19:00";
 export const DESIGNER_DAILY_TARGET = 4;
 /** Always schedule this many days forward from today (not calendar months). */

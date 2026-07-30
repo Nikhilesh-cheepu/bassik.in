@@ -18,6 +18,8 @@ import {
   DESIGNER_DAILY_TARGET,
   DESIGNER_MONTH_OUTLET_IDS,
   DESIGNER_UPLOAD_DUE_TIME,
+  DESIGNER_WEEKDAY_DUE_TIME,
+  DESIGNER_WEEKEND_DUE_TIME,
   DESIGNER_WINDOW_DAYS,
   parseDesignerLinks,
   type DesignerJobDto,
@@ -33,6 +35,8 @@ export {
   DESIGNER_LAST_WA_TIME,
   DESIGNER_MONTH_OUTLET_IDS,
   DESIGNER_UPLOAD_DUE_TIME,
+  DESIGNER_WEEKDAY_DUE_TIME,
+  DESIGNER_WEEKEND_DUE_TIME,
   DESIGNER_WINDOW_DAYS,
   linksFromText,
   parseDesignerLinks,
@@ -107,8 +111,25 @@ export function weekendDueDate(postDate: string): string {
   return addDaysYmd(postDate, -WEEKEND_POST_LEAD_DAYS);
 }
 
+/** Jeslyn: Mon–Thu flyer/story due the calendar day before go-live. */
 export function weekdayStoryDueDate(postDate: string): string {
   return previousDayYmd(postDate);
+}
+
+/** IST due instant for a designer job (uses lane-specific clock). */
+export function designerJobDueAtMs(dueDate: string, dueTime: string): number {
+  const time = /^\d{2}:\d{2}$/.test(dueTime) ? dueTime : DESIGNER_UPLOAD_DUE_TIME;
+  return Date.parse(`${dueDate}T${time}:00+05:30`);
+}
+
+export function isDesignerJobPastDue(params: {
+  dueDate: string;
+  dueTime: string;
+  now?: Date;
+}): boolean {
+  const now = params.now ?? new Date();
+  const dueMs = designerJobDueAtMs(params.dueDate, params.dueTime);
+  return Number.isFinite(dueMs) && now.getTime() > dueMs;
 }
 
 type DesignerJobRow = Omit<
@@ -261,7 +282,12 @@ export function toDesignerJobDto(job: DesignerJobRow, today = getTodayKey()): De
     job.status === "IN_PROGRESS" ||
     job.status === "PAUSED";
   const isDueToday = open && job.dueDate === today;
-  const isOverdue = open && job.dueDate < today;
+  const isOverdue =
+    open &&
+    isDesignerJobPastDue({
+      dueDate: job.dueDate,
+      dueTime: job.dueTime || DESIGNER_UPLOAD_DUE_TIME,
+    });
   return {
     id: job.id,
     monthKey: job.monthKey,
@@ -393,13 +419,14 @@ export async function seedDesignerRollingWindow(params: {
     for (const postDate of datesInRollingWindow(fromDate, days, DESIGNER_WEEKEND_DAYS)) {
       const dayId = dayIdForYmd(postDate);
       const dueDate = weekendDueDate(postDate);
-      const past = dueDate < today;
+      const dueTime = DESIGNER_WEEKEND_DUE_TIME;
+      const past = isDesignerJobPastDue({ dueDate, dueTime });
       for (const outletId of DESIGNER_MONTH_OUTLET_IDS) {
         rows.push({
           monthKey: monthKeyFromYmd(postDate),
           postDate,
           dueDate,
-          dueTime: DESIGNER_UPLOAD_DUE_TIME,
+          dueTime,
           outletId,
           lane: "WEEKEND",
           format: "post",
@@ -415,14 +442,16 @@ export async function seedDesignerRollingWindow(params: {
   if (lanes.includes("WEEKDAY")) {
     for (const postDate of datesInRollingWindow(fromDate, days, DESIGNER_WEEKDAY_DAYS)) {
       const dayId = dayIdForYmd(postDate);
+      // Jeslyn: Mon flyer due Sun 8 PM (always go-live − 1 day @ 20:00).
       const dueDate = weekdayStoryDueDate(postDate);
-      const past = dueDate < today;
+      const dueTime = DESIGNER_WEEKDAY_DUE_TIME;
+      const past = isDesignerJobPastDue({ dueDate, dueTime });
       for (const outletId of DESIGNER_MONTH_OUTLET_IDS) {
         rows.push({
           monthKey: monthKeyFromYmd(postDate),
           postDate,
           dueDate,
-          dueTime: DESIGNER_UPLOAD_DUE_TIME,
+          dueTime,
           outletId,
           lane: "WEEKDAY",
           format: "story",

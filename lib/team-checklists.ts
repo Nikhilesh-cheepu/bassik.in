@@ -360,7 +360,16 @@ function amitDueAtMsOnYmd(dueDayYmd: string, hourIst: number, minuteIst = 0): nu
   return base + dayAdjust * 86_400_000 + utcHour * 3_600_000 + utcMin * 60_000;
 }
 
-/** Story for `targetDate` is due at 11:00 PM IST on the previous calendar day. */
+/**
+ * Story deadlines (IST), day before go-live:
+ * - Jeslyn design done by 8:00 PM
+ * - Amit posts by 11:00 PM (aim ~10 PM, not before 8 PM — 24h story)
+ * Mon flyer → Sunday 8 PM (Jeslyn) / Sunday 11 PM (Amit).
+ */
+export function storyDesignDueAtMs(targetDateYmd: string): number {
+  return amitDueAtMsOnYmd(previousDayYmd(targetDateYmd), 20, 0);
+}
+
 export function storyDueAtMs(targetDateYmd: string): number {
   return amitDueAtMsOnYmd(previousDayYmd(targetDateYmd), 23, 0);
 }
@@ -368,14 +377,19 @@ export function storyDueAtMs(targetDateYmd: string): number {
 export function storyDueLabel(targetDateYmd: string, today = getTodayKey()): string {
   const dueDay = previousDayYmd(targetDateYmd);
   const targetDayId = dayIdForYmd(targetDateYmd);
-  const when =
+  const designWhen =
     dueDay === today
-      ? "POST TODAY by 11 PM"
-      : `post by ${formatBoardDateLabel(dueDay)} 11 PM`;
-  return `${CHECKLIST_DAY_LABELS[targetDayId]} story · ${when} · aim ~10 PM (not before 8 PM)`;
+      ? "design due TODAY by 8 PM"
+      : `design due ${formatBoardDateLabel(dueDay)} by 8 PM`;
+  const postWhen =
+    dueDay === today
+      ? "Amit post by 11 PM"
+      : `Amit post by ${formatBoardDateLabel(dueDay)} 11 PM`;
+  return `${CHECKLIST_DAY_LABELS[targetDayId]} story · ${designWhen} · ${postWhen} · aim ~10 PM`;
 }
 
 export function isStoryOverdue(targetDateYmd: string, now = new Date()): boolean {
+  // Red once Amit’s post window is missed (design-due is earlier the same day).
   return now.getTime() > storyDueAtMs(targetDateYmd);
 }
 
@@ -395,27 +409,32 @@ export function weekendPublishDueAtMs(targetDateYmd: string): number {
   return amitDueAtMsOnYmd(weekendPublishDueYmd(targetDateYmd), 23, 0);
 }
 
-/** Ad start deadline — 4 days before go-live at 11 PM. */
+/** Ad start deadline — same −4d / 8 PM as Mahesh creative. */
 export function weekendAdDueAtMs(targetDateYmd: string): number {
-  return amitDueAtMsOnYmd(weekendPostDueYmd(targetDateYmd), 23, 0);
+  return amitDueAtMsOnYmd(weekendPostDueYmd(targetDateYmd), 20, 0);
 }
 
 /**
- * Weekend post creative deadline — always 4 days before go-live at 10 PM IST.
- * Fri → Mon 10 PM, Sat → Tue 10 PM, Sun → Wed 10 PM.
+ * Weekend post — Mahesh creative due: go-live − 4 days @ 8 PM IST.
+ * Fri → Mon 8 PM, Sat → Tue 8 PM, Sun → Wed 8 PM.
  */
 export function weekendPostDueAtMs(targetDateYmd: string): number {
-  return amitDueAtMsOnYmd(weekendPostDueYmd(targetDateYmd), 22, 0);
+  return amitDueAtMsOnYmd(weekendPostDueYmd(targetDateYmd), 20, 0);
 }
 
 export function weekendPostDueLabel(targetDateYmd: string, today = getTodayKey()): string {
-  const dueBy = weekendPostDueYmd(targetDateYmd);
+  const designBy = weekendPostDueYmd(targetDateYmd);
+  const publishBy = weekendPublishDueYmd(targetDateYmd);
   const targetDayId = dayIdForYmd(targetDateYmd);
-  const when =
-    dueBy === today
-      ? "DUE TODAY by 10 PM"
-      : `due ${formatBoardDateLabel(dueBy)} by 10 PM`;
-  return `${CHECKLIST_DAY_LABELS[targetDayId]} post · ${when} (4 days before)`;
+  const designWhen =
+    designBy === today
+      ? "Mahesh due TODAY by 8 PM (−4d)"
+      : `Mahesh due ${formatBoardDateLabel(designBy)} by 8 PM (−4d)`;
+  const postWhen =
+    publishBy === today
+      ? "Amit post by TODAY 11 PM"
+      : `Amit post by ${formatBoardDateLabel(publishBy)} 11 PM`;
+  return `${CHECKLIST_DAY_LABELS[targetDayId]} post · ${designWhen} · ${postWhen}`;
 }
 
 export function weekendAdDueLabel(targetDateYmd: string, today = getTodayKey()): string {
@@ -423,14 +442,15 @@ export function weekendAdDueLabel(targetDateYmd: string, today = getTodayKey()):
   const targetDayId = dayIdForYmd(targetDateYmd);
   const when =
     startBy === today
-      ? "START ADS TODAY by 11 PM"
-      : `start ads by ${formatBoardDateLabel(startBy)} 11 PM`;
-  return `${CHECKLIST_DAY_LABELS[targetDayId]} ad · ${when}`;
+      ? "START ADS TODAY by 8 PM"
+      : `start ads by ${formatBoardDateLabel(startBy)} 8 PM`;
+  return `${CHECKLIST_DAY_LABELS[targetDayId]} ad · ${when} (same −4d as Mahesh)`;
 }
 
-/** True after creative due (go-live − 4 days @ 10 PM IST). */
+/** Red if Mahesh delivery OR Amit post window is past. */
 export function isWeekendPostOverdue(targetDateYmd: string, now = new Date()): boolean {
-  return now.getTime() > weekendPostDueAtMs(targetDateYmd);
+  const t = now.getTime();
+  return t > weekendPostDueAtMs(targetDateYmd) || t > weekendPublishDueAtMs(targetDateYmd);
 }
 
 export function isWeekendAdOverdue(targetDateYmd: string, now = new Date()): boolean {

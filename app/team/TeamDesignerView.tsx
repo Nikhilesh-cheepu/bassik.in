@@ -615,7 +615,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       <p className="text-[11px] leading-relaxed text-white/40">
         {queueView === "closed"
           ? `Done jobs · Designer can Edit upload · Admin can Delete upload / Force clear · Files auto-expire after ${HANDOFF_TTL_DAYS} days`
-          : "Send puts the job on the designer queue (brief optional) · Mahesh = weekend · Jeslyn = Mon–Thu · Last WA 19:00 · Upload by 20:00 · One job at a time"}
+          : "Mahesh Fri–Sun (−4d @ 8 PM) · Jeslyn Mon–Thu (day before @ 8 PM, e.g. Mon → Sun 8 PM) · Last WA 19:00 · One job at a time"}
       </p>
 
       {isAdmin && queueView === "closed" ? (
@@ -913,6 +913,11 @@ https://instagram.com/…"
                   {job.isDueToday ? (
                     <span className="font-bold uppercase text-cyan-300">Due today</span>
                   ) : null}
+                  <span className="text-white/50">
+                    Design due {job.dueDate.slice(8)}/{job.dueDate.slice(5, 7)} ·{" "}
+                    {(job.dueTime || "20:00").replace(":00", "")}:00
+                    {job.lane === "WEEKDAY" ? " (day before)" : " (−4 days)"}
+                  </span>
                 </div>
                 {job.description ? (
                   <p className="mt-2 whitespace-pre-wrap text-[14px] leading-snug text-white/75">

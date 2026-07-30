@@ -26,13 +26,16 @@ Designer: Upload & close (WA approved checkbox + file)
 Amit sees green Ready on Daily + Download
 ```
 
-### Timings (IST) — Mahesh 11:00–20:00
+### Timings (IST) — Designers
+
+| Who | Go-live | Design due |
+| --- | --- | --- |
+| **Jeslyn** | Mon–Thu stories | **Day before @ 8:00 PM** (Mon flyer → **Sunday 8 PM**) |
+| **Mahesh** | Fri–Sat–Sun | **Go-live − 4 days @ 8:00 PM** (Fri → Mon 8 PM, Sat → Tue, Sun → Wed) |
 
 - Send each creative on WA when finished (not batched).
 - **Last WA by 19:00.**
-- **Upload & close by 20:00** on the due day.
-- Weekend due = post night − 4 days (Fri → Monday, Sat → Tuesday, Sun → Wednesday).
-- Weekday stories due = day before post, Upload by 20:00.
+- **Upload & close by 20:00** on that due day.
 - Target **4 closed jobs/day** when briefs are Ready.
 - **No leave bank** — pull ahead and finish before a day off.
 - Idle queue = admin must add briefs / ad-hoc work.
@@ -51,9 +54,9 @@ Green Ready + Download = post it. Mark Done with platforms.
 
 ### Timings (IST)
 
-- **Stories:** post by **11:00 PM** the day before (Mon story → Sunday). Aim ~**10:00 PM**. Avoid before **8:00 PM** — stories only last 24h, so early posts vanish before the target day is fully visible.
-- **Weekend posts (Fri/Sat/Sun):** Mahesh delivers **4 days early** (Fri → Mon). Amit must post by **11:00 PM the day before** go-live (Fri post → Thu 11 PM).
-- **Weekend ads:** start running from the same 4-days-early day (Fri ad → Mon).
+- **Stories (Amit):** post by **11:00 PM** the day before (Mon story → Sunday). Aim ~**10:00 PM**. Avoid before **8:00 PM** — stories only last 24h. Jeslyn’s design due is earlier that same day (**8:00 PM**).
+- **Weekend posts (Amit):** post by **11:00 PM** the day before go-live (Sat post → Fri 11 PM). Mahesh’s design due is **4 days earlier @ 8:00 PM**.
+- **Weekend ads:** start from the same −4d day as Mahesh (Fri ad → Mon).
 - When Mahesh uploads a weekend creative, **Story + Post + Ad** for that go-live day all get the same Ready download.
 
 ## Rolling 30-day schedule (not calendar months)
