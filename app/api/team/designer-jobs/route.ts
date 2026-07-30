@@ -113,27 +113,34 @@ export async function GET(req: NextRequest) {
 
     // Open queue: still-open jobs in the window. Include go-live today/future even if
     // creative dueDate already passed (e.g. Sat/Sun posts due Tue–Wed still needed Fri).
-    // Use not DESIGN_DONE (includes PAUSED) so stale Prisma clients don't reject new enum values.
-    const where: {
-      postDate: { gte: string; lte: string };
-      assigneeId?: string;
-      status: { not: "DESIGN_DONE" };
-      OR: Array<{ dueDate: { gte: string } } | { postDate: { gte: string } }>;
-    } = {
+    const baseWhere = {
       postDate: { gte: fromDate, lte: toDate },
-      status: { not: "DESIGN_DONE" },
-      OR: [{ dueDate: { gte: today } }, { postDate: { gte: today } }],
+      OR: [{ dueDate: { gte: today } }, { postDate: { gte: today } }] as Array<
+        { dueDate: { gte: string } } | { postDate: { gte: string } }
+      >,
+      ...(isAdmin ? {} : { assigneeId: memberId }),
     };
 
-    if (!isAdmin) {
-      where.assigneeId = memberId;
+    let rows;
+    try {
+      // Prefer not DESIGN_DONE so PAUSED is included without listing it in `in: [...]`
+      // (avoids 500s when a deploy's Prisma client is briefly out of sync with the enum).
+      rows = await prisma.teamDesignerJob.findMany({
+        where: { ...baseWhere, status: { not: "DESIGN_DONE" } },
+        select: JOB_SELECT,
+        orderBy: [{ dueDate: "asc" }, { postDate: "asc" }, { outletId: "asc" }],
+      });
+    } catch (primaryErr) {
+      console.error("[team/designer-jobs] open query primary failed, fallback", primaryErr);
+      rows = await prisma.teamDesignerJob.findMany({
+        where: {
+          ...baseWhere,
+          status: { in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS"] },
+        },
+        select: JOB_SELECT,
+        orderBy: [{ dueDate: "asc" }, { postDate: "asc" }, { outletId: "asc" }],
+      });
     }
-
-    const rows = await prisma.teamDesignerJob.findMany({
-      where,
-      select: JOB_SELECT,
-      orderBy: [{ dueDate: "asc" }, { postDate: "asc" }, { outletId: "asc" }],
-    });
 
     const ids = rows.map((r) => r.id);
     const [linksMap, editMap] = await Promise.all([
@@ -168,7 +175,15 @@ export async function GET(req: NextRequest) {
     });
   } catch (err) {
     console.error("[team/designer-jobs] GET", err);
-    return NextResponse.json({ error: "Failed to load designer jobs" }, { status: 500 });
+    const detail = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json(
+      {
+        error: "Failed to load designer jobs",
+        // Helps diagnose prod without exposing stack traces
+        detail: detail.slice(0, 240),
+      },
+      { status: 500 }
+    );
   }
 }
 

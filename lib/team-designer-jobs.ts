@@ -180,28 +180,53 @@ export async function loadDesignerEditMetaByIds(
 ): Promise<Map<string, DesignerRequestMeta>> {
   const map = new Map<string, DesignerRequestMeta>();
   if (ids.length === 0) return map;
-  const rows = await prisma.$queryRaw<
-    Array<{
-      id: string;
-      editRequestedAt: Date | null;
-      editRequestNote: string | null;
-      pauseRequestedAt: Date | null;
-      pauseRequestNote: string | null;
-    }>
-  >`
-    SELECT id, "editRequestedAt", "editRequestNote", "pauseRequestedAt", "pauseRequestNote"
-    FROM "TeamDesignerJob"
-    WHERE id IN (${Prisma.join(ids)})
-  `;
-  for (const row of rows) {
-    map.set(row.id, {
-      editRequestedAt: row.editRequestedAt ? row.editRequestedAt.toISOString() : null,
-      editRequestNote: row.editRequestNote ?? null,
-      pauseRequestedAt: row.pauseRequestedAt ? row.pauseRequestedAt.toISOString() : null,
-      pauseRequestNote: row.pauseRequestNote ?? null,
-    });
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        editRequestedAt: Date | null;
+        editRequestNote: string | null;
+        pauseRequestedAt: Date | null;
+        pauseRequestNote: string | null;
+      }>
+    >`
+      SELECT id, "editRequestedAt", "editRequestNote", "pauseRequestedAt", "pauseRequestNote"
+      FROM "TeamDesignerJob"
+      WHERE id IN (${Prisma.join(ids)})
+    `;
+    for (const row of rows) {
+      map.set(row.id, {
+        editRequestedAt: row.editRequestedAt ? row.editRequestedAt.toISOString() : null,
+        editRequestNote: row.editRequestNote ?? null,
+        pauseRequestedAt: row.pauseRequestedAt ? row.pauseRequestedAt.toISOString() : null,
+        pauseRequestNote: row.pauseRequestNote ?? null,
+      });
+    }
+    return map;
+  } catch (err) {
+    // Older DBs before pause migration — still load edit meta so the queue can render.
+    console.error("[designer-jobs] pause meta load failed, falling back", err);
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        editRequestedAt: Date | null;
+        editRequestNote: string | null;
+      }>
+    >`
+      SELECT id, "editRequestedAt", "editRequestNote"
+      FROM "TeamDesignerJob"
+      WHERE id IN (${Prisma.join(ids)})
+    `;
+    for (const row of rows) {
+      map.set(row.id, {
+        editRequestedAt: row.editRequestedAt ? row.editRequestedAt.toISOString() : null,
+        editRequestNote: row.editRequestNote ?? null,
+        pauseRequestedAt: null,
+        pauseRequestNote: null,
+      });
+    }
+    return map;
   }
-  return map;
 }
 
 export async function setDesignerEditRequest(
