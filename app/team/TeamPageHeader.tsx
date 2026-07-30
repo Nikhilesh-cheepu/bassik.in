@@ -143,9 +143,9 @@ export default function TeamPageHeader({
   ) : null;
 
   return (
-    <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#06060a]/95 backdrop-blur-md xl:static">
-      <div className={TEAM_PAGE}>
-        <div className="flex items-center justify-between gap-2 pt-2 pb-1 xl:items-start xl:pt-5 xl:pb-2">
+    <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#06060a] xl:static xl:bg-[#06060a]/95 xl:backdrop-blur-md">
+      <div className={`${TEAM_PAGE} pointer-events-none`}>
+        <div className="pointer-events-auto flex items-center justify-between gap-2 pt-2 pb-1 xl:items-start xl:pt-5 xl:pb-2">
           <div className="min-w-0 flex-1">
             <h1 className={`truncate font-semibold tracking-tight ${tab === "reminders" || tab === "calendar" || tab === "vault" || tab === "tasks" ? "text-[28px] font-bold xl:text-2xl xl:font-semibold" : "text-base xl:text-2xl"}`}>
               <span className="xl:hidden">{mobileTitle}</span>
@@ -160,7 +160,7 @@ export default function TeamPageHeader({
             <button
               type="button"
               onClick={onLogout}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 text-white/45 active:bg-white/[0.06] xl:h-auto xl:w-auto xl:p-2 xl:hover:bg-white/[0.04]"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 text-white/45 touch-manipulation active:bg-white/[0.06] xl:h-auto xl:w-auto xl:p-2 xl:hover:bg-white/[0.04]"
               aria-label="Lock"
               title="Log out"
             >
@@ -170,7 +170,7 @@ export default function TeamPageHeader({
         </div>
 
         {tab === "ads" ? (
-          <div className={SCROLL_ROW}>
+          <div className={`pointer-events-auto ${SCROLL_ROW}`}>
             {adFilters.map((f) => (
               <button
                 key={f.id}

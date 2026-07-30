@@ -509,8 +509,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const queue = jobs;
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-4 px-1 pb-8">
-      <div className="flex flex-wrap items-end gap-2">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#06060a]">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-28 [-webkit-overflow-scrolling:touch] xl:pb-10">
+      <div className="mx-auto w-full max-w-3xl space-y-4 py-3">
+      <div className="relative z-[1] flex flex-wrap items-end gap-2">
         <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
           <p className="text-[10px] uppercase tracking-wide text-white/40">
             Rolling {DESIGNER_WINDOW_DAYS} days
@@ -858,7 +860,7 @@ https://instagram.com/…"
                       : "border-white/[0.08] bg-white/[0.03]"
             }`}
           >
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
               <div className="flex min-w-0 flex-1 gap-2.5">
                 {canSend ? (
                   <input
@@ -921,12 +923,12 @@ https://instagram.com/…"
                 ) : null}
                 </div>
               </div>
-              <div className="flex shrink-0 flex-col gap-1.5">
+              <div className="relative z-[2] flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:max-w-[12rem]">
                 {/* Download only on Done — Open must not keep a leftover file after reopen */}
                 {job.status === "DESIGN_DONE" && job.fileUrl ? (
                   <a
                     href={teamDownloadHref(job.fileUrl, `${job.outletLabel}-${job.postDate}`)}
-                    className="inline-flex h-9 items-center justify-center rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
+                    className="inline-flex h-11 min-h-[44px] items-center justify-center rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
                   >
                     Download
                   </a>
@@ -936,7 +938,7 @@ https://instagram.com/…"
                     type="button"
                     disabled={busyId === job.id || busyId === "bulk-send"}
                     onClick={() => void sendToDesigner(job)}
-                    className="h-9 rounded-lg bg-cyan-500 px-3 text-[12px] font-semibold text-black disabled:opacity-40"
+                    className="h-11 min-h-[44px] rounded-lg bg-cyan-500 px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
                   >
                     Send to {designer}
                   </button>
@@ -946,7 +948,7 @@ https://instagram.com/…"
                     type="button"
                     disabled={busyId === job.id}
                     onClick={() => startJob(job)}
-                    className="h-9 rounded-lg bg-cyan-500 px-3 text-[12px] font-semibold text-black"
+                    className="h-11 min-h-[44px] rounded-lg bg-cyan-500 px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
                   >
                     Start Job
                   </button>
@@ -960,7 +962,7 @@ https://instagram.com/…"
                         if (ok) setError("Started again — upload wait timer restarted.");
                       })
                     }
-                    className="h-9 rounded-lg bg-cyan-500 px-3 text-[12px] font-semibold text-black disabled:opacity-40"
+                    className="h-11 min-h-[44px] rounded-lg bg-cyan-500 px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
                   >
                     Start again
                   </button>
@@ -971,7 +973,7 @@ https://instagram.com/…"
                     <button
                       type="button"
                       onClick={() => tryOpenUpload(job, "close")}
-                      className="h-9 rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
+                      className="h-11 min-h-[44px] rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
                     >
                       Upload & close
                     </button>
@@ -987,7 +989,7 @@ https://instagram.com/…"
                             if (ok) setError("Pause requested — waiting on admin.");
                           })
                         }
-                        className="h-9 rounded-lg border border-violet-400/40 bg-violet-400/15 px-3 text-[12px] font-semibold text-violet-100 disabled:opacity-40"
+                        className="h-11 min-h-[44px] rounded-lg border border-violet-400/40 bg-violet-400/15 px-3 text-[13px] font-semibold text-violet-100 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
                       >
                         Request pause
                       </button>
@@ -1003,7 +1005,7 @@ https://instagram.com/…"
                     <button
                       type="button"
                       onClick={() => tryOpenUpload(job, "attach")}
-                      className="h-9 rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
+                      className="h-11 min-h-[44px] rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
                     >
                       {job.fileUrl ? "Edit upload" : "Upload"}
                     </button>
@@ -1015,7 +1017,7 @@ https://instagram.com/…"
                           if (ok) setError("Marked done (upload optional).");
                         })
                       }
-                      className="h-9 rounded-lg bg-white px-3 text-[12px] font-semibold text-black disabled:opacity-40"
+                      className="h-11 min-h-[44px] rounded-lg bg-white px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
                     >
                       Mark done
                     </button>
@@ -1027,7 +1029,7 @@ https://instagram.com/…"
                           if (ok) setError("Paused — Start again when ready.");
                         })
                       }
-                      className="h-9 rounded-lg border border-violet-400/40 bg-violet-400/15 px-3 text-[12px] font-semibold text-violet-100 disabled:opacity-40"
+                      className="h-11 min-h-[44px] rounded-lg border border-violet-400/40 bg-violet-400/15 px-3 text-[13px] font-semibold text-violet-100 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
                     >
                       Pause
                     </button>
@@ -1063,7 +1065,7 @@ https://instagram.com/…"
                     <button
                       type="button"
                       onClick={() => tryOpenUpload(job, "attach")}
-                      className="h-9 rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
+                      className="h-11 min-h-[44px] rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
                     >
                       {job.fileUrl ? "Edit upload" : "Upload"}
                     </button>
@@ -1075,7 +1077,7 @@ https://instagram.com/…"
                           if (ok) setError("Marked done (upload optional).");
                         })
                       }
-                      className="h-9 rounded-lg bg-white px-3 text-[12px] font-semibold text-black disabled:opacity-40"
+                      className="h-11 min-h-[44px] rounded-lg bg-white px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
                     >
                       Mark done
                     </button>
@@ -1420,6 +1422,8 @@ https://instagram.com/…"
           );
         })}
       </section>
+      </div>
+      </div>
 
       {expiredOpen && isAdmin ? (
         <div

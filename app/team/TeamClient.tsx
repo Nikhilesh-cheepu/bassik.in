@@ -1325,12 +1325,10 @@ export default function TeamClient() {
           !isViewer &&
           (user.role === "admin" ||
             isTeamDesignerMember(user.memberId ?? user.username)) ? (
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-3 [-webkit-overflow-scrolling:touch] md:py-4">
-            <TeamDesignerView
-              isAdmin={user.role === "admin"}
-              memberId={user.memberId ?? user.username}
-            />
-          </div>
+          <TeamDesignerView
+            isAdmin={user.role === "admin"}
+            memberId={user.memberId ?? user.username}
+          />
         ) : tab === "brain" && !isViewer ? (
           <TeamBrainView />
         ) : tab === "shoots" && !isViewer ? (
