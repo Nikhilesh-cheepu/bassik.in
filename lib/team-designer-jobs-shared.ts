@@ -146,3 +146,64 @@ export type DesignerMetricsDto = {
   dailyTarget: number;
   queueHealthOk: boolean;
 };
+
+/** ISO timestamps for first start / last upload today (IST). */
+export type DesignerDaySeriesPoint = {
+  date: string;
+  closed: number;
+  target: number;
+  firstStart: string | null;
+  lastEnd: string | null;
+};
+
+export type DesignerPerformanceDto = {
+  assigneeId: string;
+  name: string;
+  today: string;
+  closedToday: number;
+  dailyTarget: number;
+  readyToStart: number;
+  inProgress: number;
+  overdueReady: number;
+  closedThisWeek: number;
+  /** Min startedAt today IST */
+  firstStartedAt: string | null;
+  /** Max uploadedAt today IST */
+  lastEndedAt: string | null;
+  /** Under daily target (always) */
+  underTarget: boolean;
+  /** Strict red after 18:00 IST when still under target */
+  redFlag: boolean;
+  /** closedToday progressing toward target before evening */
+  onPace: boolean;
+  series: DesignerDaySeriesPoint[];
+};
+
+export type DesignerNudgeKind =
+  | "no_start"
+  | "behind_pace"
+  | "deadline_soon"
+  | "missed_target";
+
+export type DesignerReminderLogDto = {
+  id: string;
+  assigneeId: string;
+  kind: DesignerNudgeKind;
+  dateKey: string;
+  body: string;
+  delivery: "sent" | "skipped_no_config" | "failed";
+  metaMessageId: string | null;
+  shareUrl: string | null;
+  createdAt: string;
+};
+
+export const DESIGNER_PERFORMANCE_IDS = [
+  DESIGNER_ASSIGNEE_WEEKEND,
+  DESIGNER_ASSIGNEE_WEEKDAY,
+] as const;
+
+export function designerDisplayName(assigneeId: string): string {
+  if (assigneeId === "mahesh") return "Mahesh";
+  if (assigneeId === "jeslyn") return "Jeslyn";
+  return assigneeId;
+}

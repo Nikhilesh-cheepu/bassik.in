@@ -609,6 +609,27 @@ model TeamDesignerJob {
   @@index([pauseRequestedAt])
 }
 
+/// Auto / manual WhatsApp nudges for designer daily target (Meta Cloud API).
+model TeamDesignerReminderLog {
+  id             String   @id @default(cuid())
+  assigneeId     String
+  /// no_start | behind_pace | deadline_soon | missed_target
+  kind           String
+  dateKey        String   // YYYY-MM-DD IST
+  body           String
+  /// sent | skipped_no_config | failed
+  delivery       String
+  metaMessageId  String?
+  shareUrl       String?
+  error          String?
+  createdAt      DateTime @default(now())
+
+  @@unique([assigneeId, kind, dateKey])
+  @@index([assigneeId, createdAt])
+  @@index([dateKey])
+  @@index([createdAt])
+}
+
 /// SEO & performance marketing ad/creative tasks (internal /team board).
 model TeamAdTask {
   id              String              @id @default(cuid())

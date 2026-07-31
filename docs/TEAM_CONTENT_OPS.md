@@ -36,7 +36,8 @@ Amit sees green Ready on Daily + Download
 - Send each creative on WA when finished (not batched).
 - **Last WA by 19:00.**
 - **Upload & close by 20:00** on that due day.
-- Target **4 closed jobs/day** when briefs are Ready.
+- Target **4 closed jobs/day is mandatory** (red flag after 18:00 IST if under). Finishing this week’s calendar does **not** pause work — Ready briefs can land any day.
+- Auto WA nudges (Meta Cloud API) list **Ready to start** only — never Waiting brief.
 - **No leave bank** — pull ahead and finish before a day off.
 - Idle queue = admin must add briefs / ad-hoc work.
 

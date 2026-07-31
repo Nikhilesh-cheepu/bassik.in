@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/designer-nudges",
+      "schedule": "30 6 * * *"
+    },
+    {
+      "path": "/api/cron/designer-nudges",
+      "schedule": "30 9 * * *"
+    },
+    {
+      "path": "/api/cron/designer-nudges",
+      "schedule": "30 12 * * *"
+    }
+  ]
+}

@@ -35,11 +35,26 @@ import {
   sortDesignerJobs,
   type DesignerJobDto,
   type DesignerMetricsDto,
+  type DesignerPerformanceDto,
+  type DesignerReminderLogDto,
 } from "@/lib/team-designer-jobs-shared";
+import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { uploadTeamFile } from "@/lib/team-client-upload";
 import { teamDownloadHref } from "@/lib/team-download";
 import { teamOutletLabel } from "@/lib/team-outlets";
 import { IconTrash, IconUnsend } from "./TeamIcons";
+
+function formatIstClock(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return d.toLocaleTimeString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
 
 function jobBriefText(job: DesignerJobDto): string | null {
   if (isBoilerplateDesignerDescription(job.description, job.title)) return null;
@@ -230,9 +245,24 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     Array<{ url: string; pathname: string; uploadedAt: string; size: number }>
   >([]);
   const [expiredBusy, setExpiredBusy] = useState(false);
+  const [perfDesigners, setPerfDesigners] = useState<DesignerPerformanceDto[]>([]);
+  const [reminders, setReminders] = useState<DesignerReminderLogDto[]>([]);
+  const [nudgeBusy, setNudgeBusy] = useState<string | null>(null);
   const loadGen = useRef(0);
   const queueViewRef = useRef(queueView);
   queueViewRef.current = queueView;
+
+  const loadPerformance = useCallback(async () => {
+    try {
+      const res = await fetch("/api/team/designer-performance");
+      const data = await readJson(res);
+      if (!res.ok) return;
+      setPerfDesigners((data.designers as DesignerPerformanceDto[]) ?? []);
+      setReminders((data.reminders as DesignerReminderLogDto[]) ?? []);
+    } catch {
+      /* non-blocking */
+    }
+  }, []);
 
   const load = useCallback(async (opts?: { soft?: boolean; view?: "open" | "closed" }) => {
     const view = opts?.view ?? queueViewRef.current;
@@ -247,6 +277,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       setAllJobs((data.jobs as DesignerJobDto[]) ?? []);
       setWindowMeta((data.window as WindowMeta) ?? null);
       setError(null);
+      void loadPerformance();
     } catch (err) {
       if (gen !== loadGen.current) return;
       setError(err instanceof Error ? err.message : "Failed to load");
@@ -256,11 +287,42 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         setRefreshing(false);
       }
     }
-  }, []);
+  }, [loadPerformance]);
 
   useEffect(() => {
     void load({ view: queueView });
   }, [load, queueView]);
+
+  const sendManualNudge = async (assigneeId: string) => {
+    setNudgeBusy(assigneeId);
+    try {
+      const res = await fetch("/api/team/designer-performance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "nudge", assigneeId }),
+      });
+      const data = await readJson(res);
+      if (!res.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : "Nudge failed");
+      }
+      setReminders((data.reminders as DesignerReminderLogDto[]) ?? []);
+      const first = (data.results as Array<{ delivery?: string; reason?: string }>)?.[0];
+      const share = (data.reminders as DesignerReminderLogDto[])?.[0]?.shareUrl;
+      if (first?.delivery === "skipped_no_config" && share) {
+        openWhatsAppShareUrl(share);
+        setError("Cloud WA not configured — opened share link.");
+      } else if (first?.delivery === "sent") {
+        setError(`Nudge sent to ${designerDisplayName(assigneeId)}.`);
+      } else {
+        setError(first?.reason || "Nudge logged.");
+      }
+      void loadPerformance();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nudge failed");
+    } finally {
+      setNudgeBusy(null);
+    }
+  };
 
   const jobs = useMemo(() => {
     let list = allJobs;
@@ -300,6 +362,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       queueHealthOk: readyBriefs + inProgress >= DESIGNER_DAILY_TARGET,
     };
   }, [jobs]);
+
+  const visiblePerf = useMemo(() => {
+    if (!isAdmin) return perfDesigners.filter((p) => p.assigneeId === memberId);
+    if (designerTab === "all") return perfDesigners;
+    return perfDesigners.filter((p) => p.assigneeId === designerTab);
+  }, [designerTab, isAdmin, memberId, perfDesigners]);
 
   const patchJob = async (
     id: string,
@@ -755,17 +823,64 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       <div className="grid grid-cols-3 gap-2">
         <Metric label="In queue" value={String(queue.length)} />
         <Metric
-          label="Ready for designer"
+          label="Ready to start"
           value={String(metrics.readyBriefs)}
           ok={metrics.queueHealthOk}
         />
         <Metric label="In progress" value={String(metrics.inProgress)} />
       </div>
 
+      {visiblePerf.map((p) => (
+        <DesignerPerformanceCard
+          key={p.assigneeId}
+          perf={p}
+          isAdmin={isAdmin}
+          nudgeBusy={nudgeBusy === p.assigneeId}
+          onNudge={() => void sendManualNudge(p.assigneeId)}
+        />
+      ))}
+
+      {isAdmin && visiblePerf.length > 0 ? (
+        <DesignerPerformanceGraph designers={visiblePerf} />
+      ) : null}
+
+      {isAdmin && reminders.length > 0 ? (
+        <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+            WA follow-ups (admin)
+          </p>
+          <ul className="mt-2 max-h-40 space-y-1.5 overflow-y-auto">
+            {reminders.slice(0, 12).map((r) => (
+              <li
+                key={r.id}
+                className="flex flex-wrap items-baseline justify-between gap-2 text-[11px] text-white/60"
+              >
+                <span>
+                  <span className="font-medium text-white/80">
+                    {designerDisplayName(r.assigneeId)}
+                  </span>{" "}
+                  · {r.kind.replace(/_/g, " ")} · {r.delivery}
+                  <span className="text-white/35"> · {r.dateKey}</span>
+                </span>
+                {r.shareUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => openWhatsAppShareUrl(r.shareUrl!)}
+                    className="text-cyan-300/90 underline-offset-2 hover:underline"
+                  >
+                    Open WA
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <p className="text-[11px] leading-relaxed text-white/40">
         {queueView === "closed"
           ? `Done jobs · Designer can Edit upload · Admin can Delete upload / Force clear · Files auto-expire after ${HANDOFF_TTL_DAYS} days`
-          : "Mahesh Fri–Sun (−4d @ 8 PM) · Jeslyn Mon–Thu (day before @ 8 PM, e.g. Mon → Sun 8 PM) · Last WA 19:00 · One job at a time"}
+          : `Mandatory ${DESIGNER_DAILY_TARGET}/day · Ready briefs can land any day — week calendar done ≠ day off · Mahesh Fri–Sun (−4d @ 8 PM) · Jeslyn Mon–Thu (day before @ 8 PM) · One job at a time`}
       </p>
 
       {isAdmin && queueView === "closed" ? (
@@ -1841,6 +1956,167 @@ function Metric({
       >
         {value}
       </p>
+    </div>
+  );
+}
+
+function DesignerPerformanceCard({
+  perf,
+  isAdmin,
+  nudgeBusy,
+  onNudge,
+}: {
+  perf: DesignerPerformanceDto;
+  isAdmin: boolean;
+  nudgeBusy: boolean;
+  onNudge: () => void;
+}) {
+  const flag = perf.redFlag || perf.underTarget;
+  return (
+    <div
+      className={`rounded-xl border px-3 py-2.5 ${
+        perf.redFlag
+          ? "border-red-500/50 bg-red-500/[0.12]"
+          : perf.underTarget
+            ? "border-amber-400/35 bg-amber-400/[0.07]"
+            : "border-emerald-400/25 bg-emerald-400/[0.06]"
+      }`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
+            {perf.name} · today
+          </p>
+          <p
+            className={`mt-0.5 text-[22px] font-semibold tabular-nums ${
+              flag ? "text-red-200" : "text-emerald-200"
+            }`}
+          >
+            {perf.closedToday}/{perf.dailyTarget}
+            <span className="ml-2 text-[12px] font-medium text-white/45">closed</span>
+          </p>
+        </div>
+        {isAdmin ? (
+          <button
+            type="button"
+            disabled={nudgeBusy}
+            onClick={onNudge}
+            className="h-8 rounded-lg border border-cyan-400/35 bg-cyan-400/10 px-2.5 text-[11px] font-semibold text-cyan-100 disabled:opacity-40"
+          >
+            {nudgeBusy ? "Sending…" : "Send WA nudge"}
+          </button>
+        ) : null}
+      </div>
+      {perf.redFlag ? (
+        <p className="mt-1.5 text-[12px] font-semibold text-red-200">
+          Red flag — daily target is {perf.dailyTarget}. Queue isn’t closed for the week.
+        </p>
+      ) : perf.underTarget ? (
+        <p className="mt-1.5 text-[12px] text-amber-100/90">
+          Still need {perf.dailyTarget - perf.closedToday} more today. Ready briefs can land any
+          day.
+        </p>
+      ) : (
+        <p className="mt-1.5 text-[12px] text-emerald-100/85">
+          Hit today’s target — stay available if new Ready work lands.
+        </p>
+      )}
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/55">
+        <span>Ready to start {perf.readyToStart}</span>
+        <span>In progress {perf.inProgress}</span>
+        {perf.overdueReady > 0 ? (
+          <span className="font-semibold text-red-300">Overdue ready {perf.overdueReady}</span>
+        ) : null}
+        <span>Started {formatIstClock(perf.firstStartedAt)}</span>
+        <span>Last end {formatIstClock(perf.lastEndedAt)}</span>
+        <span>Week {perf.closedThisWeek}</span>
+      </div>
+    </div>
+  );
+}
+
+function DesignerPerformanceGraph({ designers }: { designers: DesignerPerformanceDto[] }) {
+  const series = designers[0]?.series ?? [];
+  if (series.length === 0) return null;
+  const maxY = Math.max(
+    DESIGNER_DAILY_TARGET,
+    ...designers.flatMap((d) => d.series.map((p) => p.closed)),
+    1
+  );
+  const w = 320;
+  const h = 88;
+  const pad = 8;
+
+  return (
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+        Last 14 days · closed vs {DESIGNER_DAILY_TARGET}/day
+      </p>
+      <div className="mt-2 overflow-x-auto">
+        <svg viewBox={`0 0 ${w} ${h}`} className="h-24 w-full min-w-[280px]" role="img">
+          {/* target line */}
+          {(() => {
+            const y =
+              pad + (1 - DESIGNER_DAILY_TARGET / maxY) * (h - pad * 2);
+            return (
+              <line
+                x1={pad}
+                x2={w - pad}
+                y1={y}
+                y2={y}
+                stroke="rgba(255,255,255,0.2)"
+                strokeDasharray="4 3"
+              />
+            );
+          })()}
+          {designers.map((d, di) => {
+            const color = di === 0 ? "#22d3ee" : "#a78bfa";
+            const pts = d.series
+              .map((p, i) => {
+                const x = pad + (i / Math.max(1, d.series.length - 1)) * (w - pad * 2);
+                const y = pad + (1 - p.closed / maxY) * (h - pad * 2);
+                return `${x},${y}`;
+              })
+              .join(" ");
+            return (
+              <g key={d.assigneeId}>
+                <polyline
+                  fill="none"
+                  stroke={color}
+                  strokeWidth="2"
+                  points={pts}
+                />
+                {d.series.map((p, i) => {
+                  const x = pad + (i / Math.max(1, d.series.length - 1)) * (w - pad * 2);
+                  const y = pad + (1 - p.closed / maxY) * (h - pad * 2);
+                  const miss = p.closed < p.target;
+                  return (
+                    <circle
+                      key={`${d.assigneeId}-${p.date}`}
+                      cx={x}
+                      cy={y}
+                      r={miss ? 3.2 : 2.4}
+                      fill={miss ? "#f87171" : color}
+                    />
+                  );
+                })}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-3 text-[10px] text-white/45">
+        {designers.map((d, di) => (
+          <span key={d.assigneeId} className="inline-flex items-center gap-1.5">
+            <span
+              className="inline-block h-2 w-2 rounded-full"
+              style={{ background: di === 0 ? "#22d3ee" : "#a78bfa" }}
+            />
+            {d.name}
+          </span>
+        ))}
+        <span className="text-white/30">Red dots = under target</span>
+      </div>
     </div>
   );
 }
