@@ -360,8 +360,17 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     if (outletFilter !== "all") {
       list = list.filter((j) => j.outletId === outletFilter);
     }
+    if (queueView === "closed") {
+      // Most recent done on top
+      return [...list].sort((a, b) => {
+        const au = a.uploadedAt || a.updatedAt || "";
+        const bu = b.uploadedAt || b.updatedAt || "";
+        if (au !== bu) return bu.localeCompare(au);
+        return b.postDate.localeCompare(a.postDate);
+      });
+    }
     return sortDesignerJobs(list);
-  }, [designerVisibleJobs, outletFilter]);
+  }, [designerVisibleJobs, outletFilter, queueView]);
 
   const dndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -2265,9 +2274,6 @@ function DesignerPerformanceCard({
         <span>Last end {formatIstClock(perf.lastEndedAt)}</span>
         <span>Week {perf.closedThisWeek}</span>
       </div>
-      <p className="mt-1.5 text-[10px] text-white/35">
-        Counts only designer Start + Upload & close — admin Mark done does not count.
-      </p>
     </div>
   );
 }

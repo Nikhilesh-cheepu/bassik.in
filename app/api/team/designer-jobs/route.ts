@@ -16,7 +16,7 @@ import {
   sortDesignerJobs,
   toDesignerJobDto,
 } from "@/lib/team-designer-jobs";
-import { getTodayKey } from "@/lib/team-checklists";
+import { addDaysYmd, getTodayKey } from "@/lib/team-checklists";
 import { parseDesignerPriorityMode } from "@/lib/team-designer-jobs-shared";
 import { sendPriorityJobAlert } from "@/lib/team-designer-nudges";
 import { isTeamOutletId } from "@/lib/team-outlets";
@@ -65,19 +65,26 @@ export async function GET(req: NextRequest) {
 
   try {
     if (view === "closed") {
+      // Look back 30 days — not the forward rolling window (fromDate = today would hide
+      // yesterday’s closes like Mahesh’s Jul 31 uploads).
+      const closedFrom = addDaysYmd(today, -(DESIGNER_WINDOW_DAYS - 1));
       const whereClosed: {
         status: "DESIGN_DONE";
         assigneeId?: string;
         OR: Array<
           | { uploadedAt: { gte: Date } }
+          | { uploadedAt: null; updatedAt: { gte: Date } }
           | { uploadedAt: null; postDate: { gte: string } }
         >;
       } = {
         status: "DESIGN_DONE",
-        // Closed in rolling window (by upload time) or recent post dates without upload stamp
         OR: [
-          { uploadedAt: { gte: new Date(`${fromDate}T00:00:00+05:30`) } },
-          { uploadedAt: null, postDate: { gte: fromDate } },
+          { uploadedAt: { gte: new Date(`${closedFrom}T00:00:00+05:30`) } },
+          {
+            uploadedAt: null,
+            updatedAt: { gte: new Date(`${closedFrom}T00:00:00+05:30`) },
+          },
+          { uploadedAt: null, postDate: { gte: closedFrom } },
         ],
       };
       if (!isAdmin) whereClosed.assigneeId = memberId;
@@ -85,7 +92,7 @@ export async function GET(req: NextRequest) {
       const rows = await prisma.teamDesignerJob.findMany({
         where: whereClosed,
         select: JOB_SELECT,
-        orderBy: [{ uploadedAt: "desc" }, { postDate: "desc" }, { outletId: "asc" }],
+        orderBy: [{ uploadedAt: "desc" }, { updatedAt: "desc" }, { postDate: "desc" }],
         take: 200,
       });
 
