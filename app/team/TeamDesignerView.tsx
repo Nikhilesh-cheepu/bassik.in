@@ -18,6 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import Image from "next/image";
 import {
   startTransition,
   useCallback,
@@ -329,16 +330,38 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     }
   };
 
-  const jobs = useMemo(() => {
+  /** Base filter by designer tab / member (before ready-only / outlet). */
+  const scopedJobs = useMemo(() => {
     let list = allJobs;
     if (isAdmin && designerTab !== "all") {
       list = list.filter((j) => j.assigneeId === designerTab);
+    } else if (!isAdmin) {
+      list = list.filter((j) => j.assigneeId === memberId);
     }
+    return list;
+  }, [allJobs, designerTab, isAdmin, memberId]);
+
+  /**
+   * Open queue for designers: only Ready / In progress / Paused.
+   * "Not sent" never appears here — admin handles those in a separate section.
+   */
+  const designerVisibleJobs = useMemo(() => {
+    if (queueView === "closed") return scopedJobs;
+    return scopedJobs.filter(
+      (j) =>
+        j.status === "READY_TO_DESIGN" ||
+        j.status === "IN_PROGRESS" ||
+        j.status === "PAUSED"
+    );
+  }, [queueView, scopedJobs]);
+
+  const jobs = useMemo(() => {
+    let list = designerVisibleJobs;
     if (outletFilter !== "all") {
       list = list.filter((j) => j.outletId === outletFilter);
     }
     return sortDesignerJobs(list);
-  }, [allJobs, designerTab, isAdmin, outletFilter]);
+  }, [designerVisibleJobs, outletFilter]);
 
   const dndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -347,14 +370,27 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   );
 
   const sendableJobs = useMemo(
-    () => jobs.filter((j) => j.status === "WAITING_BRIEF"),
-    [jobs]
+    () => scopedJobs.filter((j) => j.status === "WAITING_BRIEF"),
+    [scopedJobs]
   );
 
+  const outletCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const id of DESIGNER_MONTH_OUTLET_IDS) map.set(id, 0);
+    for (const j of designerVisibleJobs) {
+      map.set(j.outletId, (map.get(j.outletId) ?? 0) + 1);
+    }
+    return map;
+  }, [designerVisibleJobs]);
+
   const metrics: DesignerMetricsDto = useMemo(() => {
-    const readyBriefs = jobs.filter((j) => j.status === "READY_TO_DESIGN").length;
-    const inProgress = jobs.filter((j) => j.status === "IN_PROGRESS").length;
-    const overdueOpen = jobs.filter((j) => j.isOverdue).length;
+    const readyBriefs = designerVisibleJobs.filter(
+      (j) => j.status === "READY_TO_DESIGN"
+    ).length;
+    const inProgress = designerVisibleJobs.filter(
+      (j) => j.status === "IN_PROGRESS"
+    ).length;
+    const overdueOpen = designerVisibleJobs.filter((j) => j.isOverdue).length;
     return {
       closedToday: 0,
       closedThisWeek: 0,
@@ -366,7 +402,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       dailyTarget: DESIGNER_DAILY_TARGET,
       queueHealthOk: readyBriefs + inProgress >= DESIGNER_DAILY_TARGET,
     };
-  }, [jobs]);
+  }, [designerVisibleJobs]);
 
   const visiblePerf = useMemo(() => {
     if (!isAdmin) return perfDesigners.filter((p) => p.assigneeId === memberId);
@@ -839,7 +875,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <Metric label="In queue" value={String(queue.length)} />
+        <Metric label="In queue" value={String(designerVisibleJobs.length)} />
         <Metric
           label="Ready to start"
           value={String(metrics.readyBriefs)}
@@ -971,38 +1007,57 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5">
         <button
           type="button"
           onClick={() => {
             setOutletFilter("all");
             setSelectedIds(new Set());
           }}
-          className={`h-8 rounded-md px-2.5 text-[11px] font-semibold ${
+          className={`flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-semibold ${
             outletFilter === "all"
-              ? "bg-white/15 text-white"
-              : "bg-white/[0.04] text-white/45 hover:text-white/70"
+              ? "bg-white text-black"
+              : "bg-white/[0.06] text-white/65 ring-1 ring-white/10 hover:text-white"
           }`}
         >
-          All outlets
-        </button>
-        {DESIGNER_MONTH_OUTLET_IDS.map((id) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => {
-              setOutletFilter(id);
-              setSelectedIds(new Set());
-            }}
-            className={`h-8 rounded-md px-2.5 text-[11px] font-semibold ${
-              outletFilter === id
-                ? "bg-white/15 text-white"
-                : "bg-white/[0.04] text-white/45 hover:text-white/70"
+          All
+          <span
+            className={`min-w-[1.15rem] rounded-md px-1 py-0.5 text-center text-[11px] font-bold tabular-nums ${
+              outletFilter === "all" ? "bg-black/20 text-black" : "bg-white/10 text-white/80"
             }`}
           >
-            {teamOutletLabel(id)}
-          </button>
-        ))}
+            {designerVisibleJobs.length}
+          </span>
+        </button>
+        {DESIGNER_MONTH_OUTLET_IDS.map((id) => {
+          const count = outletCounts.get(id) ?? 0;
+          const on = outletFilter === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => {
+                setOutletFilter(on ? "all" : id);
+                setSelectedIds(new Set());
+              }}
+              className={`flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[12px] font-semibold ${
+                on
+                  ? "bg-cyan-400 text-black shadow-[0_0_14px_rgba(34,211,238,0.3)]"
+                  : "bg-white/[0.06] text-white/70 ring-1 ring-white/10 hover:text-white"
+              }`}
+            >
+              <OutletChipIcon outletId={id} />
+              <span className="max-w-[5.5rem] truncate">{teamOutletLabel(id)}</span>
+              <span
+                className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums ${
+                  on ? "bg-black/25 text-black" : "bg-cyan-400/25 text-cyan-100"
+                }`}
+              >
+                {count > 9 ? "9+" : count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {adhocOpen && isAdmin ? (
@@ -1104,41 +1159,17 @@ https://instagram.com/…"
       <section className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/50">
-            {queueView === "closed" ? "Done" : "Queue"} ({queue.length})
+            {queueView === "closed" ? "Done" : "Ready queue"} ({queue.length})
             {designerTab !== "all" ? ` · ${designerDisplayName(designerTab)}` : ""}
             {outletFilter !== "all" ? ` · ${teamOutletLabel(outletFilter)}` : ""}
             {canDragQueue ? " · drag ≡ to prioritize" : ""}
           </h2>
-          {isAdmin && queueView === "open" && sendableJobs.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-1.5 text-[11px] text-white/50">
-                <input
-                  type="checkbox"
-                  checked={
-                    sendableJobs.length > 0 &&
-                    sendableJobs.every((j) => selectedIds.has(j.id))
-                  }
-                  onChange={toggleSelectAllSendable}
-                  className="rounded border-white/30"
-                />
-                Select all ({sendableJobs.length})
-              </label>
-              <button
-                type="button"
-                disabled={selectedIds.size === 0 || busyId === "bulk-send"}
-                onClick={() => void sendSelected()}
-                className="h-8 rounded-lg bg-cyan-500 px-3 text-[11px] font-semibold text-black disabled:opacity-35"
-              >
-                {busyId === "bulk-send"
-                  ? "Sending…"
-                  : `Send selected (${selectedIds.size})`}
-              </button>
-            </div>
-          ) : null}
         </div>
         {queue.length === 0 && !loading ? (
           <p className="text-[13px] text-white/35">
-            No open jobs for this view — seed 30 days or switch designer / outlet.
+            {queueView === "closed"
+              ? "No done jobs for this view."
+              : "Nothing ready to start — only Ready / In progress / Paused show here."}
           </p>
         ) : null}
         {(() => {
@@ -1870,6 +1901,97 @@ https://instagram.com/…"
             </DndContext>
           );
         })()}
+
+        {isAdmin && queueView === "open" && sendableJobs.length > 0 ? (
+          <div className="mt-5 space-y-2 border-t border-white/[0.08] pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-[12px] font-semibold uppercase tracking-wide text-amber-200/80">
+                Not sent — admin only ({sendableJobs.length})
+              </h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-1.5 text-[11px] text-white/50">
+                  <input
+                    type="checkbox"
+                    checked={
+                      sendableJobs.length > 0 &&
+                      sendableJobs.every((j) => selectedIds.has(j.id))
+                    }
+                    onChange={toggleSelectAllSendable}
+                    className="rounded border-white/30"
+                  />
+                  Select all
+                </label>
+                <button
+                  type="button"
+                  disabled={selectedIds.size === 0 || busyId === "bulk-send"}
+                  onClick={() => void sendSelected()}
+                  className="h-8 rounded-lg bg-cyan-500 px-3 text-[11px] font-semibold text-black disabled:opacity-35"
+                >
+                  {busyId === "bulk-send"
+                    ? "Sending…"
+                    : `Send selected (${selectedIds.size})`}
+                </button>
+              </div>
+            </div>
+            <p className="text-[11px] text-white/40">
+              Designers never see these. Send to put them on Ready queue.
+            </p>
+            <div className="space-y-2">
+              {sendableJobs
+                .filter((j) => outletFilter === "all" || j.outletId === outletFilter)
+                .map((job) => {
+                  const { dayName, dateLabel } = formatPostDateParts(job.postDate);
+                  const designer = designerDisplayName(job.assigneeId);
+                  const selected = selectedIds.has(job.id);
+                  return (
+                    <article
+                      key={job.id}
+                      className={`rounded-xl border px-3.5 py-3 ${
+                        selected
+                          ? "border-cyan-400/40 bg-cyan-400/[0.07]"
+                          : "border-white/[0.08] bg-white/[0.02]"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex min-w-0 flex-1 gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() => toggleSelected(job.id)}
+                            className="mt-1.5 shrink-0 rounded border-white/30"
+                            aria-label={`Select ${job.title}`}
+                          />
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
+                              {dayName} · {dateLabel}
+                            </p>
+                            <p className="mt-0.5 text-[15px] font-semibold text-white/85">
+                              {job.outletLabel}{" "}
+                              <span className="text-[12px] font-medium text-white/40">
+                                {job.format === "story" ? "Story" : "Post"}
+                              </span>
+                            </p>
+                            <p className="text-[13px] text-white/70">{job.title}</p>
+                            <p className="mt-1 text-[12px] text-white/40">
+                              → {designer} · Not sent
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={busyId === job.id || busyId === "bulk-send"}
+                          onClick={() => void sendToDesigner(job)}
+                          className="h-10 min-h-[44px] rounded-lg bg-cyan-500 px-3 text-[13px] font-semibold text-black disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                        >
+                          Send to {designer}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+            </div>
+          </div>
+        ) : null}
       </section>
       </div>
       </div>
@@ -1972,6 +2094,30 @@ https://instagram.com/…"
         </div>
       ) : null}
     </div>
+  );
+}
+
+function outletLogoSrc(outletId: string): string | null {
+  if (outletId === "c53" || outletId === "boiler-room" || outletId === "firefly") {
+    return `/logos/${outletId}.png`;
+  }
+  return null;
+}
+
+function OutletChipIcon({ outletId }: { outletId: string }) {
+  const src = outletLogoSrc(outletId);
+  const letter = teamOutletLabel(outletId).slice(0, 1).toUpperCase();
+  if (!src) {
+    return (
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold text-white/80">
+        {letter}
+      </span>
+    );
+  }
+  return (
+    <span className="relative h-5 w-5 shrink-0 overflow-hidden rounded-full bg-white/10 ring-1 ring-white/15">
+      <Image src={src} alt="" fill sizes="20px" className="object-contain p-0.5" />
+    </span>
   );
 }
 
