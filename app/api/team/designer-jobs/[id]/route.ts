@@ -15,7 +15,11 @@ import {
   syncDesignerJobToChecklistHandoff,
   toDesignerJobDto,
 } from "@/lib/team-designer-jobs";
-import { isBoilerplateDesignerDescription } from "@/lib/team-designer-jobs-shared";
+import {
+  isBoilerplateDesignerDescription,
+  parseDesignerPriorityMode,
+} from "@/lib/team-designer-jobs-shared";
+import { sendPriorityJobAlert } from "@/lib/team-designer-nudges";
 
 async function jobDtoWithLinks(job: Parameters<typeof toDesignerJobDto>[0]) {
   const [linksMap, editMap] = await Promise.all([
@@ -85,6 +89,7 @@ export async function PATCH(
       note?: string;
       links?: string | string[];
       urgent?: boolean;
+      priorityMode?: string;
       fileUrl?: string;
       postingNotes?: string;
       scheduleNote?: string;
@@ -132,26 +137,83 @@ export async function PATCH(
         // Save notes only — Send (brief-ready) is what puts it on the designer queue.
         status = job.status;
       }
+
+      const priorityMode =
+        body.priorityMode !== undefined
+          ? parseDesignerPriorityMode(body.priorityMode)
+          : undefined;
+      const urgent =
+        typeof body.urgent === "boolean"
+          ? body.urgent
+          : priorityMode && priorityMode !== "NONE"
+            ? true
+            : undefined;
+
+      // Pin priority jobs near the top of the queue
+      let sortOrder: number | undefined;
+      if (action === "brief-ready" && priorityMode && priorityMode !== "NONE") {
+        const minRow = await prisma.teamDesignerJob.findFirst({
+          where: { assigneeId: job.assigneeId, status: { not: "DESIGN_DONE" } },
+          orderBy: { sortOrder: "asc" },
+          select: { sortOrder: true },
+        });
+        sortOrder = (minRow?.sortOrder ?? 0) - 1;
+      }
+
       const updated = await prisma.teamDesignerJob.update({
         where: { id },
         data: {
           description,
           status,
           ...(title ? { title } : {}),
-          ...(typeof body.urgent === "boolean" ? { urgent: body.urgent } : {}),
+          ...(typeof urgent === "boolean" ? { urgent } : {}),
+          ...(priorityMode ? { priorityMode } : {}),
+          ...(typeof sortOrder === "number" ? { sortOrder } : {}),
         },
       });
       if (links) {
         await setDesignerJobLinks(id, links);
       }
-      return NextResponse.json({ job: await jobDtoWithLinks(updated) });
+
+      let priorityNudge: Awaited<ReturnType<typeof sendPriorityJobAlert>> = null;
+      if (
+        action === "brief-ready" &&
+        status === "READY_TO_DESIGN" &&
+        priorityMode &&
+        priorityMode !== "NONE"
+      ) {
+        try {
+          priorityNudge = await sendPriorityJobAlert({
+            jobId: updated.id,
+            assigneeId: updated.assigneeId,
+            title: updated.title,
+            outletId: updated.outletId,
+            postDate: updated.postDate,
+            priorityMode,
+          });
+        } catch (e) {
+          console.error("[designer-jobs] priority WA", e);
+        }
+      }
+
+      return NextResponse.json({
+        job: await jobDtoWithLinks(updated),
+        priorityNudge,
+      });
     }
 
     if (action === "set-urgent") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      const turningOn = Boolean(body.urgent);
+      const priorityMode = turningOn
+        ? parseDesignerPriorityMode(body.priorityMode ?? "AFTER_CURRENT")
+        : ("NONE" as const);
       const updated = await prisma.teamDesignerJob.update({
         where: { id },
-        data: { urgent: Boolean(body.urgent) },
+        data: {
+          urgent: turningOn,
+          priorityMode,
+        },
       });
       return NextResponse.json({ job: await jobDtoWithLinks(updated) });
     }
@@ -179,7 +241,9 @@ export async function PATCH(
         data: {
           status: "READY_TO_DESIGN",
           startedAt: null,
+          startedByRole: null,
           uploadedAt: null,
+          closedByRole: null,
           fileUrl: null,
           postingNotes: null,
           scheduleNote: null,
@@ -242,9 +306,14 @@ export async function PATCH(
           { status: 409 }
         );
       }
+      const startedByRole = isAdmin && !canDesignerAct ? "admin" : "designer";
       const updated = await prisma.teamDesignerJob.update({
         where: { id },
-        data: { status: "IN_PROGRESS", startedAt: new Date() },
+        data: {
+          status: "IN_PROGRESS",
+          startedAt: new Date(),
+          startedByRole,
+        },
       });
       await setDesignerPauseRequest(id, { at: null, note: null });
       return NextResponse.json({
@@ -363,6 +432,7 @@ export async function PATCH(
       }
 
       const uploadedAt = new Date();
+      const closedByRole = isAdmin && !canDesignerAct ? "admin" : "designer";
       const updated = await prisma.teamDesignerJob.update({
         where: { id },
         data: {
@@ -379,6 +449,7 @@ export async function PATCH(
           waApproved: true,
           uploadedAt,
           startedAt: job.startedAt ?? uploadedAt,
+          closedByRole,
           ...(typeof body.format === "string" && body.format.trim()
             ? { format: body.format.trim() }
             : {}),
@@ -472,6 +543,8 @@ export async function PATCH(
           uploadedAt,
           waApproved: true,
           startedAt: job.startedAt ?? new Date(),
+          // Admin Mark done never counts toward designer 4/day
+          closedByRole: "admin",
           postingNotes:
             typeof body.postingNotes === "string"
               ? body.postingNotes.trim() || null
@@ -490,7 +563,7 @@ export async function PATCH(
       }
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
-        message: "Marked done — Amit Ready synced (weekend: story + post + ad)",
+        message: "Marked done (admin) — does not count toward designer daily target",
       });
     }
 
@@ -602,7 +675,9 @@ export async function PATCH(
         data: {
           status: "READY_TO_DESIGN",
           startedAt: null,
+          startedByRole: null,
           uploadedAt: null,
+          closedByRole: null,
           fileUrl: null,
           waApproved: false,
         },
@@ -636,7 +711,10 @@ export async function PATCH(
         data: {
           status: "WAITING_BRIEF",
           startedAt: null,
+          startedByRole: null,
           uploadedAt: null,
+          closedByRole: null,
+          priorityMode: "NONE",
           fileUrl: null,
           postingNotes: null,
           scheduleNote: null,

@@ -36,6 +36,7 @@ import {
   type DesignerJobDto,
   type DesignerMetricsDto,
   type DesignerPerformanceDto,
+  type DesignerPriorityMode,
   type DesignerReminderLogDto,
 } from "@/lib/team-designer-jobs-shared";
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
@@ -239,7 +240,11 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     description: "",
     links: "",
     urgent: true,
+    priorityMode: "AFTER_CURRENT" as DesignerPriorityMode,
   });
+  const [priorityDrafts, setPriorityDrafts] = useState<Record<string, DesignerPriorityMode>>(
+    {}
+  );
   const [expiredOpen, setExpiredOpen] = useState(false);
   const [expiredBlobs, setExpiredBlobs] = useState<
     Array<{ url: string; pathname: string; uploadedAt: string; size: number }>
@@ -453,11 +458,15 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     const draft = briefDrafts[job.id];
     const description =
       draft !== undefined ? draft : jobBriefText(job) ?? "";
+    const priorityMode =
+      priorityDrafts[job.id] ?? job.priorityMode ?? "NONE";
     const ok = await patchJob(job.id, {
       action: "brief-ready",
       description,
       links:
         linkDrafts[job.id] ?? (job.links?.length ? job.links.join("\n") : ""),
+      priorityMode,
+      urgent: priorityMode !== "NONE" ? true : job.urgent,
     });
     if (ok) setBriefJobId((cur) => (cur === job.id ? null : cur));
     return ok;
@@ -707,7 +716,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           title: adhoc.title.trim(),
           description: adhoc.description,
           links: adhoc.links,
-          urgent: adhoc.urgent,
+          urgent: adhoc.urgent || adhoc.priorityMode !== "NONE",
+          priorityMode: adhoc.priorityMode,
         }),
       });
       const data = await readJson(res);
@@ -719,16 +729,24 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         description: "",
         links: "",
         urgent: true,
+        priorityMode: "AFTER_CURRENT",
       });
       const created = data.job as DesignerJobDto | undefined;
       if (created) {
         setAllJobs((prev) => [created, ...prev.filter((j) => j.id !== created.id)]);
       }
       setDesignerTab(adhoc.assigneeId);
+      const nudge = data.priorityNudge as { delivery?: string } | null | undefined;
+      const shareHint =
+        nudge?.delivery === "skipped_no_config"
+          ? " · WA logged (open share from follow-ups if needed)"
+          : nudge?.delivery === "sent"
+            ? " · priority WA sent"
+            : "";
       setError(
-        typeof data.message === "string"
+        (typeof data.message === "string"
           ? data.message
-          : `Sent to ${designerDisplayName(adhoc.assigneeId)}`
+          : `Sent to ${designerDisplayName(adhoc.assigneeId)}`) + shareHint
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Create failed");
@@ -1065,6 +1083,10 @@ https://instagram.com/…"
               className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-[12px] text-white"
             />
           </label>
+          <PriorityModePicker
+            value={adhoc.priorityMode}
+            onChange={(priorityMode) => setAdhoc((a) => ({ ...a, priorityMode }))}
+          />
           <button
             type="button"
             disabled={!adhoc.title.trim() || busyId === "adhoc"}
@@ -1188,6 +1210,16 @@ https://instagram.com/…"
                   <span className={statusColor(job.status)}>{statusLabel(job.status)}</span>
                   {job.urgent ? (
                     <span className="font-bold uppercase text-amber-300">Urgent</span>
+                  ) : null}
+                  {job.priorityMode === "PAUSE_NOW" ? (
+                    <span className="font-bold uppercase text-rose-300">
+                      Pause & start now
+                    </span>
+                  ) : null}
+                  {job.priorityMode === "AFTER_CURRENT" ? (
+                    <span className="font-bold uppercase text-orange-300">
+                      After current
+                    </span>
                   ) : null}
                   {job.isOverdue ? (
                     <span className="font-bold uppercase text-red-300">Overdue</span>
@@ -1593,6 +1625,12 @@ https://instagram.com/…"
                       placeholder="Drive / Instagram links — one per line"
                       className="w-full rounded-lg border border-white/10 bg-black/35 px-3 py-2 text-[12px] text-white outline-none focus:border-cyan-400/40"
                     />
+                    <PriorityModePicker
+                      value={priorityDrafts[job.id] ?? job.priorityMode ?? "NONE"}
+                      onChange={(priorityMode) =>
+                        setPriorityDrafts((d) => ({ ...d, [job.id]: priorityMode }))
+                      }
+                    />
                     <div className="flex flex-wrap items-center gap-2">
                       {canSend ? (
                         <button
@@ -1937,6 +1975,56 @@ https://instagram.com/…"
   );
 }
 
+function PriorityModePicker({
+  value,
+  onChange,
+}: {
+  value: DesignerPriorityMode;
+  onChange: (v: DesignerPriorityMode) => void;
+}) {
+  const options: Array<{ id: DesignerPriorityMode; label: string; hint: string }> = [
+    { id: "NONE", label: "Normal", hint: "No priority WA" },
+    {
+      id: "AFTER_CURRENT",
+      label: "After current",
+      hint: "Finish current job, then start this",
+    },
+    {
+      id: "PAUSE_NOW",
+      label: "Pause & start now",
+      hint: "Pause everything and start this immediately",
+    },
+  ];
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-white/40">
+        Priority when sending
+      </p>
+      <div className="flex flex-col gap-1.5 sm:flex-row">
+        {options.map((o) => (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onChange(o.id)}
+            className={`flex-1 rounded-lg border px-2.5 py-2 text-left ${
+              value === o.id
+                ? o.id === "PAUSE_NOW"
+                  ? "border-rose-400/50 bg-rose-400/15 text-rose-50"
+                  : o.id === "AFTER_CURRENT"
+                    ? "border-orange-400/45 bg-orange-400/12 text-orange-50"
+                    : "border-white/25 bg-white/10 text-white"
+                : "border-white/10 bg-black/25 text-white/55 hover:text-white/80"
+            }`}
+          >
+            <span className="block text-[12px] font-semibold">{o.label}</span>
+            <span className="mt-0.5 block text-[10px] opacity-75">{o.hint}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Metric({
   label,
   value,
@@ -2031,6 +2119,9 @@ function DesignerPerformanceCard({
         <span>Last end {formatIstClock(perf.lastEndedAt)}</span>
         <span>Week {perf.closedThisWeek}</span>
       </div>
+      <p className="mt-1.5 text-[10px] text-white/35">
+        Counts only designer Start + Upload & close — admin Mark done does not count.
+      </p>
     </div>
   );
 }

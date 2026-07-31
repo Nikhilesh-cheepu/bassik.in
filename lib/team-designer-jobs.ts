@@ -23,6 +23,7 @@ import {
   DESIGNER_WINDOW_DAYS,
   isBoilerplateDesignerDescription,
   parseDesignerLinks,
+  parseDesignerPriorityMode,
   sortDesignerJobs,
   type DesignerJobDto,
   type DesignerJobStatus,
@@ -151,9 +152,12 @@ type DesignerJobRow = Omit<
     | "assigneeId"
     | "status"
     | "urgent"
+    | "priorityMode"
     | "sortOrder"
     | "startedAt"
+    | "startedByRole"
     | "uploadedAt"
+    | "closedByRole"
     | "fileUrl"
     | "postingNotes"
     | "scheduleNote"
@@ -310,9 +314,18 @@ export function toDesignerJobDto(job: DesignerJobRow, today = getTodayKey()): De
     assigneeId: job.assigneeId,
     status: job.status,
     urgent: job.urgent,
+    priorityMode: parseDesignerPriorityMode(job.priorityMode),
     sortOrder: typeof job.sortOrder === "number" ? job.sortOrder : 0,
     startedAt: job.startedAt?.toISOString() ?? null,
+    startedByRole:
+      job.startedByRole === "designer" || job.startedByRole === "admin"
+        ? job.startedByRole
+        : null,
     uploadedAt: job.uploadedAt?.toISOString() ?? null,
+    closedByRole:
+      job.closedByRole === "designer" || job.closedByRole === "admin"
+        ? job.closedByRole
+        : null,
     fileUrl: job.fileUrl,
     postingNotes: job.postingNotes,
     scheduleNote: job.scheduleNote,
@@ -516,6 +529,7 @@ export async function computeDesignerMetrics(assigneeId?: string): Promise<Desig
         where: {
           ...whereAssignee,
           status: "DESIGN_DONE",
+          closedByRole: "designer",
           uploadedAt: { gte: new Date(`${today}T00:00:00+05:30`) },
         },
       }),
@@ -523,6 +537,7 @@ export async function computeDesignerMetrics(assigneeId?: string): Promise<Desig
         where: {
           ...whereAssignee,
           status: "DESIGN_DONE",
+          closedByRole: "designer",
           uploadedAt: { gte: new Date(`${weekStart}T00:00:00+05:30`) },
         },
       }),
@@ -547,6 +562,7 @@ export async function computeDesignerMetrics(assigneeId?: string): Promise<Desig
         where: {
           ...whereAssignee,
           status: "DESIGN_DONE",
+          closedByRole: "designer",
           uploadedAt: { gte: new Date(`${weekStart}T00:00:00+05:30`) },
         },
         select: { dueDate: true, dueTime: true, uploadedAt: true },

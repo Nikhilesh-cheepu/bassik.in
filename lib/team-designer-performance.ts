@@ -93,12 +93,14 @@ async function dayActivity(assigneeId: string, ymd: string): Promise<{
       where: {
         assigneeId,
         status: "DESIGN_DONE",
+        closedByRole: "designer",
         uploadedAt: { gte: start, lte: end },
       },
     }),
     prisma.teamDesignerJob.findMany({
       where: {
         assigneeId,
+        startedByRole: "designer",
         startedAt: { gte: start, lte: end },
       },
       select: { startedAt: true },
@@ -108,6 +110,8 @@ async function dayActivity(assigneeId: string, ymd: string): Promise<{
     prisma.teamDesignerJob.findMany({
       where: {
         assigneeId,
+        status: "DESIGN_DONE",
+        closedByRole: "designer",
         uploadedAt: { gte: start, lte: end },
       },
       select: { uploadedAt: true },
@@ -132,6 +136,7 @@ async function buildSeries(assigneeId: string, today: string): Promise<DesignerD
       where: {
         assigneeId,
         status: "DESIGN_DONE",
+        closedByRole: "designer",
         uploadedAt: { gte: start, lte: end },
       },
       select: { uploadedAt: true },
@@ -139,6 +144,7 @@ async function buildSeries(assigneeId: string, today: string): Promise<DesignerD
     prisma.teamDesignerJob.findMany({
       where: {
         assigneeId,
+        startedByRole: "designer",
         startedAt: { gte: start, lte: end },
       },
       select: { startedAt: true },

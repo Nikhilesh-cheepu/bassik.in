@@ -17,6 +17,8 @@ import {
   toDesignerJobDto,
 } from "@/lib/team-designer-jobs";
 import { getTodayKey } from "@/lib/team-checklists";
+import { parseDesignerPriorityMode } from "@/lib/team-designer-jobs-shared";
+import { sendPriorityJobAlert } from "@/lib/team-designer-nudges";
 import { isTeamOutletId } from "@/lib/team-outlets";
 
 const JOB_SELECT = {
@@ -33,9 +35,12 @@ const JOB_SELECT = {
   assigneeId: true,
   status: true,
   urgent: true,
+  priorityMode: true,
   sortOrder: true,
   startedAt: true,
+  startedByRole: true,
   uploadedAt: true,
+  closedByRole: true,
   fileUrl: true,
   postingNotes: true,
   scheduleNote: true,
@@ -201,6 +206,7 @@ export async function POST(req: NextRequest) {
       outletId?: string;
       description?: string;
       urgent?: boolean;
+      priorityMode?: string;
       title?: string;
       links?: string | string[];
       assigneeId?: string;
@@ -266,6 +272,15 @@ export async function POST(req: NextRequest) {
         : parseDesignerLinks(body.links);
 
     const format = `adhoc-${Date.now().toString(36)}`;
+    const priorityMode = parseDesignerPriorityMode(body.priorityMode);
+    const urgent = body.urgent !== false || priorityMode !== "NONE";
+    const minRow = await prisma.teamDesignerJob.findFirst({
+      where: { assigneeId, status: { not: "DESIGN_DONE" } },
+      orderBy: { sortOrder: "asc" },
+      select: { sortOrder: true },
+    });
+    const sortOrder =
+      priorityMode !== "NONE" ? (minRow?.sortOrder ?? 0) - 1 : (minRow?.sortOrder ?? 0);
 
     const job = await prisma.teamDesignerJob.create({
       data: {
@@ -278,10 +293,11 @@ export async function POST(req: NextRequest) {
         format,
         title,
         description: desc,
-        sortOrder: 0,
+        sortOrder,
         assigneeId,
         status: "READY_TO_DESIGN",
-        urgent: body.urgent !== false,
+        urgent,
+        priorityMode,
         createdBy: session.username,
       },
     });
@@ -290,8 +306,25 @@ export async function POST(req: NextRequest) {
       await setDesignerJobLinks(job.id, links);
     }
 
+    let priorityNudge = null;
+    if (priorityMode !== "NONE") {
+      try {
+        priorityNudge = await sendPriorityJobAlert({
+          jobId: job.id,
+          assigneeId: job.assigneeId,
+          title: job.title,
+          outletId: job.outletId,
+          postDate: job.postDate,
+          priorityMode,
+        });
+      } catch (e) {
+        console.error("[designer-jobs] adhoc priority WA", e);
+      }
+    }
+
     return NextResponse.json({
       job: toDesignerJobDto({ ...job, links }),
+      priorityNudge,
       message: `Sent to ${assigneeId === "jeslyn" ? "Jeslyn" : "Mahesh"}`,
     });
   } catch (err) {

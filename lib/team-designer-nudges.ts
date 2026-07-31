@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/db";
 import { getTodayKey } from "@/lib/team-checklists";
+import { findActiveDesignerJob } from "@/lib/team-designer-jobs";
 import {
   DESIGNER_DAILY_TARGET,
   DESIGNER_PERFORMANCE_IDS,
   designerDisplayName,
   type DesignerNudgeKind,
+  type DesignerPriorityMode,
   type DesignerReminderLogDto,
 } from "@/lib/team-designer-jobs-shared";
 import {
@@ -14,6 +16,18 @@ import {
   type ReadyJobLine,
 } from "@/lib/team-designer-performance";
 import { sendDesignerWhatsApp, whatsAppShareUrl, designerWaPhone } from "@/lib/team-wa-cloud";
+import { teamOutletLabel } from "@/lib/team-outlets";
+
+const PAUSE_SUGGEST_MAX_MS = 45 * 60 * 1000;
+const FINISH_ASAP_MIN_MS = 60 * 60 * 1000;
+
+function formatDuration(ms: number): string {
+  const m = Math.max(1, Math.round(ms / 60000));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r ? `${h}h ${r}m` : `${h}h`;
+}
 
 function formatReadyList(jobs: ReadyJobLine[], cap = 5): string {
   if (jobs.length === 0) return "(no ready-to-start jobs)";
@@ -118,7 +132,7 @@ async function alreadyLogged(
   dateKey: string
 ): Promise<boolean> {
   const existing = await prisma.teamDesignerReminderLog.findFirst({
-    where: { assigneeId, kind, dateKey },
+    where: { assigneeId, kind, dateKey, jobId: "" },
     select: { id: true },
   });
   return Boolean(existing);
@@ -214,12 +228,18 @@ export async function evaluateAndSendDesignerNudges(opts?: {
 
       const log = await prisma.teamDesignerReminderLog.upsert({
         where: {
-          assigneeId_kind_dateKey: { assigneeId, kind, dateKey },
+          assigneeId_kind_dateKey_jobId: {
+            assigneeId,
+            kind,
+            dateKey,
+            jobId: "",
+          },
         },
         create: {
           assigneeId,
           kind,
           dateKey,
+          jobId: "",
           body,
           delivery,
           metaMessageId: send.ok ? send.messageId : null,
@@ -281,4 +301,119 @@ export async function listRecentReminderLogs(limit = 40): Promise<DesignerRemind
     take: limit,
   });
   return rows.map(toReminderLogDto);
+}
+
+/**
+ * When admin sends a priority Ready job — WA the designer with interrupt instructions.
+ * Only READY_TO_DESIGN (this job) is mentioned; never Waiting brief.
+ */
+export async function sendPriorityJobAlert(params: {
+  jobId: string;
+  assigneeId: string;
+  title: string;
+  outletId: string;
+  postDate: string;
+  priorityMode: DesignerPriorityMode;
+}): Promise<NudgeRunResult | null> {
+  if (params.priorityMode !== "PAUSE_NOW" && params.priorityMode !== "AFTER_CURRENT") {
+    return null;
+  }
+
+  const dateKey = getTodayKey();
+  const name = designerDisplayName(params.assigneeId);
+  const outlet = teamOutletLabel(params.outletId);
+  const jobLine = `• ${params.title} (${outlet} · ${params.postDate})`;
+  const active = await findActiveDesignerJob(params.assigneeId);
+  const activeAgeMs =
+    active?.startedAt != null ? Date.now() - active.startedAt.getTime() : null;
+
+  const kind: DesignerNudgeKind =
+    params.priorityMode === "PAUSE_NOW" ? "priority_pause_now" : "priority_after_current";
+
+  let body: string;
+  if (params.priorityMode === "PAUSE_NOW") {
+    const activeBit = active
+      ? activeAgeMs != null && activeAgeMs < PAUSE_SUGGEST_MAX_MS
+        ? `You have “${active.title}” in progress (~${formatDuration(activeAgeMs)}). Send a pause request on it, then Start this priority job.`
+        : activeAgeMs != null && activeAgeMs >= FINISH_ASAP_MIN_MS
+          ? `You’ve been on “${active.title}” for ~${formatDuration(activeAgeMs)}. Wrap a safe pause / handoff, then Start this priority job now.`
+          : `Pause “${active.title}” (or request pause), then Start this priority job immediately.`
+      : "Nothing in progress — Start this priority job now.";
+    body = [
+      `Hey ${name} — NEW PRIORITY task (start immediately):`,
+      jobLine,
+      "",
+      activeBit,
+      "",
+      "Open /team → Monthly designer queue.",
+    ].join("\n");
+  } else {
+    const activeBit = active
+      ? activeAgeMs != null && activeAgeMs >= FINISH_ASAP_MIN_MS
+        ? `Finish “${active.title}” ASAP (already ~${formatDuration(activeAgeMs)}), then Start this next.`
+        : `Complete your current job “${active.title}” first, then Start this priority task.`
+      : "No job in progress — you can Start this when ready.";
+    body = [
+      `Hey ${name} — NEW PRIORITY task (after current):`,
+      jobLine,
+      "",
+      activeBit,
+      "",
+      "Open /team → Monthly designer queue.",
+    ].join("\n");
+  }
+
+  const send = await sendDesignerWhatsApp({
+    assigneeId: params.assigneeId,
+    body,
+    templateParams: [
+      name,
+      params.priorityMode === "PAUSE_NOW" ? "Priority — pause & start now" : "Priority — after current",
+      params.title.slice(0, 200),
+    ],
+  });
+
+  const delivery: DesignerReminderLogDto["delivery"] = send.ok
+    ? "sent"
+    : send.skipped
+      ? "skipped_no_config"
+      : "failed";
+
+  const log = await prisma.teamDesignerReminderLog.upsert({
+    where: {
+      assigneeId_kind_dateKey_jobId: {
+        assigneeId: params.assigneeId,
+        kind,
+        dateKey,
+        jobId: params.jobId,
+      },
+    },
+    create: {
+      assigneeId: params.assigneeId,
+      kind,
+      dateKey,
+      jobId: params.jobId,
+      body,
+      delivery,
+      metaMessageId: send.ok ? send.messageId : null,
+      shareUrl: send.shareUrl,
+      error: send.ok ? null : send.error,
+    },
+    update: {
+      body,
+      delivery,
+      metaMessageId: send.ok ? send.messageId : null,
+      shareUrl: send.shareUrl,
+      error: send.ok ? null : send.error,
+    },
+  });
+
+  return {
+    assigneeId: params.assigneeId,
+    kind,
+    skipped: false,
+    delivery,
+    logId: log.id,
+    reason: send.ok ? undefined : send.error,
+  };
 }

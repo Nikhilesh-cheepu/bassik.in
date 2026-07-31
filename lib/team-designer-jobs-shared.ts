@@ -43,10 +43,16 @@ export type DesignerJobDto = {
   assigneeId: string;
   status: DesignerJobStatus;
   urgent: boolean;
+  /** NONE | AFTER_CURRENT | PAUSE_NOW — set by admin when sending */
+  priorityMode: DesignerPriorityMode;
   /** Admin drag priority — lower first */
   sortOrder: number;
   startedAt: string | null;
+  /** designer | admin | null */
+  startedByRole: "designer" | "admin" | null;
   uploadedAt: string | null;
+  /** designer | admin | null — only designer counts for 4/day */
+  closedByRole: "designer" | "admin" | null;
   fileUrl: string | null;
   postingNotes: string | null;
   scheduleNote: string | null;
@@ -179,11 +185,20 @@ export type DesignerPerformanceDto = {
   series: DesignerDaySeriesPoint[];
 };
 
+export type DesignerPriorityMode = "NONE" | "AFTER_CURRENT" | "PAUSE_NOW";
+
+export function parseDesignerPriorityMode(raw: unknown): DesignerPriorityMode {
+  if (raw === "AFTER_CURRENT" || raw === "PAUSE_NOW" || raw === "NONE") return raw;
+  return "NONE";
+}
+
 export type DesignerNudgeKind =
   | "no_start"
   | "behind_pace"
   | "deadline_soon"
-  | "missed_target";
+  | "missed_target"
+  | "priority_pause_now"
+  | "priority_after_current";
 
 export type DesignerReminderLogDto = {
   id: string;

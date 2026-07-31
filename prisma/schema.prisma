@@ -577,10 +577,16 @@ model TeamDesignerJob {
   assigneeId    String
   status        TeamDesignerJobStatus  @default(WAITING_BRIEF)
   urgent        Boolean                @default(false)
+  /// Admin interrupt when sending: NONE | AFTER_CURRENT | PAUSE_NOW
+  priorityMode  String                 @default("NONE")
   /// Admin drag priority — lower = higher on Open queue
   sortOrder     Int                    @default(0)
   startedAt     DateTime?
+  /// designer | admin — who clicked Start (performance uses designer only)
+  startedByRole String?
   uploadedAt    DateTime?
+  /// designer | admin — who closed the job (performance uses designer only)
+  closedByRole  String?
   fileUrl       String?
   postingNotes  String?
   scheduleNote  String?
@@ -603,7 +609,9 @@ model TeamDesignerJob {
   @@index([outletId])
   @@index([lane])
   @@index([urgent])
+  @@index([priorityMode])
   @@index([sortOrder])
+  @@index([closedByRole])
   @@index([createdAt])
   @@index([editRequestedAt])
   @@index([pauseRequestedAt])
@@ -613,9 +621,11 @@ model TeamDesignerJob {
 model TeamDesignerReminderLog {
   id             String   @id @default(cuid())
   assigneeId     String
-  /// no_start | behind_pace | deadline_soon | missed_target
+  /// no_start | behind_pace | deadline_soon | missed_target | priority_*
   kind           String
   dateKey        String   // YYYY-MM-DD IST
+  /// Empty string for daily nudges; job id for priority alerts
+  jobId          String   @default("")
   body           String
   /// sent | skipped_no_config | failed
   delivery       String
@@ -624,7 +634,7 @@ model TeamDesignerReminderLog {
   error          String?
   createdAt      DateTime @default(now())
 
-  @@unique([assigneeId, kind, dateKey])
+  @@unique([assigneeId, kind, dateKey, jobId])
   @@index([assigneeId, createdAt])
   @@index([dateKey])
   @@index([createdAt])
