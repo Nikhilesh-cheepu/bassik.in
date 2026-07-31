@@ -577,6 +577,8 @@ model TeamDesignerJob {
   assigneeId    String
   status        TeamDesignerJobStatus  @default(WAITING_BRIEF)
   urgent        Boolean                @default(false)
+  /// Admin drag priority — lower = higher on Open queue
+  sortOrder     Int                    @default(0)
   startedAt     DateTime?
   uploadedAt    DateTime?
   fileUrl       String?
@@ -601,6 +603,7 @@ model TeamDesignerJob {
   @@index([outletId])
   @@index([lane])
   @@index([urgent])
+  @@index([sortOrder])
   @@index([createdAt])
   @@index([editRequestedAt])
   @@index([pauseRequestedAt])

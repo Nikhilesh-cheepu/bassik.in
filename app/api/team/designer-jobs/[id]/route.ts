@@ -15,6 +15,7 @@ import {
   syncDesignerJobToChecklistHandoff,
   toDesignerJobDto,
 } from "@/lib/team-designer-jobs";
+import { isBoilerplateDesignerDescription } from "@/lib/team-designer-jobs-shared";
 
 async function jobDtoWithLinks(job: Parameters<typeof toDesignerJobDto>[0]) {
   const [linksMap, editMap] = await Promise.all([
@@ -101,14 +102,19 @@ export async function PATCH(
 
     if (action === "set-brief" || action === "brief-ready" || action === "brief-waiting") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      const description =
-        body.description !== undefined
-          ? body.description.trim() || null
-          : job.description;
       const title =
         typeof body.title === "string" && body.title.trim()
           ? body.title.trim()
           : undefined;
+      const rawDescription =
+        body.description !== undefined
+          ? body.description.trim() || null
+          : job.description;
+      const description =
+        rawDescription &&
+        isBoilerplateDesignerDescription(rawDescription, title ?? job.title)
+          ? null
+          : rawDescription;
       let links: string[] | undefined;
       if (typeof body.links === "string") links = linksFromText(body.links);
       else if (Array.isArray(body.links)) links = parseDesignerLinks(body.links);

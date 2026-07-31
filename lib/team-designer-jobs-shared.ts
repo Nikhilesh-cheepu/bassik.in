@@ -43,6 +43,8 @@ export type DesignerJobDto = {
   assigneeId: string;
   status: DesignerJobStatus;
   urgent: boolean;
+  /** Admin drag priority — lower first */
+  sortOrder: number;
   startedAt: string | null;
   uploadedAt: string | null;
   fileUrl: string | null;
@@ -61,6 +63,53 @@ export type DesignerJobDto = {
   isOverdue: boolean;
   isDueToday: boolean;
 };
+
+/** Seed leftovers like "C53 Sunday Post — send to Mahesh" — treat as empty. */
+export function isBoilerplateDesignerDescription(
+  description: string | null | undefined,
+  title?: string | null
+): boolean {
+  const t = description?.trim() ?? "";
+  if (!t) return true;
+  if (title?.trim() && t === title.trim()) return true;
+  if (/[—–-]\s*send to\s+/i.test(t)) return true;
+  if (/^send to\s+(mahesh|jeslyn)\b/i.test(t)) return true;
+  return false;
+}
+
+/** Priority sort — admin drag uses sortOrder; In progress / Paused pin to top. */
+export function sortDesignerJobs(jobs: DesignerJobDto[]): DesignerJobDto[] {
+  const outletRank = new Map(DESIGNER_MONTH_OUTLET_IDS.map((id, i) => [id, i]));
+  const pinRank = (s: DesignerJobStatus) => {
+    if (s === "IN_PROGRESS") return 0;
+    if (s === "PAUSED") return 1;
+    if (s === "DESIGN_DONE") return 9;
+    return 2;
+  };
+
+  return [...jobs].sort((a, b) => {
+    const aDone = a.status === "DESIGN_DONE" ? 1 : 0;
+    const bDone = b.status === "DESIGN_DONE" ? 1 : 0;
+    if (aDone !== bDone) return aDone - bDone;
+
+    const pa = pinRank(a.status);
+    const pb = pinRank(b.status);
+    if (pa !== pb) return pa - pb;
+
+    if ((a.sortOrder ?? 0) !== (b.sortOrder ?? 0)) {
+      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+    }
+
+    if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
+    if (a.isDueToday !== b.isDueToday) return a.isDueToday ? -1 : 1;
+    if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
+    if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+    const oa = outletRank.get(a.outletId as (typeof DESIGNER_MONTH_OUTLET_IDS)[number]) ?? 99;
+    const ob = outletRank.get(b.outletId as (typeof DESIGNER_MONTH_OUTLET_IDS)[number]) ?? 99;
+    if (oa !== ob) return oa - ob;
+    return a.postDate.localeCompare(b.postDate);
+  });
+}
 
 export function parseDesignerLinks(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];

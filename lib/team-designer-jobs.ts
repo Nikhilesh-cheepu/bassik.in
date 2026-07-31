@@ -21,7 +21,9 @@ import {
   DESIGNER_WEEKDAY_DUE_TIME,
   DESIGNER_WEEKEND_DUE_TIME,
   DESIGNER_WINDOW_DAYS,
+  isBoilerplateDesignerDescription,
   parseDesignerLinks,
+  sortDesignerJobs,
   type DesignerJobDto,
   type DesignerJobStatus,
   type DesignerMetricsDto,
@@ -40,6 +42,7 @@ export {
   DESIGNER_WINDOW_DAYS,
   linksFromText,
   parseDesignerLinks,
+  sortDesignerJobs,
 } from "@/lib/team-designer-jobs-shared";
 
 export const DESIGNER_WEEKEND_DAYS: ChecklistDayId[] = ["fri", "sat", "sun"];
@@ -148,6 +151,7 @@ type DesignerJobRow = Omit<
     | "assigneeId"
     | "status"
     | "urgent"
+    | "sortOrder"
     | "startedAt"
     | "uploadedAt"
     | "fileUrl"
@@ -299,11 +303,14 @@ export function toDesignerJobDto(job: DesignerJobRow, today = getTodayKey()): De
     lane: job.lane,
     format: job.format,
     title: job.title,
-    description: job.description,
+    description: isBoilerplateDesignerDescription(job.description, job.title)
+      ? null
+      : job.description,
     links: parseDesignerLinks(job.links),
     assigneeId: job.assigneeId,
     status: job.status,
     urgent: job.urgent,
+    sortOrder: typeof job.sortOrder === "number" ? job.sortOrder : 0,
     startedAt: job.startedAt?.toISOString() ?? null,
     uploadedAt: job.uploadedAt?.toISOString() ?? null,
     fileUrl: job.fileUrl,
@@ -328,37 +335,6 @@ export function toDesignerJobDto(job: DesignerJobRow, today = getTodayKey()): De
     isOverdue,
     isDueToday,
   };
-}
-
-/** Priority sort for designer queue. */
-export function sortDesignerJobs(jobs: DesignerJobDto[], today = getTodayKey()): DesignerJobDto[] {
-  const outletRank = new Map(DESIGNER_MONTH_OUTLET_IDS.map((id, i) => [id, i]));
-  const statusRank = (s: DesignerJobStatus) => {
-    if (s === "IN_PROGRESS") return 0;
-    if (s === "PAUSED") return 1;
-    if (s === "READY_TO_DESIGN") return 2;
-    if (s === "WAITING_BRIEF") return 3;
-    return 4;
-  };
-
-  return [...jobs].sort((a, b) => {
-    const aDone = a.status === "DESIGN_DONE" ? 1 : 0;
-    const bDone = b.status === "DESIGN_DONE" ? 1 : 0;
-    if (aDone !== bDone) return aDone - bDone;
-
-    if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
-    if (a.isDueToday !== b.isDueToday) return a.isDueToday ? -1 : 1;
-    if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
-
-    if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
-    const sa = statusRank(a.status);
-    const sb = statusRank(b.status);
-    if (sa !== sb) return sa - sb;
-    const oa = outletRank.get(a.outletId as (typeof DESIGNER_MONTH_OUTLET_IDS)[number]) ?? 99;
-    const ob = outletRank.get(b.outletId as (typeof DESIGNER_MONTH_OUTLET_IDS)[number]) ?? 99;
-    if (oa !== ob) return oa - ob;
-    return a.postDate.localeCompare(b.postDate);
-  });
 }
 
 export async function findActiveDesignerJob(assigneeId: string): Promise<TeamDesignerJob | null> {
@@ -421,7 +397,8 @@ export async function seedDesignerRollingWindow(params: {
       const dueDate = weekendDueDate(postDate);
       const dueTime = DESIGNER_WEEKEND_DUE_TIME;
       const past = isDesignerJobPastDue({ dueDate, dueTime });
-      for (const outletId of DESIGNER_MONTH_OUTLET_IDS) {
+      for (let oi = 0; oi < DESIGNER_MONTH_OUTLET_IDS.length; oi++) {
+        const outletId = DESIGNER_MONTH_OUTLET_IDS[oi]!;
         rows.push({
           monthKey: monthKeyFromYmd(postDate),
           postDate,
@@ -431,6 +408,8 @@ export async function seedDesignerRollingWindow(params: {
           lane: "WEEKEND",
           format: "post",
           title: `${teamOutletLabel(outletId)} ${CHECKLIST_DAY_LABELS[dayId]} Post`,
+          description: null,
+          sortOrder: Number(dueDate.replace(/-/g, "")) * 10 + oi,
           assigneeId: DESIGNER_ASSIGNEE_WEEKEND,
           status: past ? "DESIGN_DONE" : "WAITING_BRIEF",
           createdBy: params.createdBy,
@@ -446,7 +425,8 @@ export async function seedDesignerRollingWindow(params: {
       const dueDate = weekdayStoryDueDate(postDate);
       const dueTime = DESIGNER_WEEKDAY_DUE_TIME;
       const past = isDesignerJobPastDue({ dueDate, dueTime });
-      for (const outletId of DESIGNER_MONTH_OUTLET_IDS) {
+      for (let oi = 0; oi < DESIGNER_MONTH_OUTLET_IDS.length; oi++) {
+        const outletId = DESIGNER_MONTH_OUTLET_IDS[oi]!;
         rows.push({
           monthKey: monthKeyFromYmd(postDate),
           postDate,
@@ -456,6 +436,8 @@ export async function seedDesignerRollingWindow(params: {
           lane: "WEEKDAY",
           format: "story",
           title: `${teamOutletLabel(outletId)} ${CHECKLIST_DAY_LABELS[dayId]} Story`,
+          description: null,
+          sortOrder: Number(dueDate.replace(/-/g, "")) * 10 + oi,
           assigneeId: DESIGNER_ASSIGNEE_WEEKDAY,
           status: past ? "DESIGN_DONE" : "WAITING_BRIEF",
           createdBy: params.createdBy,

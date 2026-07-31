@@ -33,6 +33,7 @@ const JOB_SELECT = {
   assigneeId: true,
   status: true,
   urgent: true,
+  sortOrder: true,
   startedAt: true,
   uploadedAt: true,
   fileUrl: true,
@@ -161,8 +162,7 @@ export async function GET(req: NextRequest) {
           },
           today
         );
-      }),
-      today
+      })
     );
 
     return NextResponse.json({
@@ -205,6 +205,7 @@ export async function POST(req: NextRequest) {
       links?: string | string[];
       assigneeId?: string;
       adhoc?: boolean;
+      orderedIds?: string[];
     };
 
     if (body.action === "seed" || body.action === "seed-month") {
@@ -215,6 +216,24 @@ export async function POST(req: NextRequest) {
         lanes: body.lanes,
       });
       return NextResponse.json({ ok: true, ...result });
+    }
+
+    if (body.action === "reorder") {
+      const ids = Array.isArray(body.orderedIds)
+        ? body.orderedIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+        : [];
+      if (ids.length === 0) {
+        return NextResponse.json({ error: "orderedIds required" }, { status: 400 });
+      }
+      await prisma.$transaction(
+        ids.map((id, index) =>
+          prisma.teamDesignerJob.update({
+            where: { id },
+            data: { sortOrder: index },
+          })
+        )
+      );
+      return NextResponse.json({ ok: true, count: ids.length });
     }
 
     const today = getTodayKey();
@@ -259,6 +278,7 @@ export async function POST(req: NextRequest) {
         format,
         title,
         description: desc,
+        sortOrder: 0,
         assigneeId,
         status: "READY_TO_DESIGN",
         urgent: body.urgent !== false,

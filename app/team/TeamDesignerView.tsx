@@ -1,17 +1,38 @@
 "use client";
 
 import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   startTransition,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import {
   DESIGNER_DAILY_TARGET,
   DESIGNER_MONTH_OUTLET_IDS,
   DESIGNER_WINDOW_DAYS,
+  isBoilerplateDesignerDescription,
+  sortDesignerJobs,
   type DesignerJobDto,
   type DesignerMetricsDto,
 } from "@/lib/team-designer-jobs-shared";
@@ -19,6 +40,35 @@ import { uploadTeamFile } from "@/lib/team-client-upload";
 import { teamDownloadHref } from "@/lib/team-download";
 import { teamOutletLabel } from "@/lib/team-outlets";
 import { IconTrash, IconUnsend } from "./TeamIcons";
+
+function jobBriefText(job: DesignerJobDto): string | null {
+  if (isBoilerplateDesignerDescription(job.description, job.title)) return null;
+  const t = job.description?.trim() ?? "";
+  return t || null;
+}
+
+function SortableDesignerJob({
+  id,
+  children,
+}: {
+  id: string;
+  children: (dragHandleProps: Record<string, unknown>) => ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 20 : undefined,
+    opacity: isDragging ? 0.92 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({ ...attributes, ...listeners })}
+    </div>
+  );
+}
 
 const HANDOFF_TTL_DAYS = 7;
 /** Designers wait this long after Start before Upload & close. Admin bypasses. */
@@ -220,8 +270,14 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     if (outletFilter !== "all") {
       list = list.filter((j) => j.outletId === outletFilter);
     }
-    return list;
+    return sortDesignerJobs(list);
   }, [allJobs, designerTab, isAdmin, outletFilter]);
+
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const sendableJobs = useMemo(
     () => jobs.filter((j) => j.status === "WAITING_BRIEF"),
@@ -326,14 +382,67 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   };
 
   const sendToDesigner = async (job: DesignerJobDto) => {
+    const draft = briefDrafts[job.id];
+    const description =
+      draft !== undefined ? draft : jobBriefText(job) ?? "";
     const ok = await patchJob(job.id, {
       action: "brief-ready",
-      description: briefDrafts[job.id] ?? job.description ?? "",
+      description,
       links:
         linkDrafts[job.id] ?? (job.links?.length ? job.links.join("\n") : ""),
     });
     if (ok) setBriefJobId((cur) => (cur === job.id ? null : cur));
     return ok;
+  };
+
+  const persistQueueOrder = async (orderedIds: string[]) => {
+    const orderMap = new Map(orderedIds.map((id, i) => [id, i]));
+    setAllJobs((prev) =>
+      sortDesignerJobs(
+        prev.map((j) =>
+          orderMap.has(j.id) ? { ...j, sortOrder: orderMap.get(j.id)! } : j
+        )
+      )
+    );
+    try {
+      const res = await fetch("/api/team/designer-jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reorder", orderedIds }),
+      });
+      const data = await readJson(res);
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "Reorder failed"
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reorder failed");
+      void load({ soft: true });
+    }
+  };
+
+  const onQueueDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const visibleIds = jobs.map((j) => j.id);
+    const oldIndex = visibleIds.indexOf(String(active.id));
+    const newIndex = visibleIds.indexOf(String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const fullSorted = sortDesignerJobs(allJobs);
+    const visibleSet = new Set(visibleIds);
+    const nextVisible = arrayMove(
+      fullSorted.filter((j) => visibleSet.has(j.id)),
+      oldIndex,
+      newIndex
+    );
+    let vi = 0;
+    const nextFull = fullSorted.map((j) => {
+      if (visibleSet.has(j.id)) return nextVisible[vi++]!;
+      return j;
+    });
+    void persistQueueOrder(nextFull.map((j) => j.id));
   };
 
   const sendSelected = async () => {
@@ -346,11 +455,14 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       for (const id of ids) {
         const job = allJobs.find((j) => j.id === id);
         if (!job || job.status !== "WAITING_BRIEF") continue;
+        const draft = briefDrafts[id];
+        const description =
+          draft !== undefined ? draft : jobBriefText(job) ?? "";
         const ok = await patchJob(
           id,
           {
             action: "brief-ready",
-            description: briefDrafts[id] ?? job.description ?? "",
+            description,
             links: linkDrafts[id] ?? (job.links?.length ? job.links.join("\n") : ""),
           },
           { quiet: true }
@@ -558,6 +670,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   };
 
   const queue = jobs;
+  const canDragQueue = isAdmin && queueView === "open" && queue.length > 1;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#06060a]">
@@ -857,6 +970,7 @@ https://instagram.com/…"
             {queueView === "closed" ? "Done" : "Queue"} ({queue.length})
             {designerTab !== "all" ? ` · ${designerDisplayName(designerTab)}` : ""}
             {outletFilter !== "all" ? ` · ${teamOutletLabel(outletFilter)}` : ""}
+            {canDragQueue ? " · drag ≡ to prioritize" : ""}
           </h2>
           {isAdmin && queueView === "open" && sendableJobs.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -890,12 +1004,17 @@ https://instagram.com/…"
             No open jobs for this view — seed 30 days or switch designer / outlet.
           </p>
         ) : null}
-        {queue.map((job) => {
+        {(() => {
+          const renderJob = (
+            job: DesignerJobDto,
+            dragHandleProps?: Record<string, unknown>
+          ) => {
           const { dayName, dateLabel } = formatPostDateParts(job.postDate);
           const designer = designerDisplayName(job.assigneeId);
           const formatLabel = job.format === "story" ? "Story" : "Post";
           const canSend = isAdmin && job.status === "WAITING_BRIEF";
           const selected = selectedIds.has(job.id);
+          const brief = jobBriefText(job);
           return (
           <article
             key={job.id}
@@ -913,6 +1032,17 @@ https://instagram.com/…"
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
               <div className="flex min-w-0 flex-1 gap-2.5">
+                {dragHandleProps ? (
+                  <button
+                    type="button"
+                    className="mt-1.5 flex h-9 w-7 shrink-0 touch-none items-center justify-center text-white/30 active:text-white/55"
+                    aria-label="Drag to set priority"
+                    title="Drag to set priority"
+                    {...dragHandleProps}
+                  >
+                    <span className="text-base leading-none">≡</span>
+                  </button>
+                ) : null}
                 {canSend ? (
                   <input
                     type="checkbox"
@@ -956,9 +1086,9 @@ https://instagram.com/…"
                     {job.lane === "WEEKDAY" ? " (day before)" : " (−4 days)"}
                   </span>
                 </div>
-                {job.description ? (
+                {brief ? (
                   <p className="mt-2 whitespace-pre-wrap text-[14px] leading-snug text-white/75">
-                    {job.description}
+                    {brief}
                   </p>
                 ) : null}
                 {job.links?.length ? (
@@ -1325,7 +1455,7 @@ https://instagram.com/…"
                     </label>
                     <textarea
                       autoFocus
-                      value={briefDrafts[job.id] ?? job.description ?? ""}
+                      value={briefDrafts[job.id] ?? brief ?? ""}
                       onChange={(e) =>
                         setBriefDrafts((d) => ({ ...d, [job.id]: e.target.value }))
                       }
@@ -1365,7 +1495,10 @@ https://instagram.com/…"
                         onClick={() =>
                           void patchJob(job.id, {
                             action: "set-brief",
-                            description: briefDrafts[job.id] ?? job.description ?? "",
+                            description:
+                              briefDrafts[job.id] !== undefined
+                                ? briefDrafts[job.id]
+                                : brief ?? "",
                             links:
                               linkDrafts[job.id] ??
                               (job.links?.length ? job.links.join("\n") : ""),
@@ -1430,7 +1563,7 @@ https://instagram.com/…"
                       onClick={() => setBriefJobId(job.id)}
                       className="h-9 rounded-lg border border-white/15 px-3 text-[12px] font-medium text-white/65 hover:text-white/85"
                     >
-                      {job.description ? "Edit brief" : "Add brief"}
+                      {brief ? "Edit brief" : "Add brief"}
                     </button>
                     <button
                       type="button"
@@ -1557,7 +1690,33 @@ https://instagram.com/…"
             ) : null}
           </article>
           );
-        })}
+          };
+
+          if (!canDragQueue) {
+            return queue.map((job) => renderJob(job));
+          }
+
+          return (
+            <DndContext
+              sensors={dndSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={onQueueDragEnd}
+            >
+              <SortableContext
+                items={queue.map((j) => j.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2">
+                  {queue.map((job) => (
+                    <SortableDesignerJob key={job.id} id={job.id}>
+                      {(dragHandleProps) => renderJob(job, dragHandleProps)}
+                    </SortableDesignerJob>
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          );
+        })()}
       </section>
       </div>
       </div>
