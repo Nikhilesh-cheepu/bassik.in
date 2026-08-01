@@ -1119,7 +1119,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       <p className="text-[11px] leading-relaxed text-white/40">
         {queueView === "closed"
           ? `Done jobs · Designer can Edit upload · Admin can Delete upload / Force clear · Files auto-expire after ${HANDOFF_TTL_DAYS} days`
-          : `Mandatory ${DESIGNER_DAILY_TARGET}/day · Ready briefs can land any day — week calendar done ≠ day off · Mahesh Fri–Sun (−4d @ 8 PM) · Jeslyn Mon–Thu (day before @ 8 PM) · One job at a time`}
+          : `Mandatory ${DESIGNER_DAILY_TARGET}/day (Sun break) · Ready briefs can land any day · Mahesh Fri–Sat (−4d @ 8 PM) · Jeslyn Mon–Thu (day before @ 8 PM) · One job at a time`}
       </p>
 
       {isAdmin && queueView === "closed" ? (

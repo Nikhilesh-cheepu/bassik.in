@@ -16,13 +16,15 @@ import {
 } from "@/lib/team-designer-jobs-shared";
 import { computeDesignerMetrics } from "@/lib/team-designer-jobs";
 
-const WEEKEND_DAYS: ChecklistDayId[] = ["fri", "sat", "sun"];
-const WEEKDAY_DAYS: ChecklistDayId[] = ["mon", "tue", "wed", "thu"];
+/** Stack target days — Sunday is a break (no 4/day owed). */
+const STACK_WEEKEND_DAYS: ChecklistDayId[] = ["fri", "sat"];
+const STACK_WEEKDAY_DAYS: ChecklistDayId[] = ["mon", "tue", "wed", "thu"];
 
 function isStackWorkday(assigneeId: string, ymd: string): boolean {
   const day = dayIdForYmd(ymd);
-  if (assigneeId === DESIGNER_ASSIGNEE_WEEKEND) return WEEKEND_DAYS.includes(day);
-  if (assigneeId === DESIGNER_ASSIGNEE_WEEKDAY) return WEEKDAY_DAYS.includes(day);
+  if (day === "sun") return false;
+  if (assigneeId === DESIGNER_ASSIGNEE_WEEKEND) return STACK_WEEKEND_DAYS.includes(day);
+  if (assigneeId === DESIGNER_ASSIGNEE_WEEKDAY) return STACK_WEEKDAY_DAYS.includes(day);
   return true;
 }
 

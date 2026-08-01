@@ -17,7 +17,7 @@ export const DESIGNER_LAST_WA_TIME = "19:00";
 export const DESIGNER_DAILY_TARGET = 4;
 /** Always schedule this many days forward from today (not calendar months). */
 export const DESIGNER_WINDOW_DAYS = 30;
-/** Cumulative 4/day stack starts here (IST). Misses carry forward. */
+/** Cumulative 4/day stack starts here (IST). Misses carry forward. Sunday = break. */
 export const DESIGNER_STACK_START_DATE = "2026-08-01";
 
 export type DesignerJobLane = "WEEKEND" | "WEEKDAY";
