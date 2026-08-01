@@ -86,7 +86,7 @@ function isBeforeWorkStart(hour: number): boolean {
 
 function sundayNote(todayYmd: string): string | null {
   if (dayIdForYmd(todayYmd) !== "sun") return null;
-  return "It’s Sunday (holiday) — no daily target. Anything you finish counts as catch-up toward Sat / earlier.";
+  return "Happy holiday — enjoy your day. If you work the next-day pack, it earns holiday points (after catch-up).";
 }
 
 function seriousCloser(): string {

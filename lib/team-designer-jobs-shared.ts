@@ -21,8 +21,8 @@ export const DESIGNER_LAST_WA_TIME = "19:00";
 export const DESIGNER_DAILY_TARGET = 4;
 /** Mon–Sat workdays (Sunday off target). 6 × 4 = 24. */
 export const DESIGNER_WEEKLY_TARGET = DESIGNER_DAILY_TARGET * 6;
-/** Optional leaves each month — use or lose (do not stack). */
-export const DESIGNER_OPTIONAL_LEAVES_PER_MONTH = 2;
+/** @deprecated No fixed optional leaves — only points-unlocked leave. */
+export const DESIGNER_OPTIONAL_LEAVES_PER_MONTH = 0;
 /** Holiday points needed to unlock one permission leave. */
 export const DESIGNER_POINTS_PER_LEAVE = 7;
 /** Always schedule this many days forward from today (not calendar months). */
@@ -215,7 +215,7 @@ export type DesignerStackDto = {
   advancePoints: number;
   /** Always true — Sunday is a fixed holiday */
   sundayHoliday: boolean;
-  /** 2/month optional leaves — do not carry unused into next month */
+  /** Always 0 — leave only via holiday points */
   optionalLeavesPerMonth: number;
   /** Sundays in the current month (for Holiday tab) */
   monthSundays: DesignerHolidaySundayDto[];

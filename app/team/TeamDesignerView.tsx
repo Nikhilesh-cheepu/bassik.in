@@ -31,7 +31,6 @@ import {
 import {
   DESIGNER_DAILY_TARGET,
   DESIGNER_MONTH_OUTLET_IDS,
-  DESIGNER_OPTIONAL_LEAVES_PER_MONTH,
   DESIGNER_POINTS_PER_LEAVE,
   DESIGNER_STACK_START_DATE,
   DESIGNER_WINDOW_DAYS,
@@ -1008,13 +1007,13 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       {queueView !== "holiday" ? (
         <div className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
           <p className="text-[12px] leading-snug text-white/65">
-            Catch-up first, then the daily pack. Extra = Start + Close{" "}
-            <span className="font-semibold text-white/90">same day</span> for holiday points. Sunday =
-            holiday — work the next-day pack today for points.
+            WFH — your work, your responsibility. Minimum{" "}
+            <span className="font-semibold text-white/90">4/day</span> Mon–Sat. Extra same-day closes
+            earn holiday points (see Holiday tab).
           </p>
           <span
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/15 text-[12px] font-bold text-white/45"
-            title={`Mon–Sat: 4/day by Start day. Extras need same-day Start+Close or they only fill that day’s count. Sunday: no today’s 4 — next-day pack; Sunday-started jobs = catch-up then points (even if closed Mon). ${DESIGNER_POINTS_PER_LEAVE} pts = 1 leave.`}
+            title={`No fixed optional leaves. ${DESIGNER_POINTS_PER_LEAVE} holiday points = 1 leave (ask permission). Sunday: enjoy the day, or work the next-day pack for points.`}
           >
             i
           </span>
@@ -2120,7 +2119,7 @@ https://instagram.com/…"
                     ? "Next day pack"
                     : `Today’s ${DESIGNER_DAILY_TARGET}`,
                   visiblePerf[0]?.isSundayHoliday
-                    ? "Sunday holiday — no today’s target. Complete these today to add holiday points (after catch-up)."
+                    ? "Optional — complete these today to earn holiday points (after any catch-up)."
                     : "Focus pack. Extra points only if you Start + Close the same day.",
                   openParts.todayPack,
                   "today",
@@ -2162,7 +2161,7 @@ https://instagram.com/…"
                           ? "Next day pack"
                           : `Today’s ${DESIGNER_DAILY_TARGET}`,
                         visiblePerf[0]?.isSundayHoliday
-                          ? "Sunday holiday — complete these today to add holiday points (after catch-up)."
+                          ? "Optional — complete these today to earn holiday points (after any catch-up)."
                           : "Focus pack. Drag ≡ to reorder. Extra = Start + Close same day.",
                         openParts.todayPack,
                         "today",
@@ -2483,6 +2482,10 @@ function HolidayTabPanel({ designers }: { designers: DesignerPerformanceDto[] })
   }
   return (
     <div className="space-y-3">
+      <p className="text-[12px] leading-relaxed text-white/55">
+        Work from home — no fixed paid holidays. Leave unlocks only from holiday points (extra work).
+        Four tasks per workday is the minimum. Hope you get that and do them well.
+      </p>
       {designers.map((perf) => {
         const stack = perf.stack;
         const points = stack?.holidayPoints ?? 0;
@@ -2500,17 +2503,12 @@ function HolidayTabPanel({ designers }: { designers: DesignerPerformanceDto[] })
             <p className="mt-1 text-[20px] font-semibold tabular-nums text-white">
               {points}
               <span className="ml-1.5 text-[12px] font-medium text-white/45">
-                holiday points · {per} = 1 leave
+                holiday points · {per} = 1 leave (ask permission)
               </span>
             </p>
             <p className="mt-1 text-[12px] text-white/55">
-              Unlocked leaves (ask permission):{" "}
+              Unlocked leaves:{" "}
               <span className="font-semibold text-cyan-200">{unlocked}</span>
-              <span className="text-white/35">
-                {" "}
-                · Optional {stack?.optionalLeavesPerMonth ?? DESIGNER_OPTIONAL_LEAVES_PER_MONTH}
-                /mo (use or lose)
-              </span>
             </p>
             <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-white/40">
               Sundays this month
@@ -2531,17 +2529,16 @@ function HolidayTabPanel({ designers }: { designers: DesignerPerformanceDto[] })
                     }`}
                   >
                     <span>{s.label}</span>
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-white/40">
-                      {s.isToday ? "Today · holiday" : "Holiday"}
+                    <span className="text-[11px] font-semibold text-violet-200/80">
+                      {s.isToday ? "Happy holiday — enjoy your day" : "Happy holiday"}
                     </span>
                   </li>
                 ))
               )}
             </ul>
             <p className="mt-2 text-[11px] leading-snug text-white/40">
-              Sunday: work the next-day pack. Jobs you Start on Sunday count as Sunday work (catch-up
-              first, then points) even if you Close on Monday. Mon–Sat extras need Start+Close same
-              day for points.
+              Earn holiday points by working Sunday (next-day pack) or Mon–Sat extras (Start + Close
+              same day). {per} points = 1 leave — ask before taking it.
             </p>
           </div>
         );
@@ -2565,33 +2562,36 @@ function DesignerPerformanceCard({
 }) {
   const stack = perf.stack;
   const behind = stack?.stackedBehind ?? 0;
-  const flag = behind > 0 || perf.redFlag || perf.underTarget;
-  const optional = stack?.optionalLeavesPerMonth ?? DESIGNER_OPTIONAL_LEAVES_PER_MONTH;
+  const flag = !perf.isSundayHoliday && (behind > 0 || perf.redFlag || perf.underTarget);
   const points = stack?.holidayPoints ?? stack?.advancePoints ?? 0;
   const perLeave = stack?.pointsPerLeave ?? DESIGNER_POINTS_PER_LEAVE;
   const unlocked = stack?.leaveDaysEarned ?? 0;
+  const sunday = Boolean(perf.isSundayHoliday);
   return (
     <div
       className={`rounded-xl border px-3 py-2.5 ${
-        behind > 0 || perf.redFlag
-          ? "border-red-500/50 bg-red-500/[0.12]"
-          : perf.underTarget
-            ? "border-amber-400/35 bg-amber-400/[0.07]"
-            : "border-emerald-400/25 bg-emerald-400/[0.06]"
+        sunday
+          ? "border-violet-400/35 bg-violet-400/[0.08]"
+          : flag
+            ? "border-red-500/50 bg-red-500/[0.12]"
+            : perf.underTarget
+              ? "border-amber-400/35 bg-amber-400/[0.07]"
+              : "border-emerald-400/25 bg-emerald-400/[0.06]"
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
-            {perf.name} · {perf.isSundayHoliday ? "Sunday holiday" : "today"}
+            {perf.name}
+            {sunday ? " · Sunday" : " · today"}
           </p>
-          {perf.isSundayHoliday ? (
-            <p className="mt-0.5 text-[18px] font-semibold text-white/90">
-              No daily target
-              <span className="ml-2 text-[12px] font-medium text-white/45">
-                · Sunday starts done {perf.catchUpClosedToday} (catch-up / points)
-              </span>
-            </p>
+          {sunday ? (
+            <>
+              <p className="mt-0.5 text-[20px] font-semibold text-violet-100">
+                Happy holiday
+              </p>
+              <p className="mt-0.5 text-[13px] text-white/60">Enjoy your day.</p>
+            </>
           ) : (
             <p
               className={`mt-0.5 text-[22px] font-semibold tabular-nums ${
@@ -2599,9 +2599,7 @@ function DesignerPerformanceCard({
               }`}
             >
               {perf.closedToday}/{perf.dailyTarget}
-              <span className="ml-2 text-[12px] font-medium text-white/45">
-                closed (by start day)
-              </span>
+              <span className="ml-2 text-[12px] font-medium text-white/45">closed</span>
             </p>
           )}
         </div>
@@ -2616,18 +2614,27 @@ function DesignerPerformanceCard({
           </button>
         ) : null}
       </div>
-      <p className="mt-1.5 text-[11px] text-white/55">
-        Holiday points{" "}
-        <span className="font-semibold text-violet-200">
-          {points}/{perLeave}
-        </span>
-        {unlocked > 0 ? (
-          <span className="text-cyan-200"> · {unlocked} leave unlocked (ask permission)</span>
-        ) : null}
-        <span className="text-white/35"> · Optional {optional}/mo</span>
-        {behind > 0 ? <span className="text-red-300"> · Behind {behind}</span> : null}
-      </p>
-      {stack?.missedDays?.[0] ? (
+      {sunday ? (
+        <p className="mt-2 text-[12px] leading-snug text-white/60">
+          You can earn holiday points by working today (next-day pack below). Check the{" "}
+          <span className="font-semibold text-violet-200">Holiday</span> tab for points and Sundays.
+          {perf.catchUpClosedToday > 0 ? (
+            <span className="text-white/45"> · Sunday work done {perf.catchUpClosedToday}</span>
+          ) : null}
+        </p>
+      ) : (
+        <p className="mt-1.5 text-[11px] text-white/55">
+          Holiday points{" "}
+          <span className="font-semibold text-violet-200">
+            {points}/{perLeave}
+          </span>
+          {unlocked > 0 ? (
+            <span className="text-cyan-200"> · {unlocked} leave unlocked (ask permission)</span>
+          ) : null}
+          {behind > 0 ? <span className="text-red-300"> · Behind {behind}</span> : null}
+        </p>
+      )}
+      {!sunday && stack?.missedDays?.[0] ? (
         <p className="mt-1 text-[11px] text-orange-200/90">
           Missed {stack.missedDays[0].date.slice(8)}/{stack.missedDays[0].date.slice(5, 7)} — short{" "}
           {stack.missedDays[0].missed}. Catch up first.
