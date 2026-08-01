@@ -31,12 +31,15 @@ import {
 import {
   DESIGNER_DAILY_TARGET,
   DESIGNER_MONTH_OUTLET_IDS,
+  DESIGNER_OPTIONAL_LEAVES_PER_MONTH,
+  DESIGNER_POINTS_PER_LEAVE,
   DESIGNER_STACK_START_DATE,
   DESIGNER_WINDOW_DAYS,
+  designerFormatLabel,
   isBoilerplateDesignerDescription,
+  partitionOpenDesignerQueue,
   sortDesignerJobs,
   type DesignerJobDto,
-  type DesignerMetricsDto,
   type DesignerPerformanceDto,
   type DesignerPriorityMode,
   type DesignerReminderLogDto,
@@ -514,27 +517,6 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     return map;
   }, [designerVisibleJobs]);
 
-  const metrics: DesignerMetricsDto = useMemo(() => {
-    const readyBriefs = designerVisibleJobs.filter(
-      (j) => j.status === "READY_TO_DESIGN"
-    ).length;
-    const inProgress = designerVisibleJobs.filter(
-      (j) => j.status === "IN_PROGRESS"
-    ).length;
-    const overdueOpen = designerVisibleJobs.filter((j) => j.isOverdue).length;
-    return {
-      closedToday: 0,
-      closedThisWeek: 0,
-      readyBriefs,
-      inProgress,
-      overdueOpen,
-      onTimeUploadsWeek: 0,
-      lateUploadsWeek: 0,
-      dailyTarget: DESIGNER_DAILY_TARGET,
-      queueHealthOk: readyBriefs + inProgress >= DESIGNER_DAILY_TARGET,
-    };
-  }, [designerVisibleJobs]);
-
   const visiblePerf = useMemo(() => {
     if (!isAdmin) return perfDesigners.filter((p) => p.assigneeId === memberId);
     if (designerTab === "all") return perfDesigners;
@@ -933,6 +915,13 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   };
 
   const queue = jobs;
+  const openParts = useMemo(
+    () =>
+      queueView === "open"
+        ? partitionOpenDesignerQueue(queue, DESIGNER_DAILY_TARGET)
+        : { catchUp: [] as DesignerJobDto[], todayPack: [] as DesignerJobDto[], upNext: [] as DesignerJobDto[] },
+    [queue, queueView]
+  );
   const canDragQueue = isAdmin && queueView === "open" && queue.length > 1;
 
   return (
@@ -940,16 +929,6 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-28 [-webkit-overflow-scrolling:touch] xl:pb-10">
       <div className="mx-auto w-full max-w-3xl space-y-4 py-3">
       <div className="relative z-[1] flex flex-wrap items-end gap-2">
-        <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
-          <p className="text-[10px] uppercase tracking-wide text-white/40">
-            Rolling {DESIGNER_WINDOW_DAYS} days
-          </p>
-          <p className="text-[13px] font-semibold text-white/85">
-            {windowMeta
-              ? `${windowMeta.fromDate} → ${windowMeta.toDate}`
-              : "From today"}
-          </p>
-        </div>
         <div className="flex rounded-lg bg-black/35 p-1">
           {(
             [
@@ -1010,19 +989,29 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
             ))}
           </div>
         ) : null}
+        {isAdmin && windowMeta ? (
+          <p className="text-[11px] text-white/35">
+            {windowMeta.fromDate} → {windowMeta.toDate}
+          </p>
+        ) : null}
         {refreshing ? (
           <span className="text-[11px] text-white/35">Refreshing…</span>
         ) : null}
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <Metric label="In queue" value={String(designerVisibleJobs.length)} />
-        <Metric
-          label="Ready to start"
-          value={String(metrics.readyBriefs)}
-          ok={metrics.queueHealthOk}
-        />
-        <Metric label="In progress" value={String(metrics.inProgress)} />
+      <div className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+        <p className="text-[12px] leading-snug text-white/65">
+          Finish <span className="font-semibold text-white/90">catch-up</span> first, then today’s{" "}
+          <span className="font-semibold text-emerald-200">{DESIGNER_DAILY_TARGET}</span>. Sunday =
+          holiday. {DESIGNER_OPTIONAL_LEAVES_PER_MONTH} optional leaves/month (no stack). Advance
+          work unlocks leave (ask permission).
+        </p>
+        <span
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/15 text-[12px] font-bold text-white/45"
+          title={`4/day Mon–Sat (24/week). Sunday holiday. ${DESIGNER_OPTIONAL_LEAVES_PER_MONTH} optional leaves/month — unused don’t carry. +${DESIGNER_POINTS_PER_LEAVE} advance closes unlock 1 leave (needs permission). Weekly TV calendar: C53/Boiler/Firefly, due Tuesday.`}
+        >
+          i
+        </span>
       </div>
 
       {visiblePerf.map((p) => (
@@ -1030,6 +1019,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           key={p.assigneeId}
           perf={p}
           isAdmin={isAdmin}
+          compact={!isAdmin}
           nudgeBusy={nudgeBusy === p.assigneeId}
           onNudge={() => void sendManualNudge(p.assigneeId)}
         />
@@ -1046,8 +1036,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
               WA reminders — tap Send
             </p>
             <p className="mt-0.5 text-[11px] text-white/45">
-              Auto Cloud API later. Until then: open WhatsApp with text ready. Rules: no start after
-              11:20 · task over 3h → move faster · evening under 4/day.
+              Auto Cloud API later. Until then: open WhatsApp with text ready.
             </p>
           </div>
           {suggestedNudges.length === 0 ? (
@@ -1116,11 +1105,11 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         </div>
       ) : null}
 
-      <p className="text-[11px] leading-relaxed text-white/40">
-        {queueView === "closed"
-          ? `Done jobs · Designer can Edit upload · Admin can Delete upload / Force clear · Files auto-expire after ${HANDOFF_TTL_DAYS} days`
-          : `Mandatory ${DESIGNER_DAILY_TARGET}/day Mon–Sat (24/week) · Sunday off target · +4 over = 1 leave · Due = date + 8 PM IST · Mahesh Fri–Sat–Sun posts (−4d) · Jeslyn Mon–Thu (day before) · One job at a time`}
-      </p>
+      {isAdmin && queueView === "closed" ? (
+        <p className="text-[11px] leading-relaxed text-white/40">
+          Done jobs · Edit / Delete upload · Files auto-expire after {HANDOFF_TTL_DAYS} days
+        </p>
+      ) : null}
 
       {isAdmin && queueView === "closed" ? (
         <div className="flex flex-wrap gap-2">
@@ -1341,47 +1330,44 @@ https://instagram.com/…"
       {error ? <p className="text-[12px] text-amber-200/90">{error}</p> : null}
       {loading ? <p className="text-[13px] text-white/40">Loading queue…</p> : null}
 
-      <section className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/50">
-            {queueView === "closed" ? "Done" : "Ready queue"} ({queue.length})
-            {designerTab !== "all" ? ` · ${designerDisplayName(designerTab)}` : ""}
-            {outletFilter !== "all" ? ` · ${teamOutletLabel(outletFilter)}` : ""}
-            {canDragQueue ? " · drag ≡ to prioritize" : ""}
-          </h2>
-        </div>
+      <section className="space-y-3">
         {queue.length === 0 && !loading ? (
           <p className="text-[13px] text-white/35">
             {queueView === "closed"
               ? "No done jobs for this view."
-              : "Nothing ready to start — only Ready / In progress / Paused show here."}
+              : "Nothing ready — only Ready / In progress / Paused show here."}
           </p>
         ) : null}
         {(() => {
           const renderJob = (
             job: DesignerJobDto,
-            dragHandleProps?: Record<string, unknown>
+            dragHandleProps?: Record<string, unknown>,
+            tone: "catchUp" | "today" | "next" | "done" = "next"
           ) => {
           const { dayName, dateLabel } = formatPostDateParts(job.postDate);
           const designer = designerDisplayName(job.assigneeId);
-          const formatLabel = job.format === "story" ? "Story" : "Post";
+          const formatLabel = designerFormatLabel(job.format);
           const canSend = isAdmin && job.status === "WAITING_BRIEF";
           const selected = selectedIds.has(job.id);
           const brief = jobBriefText(job);
+          const toneClass =
+            tone === "catchUp"
+              ? "border-orange-400/55 bg-orange-400/[0.12] ring-1 ring-orange-400/30"
+              : tone === "today"
+                ? "border-emerald-400/55 bg-emerald-400/[0.12] ring-1 ring-emerald-400/30"
+                : job.isOverdue
+                  ? "border-red-500/55 bg-red-500/[0.12] ring-1 ring-red-400/25"
+                  : selected
+                    ? "border-cyan-400/40 bg-cyan-400/[0.07]"
+                    : job.status === "IN_PROGRESS"
+                      ? "border-amber-400/35 bg-amber-400/[0.07]"
+                      : job.status === "PAUSED"
+                        ? "border-violet-400/35 bg-violet-400/[0.07]"
+                        : "border-white/[0.08] bg-white/[0.03]";
           return (
           <article
             key={job.id}
-            className={`rounded-xl border px-3.5 py-3 ${
-              job.isOverdue
-                ? "border-red-500/55 bg-red-500/[0.12] ring-1 ring-red-400/25"
-                : selected
-                  ? "border-cyan-400/40 bg-cyan-400/[0.07]"
-                  : job.status === "IN_PROGRESS"
-                    ? "border-amber-400/35 bg-amber-400/[0.07]"
-                    : job.status === "PAUSED"
-                      ? "border-violet-400/35 bg-violet-400/[0.07]"
-                      : "border-white/[0.08] bg-white/[0.03]"
-            }`}
+            className={`rounded-xl border px-3.5 py-3 ${toneClass}`}
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
               <div className="flex min-w-0 flex-1 gap-2.5">
@@ -1446,7 +1432,11 @@ https://instagram.com/…"
                   <span className="text-white/50">
                     Design due {job.dueDate.slice(8)}/{job.dueDate.slice(5, 7)} ·{" "}
                     {(job.dueTime || "20:00").slice(0, 5)} IST
-                    {job.lane === "WEEKDAY" ? " (day before)" : " (−4 days)"}
+                    {job.format === "calendar"
+                      ? " (Tue before weekend)"
+                      : job.lane === "WEEKDAY"
+                        ? " (day before)"
+                        : " (−4 days)"}
                     {job.isDueToday && !job.isOverdue ? " · not overdue until 8 PM" : ""}
                   </span>
                 </div>
@@ -2064,8 +2054,68 @@ https://instagram.com/…"
           );
           };
 
+          const renderSection = (
+            title: string,
+            hint: string,
+            list: DesignerJobDto[],
+            tone: "catchUp" | "today" | "next" | "done",
+            headingClass: string
+          ) => {
+            if (list.length === 0) return null;
+            return (
+              <div className="space-y-2">
+                <div>
+                  <h2 className={`text-[12px] font-semibold uppercase tracking-wide ${headingClass}`}>
+                    {title} ({list.length})
+                    {designerTab !== "all" ? ` · ${designerDisplayName(designerTab)}` : ""}
+                    {outletFilter !== "all" ? ` · ${teamOutletLabel(outletFilter)}` : ""}
+                  </h2>
+                  <p className="mt-0.5 text-[11px] text-white/45">{hint}</p>
+                </div>
+                <div className="space-y-2">
+                  {list.map((job) => renderJob(job, undefined, tone))}
+                </div>
+              </div>
+            );
+          };
+
+          if (queueView === "closed") {
+            return (
+              <div className="space-y-2">
+                <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/50">
+                  Done ({queue.length})
+                </h2>
+                {queue.map((job) => renderJob(job, undefined, "done"))}
+              </div>
+            );
+          }
+
           if (!canDragQueue) {
-            return queue.map((job) => renderJob(job));
+            return (
+              <div className="space-y-5">
+                {renderSection(
+                  "Catch up first",
+                  "Missed / past due — finish these before today’s list.",
+                  openParts.catchUp,
+                  "catchUp",
+                  "text-orange-200"
+                )}
+                {renderSection(
+                  `Today’s ${DESIGNER_DAILY_TARGET}`,
+                  "Your focus pack. New priority work lands here; extras move to Up next.",
+                  openParts.todayPack,
+                  "today",
+                  "text-emerald-200"
+                )}
+                {renderSection(
+                  "Up next",
+                  "Later in priority — after today’s four.",
+                  openParts.upNext,
+                  "next",
+                  "text-white/50"
+                )}
+              </div>
+            );
           }
 
           return (
@@ -2078,12 +2128,53 @@ https://instagram.com/…"
                 items={queue.map((j) => j.id)}
                 strategy={verticalListSortingStrategy}
               >
-                <div className="space-y-2">
-                  {queue.map((job) => (
-                    <SortableDesignerJob key={job.id} id={job.id}>
-                      {(dragHandleProps) => renderJob(job, dragHandleProps)}
-                    </SortableDesignerJob>
-                  ))}
+                <div className="space-y-5">
+                  {(
+                    [
+                      [
+                        "Catch up first",
+                        "Missed / past due — finish these before today’s list.",
+                        openParts.catchUp,
+                        "catchUp",
+                        "text-orange-200",
+                      ],
+                      [
+                        `Today’s ${DESIGNER_DAILY_TARGET}`,
+                        "Your focus pack. Drag ≡ to reorder; extras spill to Up next.",
+                        openParts.todayPack,
+                        "today",
+                        "text-emerald-200",
+                      ],
+                      [
+                        "Up next",
+                        "Later in priority — after today’s four.",
+                        openParts.upNext,
+                        "next",
+                        "text-white/50",
+                      ],
+                    ] as const
+                  ).map(([title, hint, list, tone, headingClass]) =>
+                    list.length === 0 ? null : (
+                      <div key={title} className="space-y-2">
+                        <div>
+                          <h2
+                            className={`text-[12px] font-semibold uppercase tracking-wide ${headingClass}`}
+                          >
+                            {title} ({list.length})
+                            {canDragQueue ? " · drag ≡" : ""}
+                          </h2>
+                          <p className="mt-0.5 text-[11px] text-white/45">{hint}</p>
+                        </div>
+                        <div className="space-y-2">
+                          {list.map((job) => (
+                            <SortableDesignerJob key={job.id} id={job.id}>
+                              {(dragHandleProps) => renderJob(job, dragHandleProps, tone)}
+                            </SortableDesignerJob>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  )}
                 </div>
               </SortableContext>
             </DndContext>
@@ -2359,43 +2450,25 @@ function PriorityModePicker({
   );
 }
 
-function Metric({
-  label,
-  value,
-  ok,
-}: {
-  label: string;
-  value: string;
-  ok?: boolean;
-}) {
-  return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2">
-      <p className="text-[10px] uppercase tracking-wide text-white/40">{label}</p>
-      <p
-        className={`mt-0.5 text-[16px] font-semibold ${
-          ok === false ? "text-amber-300" : ok ? "text-emerald-300" : "text-white/85"
-        }`}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
-
 function DesignerPerformanceCard({
   perf,
   isAdmin,
+  compact,
   nudgeBusy,
   onNudge,
 }: {
   perf: DesignerPerformanceDto;
   isAdmin: boolean;
+  compact?: boolean;
   nudgeBusy: boolean;
   onNudge: () => void;
 }) {
   const stack = perf.stack;
   const behind = stack?.stackedBehind ?? 0;
   const flag = behind > 0 || perf.redFlag || perf.underTarget;
+  const optional = stack?.optionalLeavesPerMonth ?? DESIGNER_OPTIONAL_LEAVES_PER_MONTH;
+  const points = stack?.advancePoints ?? stack?.surplusSoFar ?? 0;
+  const unlocked = stack?.leaveDaysEarned ?? 0;
   return (
     <div
       className={`rounded-xl border px-3 py-2.5 ${
@@ -2431,79 +2504,45 @@ function DesignerPerformanceCard({
           </button>
         ) : null}
       </div>
-      {stack ? (
+      <p className="mt-1.5 text-[11px] text-white/55">
+        Sun holiday · Optional leaves {optional}/mo (no stack) · Advance {points}/
+        {DESIGNER_POINTS_PER_LEAVE}
+        {unlocked > 0 ? (
+          <span className="text-cyan-200"> · {unlocked} leave unlocked (ask permission)</span>
+        ) : null}
+        {behind > 0 ? <span className="text-red-300"> · Behind {behind}</span> : null}
+      </p>
+      {stack?.missedDays?.[0] ? (
+        <p className="mt-1 text-[11px] text-orange-200/90">
+          Missed {stack.missedDays[0].date.slice(8)}/{stack.missedDays[0].date.slice(5, 7)} — short{" "}
+          {stack.missedDays[0].missed}. Catch up first.
+        </p>
+      ) : null}
+      {!compact && stack ? (
         <div className="mt-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">
-            So far (from {DESIGNER_STACK_START_DATE}) · Mon–Sat × {perf.dailyTarget} · Sun off
+            From {DESIGNER_STACK_START_DATE}
           </p>
-          <p className="mt-1 text-[14px] font-semibold tabular-nums text-white/90">
-            Target {stack.targetSoFar}
-            <span className="mx-1.5 text-white/30">·</span>
-            Reached {stack.closedSoFar}
+          <p className="mt-1 text-[13px] font-semibold tabular-nums text-white/90">
+            Target {stack.targetSoFar} · Reached {stack.closedSoFar}
             {behind > 0 ? (
-              <>
-                <span className="mx-1.5 text-white/30">·</span>
-                <span className="text-red-300">Behind {behind}</span>
-              </>
+              <span className="text-red-300"> · Behind {behind}</span>
             ) : (
-              <>
-                <span className="mx-1.5 text-white/30">·</span>
-                <span className="text-emerald-300">On track</span>
-              </>
+              <span className="text-emerald-300"> · On track</span>
             )}
-            {(stack.leaveDaysEarned ?? 0) > 0 ? (
-              <>
-                <span className="mx-1.5 text-white/30">·</span>
-                <span className="text-cyan-300">Leave {stack.leaveDaysEarned}</span>
-              </>
-            ) : null}
           </p>
           <p className="mt-0.5 text-[11px] text-white/45">
-            This week {stack.weekClosed}/{stack.weekTargetFull} (so far {stack.weekClosed}/
-            {stack.weekTargetSoFar})
-            {stack.lastMonthDeficit > 0 && stack.lastMonthKey ? (
-              <>
-                {" "}
-                · Last month ({stack.lastMonthKey}) missed {stack.lastMonthDeficit} — still owed
-              </>
-            ) : null}
+            Week {stack.weekClosed}/{stack.weekTargetFull}
           </p>
-          {stack.missedDays?.[0] ? (
-            <p className="mt-1 text-[11px] text-red-200/90">
-              Missed {stack.missedDays[0].date.slice(8)}/{stack.missedDays[0].date.slice(5, 7)}:{" "}
-              {stack.missedDays[0].closed}/{stack.missedDays[0].target} (short{" "}
-              {stack.missedDays[0].missed}) — catch up
-            </p>
-          ) : null}
         </div>
       ) : null}
-      {perf.underTarget ? (
-        <p className="mt-1.5 text-[12px] text-amber-100/90">
-          Still need {perf.dailyTarget - perf.closedToday} more today. Misses stack into “Behind”.
-          +{perf.dailyTarget} over target = 1 leave day.
-        </p>
-      ) : (
-        <p className="mt-1.5 text-[12px] text-emerald-100/85">
-          {perf.closedToday >= perf.dailyTarget
-            ? `Hit today’s ${perf.dailyTarget}${
-                perf.closedToday > perf.dailyTarget
-                  ? ` (+${perf.closedToday - perf.dailyTarget} toward leave)`
-                  : ""
-              }.`
-            : "Sunday — no 4/day stack target; clear pending queue if needed."}{" "}
-          Stay available if new Ready work lands.
-        </p>
-      )}
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/55">
-        <span>Ready to start {perf.readyToStart}</span>
-        <span>In progress {perf.inProgress}</span>
-        {perf.overdueReady > 0 ? (
-          <span className="font-semibold text-red-300">Overdue ready {perf.overdueReady}</span>
-        ) : null}
-        <span>Started {formatIstClock(perf.firstStartedAt)}</span>
-        <span>Last end {formatIstClock(perf.lastEndedAt)}</span>
-        <span>Week {perf.closedThisWeek}</span>
-      </div>
+      {!compact ? (
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/45">
+          <span>In progress {perf.inProgress}</span>
+          <span>Started {formatIstClock(perf.firstStartedAt)}</span>
+          <span>Last end {formatIstClock(perf.lastEndedAt)}</span>
+        </div>
+      ) : null}
     </div>
   );
 }

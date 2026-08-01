@@ -15,6 +15,8 @@ import { teamOutletLabel } from "@/lib/team-outlets";
 import {
   DESIGNER_ASSIGNEE_WEEKDAY,
   DESIGNER_ASSIGNEE_WEEKEND,
+  DESIGNER_CALENDAR_DUE_TIME,
+  DESIGNER_CALENDAR_OUTLET_IDS,
   DESIGNER_DAILY_TARGET,
   DESIGNER_MONTH_OUTLET_IDS,
   DESIGNER_UPLOAD_DUE_TIME,
@@ -118,6 +120,11 @@ export function weekendDueDate(postDate: string): string {
 /** Jeslyn: Mon–Thu flyer/story due the calendar day before go-live. */
 export function weekdayStoryDueDate(postDate: string): string {
   return previousDayYmd(postDate);
+}
+
+/** Friday of a Fri–Sat–Sun weekend → Tuesday before (3 days earlier) @ 8 PM. */
+export function weekendCalendarDueDate(fridayYmd: string): string {
+  return addDaysYmd(fridayYmd, -3);
 }
 
 /** IST due instant for a designer job (uses lane-specific clock). */
@@ -473,6 +480,35 @@ export async function seedDesignerRollingWindow(params: {
     }
   }
 
+  // Weekly TV calendar (Fri–Sat–Sun together) for C53 / Boiler / Firefly — Mahesh, due Tuesday.
+  if (lanes.includes("WEEKEND")) {
+    const fridays = datesInRollingWindow(fromDate, days, ["fri"]);
+    for (const friday of fridays) {
+      const dueDate = weekendCalendarDueDate(friday);
+      const dueTime = DESIGNER_CALENDAR_DUE_TIME;
+      const past = isDesignerJobPastDue({ dueDate, dueTime });
+      for (let oi = 0; oi < DESIGNER_CALENDAR_OUTLET_IDS.length; oi++) {
+        const outletId = DESIGNER_CALENDAR_OUTLET_IDS[oi]!;
+        rows.push({
+          monthKey: monthKeyFromYmd(friday),
+          postDate: friday,
+          dueDate,
+          dueTime,
+          outletId,
+          lane: "WEEKEND",
+          format: "calendar",
+          title: `${teamOutletLabel(outletId)} Weekend TV Calendar (Fri–Sun)`,
+          description:
+            "One TV-size calendar video covering Friday + Saturday + Sunday for this weekend.",
+          sortOrder: Number(dueDate.replace(/-/g, "")) * 10 + 50 + oi,
+          assigneeId: DESIGNER_ASSIGNEE_WEEKEND,
+          status: past ? "DESIGN_DONE" : "WAITING_BRIEF",
+          createdBy: params.createdBy,
+        });
+      }
+    }
+  }
+
   if (rows.length === 0) {
     return { created: 0, skipped: 0, closedPast, fromDate, toDate };
   }
@@ -482,7 +518,7 @@ export async function seedDesignerRollingWindow(params: {
     where: {
       postDate: { gte: fromDate, lte: toDate },
       lane: { in: [...lanes] },
-      format: { in: ["post", "story"] },
+      format: { in: ["post", "story", "calendar"] },
     },
     select: {
       monthKey: true,
@@ -681,6 +717,8 @@ async function writeChecklistHandoffReady(params: {
  */
 export async function syncDesignerJobToChecklistHandoff(job: TeamDesignerJob): Promise<void> {
   if (!job.fileUrl) return;
+  // TV calendars are not Amit story/post handoffs
+  if (job.format === "calendar") return;
   const dayId = dayIdForYmd(job.postDate);
   const uploadedAt = job.uploadedAt?.toISOString() ?? new Date().toISOString();
   const base = {
@@ -755,6 +793,7 @@ async function clearChecklistHandoffReady(params: {
 
 /** Remove Ready handoff from Amit's Daily when admin clears / deletes an upload. */
 export async function clearDesignerJobChecklistHandoff(job: TeamDesignerJob): Promise<void> {
+  if (job.format === "calendar") return;
   const dayId = dayIdForYmd(job.postDate);
   const base = { outletId: job.outletId, dayId, postDate: job.postDate };
 

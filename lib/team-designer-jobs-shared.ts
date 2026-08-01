@@ -1,6 +1,8 @@
 /** Client-safe designer job types & constants (no DB / Node imports). */
 
 export const DESIGNER_MONTH_OUTLET_IDS = ["c53", "boiler-room", "firefly", "komma"] as const;
+/** Weekly Fri–Sun TV calendar video (one per outlet per weekend). */
+export const DESIGNER_CALENDAR_OUTLET_IDS = ["c53", "boiler-room", "firefly"] as const;
 
 export const DESIGNER_ASSIGNEE_WEEKEND = "mahesh";
 export const DESIGNER_ASSIGNEE_WEEKDAY = "jeslyn";
@@ -9,14 +11,20 @@ export const DESIGNER_ASSIGNEE_WEEKDAY = "jeslyn";
  * Designer upload deadlines (IST).
  * - Jeslyn (Mon–Thu): day before go-live @ 20:00 (Mon flyer → Sun 8 PM).
  * - Mahesh (Fri–Sat–Sun): go-live − 4 days @ 20:00 (Fri → Mon 8 PM).
+ * - Weekend TV calendar: Tuesday 8 PM before that Fri–Sat–Sun weekend.
  */
 export const DESIGNER_UPLOAD_DUE_TIME = "20:00";
 export const DESIGNER_WEEKDAY_DUE_TIME = "20:00";
 export const DESIGNER_WEEKEND_DUE_TIME = "20:00";
+export const DESIGNER_CALENDAR_DUE_TIME = "20:00";
 export const DESIGNER_LAST_WA_TIME = "19:00";
 export const DESIGNER_DAILY_TARGET = 4;
 /** Mon–Sat workdays (Sunday off target). 6 × 4 = 24. */
 export const DESIGNER_WEEKLY_TARGET = DESIGNER_DAILY_TARGET * 6;
+/** Optional leaves each month — use or lose (do not stack). */
+export const DESIGNER_OPTIONAL_LEAVES_PER_MONTH = 2;
+/** Advance closes needed to unlock one permission leave. */
+export const DESIGNER_POINTS_PER_LEAVE = DESIGNER_DAILY_TARGET;
 /** Always schedule this many days forward from today (not calendar months). */
 export const DESIGNER_WINDOW_DAYS = 30;
 /** Cumulative 4/day stack starts here (IST). Misses carry forward. Sunday = break. */
@@ -192,8 +200,14 @@ export type DesignerStackDto = {
   stackedBehind: number;
   /** Extra closes beyond target (after clearing carry) */
   surplusSoFar: number;
-  /** floor(surplus / 4) — each +4 over target banks one leave day */
+  /** floor(surplus / POINTS) — unlocks leave that still needs permission */
   leaveDaysEarned: number;
+  /** Advance points (= surplus closes after clearing behind) */
+  advancePoints: number;
+  /** Always true — Sunday is a fixed holiday */
+  sundayHoliday: boolean;
+  /** 2/month optional leaves — do not carry unused into next month */
+  optionalLeavesPerMonth: number;
   /** This ISO week (Mon–Sat): target through today and closes */
   weekKey: string;
   weekTargetSoFar: number;
@@ -202,6 +216,30 @@ export type DesignerStackDto = {
   /** Recent under-target workdays (newest first), for WA / UI */
   missedDays: DesignerMissedDayDto[];
 };
+
+/** Split open queue into catch-up / today's 4 / later (extras spill out of today). */
+export function partitionOpenDesignerQueue(
+  jobs: DesignerJobDto[],
+  dailyTarget = DESIGNER_DAILY_TARGET
+): {
+  catchUp: DesignerJobDto[];
+  todayPack: DesignerJobDto[];
+  upNext: DesignerJobDto[];
+} {
+  const sorted = sortDesignerJobs(jobs.filter((j) => j.status !== "DESIGN_DONE"));
+  const catchUp = sorted.filter((j) => j.isOverdue);
+  const rest = sorted.filter((j) => !j.isOverdue);
+  const todayPack = rest.slice(0, dailyTarget);
+  const upNext = rest.slice(dailyTarget);
+  return { catchUp, todayPack, upNext };
+}
+
+export function designerFormatLabel(format: string): string {
+  if (format === "story") return "Story";
+  if (format === "calendar") return "TV calendar";
+  if (format === "ad") return "Ad";
+  return "Post";
+}
 
 export type DesignerPerformanceDto = {
   assigneeId: string;

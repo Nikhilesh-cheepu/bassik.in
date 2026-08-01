@@ -3,7 +3,9 @@ import { addDaysYmd, dayIdForYmd, getTodayKey } from "@/lib/team-checklists";
 import { teamOutletLabel } from "@/lib/team-outlets";
 import {
   DESIGNER_DAILY_TARGET,
+  DESIGNER_OPTIONAL_LEAVES_PER_MONTH,
   DESIGNER_PERFORMANCE_IDS,
+  DESIGNER_POINTS_PER_LEAVE,
   DESIGNER_STACK_START_DATE,
   DESIGNER_WEEKLY_TARGET,
   designerDisplayName,
@@ -178,7 +180,8 @@ export async function computeDesignerStack(
   const net = closedSoFar - targetSoFar - lastMonthDeficit;
   const stackedBehind = Math.max(0, -net);
   const surplusSoFar = Math.max(0, net);
-  const leaveDaysEarned = Math.floor(surplusSoFar / DESIGNER_DAILY_TARGET);
+  const advancePoints = surplusSoFar;
+  const leaveDaysEarned = Math.floor(advancePoints / DESIGNER_POINTS_PER_LEAVE);
 
   const weekStart = weekStartMonday(today);
   const weekKey = weekStart;
@@ -208,6 +211,9 @@ export async function computeDesignerStack(
     stackedBehind,
     surplusSoFar,
     leaveDaysEarned,
+    advancePoints,
+    sundayHoliday: true,
+    optionalLeavesPerMonth: DESIGNER_OPTIONAL_LEAVES_PER_MONTH,
     weekKey,
     weekTargetSoFar,
     weekClosed,
