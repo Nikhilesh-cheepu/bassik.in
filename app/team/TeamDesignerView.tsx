@@ -31,6 +31,7 @@ import {
 import {
   DESIGNER_DAILY_TARGET,
   DESIGNER_MONTH_OUTLET_IDS,
+  DESIGNER_STACK_START_DATE,
   DESIGNER_WINDOW_DAYS,
   isBoilerplateDesignerDescription,
   sortDesignerJobs,
@@ -2391,11 +2392,13 @@ function DesignerPerformanceCard({
   nudgeBusy: boolean;
   onNudge: () => void;
 }) {
-  const flag = perf.redFlag || perf.underTarget;
+  const stack = perf.stack;
+  const behind = stack?.stackedBehind ?? 0;
+  const flag = behind > 0 || perf.redFlag || perf.underTarget;
   return (
     <div
       className={`rounded-xl border px-3 py-2.5 ${
-        perf.redFlag
+        behind > 0 || perf.redFlag
           ? "border-red-500/50 bg-red-500/[0.12]"
           : perf.underTarget
             ? "border-amber-400/35 bg-amber-400/[0.07]"
@@ -2427,18 +2430,46 @@ function DesignerPerformanceCard({
           </button>
         ) : null}
       </div>
-      {perf.redFlag ? (
-        <p className="mt-1.5 text-[12px] font-semibold text-red-200">
-          Red flag — daily target is {perf.dailyTarget}. Queue isn’t closed for the week.
-        </p>
-      ) : perf.underTarget ? (
+      {stack ? (
+        <div className="mt-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">
+            So far (from {DESIGNER_STACK_START_DATE})
+          </p>
+          <p className="mt-1 text-[14px] font-semibold tabular-nums text-white/90">
+            Target {stack.targetSoFar}
+            <span className="mx-1.5 text-white/30">·</span>
+            Reached {stack.closedSoFar}
+            {behind > 0 ? (
+              <>
+                <span className="mx-1.5 text-white/30">·</span>
+                <span className="text-red-300">Behind {behind}</span>
+              </>
+            ) : (
+              <>
+                <span className="mx-1.5 text-white/30">·</span>
+                <span className="text-emerald-300">On track</span>
+              </>
+            )}
+          </p>
+          <p className="mt-0.5 text-[11px] text-white/45">
+            {stack.workDaysSoFar} work day{stack.workDaysSoFar === 1 ? "" : "s"} this month ×{" "}
+            {perf.dailyTarget}/day
+            {stack.lastMonthDeficit > 0 && stack.lastMonthKey ? (
+              <>
+                {" "}
+                · Last month ({stack.lastMonthKey}) missed {stack.lastMonthDeficit} — still owed
+              </>
+            ) : null}
+          </p>
+        </div>
+      ) : null}
+      {perf.underTarget ? (
         <p className="mt-1.5 text-[12px] text-amber-100/90">
-          Still need {perf.dailyTarget - perf.closedToday} more today. Ready briefs can land any
-          day.
+          Still need {perf.dailyTarget - perf.closedToday} more today. Misses stack into “Behind”.
         </p>
       ) : (
         <p className="mt-1.5 text-[12px] text-emerald-100/85">
-          Hit today’s target — stay available if new Ready work lands.
+          Hit today’s {perf.dailyTarget} — stay available if new Ready work lands.
         </p>
       )}
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/55">

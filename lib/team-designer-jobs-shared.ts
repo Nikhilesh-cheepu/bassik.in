@@ -17,6 +17,8 @@ export const DESIGNER_LAST_WA_TIME = "19:00";
 export const DESIGNER_DAILY_TARGET = 4;
 /** Always schedule this many days forward from today (not calendar months). */
 export const DESIGNER_WINDOW_DAYS = 30;
+/** Cumulative 4/day stack starts here (IST). Misses carry forward. */
+export const DESIGNER_STACK_START_DATE = "2026-08-01";
 
 export type DesignerJobLane = "WEEKEND" | "WEEKDAY";
 export type DesignerJobStatus =
@@ -162,6 +164,24 @@ export type DesignerDaySeriesPoint = {
   lastEnd: string | null;
 };
 
+/** Cumulative target vs done from DESIGNER_STACK_START_DATE (workdays). */
+export type DesignerStackDto = {
+  countFrom: string;
+  monthKey: string;
+  workDaysSoFar: number;
+  /** 4 × workdays in this month (from max(start, monthStart) → today) */
+  targetSoFar: number;
+  /** Designer closes counted toward stack */
+  closedSoFar: number;
+  /** max(0, targetSoFar − closedSoFar) this month */
+  deficitSoFar: number;
+  lastMonthKey: string | null;
+  /** Missed count carried from previous month (0 in first stack month) */
+  lastMonthDeficit: number;
+  /** What they still owe overall: this-month deficit + last-month carry */
+  stackedBehind: number;
+};
+
 export type DesignerPerformanceDto = {
   assigneeId: string;
   name: string;
@@ -183,6 +203,8 @@ export type DesignerPerformanceDto = {
   /** closedToday progressing toward target before evening */
   onPace: boolean;
   series: DesignerDaySeriesPoint[];
+  /** Cumulative stack from 1 Aug 2026 */
+  stack: DesignerStackDto;
 };
 
 export type DesignerPriorityMode = "NONE" | "AFTER_CURRENT" | "PAUSE_NOW";
