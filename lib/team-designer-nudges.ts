@@ -687,11 +687,7 @@ export async function sendPriorityJobAlert(params: {
   let body: string;
   if (params.priorityMode === "PAUSE_NOW") {
     const activeBit = active
-      ? activeAgeMs != null && activeAgeMs < PAUSE_SUGGEST_MAX_MS
-        ? `You have “${active.title}” in progress (~${formatDuration(activeAgeMs)}). Send a pause request on it, then Start this priority job.`
-        : activeAgeMs != null && activeAgeMs >= FINISH_ASAP_MIN_MS
-          ? `You’ve been on “${active.title}” for ~${formatDuration(activeAgeMs)}. Wrap a safe pause / handoff, then Start this priority job now.`
-          : `Pause “${active.title}” (or request pause), then Start this priority job immediately.`
+      ? `“${active.title}” will be paused for this. Start this priority job now.`
       : "Nothing in progress — Start this priority job now.";
     body = [
       `${name} — PRIORITY. Start this now:`,

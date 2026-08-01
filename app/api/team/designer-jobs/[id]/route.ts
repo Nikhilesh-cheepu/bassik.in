@@ -8,6 +8,7 @@ import {
   linksFromText,
   loadDesignerEditMetaByIds,
   loadDesignerJobLinksByIds,
+  nextManualDesignerSortOrder,
   parseDesignerLinks,
   setDesignerEditRequest,
   setDesignerJobLinks,
@@ -149,15 +150,10 @@ export async function PATCH(
             ? true
             : undefined;
 
-      // Pin priority jobs near the top of the queue
+      // Pin interrupt jobs in the manual sort band (above date queue)
       let sortOrder: number | undefined;
       if (action === "brief-ready" && priorityMode && priorityMode !== "NONE") {
-        const minRow = await prisma.teamDesignerJob.findFirst({
-          where: { assigneeId: job.assigneeId, status: { not: "DESIGN_DONE" } },
-          orderBy: { sortOrder: "asc" },
-          select: { sortOrder: true },
-        });
-        sortOrder = (minRow?.sortOrder ?? 0) - 1;
+        sortOrder = await nextManualDesignerSortOrder(job.assigneeId);
       }
 
       const updated = await prisma.teamDesignerJob.update({
@@ -193,6 +189,16 @@ export async function PATCH(
           });
         } catch (e) {
           console.error("[designer-jobs] priority WA", e);
+        }
+        if (priorityMode === "PAUSE_NOW") {
+          await prisma.teamDesignerJob.updateMany({
+            where: {
+              assigneeId: job.assigneeId,
+              status: "IN_PROGRESS",
+              id: { not: id },
+            },
+            data: { status: "PAUSED" },
+          });
         }
       }
 

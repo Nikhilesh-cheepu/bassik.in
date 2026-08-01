@@ -95,9 +95,56 @@ export function isBoilerplateDesignerDescription(
   return false;
 }
 
-/** Priority sort — admin drag uses sortOrder; In progress / Paused pin to top. */
+/**
+ * sortOrder &lt; this = admin drag / interrupt pin (floats above date queue).
+ * Natural event-date keys are YYYYMMDD*100+… (≥ ~2026010100).
+ */
+export const DESIGNER_MANUAL_SORT_CEILING = 1_000_000;
+
+/** Outlet rotation within a go-live day: C53 → Boiler → Firefly → Komma. */
+export function designerOutletRank(outletId: string): number {
+  const i = DESIGNER_MONTH_OUTLET_IDS.indexOf(
+    outletId as (typeof DESIGNER_MONTH_OUTLET_IDS)[number]
+  );
+  return i >= 0 ? i : 99;
+}
+
+/**
+ * Natural queue key from **event/go-live date**, then outlet, then format.
+ * Same Friday = all outlets together, then Saturday — not one outlet’s whole weekend first.
+ */
+export function naturalDesignerSortOrder(
+  postDate: string,
+  outletId: string,
+  format = "post"
+): number {
+  const day = Number(String(postDate).replace(/-/g, ""));
+  if (!Number.isFinite(day) || day <= 0) {
+    return DESIGNER_MANUAL_SORT_CEILING + designerOutletRank(outletId);
+  }
+  const formatBump =
+    format === "calendar" ? 50 : format.startsWith("adhoc") ? 20 : 0;
+  return day * 100 + formatBump + designerOutletRank(outletId);
+}
+
+function priorityInsertRank(mode: DesignerPriorityMode | string | null | undefined): number {
+  if (mode === "PAUSE_NOW") return 0;
+  if (mode === "AFTER_CURRENT") return 1;
+  return 2;
+}
+
+function isManualDesignerSortOrder(sortOrder: number | null | undefined): boolean {
+  return (sortOrder ?? 0) < DESIGNER_MANUAL_SORT_CEILING;
+}
+
+/**
+ * Queue order:
+ * 1) In progress / Paused pin
+ * 2) Interrupt mode (Pause now → After current → by date)
+ * 3) Manual band (drag / interrupt sortOrder &lt; 1e6) above date queue
+ * 4) Event date → outlet → format → due (never random)
+ */
 export function sortDesignerJobs(jobs: DesignerJobDto[]): DesignerJobDto[] {
-  const outletRank = new Map(DESIGNER_MONTH_OUTLET_IDS.map((id, i) => [id, i]));
   const pinRank = (s: DesignerJobStatus) => {
     if (s === "IN_PROGRESS") return 0;
     if (s === "PAUSED") return 1;
@@ -114,18 +161,33 @@ export function sortDesignerJobs(jobs: DesignerJobDto[]): DesignerJobDto[] {
     const pb = pinRank(b.status);
     if (pa !== pb) return pa - pb;
 
-    if ((a.sortOrder ?? 0) !== (b.sortOrder ?? 0)) {
+    const pia = priorityInsertRank(a.priorityMode);
+    const pib = priorityInsertRank(b.priorityMode);
+    if (pia !== pib) return pia - pib;
+
+    const aManual = isManualDesignerSortOrder(a.sortOrder);
+    const bManual = isManualDesignerSortOrder(b.sortOrder);
+    if (aManual !== bManual) return aManual ? -1 : 1;
+    if (aManual && bManual && (a.sortOrder ?? 0) !== (b.sortOrder ?? 0)) {
       return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
     }
 
+    // Date queue (and tie-break when both natural)
+    if (a.postDate !== b.postDate) return a.postDate.localeCompare(b.postDate);
+    const oa = designerOutletRank(a.outletId);
+    const ob = designerOutletRank(b.outletId);
+    if (oa !== ob) return oa - ob;
+    const fa = a.format === "calendar" ? 1 : a.format.startsWith("adhoc") ? 2 : 0;
+    const fb = b.format === "calendar" ? 1 : b.format.startsWith("adhoc") ? 2 : 0;
+    if (fa !== fb) return fa - fb;
+    if (!aManual && !bManual && (a.sortOrder ?? 0) !== (b.sortOrder ?? 0)) {
+      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+    }
     if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
     if (a.isDueToday !== b.isDueToday) return a.isDueToday ? -1 : 1;
     if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
     if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
-    const oa = outletRank.get(a.outletId as (typeof DESIGNER_MONTH_OUTLET_IDS)[number]) ?? 99;
-    const ob = outletRank.get(b.outletId as (typeof DESIGNER_MONTH_OUTLET_IDS)[number]) ?? 99;
-    if (oa !== ob) return oa - ob;
-    return a.postDate.localeCompare(b.postDate);
+    return (a.title || "").localeCompare(b.title || "");
   });
 }
 

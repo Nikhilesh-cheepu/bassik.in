@@ -23,7 +23,9 @@ import {
   DESIGNER_WEEKDAY_DUE_TIME,
   DESIGNER_WEEKEND_DUE_TIME,
   DESIGNER_WINDOW_DAYS,
+  DESIGNER_MANUAL_SORT_CEILING,
   isBoilerplateDesignerDescription,
+  naturalDesignerSortOrder,
   parseDesignerLinks,
   parseDesignerPriorityMode,
   sortDesignerJobs,
@@ -38,12 +40,14 @@ export {
   DESIGNER_ASSIGNEE_WEEKEND,
   DESIGNER_DAILY_TARGET,
   DESIGNER_LAST_WA_TIME,
+  DESIGNER_MANUAL_SORT_CEILING,
   DESIGNER_MONTH_OUTLET_IDS,
   DESIGNER_UPLOAD_DUE_TIME,
   DESIGNER_WEEKDAY_DUE_TIME,
   DESIGNER_WEEKEND_DUE_TIME,
   DESIGNER_WINDOW_DAYS,
   linksFromText,
+  naturalDesignerSortOrder,
   parseDesignerLinks,
   sortDesignerJobs,
 } from "@/lib/team-designer-jobs-shared";
@@ -368,9 +372,59 @@ type SeedResult = {
   created: number;
   skipped: number;
   closedPast: number;
+  /** Open NONE jobs re-keyed to event-date order */
+  repaired: number;
   fromDate: string;
   toDate: string;
 };
+
+/**
+ * Rewrite natural-band sortOrder from event date.
+ * Skips interrupt/drag pins (sortOrder &lt; 1e6) and priorityMode inserts.
+ */
+export async function repairNaturalDesignerSortOrders(): Promise<number> {
+  const open = await prisma.teamDesignerJob.findMany({
+    where: {
+      status: { not: "DESIGN_DONE" },
+      priorityMode: "NONE",
+      sortOrder: { gte: DESIGNER_MANUAL_SORT_CEILING },
+    },
+    select: { id: true, postDate: true, outletId: true, format: true, sortOrder: true },
+  });
+
+  let repaired = 0;
+  const ops: Prisma.PrismaPromise<unknown>[] = [];
+  for (const j of open) {
+    const next = naturalDesignerSortOrder(j.postDate, j.outletId, j.format);
+    if (j.sortOrder === next) continue;
+    repaired += 1;
+    ops.push(
+      prisma.teamDesignerJob.update({
+        where: { id: j.id },
+        data: { sortOrder: next },
+      })
+    );
+  }
+  const chunk = 40;
+  for (let i = 0; i < ops.length; i += chunk) {
+    await prisma.$transaction(ops.slice(i, i + chunk));
+  }
+  return repaired;
+}
+
+/** Next sortOrder in the manual/interrupt band (always &lt; DESIGNER_MANUAL_SORT_CEILING). */
+export async function nextManualDesignerSortOrder(assigneeId: string): Promise<number> {
+  const minRow = await prisma.teamDesignerJob.findFirst({
+    where: {
+      assigneeId,
+      status: { not: "DESIGN_DONE" },
+      sortOrder: { lt: DESIGNER_MANUAL_SORT_CEILING },
+    },
+    orderBy: { sortOrder: "asc" },
+    select: { sortOrder: true },
+  });
+  return (minRow?.sortOrder ?? 0) - 1;
+}
 
 /** Mark open jobs past their design due datetime (date + 8 PM IST), not midnight. */
 export async function closePastDueDesignerJobs(today = getTodayKey()): Promise<number> {
@@ -443,7 +497,7 @@ export async function seedDesignerRollingWindow(params: {
           format: "post",
           title: `${teamOutletLabel(outletId)} ${CHECKLIST_DAY_LABELS[dayId]} Post`,
           description: null,
-          sortOrder: Number(dueDate.replace(/-/g, "")) * 10 + oi,
+          sortOrder: naturalDesignerSortOrder(postDate, outletId, "post"),
           assigneeId: DESIGNER_ASSIGNEE_WEEKEND,
           status: past ? "DESIGN_DONE" : "WAITING_BRIEF",
           createdBy: params.createdBy,
@@ -471,7 +525,7 @@ export async function seedDesignerRollingWindow(params: {
           format: "story",
           title: `${teamOutletLabel(outletId)} ${CHECKLIST_DAY_LABELS[dayId]} Story`,
           description: null,
-          sortOrder: Number(dueDate.replace(/-/g, "")) * 10 + oi,
+          sortOrder: naturalDesignerSortOrder(postDate, outletId, "story"),
           assigneeId: DESIGNER_ASSIGNEE_WEEKDAY,
           status: past ? "DESIGN_DONE" : "WAITING_BRIEF",
           createdBy: params.createdBy,
@@ -500,7 +554,7 @@ export async function seedDesignerRollingWindow(params: {
           title: `${teamOutletLabel(outletId)} Weekend TV Calendar (Fri–Sun)`,
           description:
             "One TV-size calendar video covering Friday + Saturday + Sunday for this weekend.",
-          sortOrder: Number(dueDate.replace(/-/g, "")) * 10 + 50 + oi,
+          sortOrder: naturalDesignerSortOrder(friday, outletId, "calendar"),
           assigneeId: DESIGNER_ASSIGNEE_WEEKEND,
           status: past ? "DESIGN_DONE" : "WAITING_BRIEF",
           createdBy: params.createdBy,
@@ -510,7 +564,8 @@ export async function seedDesignerRollingWindow(params: {
   }
 
   if (rows.length === 0) {
-    return { created: 0, skipped: 0, closedPast, fromDate, toDate };
+    const repairedEmpty = await repairNaturalDesignerSortOrders();
+    return { created: 0, skipped: 0, closedPast, repaired: repairedEmpty, fromDate, toDate };
   }
 
   // One range lookup, then insert only missing slots (no unique-constraint spam).
@@ -545,7 +600,8 @@ export async function seedDesignerRollingWindow(params: {
     skipped += Math.max(0, toInsert.length - created);
   }
 
-  return { created, skipped, closedPast, fromDate, toDate };
+  const repaired = await repairNaturalDesignerSortOrders();
+  return { created, skipped, closedPast, repaired, fromDate, toDate };
 }
 
 /** @deprecated use seedDesignerRollingWindow — kept for compatibility */

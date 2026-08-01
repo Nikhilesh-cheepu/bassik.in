@@ -9,7 +9,10 @@ import {
   loadDesignerEditMetaByIds,
   loadDesignerJobLinksByIds,
   monthKeyFromYmd,
+  naturalDesignerSortOrder,
+  nextManualDesignerSortOrder,
   parseDesignerLinks,
+  repairNaturalDesignerSortOrders,
   rollingWindowBounds,
   seedDesignerRollingWindow,
   setDesignerJobLinks,
@@ -134,6 +137,15 @@ export async function GET(req: NextRequest) {
       ...(isAdmin ? {} : { assigneeId: memberId }),
     };
 
+    // Keep legacy due-date sortKeys aligned to event dates (no-op once repaired).
+    if (isAdmin) {
+      try {
+        await repairNaturalDesignerSortOrders();
+      } catch (e) {
+        console.error("[team/designer-jobs] repair sortOrder", e);
+      }
+    }
+
     let rows;
     try {
       // Prefer not DESIGN_DONE so PAUSED is included without listing it in `in: [...]`
@@ -219,6 +231,10 @@ export async function POST(req: NextRequest) {
       assigneeId?: string;
       adhoc?: boolean;
       orderedIds?: string[];
+      /** Event / go-live date (YYYY-MM-DD) */
+      postDate?: string;
+      /** Design due date (YYYY-MM-DD); defaults to postDate */
+      dueDate?: string;
     };
 
     if (body.action === "seed" || body.action === "seed-month") {
@@ -280,20 +296,28 @@ export async function POST(req: NextRequest) {
 
     const format = `adhoc-${Date.now().toString(36)}`;
     const priorityMode = parseDesignerPriorityMode(body.priorityMode);
-    const urgent = body.urgent !== false || priorityMode !== "NONE";
-    const minRow = await prisma.teamDesignerJob.findFirst({
-      where: { assigneeId, status: { not: "DESIGN_DONE" } },
-      orderBy: { sortOrder: "asc" },
-      select: { sortOrder: true },
-    });
+    const ymd =
+      typeof body.postDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.postDate.trim())
+        ? body.postDate.trim()
+        : typeof body.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate.trim())
+          ? body.dueDate.trim()
+          : today;
+    const dueYmd =
+      typeof body.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate.trim())
+        ? body.dueDate.trim()
+        : ymd;
+    const urgent =
+      typeof body.urgent === "boolean" ? body.urgent : priorityMode !== "NONE";
     const sortOrder =
-      priorityMode !== "NONE" ? (minRow?.sortOrder ?? 0) - 1 : (minRow?.sortOrder ?? 0);
+      priorityMode !== "NONE"
+        ? await nextManualDesignerSortOrder(assigneeId)
+        : naturalDesignerSortOrder(ymd, outletId, format);
 
     const job = await prisma.teamDesignerJob.create({
       data: {
-        monthKey: monthKeyFromYmd(today),
-        postDate: today,
-        dueDate: today,
+        monthKey: monthKeyFromYmd(ymd),
+        postDate: ymd,
+        dueDate: dueYmd,
         dueTime: DESIGNER_UPLOAD_DUE_TIME,
         outletId,
         lane,
@@ -327,6 +351,13 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         console.error("[designer-jobs] adhoc priority WA", e);
       }
+    }
+
+    if (priorityMode === "PAUSE_NOW") {
+      await prisma.teamDesignerJob.updateMany({
+        where: { assigneeId, status: "IN_PROGRESS" },
+        data: { status: "PAUSED" },
+      });
     }
 
     return NextResponse.json({

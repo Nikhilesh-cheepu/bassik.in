@@ -374,8 +374,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     title: "",
     description: "",
     links: "",
-    urgent: true,
-    priorityMode: "AFTER_CURRENT" as DesignerPriorityMode,
+    postDate: "",
+    urgent: false,
+    priorityMode: "NONE" as DesignerPriorityMode,
   });
   const [priorityDrafts, setPriorityDrafts] = useState<Record<string, DesignerPriorityMode>>(
     {}
@@ -929,6 +930,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           title: adhoc.title.trim(),
           description: adhoc.description,
           links: adhoc.links,
+          postDate: adhoc.postDate.trim() || undefined,
+          dueDate: adhoc.postDate.trim() || undefined,
           urgent: adhoc.urgent || adhoc.priorityMode !== "NONE",
           priorityMode: adhoc.priorityMode,
         }),
@@ -941,8 +944,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         title: "",
         description: "",
         links: "",
-        urgent: true,
-        priorityMode: "AFTER_CURRENT",
+        postDate: "",
+        urgent: false,
+        priorityMode: "NONE",
       });
       const created = data.job as DesignerJobDto | undefined;
       if (created) {
@@ -1328,7 +1332,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           <div>
             <p className="text-[13px] font-semibold text-amber-50">Add task</p>
             <p className="text-[11px] text-white/45">
-              Date stamps as today ({todayYmdLocal()}). Brief optional — pick outlet + designer.
+              Set the event / go-live date — queue slots by date (C53 → Boiler → Firefly → Komma
+              that day). Leave blank = today ({todayYmdLocal()}).
             </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -1347,6 +1352,15 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
               </select>
             </label>
             <label className="block text-[11px] text-white/50">
+              Event / go-live date
+              <input
+                type="date"
+                value={adhoc.postDate}
+                onChange={(e) => setAdhoc((a) => ({ ...a, postDate: e.target.value }))}
+                className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2 text-[13px] text-white"
+              />
+            </label>
+            <label className="block text-[11px] text-white/50 sm:col-span-2">
               Send to
               <div className="mt-1 flex gap-1 rounded-lg bg-black/30 p-0.5">
                 {(
@@ -2547,22 +2561,26 @@ function PriorityModePicker({
   onChange: (v: DesignerPriorityMode) => void;
 }) {
   const options: Array<{ id: DesignerPriorityMode; label: string; hint: string }> = [
-    { id: "NONE", label: "Normal", hint: "No priority WA" },
+    {
+      id: "NONE",
+      label: "By event date",
+      hint: "Slots with that day’s posts (availability order)",
+    },
     {
       id: "AFTER_CURRENT",
-      label: "After current",
-      hint: "Finish current job, then start this",
+      label: "Finish current → start",
+      hint: "Complete what’s in progress, then this",
     },
     {
       id: "PAUSE_NOW",
-      label: "Pause & start now",
-      hint: "Pause everything and start this immediately",
+      label: "Pause current → start",
+      hint: "Auto-pauses in-progress, then this first",
     },
   ];
   return (
     <div className="space-y-1.5">
       <p className="text-[11px] font-medium uppercase tracking-wide text-white/40">
-        Priority when sending
+        When to start
       </p>
       <div className="flex flex-col gap-1.5 sm:flex-row">
         {options.map((o) => (
