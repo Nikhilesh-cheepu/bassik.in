@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/db";
-import { getTodayKey } from "@/lib/team-checklists";
+import { addDaysYmd, dayIdForYmd, getTodayKey } from "@/lib/team-checklists";
 import { findActiveDesignerJob } from "@/lib/team-designer-jobs";
 import {
   DESIGNER_DAILY_TARGET,
   DESIGNER_PERFORMANCE_IDS,
+  DESIGNER_STACK_START_DATE,
   designerDisplayName,
   type DesignerNudgeKind,
   type DesignerPriorityMode,
@@ -12,6 +13,8 @@ import {
 } from "@/lib/team-designer-jobs-shared";
 import {
   computeDesignerPerformance,
+  computeDesignerStack,
+  designerClosesOnDay,
   istHourNow,
   istMinuteNow,
   listReadyToStartJobs,
@@ -36,15 +39,52 @@ function formatDuration(ms: number): string {
   return r ? `${h}h ${r}m` : `${h}h`;
 }
 
-function formatReadyList(jobs: ReadyJobLine[], cap = 5): string {
-  if (jobs.length === 0) return "(no ready-to-start jobs)";
-  const lines = jobs.slice(0, cap).map((j) => {
-    const due =
-      j.isOverdue ? "OVERDUE" : j.isDueToday ? "due today" : `due ${j.dueDate.slice(8)}/${j.dueDate.slice(5, 7)}`;
-    return `• ${j.title} (${due})`;
+/** Designers typically start ~11 AM IST — before that, talk about yesterday. */
+export const WORK_DAY_START_HOUR_IST = NO_START_HOUR_IST;
+
+function designerQueueLink(): string {
+  const base =
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "")?.trim() || "https://bassik.in";
+  return `${base}/team?tab=designer`;
+}
+
+function formatDayLabel(ymd: string): string {
+  const d = new Date(`${ymd}T12:00:00+05:30`);
+  return d.toLocaleDateString("en-GB", {
+    timeZone: "Asia/Kolkata",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
   });
-  const more = jobs.length > cap ? `\n+${jobs.length - cap} more` : "";
-  return lines.join("\n") + more;
+}
+
+/** One short line — don’t dump the whole queue into WhatsApp. */
+function shortMissLine(jobs: ReadyJobLine[]): string | null {
+  if (jobs.length === 0) return null;
+  const j = jobs[0]!;
+  const day = j.isOverdue
+    ? `overdue (${j.dueDate.slice(8)}/${j.dueDate.slice(5, 7)})`
+    : j.isDueToday
+      ? "due today"
+      : `due ${j.dueDate.slice(8)}/${j.dueDate.slice(5, 7)}`;
+  const extra = jobs.length > 1 ? ` +${jobs.length - 1} more` : "";
+  return `${j.title} — ${day}${extra}`;
+}
+
+function isBeforeWorkStart(hour: number): boolean {
+  return hour < WORK_DAY_START_HOUR_IST;
+}
+
+function sundayNote(todayYmd: string): string | null {
+  if (dayIdForYmd(todayYmd) !== "sun") return null;
+  return "It’s Sunday — you still need to complete pending work and meet the daily target.";
+}
+
+function seriousCloser(): string {
+  return [
+    "This can lead to a serious issue if it continues.",
+    "Reply with the reason you haven’t done this.",
+  ].join("\n");
 }
 
 function nudgeLabel(kind: DesignerNudgeKind): string {
@@ -58,7 +98,7 @@ function nudgeLabel(kind: DesignerNudgeKind): string {
     case "deadline_soon":
       return "Deadline soon";
     case "missed_target":
-      return "Missed 4/day target";
+      return "Missed daily target";
     case "priority_pause_now":
       return "Priority — pause now";
     case "priority_after_current":
@@ -71,87 +111,111 @@ function nudgeLabel(kind: DesignerNudgeKind): string {
 function buildNudgeBody(params: {
   kind: DesignerNudgeKind;
   name: string;
+  todayYmd: string;
   closedToday: number;
+  closedYesterday: number;
   readyToStart: number;
   readyJobs: ReadyJobLine[];
+  stackedBehind: number;
+  hour: number;
   activeTitle?: string | null;
   activeAgeMs?: number | null;
 }): string {
-  const list = formatReadyList(params.readyJobs);
-  const targetNote =
-    "Daily target is 4 closed jobs. Ready briefs can land any day — finishing this week’s calendar does not pause work.";
+  const link = designerQueueLink();
+  const yesterday = addDaysYmd(params.todayYmd, -1);
+  const beforeWork = isBeforeWorkStart(params.hour);
+  const focusYmd = beforeWork ? yesterday : params.todayYmd;
+  const focusClosed = beforeWork ? params.closedYesterday : params.closedToday;
+  const focusLabel = formatDayLabel(focusYmd);
+  const miss = shortMissLine(params.readyJobs);
+  const sun = sundayNote(params.todayYmd);
+  const stackBit =
+    params.stackedBehind > 0
+      ? `From ${formatDayLabel(DESIGNER_STACK_START_DATE)} you’re ${params.stackedBehind} behind — that stacks up. Clear it ASAP.`
+      : "Missed work stacks onto the next day — clear it ASAP.";
 
+  const focusLine = `On ${focusLabel} you only closed ${focusClosed}/${DESIGNER_DAILY_TARGET}.`;
+  const pendingBit = miss ? `Pending: ${miss}` : null;
+
+  let head: string[];
   switch (params.kind) {
     case "no_start":
-      return [
-        `Hey ${params.name} — you haven’t started any task today.`,
-        `${params.readyToStart} job(s) ready to start:`,
-        list,
-        "",
-        targetNote,
-        "Open /team → Monthly designer queue → Start Job.",
-      ].join("\n");
+      head = [
+        `${params.name} — work has started and you haven’t begun today’s queue.`,
+        pendingBit ?? `${params.readyToStart} job(s) waiting.`,
+        stackBit,
+      ];
+      break;
     case "slow_task":
-      return [
-        `Hey ${params.name} — follow-up: you’ve been on “${params.activeTitle ?? "this job"}” for ~${formatDuration(params.activeAgeMs ?? SLOW_TASK_MS)}.`,
-        "Please wrap this up and move faster so we can hit today’s target.",
-        params.readyToStart > 0 ? `\nStill ready after this:\n${list}` : "",
-        "",
-        `Today so far: ${params.closedToday}/${DESIGNER_DAILY_TARGET}.`,
-        targetNote,
-      ]
-        .filter(Boolean)
-        .join("\n");
+      head = [
+        `${params.name} — you’ve been on “${params.activeTitle ?? "this job"}” for ~${formatDuration(params.activeAgeMs ?? SLOW_TASK_MS)}.`,
+        `Today so far: ${params.closedToday}/${DESIGNER_DAILY_TARGET}. Finish and move — don’t let this stack up.`,
+      ];
+      break;
     case "behind_pace":
-      return [
-        `Hey ${params.name} — only ${params.closedToday} done today (target ${DESIGNER_DAILY_TARGET}).`,
-        `${params.readyToStart} still ready to start:`,
-        list,
-        "",
-        targetNote,
-      ].join("\n");
+      head = [
+        `${params.name} — you’re behind.`,
+        focusLine,
+        pendingBit,
+        stackBit,
+      ].filter(Boolean) as string[];
+      break;
     case "deadline_soon":
-      return [
-        `Hey ${params.name} — deadline coming soon / overdue on ready work.`,
-        list,
-        "",
-        `Today so far: ${params.closedToday}/${DESIGNER_DAILY_TARGET}.`,
-        targetNote,
-      ].join("\n");
+      head = [
+        `${params.name} — you missed / are late on this:`,
+        pendingBit ?? "Ready work due or overdue.",
+        beforeWork ? focusLine : null,
+        stackBit,
+      ].filter(Boolean) as string[];
+      break;
     case "missed_target":
-      return [
-        `Hey ${params.name} — red flag: ${params.closedToday}/${DESIGNER_DAILY_TARGET} closed today.`,
-        params.readyToStart > 0
-          ? `Still ${params.readyToStart} ready to start:\n${list}`
-          : "No ready-to-start jobs right now — stay available if new briefs land.",
-        "",
-        targetNote,
-      ].join("\n");
+      head = [
+        `${params.name} — missed target.`,
+        focusLine,
+        pendingBit,
+        stackBit,
+      ].filter(Boolean) as string[];
+      break;
     default:
-      return `Hey ${params.name} — check your designer queue.`;
+      head = [
+        `${params.name} — clear pending designer work ASAP.`,
+        focusLine,
+        stackBit,
+      ];
   }
+
+  return [
+    ...head,
+    sun,
+    "",
+    seriousCloser(),
+    "",
+    `Open & complete: ${link}`,
+  ]
+    .filter((line): line is string => line != null && line !== undefined)
+    .join("\n");
 }
 
 function templateParamsFor(
   kind: DesignerNudgeKind,
   name: string,
-  closedToday: number,
+  closedFocus: number,
   readyToStart: number,
   readyJobs: ReadyJobLine[],
   activeTitle?: string | null
 ): [string, string, string] {
   const summary =
     kind === "no_start"
-      ? `Haven't started — ${readyToStart} ready`
+      ? `Haven't started — ${readyToStart} waiting`
       : kind === "slow_task"
-        ? `Over 3h on ${activeTitle ?? "task"} — move faster`
+        ? `Stuck ~3h+ on ${activeTitle ?? "task"}`
         : kind === "behind_pace"
-          ? `Only ${closedToday}/${DESIGNER_DAILY_TARGET} done`
+          ? `Behind ${closedFocus}/${DESIGNER_DAILY_TARGET}`
           : kind === "deadline_soon"
-            ? "Deadline soon on ready jobs"
-            : `Missed target ${closedToday}/${DESIGNER_DAILY_TARGET}`;
-  const jobList = formatReadyList(readyJobs, 3).replace(/\n/g, " | ").slice(0, 200) || "-";
-  return [name, summary, jobList];
+            ? "Missed / late on due work"
+            : `Missed target ${closedFocus}/${DESIGNER_DAILY_TARGET}`;
+  const miss = shortMissLine(readyJobs)?.slice(0, 200) || "-";
+  return [name, summary, miss];
 }
 
 /** Cron windows (IST). */
@@ -290,8 +354,13 @@ export async function evaluateAndSendDesignerNudges(opts?: {
   });
   const results: NudgeRunResult[] = [];
 
+  const hour = opts?.hour ?? istHourNow();
+
   for (const assigneeId of assignees) {
     const perf = await computeDesignerPerformance(assigneeId);
+    const stack = await computeDesignerStack(assigneeId, dateKey);
+    const yesterday = addDaysYmd(dateKey, -1);
+    const closedYesterday = await designerClosesOnDay(assigneeId, yesterday);
     const readyJobs = await listReadyToStartJobs(assigneeId);
     const name = designerDisplayName(assigneeId);
     const active = await findActiveDesignerJob(assigneeId);
@@ -328,15 +397,21 @@ export async function evaluateAndSendDesignerNudges(opts?: {
         continue;
       }
 
+      const jobs = jobsForBody.length ? jobsForBody : readyJobs;
       const body = buildNudgeBody({
         kind,
         name,
+        todayYmd: dateKey,
         closedToday: perf.closedToday,
+        closedYesterday,
         readyToStart: perf.readyToStart,
-        readyJobs: jobsForBody.length ? jobsForBody : readyJobs,
+        readyJobs: jobs,
+        stackedBehind: stack.stackedBehind,
+        hour,
         activeTitle: active?.title,
         activeAgeMs,
       });
+      const focusClosed = isBeforeWorkStart(hour) ? closedYesterday : perf.closedToday;
 
       results.push(
         await logAndMaybeSend({
@@ -348,9 +423,9 @@ export async function evaluateAndSendDesignerNudges(opts?: {
           templateParams: templateParamsFor(
             kind,
             name,
-            perf.closedToday,
+            focusClosed,
             perf.readyToStart,
-            jobsForBody.length ? jobsForBody : readyJobs,
+            jobs,
             active?.title
           ),
           force: opts?.force,
@@ -370,12 +445,17 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
   const out: DesignerSuggestedNudgeDto[] = [];
   const hour = istHourNow();
   const minute = istMinuteNow();
+  const today = getTodayKey();
+  const yesterday = addDaysYmd(today, -1);
   const afterNoStart =
     hour > NO_START_HOUR_IST ||
     (hour === NO_START_HOUR_IST && minute >= NO_START_MINUTE_IST);
+  const beforeWork = isBeforeWorkStart(hour);
 
   for (const assigneeId of DESIGNER_PERFORMANCE_IDS) {
     const perf = await computeDesignerPerformance(assigneeId);
+    const stack = await computeDesignerStack(assigneeId, today);
+    const closedYesterday = await designerClosesOnDay(assigneeId, yesterday);
     const readyJobs = await listReadyToStartJobs(assigneeId);
     const name = designerDisplayName(assigneeId);
     const active = await findActiveDesignerJob(assigneeId);
@@ -395,30 +475,42 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
       });
     };
 
+    const bodyFor = (kind: DesignerNudgeKind, jobs: ReadyJobLine[], extra?: {
+      activeTitle?: string | null;
+      activeAgeMs?: number | null;
+    }) =>
+      buildNudgeBody({
+        kind,
+        name,
+        todayYmd: today,
+        closedToday: perf.closedToday,
+        closedYesterday,
+        readyToStart: perf.readyToStart,
+        readyJobs: jobs,
+        stackedBehind: stack.stackedBehind,
+        hour,
+        activeTitle: extra?.activeTitle,
+        activeAgeMs: extra?.activeAgeMs,
+      });
+
+    // Overnight / early morning: only ask about yesterday + stack — not “today”
+    if (beforeWork) {
+      const missedYesterday = closedYesterday < DESIGNER_DAILY_TARGET;
+      if (missedYesterday || stack.stackedBehind > 0) {
+        push("missed_target", "", bodyFor("missed_target", readyJobs));
+      }
+      continue;
+    }
+
     if (afterNoStart && !perf.firstStartedAt && perf.readyToStart > 0 && perf.closedToday === 0) {
-      push(
-        "no_start",
-        "",
-        buildNudgeBody({
-          kind: "no_start",
-          name,
-          closedToday: perf.closedToday,
-          readyToStart: perf.readyToStart,
-          readyJobs,
-        })
-      );
+      push("no_start", "", bodyFor("no_start", readyJobs));
     }
 
     if (active && activeAgeMs != null && activeAgeMs >= SLOW_TASK_MS) {
       push(
         "slow_task",
         active.id,
-        buildNudgeBody({
-          kind: "slow_task",
-          name,
-          closedToday: perf.closedToday,
-          readyToStart: perf.readyToStart,
-          readyJobs,
+        bodyFor("slow_task", readyJobs, {
           activeTitle: active.title,
           activeAgeMs,
         })
@@ -426,46 +518,16 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
     }
 
     if (perf.closedToday < 2 && perf.readyToStart > 0 && afterNoStart && hour >= 14) {
-      push(
-        "behind_pace",
-        "",
-        buildNudgeBody({
-          kind: "behind_pace",
-          name,
-          closedToday: perf.closedToday,
-          readyToStart: perf.readyToStart,
-          readyJobs,
-        })
-      );
+      push("behind_pace", "", bodyFor("behind_pace", readyJobs));
     }
 
     const hot = readyJobs.filter((j) => j.isOverdue || j.isDueToday);
     if (hot.length > 0) {
-      push(
-        "deadline_soon",
-        "",
-        buildNudgeBody({
-          kind: "deadline_soon",
-          name,
-          closedToday: perf.closedToday,
-          readyToStart: perf.readyToStart,
-          readyJobs: hot,
-        })
-      );
+      push("deadline_soon", "", bodyFor("deadline_soon", hot));
     }
 
     if (hour >= 18 && perf.closedToday < DESIGNER_DAILY_TARGET) {
-      push(
-        "missed_target",
-        "",
-        buildNudgeBody({
-          kind: "missed_target",
-          name,
-          closedToday: perf.closedToday,
-          readyToStart: perf.readyToStart,
-          readyJobs,
-        })
-      );
+      push("missed_target", "", bodyFor("missed_target", readyJobs));
     }
   }
 
@@ -583,12 +645,14 @@ export async function sendPriorityJobAlert(params: {
           : `Pause “${active.title}” (or request pause), then Start this priority job immediately.`
       : "Nothing in progress — Start this priority job now.";
     body = [
-      `Hey ${name} — NEW PRIORITY task (start immediately):`,
+      `${name} — PRIORITY. Start this now:`,
       jobLine,
-      "",
       activeBit,
       "",
-      "Open /team → Monthly designer queue.",
+      "This can lead to a serious issue if delayed.",
+      "Reply if you can’t — with the reason.",
+      "",
+      `Open & complete: ${designerQueueLink()}`,
     ].join("\n");
   } else {
     const activeBit = active
@@ -597,12 +661,14 @@ export async function sendPriorityJobAlert(params: {
         : `Complete your current job “${active.title}” first, then Start this priority task.`
       : "No job in progress — you can Start this when ready.";
     body = [
-      `Hey ${name} — NEW PRIORITY task (after current):`,
+      `${name} — PRIORITY (after your current job):`,
       jobLine,
-      "",
       activeBit,
       "",
-      "Open /team → Monthly designer queue.",
+      "This can lead to a serious issue if delayed.",
+      "Reply if you can’t — with the reason.",
+      "",
+      `Open & complete: ${designerQueueLink()}`,
     ].join("\n");
   }
 

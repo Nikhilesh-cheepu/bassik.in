@@ -38,7 +38,14 @@ import TeamBrainView from "./TeamBrainView";
 import { uploadTeamFile } from "@/lib/team-client-upload";
 import { canCreateShoots } from "@/lib/team-shoots";
 import { readCachedTeamUser, writeCachedTeamUser } from "@/lib/team-session-cache";
-import { TeamSidebarNav, TEAM_PAGE, TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL, type TeamTab } from "./TeamNav";
+import {
+  TeamSidebarNav,
+  TEAM_PAGE,
+  TEAM_SHEET_OVERLAY,
+  TEAM_SHEET_PANEL,
+  TEAM_TABS,
+  type TeamTab,
+} from "./TeamNav";
 import TeamDock, { TeamActionSheet, TeamMoreSheet } from "./TeamDock";
 import TeamWhatsAppSheet from "./TeamWhatsAppSheet";
 import { TeamDatePicker, TeamTimePicker } from "./TeamDatePicker";
@@ -453,6 +460,15 @@ export default function TeamClient() {
     if (cached) setUser(cached);
     void probeSession();
   }, [probeSession]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tabParam = new URLSearchParams(window.location.search).get("tab");
+    const allowed = TEAM_TABS.map((t) => t.id) as TeamTab[];
+    if (tabParam && allowed.includes(tabParam as TeamTab)) {
+      setTab(tabParam as TeamTab);
+    }
+  }, []);
 
   useEffect(() => {
     if (!user) return;

@@ -208,6 +208,15 @@ export async function listReadyToStartJobs(assigneeId: string): Promise<ReadyJob
   }));
 }
 
+/** Designer closes (Upload & close) on a single IST calendar day. */
+export async function designerClosesOnDay(
+  assigneeId: string,
+  ymd: string
+): Promise<number> {
+  const { closed } = await dayActivity(assigneeId, ymd);
+  return closed;
+}
+
 async function dayActivity(assigneeId: string, ymd: string): Promise<{
   closed: number;
   firstStart: Date | null;
