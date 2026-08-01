@@ -96,21 +96,18 @@ type CloseRow = {
 
 type ClassifiedClose =
   | { kind: "workday"; creditYmd: string; sameDay: boolean }
-  | { kind: "sunday_same_day"; sundayYmd: string }
+  | { kind: "sunday_work"; sundayYmd: string }
   | { kind: "skip" };
 
 /**
- * Anti-cheat attribution:
- * - Start Mon–Sat → credit that workday (close can be later).
- * - Start Sun + close Sun → Sunday pool (catch-up first, else holiday points).
- * - Start Sun + close Mon+ → credit the close workday only (no Sunday points).
- * Holiday points only from same-day extras (workday) or leftover Sunday same-day.
+ * Attribution:
+ * - Start Mon–Sat → credit that workday. Points only if Start+Close same day (extras).
+ * - Start Sunday → Sunday work (even if closed Monday): catch-up first, else holiday point.
+ * - No start stamp → credit close workday, no points.
  */
 export function classifyDesignerClose(row: CloseRow): ClassifiedClose {
   const startYmd = row.startedAt ? istYmd(row.startedAt) : null;
-  const closeYmd = row.uploadedAt
-    ? istYmd(row.uploadedAt)
-    : startYmd;
+  const closeYmd = row.uploadedAt ? istYmd(row.uploadedAt) : startYmd;
   if (!closeYmd && !startYmd) {
     if (row.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(row.dueDate)) {
       return {
@@ -123,25 +120,17 @@ export function classifyDesignerClose(row: CloseRow): ClassifiedClose {
   }
 
   const startSun = startYmd ? dayIdForYmd(startYmd) === "sun" : false;
-  const closeSun = closeYmd ? dayIdForYmd(closeYmd) === "sun" : false;
 
-  if (startSun && closeSun && startYmd && closeYmd) {
-    return { kind: "sunday_same_day", sundayYmd: closeYmd };
-  }
-
-  // Started Sunday, finished later → counts on the close workday only
-  if (startSun && closeYmd && !closeSun) {
-    return {
-      kind: "workday",
-      creditYmd: previousStackWorkday(closeYmd),
-      sameDay: false,
-    };
+  // Any job started on Sunday = Sunday work → catch-up or holiday point
+  if (startSun && startYmd) {
+    return { kind: "sunday_work", sundayYmd: startYmd };
   }
 
   if (startYmd && !startSun) {
     return {
       kind: "workday",
       creditYmd: previousStackWorkday(startYmd),
+      // Extra points only when opened + closed the same calendar day
       sameDay: Boolean(closeYmd && startYmd === closeYmd),
     };
   }
@@ -169,7 +158,7 @@ export function creditWorkdayYmd(
     dueDate: dueDate ?? "",
   });
   if (c.kind === "workday") return c.creditYmd;
-  if (c.kind === "sunday_same_day") return previousStackWorkday(addDaysYmd(c.sundayYmd, -1));
+  if (c.kind === "sunday_work") return previousStackWorkday(addDaysYmd(c.sundayYmd, -1));
   return null;
 }
 
@@ -230,7 +219,7 @@ async function computeCloseLedger(
   for (const r of rows) {
     const c = classifyDesignerClose(r);
     if (c.kind === "skip") continue;
-    if (c.kind === "sunday_same_day") {
+    if (c.kind === "sunday_work") {
       if (c.sundayYmd >= fromYmd && c.sundayYmd <= toYmd) sundayPool.push(c.sundayYmd);
       continue;
     }
@@ -252,7 +241,7 @@ async function computeCloseLedger(
     holidayPoints += holidayPointsFromWorkday(b.total, b.sameDay);
   }
 
-  // Sunday same-day → catch-up on oldest short workdays, else holiday points
+  // Sunday-started work → catch-up on oldest short workdays, else holiday points
   sundayPool.sort();
   for (const sundayYmd of sundayPool) {
     let placed = false;
@@ -555,7 +544,7 @@ async function dayActivity(assigneeId: string, ymd: string): Promise<{
   let sundaySameDayCloses = 0;
   for (const e of ends) {
     const c = classifyDesignerClose(e);
-    if (c.kind === "sunday_same_day") sundaySameDayCloses += 1;
+    if (c.kind === "sunday_work") sundaySameDayCloses += 1;
   }
   return {
     closed: creditClosed,

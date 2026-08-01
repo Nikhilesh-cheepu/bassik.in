@@ -1008,13 +1008,13 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       {queueView !== "holiday" ? (
         <div className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
           <p className="text-[12px] leading-snug text-white/65">
-            Catch-up first, then focus pack. Closes count on{" "}
-            <span className="font-semibold text-white/90">Start</span> day. Sunday = holiday — same-day
-            Sunday work fills catch-up, then holiday points.
+            Catch-up first, then the daily pack. Extra = Start + Close{" "}
+            <span className="font-semibold text-white/90">same day</span> for holiday points. Sunday =
+            holiday — work the next-day pack today for points.
           </p>
           <span
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/15 text-[12px] font-bold text-white/45"
-            title={`Start Sun + close Mon = Monday only (no Sunday points). Holiday points need same-day open+close. ${DESIGNER_POINTS_PER_LEAVE} points = 1 leave (ask permission). ${DESIGNER_OPTIONAL_LEAVES_PER_MONTH} optional leaves/mo.`}
+            title={`Mon–Sat: 4/day by Start day. Extras need same-day Start+Close or they only fill that day’s count. Sunday: no today’s 4 — next-day pack; Sunday-started jobs = catch-up then points (even if closed Mon). ${DESIGNER_POINTS_PER_LEAVE} pts = 1 leave.`}
           >
             i
           </span>
@@ -2117,11 +2117,11 @@ https://instagram.com/…"
                 )}
                 {renderSection(
                   visiblePerf[0]?.isSundayHoliday
-                    ? "Catch-up pack"
+                    ? "Next day pack"
                     : `Today’s ${DESIGNER_DAILY_TARGET}`,
                   visiblePerf[0]?.isSundayHoliday
-                    ? "Sunday holiday — work here counts toward Sat / earlier (by start day)."
-                    : "Your focus pack. Closes count on the day you Start. Extras move to Up next.",
+                    ? "Sunday holiday — no today’s target. Complete these today to add holiday points (after catch-up)."
+                    : "Focus pack. Extra points only if you Start + Close the same day.",
                   openParts.todayPack,
                   "today",
                   "text-emerald-200"
@@ -2152,18 +2152,18 @@ https://instagram.com/…"
                     [
                       [
                         "Catch up first",
-                        "Missed / past due — finish these before today’s list.",
+                        "Missed / past due — finish these before the focus pack.",
                         openParts.catchUp,
                         "catchUp",
                         "text-orange-200",
                       ],
                       [
                         visiblePerf[0]?.isSundayHoliday
-                          ? "Catch-up pack"
+                          ? "Next day pack"
                           : `Today’s ${DESIGNER_DAILY_TARGET}`,
                         visiblePerf[0]?.isSundayHoliday
-                          ? "Sunday holiday — work here counts toward Sat / earlier (by start day)."
-                          : "Your focus pack. Drag ≡ to reorder; closes count on Start day.",
+                          ? "Sunday holiday — complete these today to add holiday points (after catch-up)."
+                          : "Focus pack. Drag ≡ to reorder. Extra = Start + Close same day.",
                         openParts.todayPack,
                         "today",
                         "text-emerald-200",
@@ -2539,8 +2539,9 @@ function HolidayTabPanel({ designers }: { designers: DesignerPerformanceDto[] })
               )}
             </ul>
             <p className="mt-2 text-[11px] leading-snug text-white/40">
-              Same-day Sunday work fills catch-up first, then points. Start Sun / close Mon counts as
-              Monday only — no free Sunday points.
+              Sunday: work the next-day pack. Jobs you Start on Sunday count as Sunday work (catch-up
+              first, then points) even if you Close on Monday. Mon–Sat extras need Start+Close same
+              day for points.
             </p>
           </div>
         );
@@ -2588,7 +2589,7 @@ function DesignerPerformanceCard({
             <p className="mt-0.5 text-[18px] font-semibold text-white/90">
               No daily target
               <span className="ml-2 text-[12px] font-medium text-white/45">
-                · Sunday same-day done {perf.catchUpClosedToday}
+                · Sunday starts done {perf.catchUpClosedToday} (catch-up / points)
               </span>
             </p>
           ) : (
