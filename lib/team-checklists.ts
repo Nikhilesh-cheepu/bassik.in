@@ -739,7 +739,8 @@ export function buildChecklistBoard(
         const done = Boolean(item.completionsByDate[targetDate]);
         if (done) continue;
 
-        const pastDue = dueOffset > 0 || isStoryOverdue(targetDate, now);
+        // Overdue only after design due datetime (day-before @ 8 PM IST), not midnight.
+        const pastDue = now.getTime() > storyDesignDueAtMs(targetDate);
         const row = applyHandoffToRow(
           {
             ...item,
@@ -783,7 +784,7 @@ export function buildChecklistBoard(
         const done = Boolean(item.completionsByDate[targetDate]);
         if (done) continue;
         if (focus > addDaysYmd(dueDate, OVERDUE_LOOKBACK_DAYS)) continue;
-        const pastDue = focus > dueDate || isWeekendAdOverdue(targetDate, now);
+        const pastDue = isWeekendAdOverdue(targetDate, now);
         const adRow = applyHandoffToRow(
           {
             ...item,
@@ -857,7 +858,8 @@ export function buildChecklistBoard(
               outletTitle: outletKindTitle(outletId ?? postsList.title, "posts"),
               targetDate,
               dueLabel: weekendPostDueLabel(targetDate, focus),
-              isOverdue: focus > targetDate || isWeekendPostOverdue(targetDate, now),
+              // Design (−4d 8 PM) or publish (day-before 11 PM) — never midnight-of-due-day
+              isOverdue: isWeekendPostOverdue(targetDate, now),
             },
             targetDate
           );

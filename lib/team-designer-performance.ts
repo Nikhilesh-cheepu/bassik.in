@@ -1,36 +1,38 @@
 import { prisma } from "@/lib/db";
 import { addDaysYmd, dayIdForYmd, getTodayKey } from "@/lib/team-checklists";
 import { teamOutletLabel } from "@/lib/team-outlets";
-import type { ChecklistDayId } from "@/lib/team-checklist-templates";
 import {
-  DESIGNER_ASSIGNEE_WEEKDAY,
-  DESIGNER_ASSIGNEE_WEEKEND,
   DESIGNER_DAILY_TARGET,
   DESIGNER_PERFORMANCE_IDS,
   DESIGNER_STACK_START_DATE,
+  DESIGNER_WEEKLY_TARGET,
   designerDisplayName,
   type DesignerDaySeriesPoint,
+  type DesignerMissedDayDto,
   type DesignerMetricsDto,
   type DesignerPerformanceDto,
   type DesignerStackDto,
 } from "@/lib/team-designer-jobs-shared";
-import { computeDesignerMetrics } from "@/lib/team-designer-jobs";
+import {
+  computeDesignerMetrics,
+  isDesignerJobPastDue,
+  DESIGNER_UPLOAD_DUE_TIME,
+  weekStartMonday,
+} from "@/lib/team-designer-jobs";
 
 /**
- * Days that add +4 to the cumulative target.
- * Sunday posts still exist in the queue — Sunday just isn’t a required workday for the stack.
+ * Target workdays for every designer: Mon–Sat (6 × 4 = 24/week).
+ * Sunday is off the stacked target — queue/Sunday posts can still exist.
  */
-const STACK_WEEKEND_DAYS: ChecklistDayId[] = ["fri", "sat"];
-const STACK_WEEKDAY_DAYS: ChecklistDayId[] = ["mon", "tue", "wed", "thu"];
-
-function isStackWorkday(assigneeId: string, ymd: string): boolean {
-  const day = dayIdForYmd(ymd);
-  // Break from target only — does not remove Sunday go-live jobs from Mahesh’s queue
-  if (day === "sun") return false;
-  if (assigneeId === DESIGNER_ASSIGNEE_WEEKEND) return STACK_WEEKEND_DAYS.includes(day);
-  if (assigneeId === DESIGNER_ASSIGNEE_WEEKDAY) return STACK_WEEKDAY_DAYS.includes(day);
-  return true;
+function isStackWorkday(_assigneeId: string, ymd: string): boolean {
+  return dayIdForYmd(ymd) !== "sun";
 }
+
+const TZ = "Asia/Kolkata";
+const SERIES_DAYS = 14;
+/** After this IST hour, under-target becomes a hard red flag. */
+export const DESIGNER_RED_FLAG_HOUR_IST = 18;
+
 
 function monthKeyFromYmd(ymd: string): string {
   return ymd.slice(0, 7);
@@ -87,6 +89,55 @@ async function countDesignerCloses(
   });
 }
 
+async function listMissedWorkdays(
+  assigneeId: string,
+  fromYmd: string,
+  toYmd: string,
+  cap = 8
+): Promise<DesignerMissedDayDto[]> {
+  if (fromYmd > toYmd) return [];
+  const { start } = istDayBounds(fromYmd);
+  const { end } = istDayBounds(toYmd);
+  const uploads = await prisma.teamDesignerJob.findMany({
+    where: {
+      assigneeId,
+      status: "DESIGN_DONE",
+      closedByRole: "designer",
+      uploadedAt: { gte: start, lte: end },
+    },
+    select: { uploadedAt: true },
+  });
+  const closedByDay = new Map<string, number>();
+  for (const u of uploads) {
+    if (!u.uploadedAt) continue;
+    const key = u.uploadedAt.toLocaleDateString("en-CA", { timeZone: TZ });
+    closedByDay.set(key, (closedByDay.get(key) ?? 0) + 1);
+  }
+  const missed: DesignerMissedDayDto[] = [];
+  let cur = toYmd;
+  for (let i = 0; i < 400 && cur >= fromYmd; i++) {
+    if (isStackWorkday(assigneeId, cur)) {
+      // Don’t ding “today” before work hours end — only closed days / after red-flag hour
+      const closed = closedByDay.get(cur) ?? 0;
+      if (closed < DESIGNER_DAILY_TARGET) {
+        if (cur === toYmd && istHourNow() < DESIGNER_RED_FLAG_HOUR_IST) {
+          // still in progress today
+        } else {
+          missed.push({
+            date: cur,
+            closed,
+            target: DESIGNER_DAILY_TARGET,
+            missed: DESIGNER_DAILY_TARGET - closed,
+          });
+          if (missed.length >= cap) break;
+        }
+      }
+    }
+    cur = addDaysYmd(cur, -1);
+  }
+  return missed;
+}
+
 export async function computeDesignerStack(
   assigneeId: string,
   today = getTodayKey()
@@ -124,6 +175,27 @@ export async function computeDesignerStack(
     }
   }
 
+  const net = closedSoFar - targetSoFar - lastMonthDeficit;
+  const stackedBehind = Math.max(0, -net);
+  const surplusSoFar = Math.max(0, net);
+  const leaveDaysEarned = Math.floor(surplusSoFar / DESIGNER_DAILY_TARGET);
+
+  const weekStart = weekStartMonday(today);
+  const weekKey = weekStart;
+  const weekRangeStart = weekStart < countFrom ? countFrom : weekStart;
+  const weekDaysSoFar =
+    effectiveToday < weekRangeStart
+      ? 0
+      : countWorkdaysInclusive(assigneeId, weekRangeStart, effectiveToday);
+  const weekTargetSoFar = weekDaysSoFar * DESIGNER_DAILY_TARGET;
+  const weekClosed =
+    effectiveToday < weekRangeStart
+      ? 0
+      : await countDesignerCloses(assigneeId, weekRangeStart, effectiveToday);
+
+  const missFrom = rangeStart < countFrom ? countFrom : rangeStart;
+  const missedDays = await listMissedWorkdays(assigneeId, missFrom, effectiveToday);
+
   return {
     countFrom,
     monthKey,
@@ -133,14 +205,16 @@ export async function computeDesignerStack(
     deficitSoFar,
     lastMonthKey,
     lastMonthDeficit,
-    stackedBehind: deficitSoFar + lastMonthDeficit,
+    stackedBehind,
+    surplusSoFar,
+    leaveDaysEarned,
+    weekKey,
+    weekTargetSoFar,
+    weekClosed,
+    weekTargetFull: DESIGNER_WEEKLY_TARGET,
+    missedDays,
   };
 }
-
-const TZ = "Asia/Kolkata";
-const SERIES_DAYS = 14;
-/** After this IST hour, under-target becomes a hard red flag. */
-export const DESIGNER_RED_FLAG_HOUR_IST = 18;
 
 export function istHourNow(d = new Date()): number {
   const hour = Number(
@@ -196,16 +270,20 @@ export async function listReadyToStartJobs(assigneeId: string): Promise<ReadyJob
       dueTime: true,
     },
   });
-  return rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    outletLabel: teamOutletLabel(r.outletId),
-    postDate: r.postDate,
-    dueDate: r.dueDate,
-    dueTime: r.dueTime || "20:00",
-    isOverdue: r.dueDate < today,
-    isDueToday: r.dueDate === today,
-  }));
+  return rows.map((r) => {
+    const dueTime = r.dueTime || DESIGNER_UPLOAD_DUE_TIME;
+    const past = isDesignerJobPastDue({ dueDate: r.dueDate, dueTime });
+    return {
+      id: r.id,
+      title: r.title,
+      outletLabel: teamOutletLabel(r.outletId),
+      postDate: r.postDate,
+      dueDate: r.dueDate,
+      dueTime,
+      isOverdue: past,
+      isDueToday: r.dueDate === today && !past,
+    };
+  });
 }
 
 /** Designer closes (Upload & close) on a single IST calendar day. */
@@ -323,32 +401,47 @@ export async function computeDesignerPerformance(
 ): Promise<DesignerPerformanceDto> {
   const today = getTodayKey();
   const hour = istHourNow();
-  const [metrics, activity, readyToStart, overdueReady, series, stack] =
+  const [metrics, activity, readyToStart, readyDueRows, series, stack] =
     await Promise.all([
       computeDesignerMetrics(assigneeId),
       dayActivity(assigneeId, today),
       prisma.teamDesignerJob.count({
         where: { assigneeId, status: "READY_TO_DESIGN" },
       }),
-      prisma.teamDesignerJob.count({
-        where: {
-          assigneeId,
-          status: "READY_TO_DESIGN",
-          dueDate: { lt: today },
-        },
+      prisma.teamDesignerJob.findMany({
+        where: { assigneeId, status: "READY_TO_DESIGN" },
+        select: { dueDate: true, dueTime: true },
       }),
       buildSeries(assigneeId, today),
       computeDesignerStack(assigneeId, today),
     ]);
+  const overdueReady = readyDueRows.filter((r) =>
+    isDesignerJobPastDue({
+      dueDate: r.dueDate,
+      dueTime: r.dueTime || DESIGNER_UPLOAD_DUE_TIME,
+    })
+  ).length;
 
   const closedToday = activity.closed;
-  const underTarget = closedToday < DESIGNER_DAILY_TARGET;
+  const isSunday = dayIdForYmd(today) === "sun";
+  // Sunday is off the 4/day stack target (queue work can still happen)
+  const underTarget = !isSunday && closedToday < DESIGNER_DAILY_TARGET;
   const redFlag =
     (underTarget && hour >= DESIGNER_RED_FLAG_HOUR_IST) || stack.stackedBehind > 0;
   // On pace if at least ~1 job per ~4.5 working hours toward 4 by evening (rough)
-  const expectedByNow =
-    hour < 11 ? 0 : hour < 14 ? 1 : hour < 17 ? 2 : hour < DESIGNER_RED_FLAG_HOUR_IST ? 3 : 4;
-  const onPace = closedToday >= Math.min(DESIGNER_DAILY_TARGET, expectedByNow);
+  const expectedByNow = isSunday
+    ? 0
+    : hour < 11
+      ? 0
+      : hour < 14
+        ? 1
+        : hour < 17
+          ? 2
+          : hour < DESIGNER_RED_FLAG_HOUR_IST
+            ? 3
+            : 4;
+  const onPace =
+    isSunday || closedToday >= Math.min(DESIGNER_DAILY_TARGET, expectedByNow);
 
   return {
     assigneeId,

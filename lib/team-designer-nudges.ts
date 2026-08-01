@@ -62,13 +62,22 @@ function formatDayLabel(ymd: string): string {
 function shortMissLine(jobs: ReadyJobLine[]): string | null {
   if (jobs.length === 0) return null;
   const j = jobs[0]!;
+  const time = (j.dueTime || "20:00").slice(0, 5);
   const day = j.isOverdue
-    ? `overdue (${j.dueDate.slice(8)}/${j.dueDate.slice(5, 7)})`
+    ? `OVERDUE (was ${j.dueDate.slice(8)}/${j.dueDate.slice(5, 7)} ${time})`
     : j.isDueToday
-      ? "due today"
-      : `due ${j.dueDate.slice(8)}/${j.dueDate.slice(5, 7)}`;
+      ? `due today by ${time}`
+      : `due ${j.dueDate.slice(8)}/${j.dueDate.slice(5, 7)} ${time}`;
   const extra = jobs.length > 1 ? ` +${jobs.length - 1} more` : "";
   return `${j.title} — ${day}${extra}`;
+}
+
+function missedDaysLine(
+  missedDays: { date: string; closed: number; missed: number }[] | undefined
+): string | null {
+  if (!missedDays?.length) return null;
+  const m = missedDays[0]!;
+  return `Missed on ${formatDayLabel(m.date)}: closed ${m.closed}/4 (short ${m.missed}). Do that catch-up now.`;
 }
 
 function isBeforeWorkStart(hour: number): boolean {
@@ -117,6 +126,8 @@ function buildNudgeBody(params: {
   readyToStart: number;
   readyJobs: ReadyJobLine[];
   stackedBehind: number;
+  leaveDaysEarned?: number;
+  missedDays?: { date: string; closed: number; missed: number }[];
   hour: number;
   activeTitle?: string | null;
   activeAgeMs?: number | null;
@@ -128,11 +139,15 @@ function buildNudgeBody(params: {
   const focusClosed = beforeWork ? params.closedYesterday : params.closedToday;
   const focusLabel = formatDayLabel(focusYmd);
   const miss = shortMissLine(params.readyJobs);
+  const dayMiss = missedDaysLine(params.missedDays);
   const sun = sundayNote(params.todayYmd);
+  const leave = params.leaveDaysEarned ?? 0;
   const stackBit =
     params.stackedBehind > 0
-      ? `From ${formatDayLabel(DESIGNER_STACK_START_DATE)} you’re ${params.stackedBehind} behind — that stacks up. Clear it ASAP.`
-      : "Missed work stacks onto the next day — clear it ASAP.";
+      ? `From ${formatDayLabel(DESIGNER_STACK_START_DATE)} you’re ${params.stackedBehind} behind (Mon–Sat × 4 = 24/week). Clear it ASAP.`
+      : leave > 0
+        ? `On track — leave banked: ${leave} day(s) (+4 over target = 1 leave).`
+        : "Target: 4/day Mon–Sat (24/week). Extra closes bank leave.";
 
   const focusLine = `On ${focusLabel} you only closed ${focusClosed}/${DESIGNER_DAILY_TARGET}.`;
   const pendingBit = miss ? `Pending: ${miss}` : null;
@@ -142,9 +157,10 @@ function buildNudgeBody(params: {
     case "no_start":
       head = [
         `${params.name} — work has started and you haven’t begun today’s queue.`,
+        dayMiss,
         pendingBit ?? `${params.readyToStart} job(s) waiting.`,
         stackBit,
-      ];
+      ].filter(Boolean) as string[];
       break;
     case "slow_task":
       head = [
@@ -155,7 +171,7 @@ function buildNudgeBody(params: {
     case "behind_pace":
       head = [
         `${params.name} — you’re behind.`,
-        focusLine,
+        dayMiss ?? focusLine,
         pendingBit,
         stackBit,
       ].filter(Boolean) as string[];
@@ -163,15 +179,15 @@ function buildNudgeBody(params: {
     case "deadline_soon":
       head = [
         `${params.name} — you missed / are late on this:`,
-        pendingBit ?? "Ready work due or overdue.",
-        beforeWork ? focusLine : null,
+        pendingBit ?? "Ready work past its 8 PM due time.",
+        dayMiss ?? (beforeWork ? focusLine : null),
         stackBit,
       ].filter(Boolean) as string[];
       break;
     case "missed_target":
       head = [
         `${params.name} — missed target.`,
-        focusLine,
+        dayMiss ?? focusLine,
         pendingBit,
         stackBit,
       ].filter(Boolean) as string[];
@@ -179,9 +195,9 @@ function buildNudgeBody(params: {
     default:
       head = [
         `${params.name} — clear pending designer work ASAP.`,
-        focusLine,
+        dayMiss ?? focusLine,
         stackBit,
-      ];
+      ].filter(Boolean) as string[];
   }
 
   return [
@@ -407,6 +423,8 @@ export async function evaluateAndSendDesignerNudges(opts?: {
         readyToStart: perf.readyToStart,
         readyJobs: jobs,
         stackedBehind: stack.stackedBehind,
+        leaveDaysEarned: stack.leaveDaysEarned,
+        missedDays: stack.missedDays,
         hour,
         activeTitle: active?.title,
         activeAgeMs,
@@ -488,6 +506,8 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
         readyToStart: perf.readyToStart,
         readyJobs: jobs,
         stackedBehind: stack.stackedBehind,
+        leaveDaysEarned: stack.leaveDaysEarned,
+        missedDays: stack.missedDays,
         hour,
         activeTitle: extra?.activeTitle,
         activeAgeMs: extra?.activeAgeMs,

@@ -365,13 +365,27 @@ type SeedResult = {
   toDate: string;
 };
 
-/** Mark open jobs whose design due date is before today as done (no backlog chase). */
+/** Mark open jobs past their design due datetime (date + 8 PM IST), not midnight. */
 export async function closePastDueDesignerJobs(today = getTodayKey()): Promise<number> {
-  const result = await prisma.teamDesignerJob.updateMany({
+  const open = await prisma.teamDesignerJob.findMany({
     where: {
-      dueDate: { lt: today },
+      // Only consider due calendar day ≤ today; then filter by 20:00 IST
+      dueDate: { lte: today },
       status: { in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS"] },
     },
+    select: { id: true, dueDate: true, dueTime: true },
+  });
+  const pastIds = open
+    .filter((j) =>
+      isDesignerJobPastDue({
+        dueDate: j.dueDate,
+        dueTime: j.dueTime || DESIGNER_UPLOAD_DUE_TIME,
+      })
+    )
+    .map((j) => j.id);
+  if (pastIds.length === 0) return 0;
+  const result = await prisma.teamDesignerJob.updateMany({
+    where: { id: { in: pastIds } },
     data: {
       status: "DESIGN_DONE",
       uploadedAt: null,
@@ -512,7 +526,7 @@ export async function seedDesignerMonth(params: {
   });
 }
 
-function weekStartMonday(today: string): string {
+export function weekStartMonday(today: string): string {
   const dayId = dayIdForYmd(today);
   const idx = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].indexOf(dayId);
   return addDaysYmd(today, -Math.max(0, idx));
@@ -523,7 +537,7 @@ export async function computeDesignerMetrics(assigneeId?: string): Promise<Desig
   const weekStart = weekStartMonday(today);
   const whereAssignee = assigneeId ? { assigneeId } : {};
 
-  const [closedToday, closedWeek, readyBriefs, inProgress, overdueOpen, weekUploads] =
+  const [closedToday, closedWeek, readyBriefs, inProgress, openDueRows, weekUploads] =
     await Promise.all([
       prisma.teamDesignerJob.count({
         where: {
@@ -551,12 +565,13 @@ export async function computeDesignerMetrics(assigneeId?: string): Promise<Desig
       prisma.teamDesignerJob.count({
         where: { ...whereAssignee, status: "IN_PROGRESS" },
       }),
-      prisma.teamDesignerJob.count({
+      prisma.teamDesignerJob.findMany({
         where: {
           ...whereAssignee,
           status: { not: "DESIGN_DONE" },
-          dueDate: { lt: today },
+          dueDate: { lte: today },
         },
+        select: { dueDate: true, dueTime: true },
       }),
       prisma.teamDesignerJob.findMany({
         where: {
@@ -568,6 +583,13 @@ export async function computeDesignerMetrics(assigneeId?: string): Promise<Desig
         select: { dueDate: true, dueTime: true, uploadedAt: true },
       }),
     ]);
+
+  const overdueOpen = openDueRows.filter((j) =>
+    isDesignerJobPastDue({
+      dueDate: j.dueDate,
+      dueTime: j.dueTime || DESIGNER_UPLOAD_DUE_TIME,
+    })
+  ).length;
 
   let onTime = 0;
   let late = 0;

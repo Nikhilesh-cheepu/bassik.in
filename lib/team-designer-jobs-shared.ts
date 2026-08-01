@@ -15,6 +15,8 @@ export const DESIGNER_WEEKDAY_DUE_TIME = "20:00";
 export const DESIGNER_WEEKEND_DUE_TIME = "20:00";
 export const DESIGNER_LAST_WA_TIME = "19:00";
 export const DESIGNER_DAILY_TARGET = 4;
+/** Mon–Sat workdays (Sunday off target). 6 × 4 = 24. */
+export const DESIGNER_WEEKLY_TARGET = DESIGNER_DAILY_TARGET * 6;
 /** Always schedule this many days forward from today (not calendar months). */
 export const DESIGNER_WINDOW_DAYS = 30;
 /** Cumulative 4/day stack starts here (IST). Misses carry forward. Sunday = break. */
@@ -164,12 +166,20 @@ export type DesignerDaySeriesPoint = {
   lastEnd: string | null;
 };
 
-/** Cumulative target vs done from DESIGNER_STACK_START_DATE (workdays). */
+/** One under-target workday for miss copy. */
+export type DesignerMissedDayDto = {
+  date: string;
+  closed: number;
+  target: number;
+  missed: number;
+};
+
+/** Cumulative target vs done from DESIGNER_STACK_START_DATE (Mon–Sat workdays). */
 export type DesignerStackDto = {
   countFrom: string;
   monthKey: string;
   workDaysSoFar: number;
-  /** 4 × workdays in this month (from max(start, monthStart) → today) */
+  /** 4 × Mon–Sat workdays in this month (from max(start, monthStart) → today) */
   targetSoFar: number;
   /** Designer closes counted toward stack */
   closedSoFar: number;
@@ -180,6 +190,17 @@ export type DesignerStackDto = {
   lastMonthDeficit: number;
   /** What they still owe overall: this-month deficit + last-month carry */
   stackedBehind: number;
+  /** Extra closes beyond target (after clearing carry) */
+  surplusSoFar: number;
+  /** floor(surplus / 4) — each +4 over target banks one leave day */
+  leaveDaysEarned: number;
+  /** This ISO week (Mon–Sat): target through today and closes */
+  weekKey: string;
+  weekTargetSoFar: number;
+  weekClosed: number;
+  weekTargetFull: number;
+  /** Recent under-target workdays (newest first), for WA / UI */
+  missedDays: DesignerMissedDayDto[];
 };
 
 export type DesignerPerformanceDto = {

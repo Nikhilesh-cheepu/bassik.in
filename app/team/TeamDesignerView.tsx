@@ -1119,7 +1119,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       <p className="text-[11px] leading-relaxed text-white/40">
         {queueView === "closed"
           ? `Done jobs · Designer can Edit upload · Admin can Delete upload / Force clear · Files auto-expire after ${HANDOFF_TTL_DAYS} days`
-          : `Mandatory ${DESIGNER_DAILY_TARGET}/day · Sunday posts stay in queue · no 4/day owed on Sundays · Mahesh Fri–Sat–Sun posts (−4d @ 8 PM) · Jeslyn Mon–Thu (day before @ 8 PM) · One job at a time`}
+          : `Mandatory ${DESIGNER_DAILY_TARGET}/day Mon–Sat (24/week) · Sunday off target · +4 over = 1 leave · Due = date + 8 PM IST · Mahesh Fri–Sat–Sun posts (−4d) · Jeslyn Mon–Thu (day before) · One job at a time`}
       </p>
 
       {isAdmin && queueView === "closed" ? (
@@ -1445,8 +1445,9 @@ https://instagram.com/…"
                   ) : null}
                   <span className="text-white/50">
                     Design due {job.dueDate.slice(8)}/{job.dueDate.slice(5, 7)} ·{" "}
-                    {(job.dueTime || "20:00").replace(":00", "")}:00
+                    {(job.dueTime || "20:00").slice(0, 5)} IST
                     {job.lane === "WEEKDAY" ? " (day before)" : " (−4 days)"}
+                    {job.isDueToday && !job.isOverdue ? " · not overdue until 8 PM" : ""}
                   </span>
                 </div>
                 {/* timingTick refreshes in-progress duration */}
@@ -2433,7 +2434,7 @@ function DesignerPerformanceCard({
       {stack ? (
         <div className="mt-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">
-            So far (from {DESIGNER_STACK_START_DATE})
+            So far (from {DESIGNER_STACK_START_DATE}) · Mon–Sat × {perf.dailyTarget} · Sun off
           </p>
           <p className="mt-1 text-[14px] font-semibold tabular-nums text-white/90">
             Target {stack.targetSoFar}
@@ -2450,10 +2451,16 @@ function DesignerPerformanceCard({
                 <span className="text-emerald-300">On track</span>
               </>
             )}
+            {(stack.leaveDaysEarned ?? 0) > 0 ? (
+              <>
+                <span className="mx-1.5 text-white/30">·</span>
+                <span className="text-cyan-300">Leave {stack.leaveDaysEarned}</span>
+              </>
+            ) : null}
           </p>
           <p className="mt-0.5 text-[11px] text-white/45">
-            {stack.workDaysSoFar} work day{stack.workDaysSoFar === 1 ? "" : "s"} this month ×{" "}
-            {perf.dailyTarget}/day
+            This week {stack.weekClosed}/{stack.weekTargetFull} (so far {stack.weekClosed}/
+            {stack.weekTargetSoFar})
             {stack.lastMonthDeficit > 0 && stack.lastMonthKey ? (
               <>
                 {" "}
@@ -2461,15 +2468,30 @@ function DesignerPerformanceCard({
               </>
             ) : null}
           </p>
+          {stack.missedDays?.[0] ? (
+            <p className="mt-1 text-[11px] text-red-200/90">
+              Missed {stack.missedDays[0].date.slice(8)}/{stack.missedDays[0].date.slice(5, 7)}:{" "}
+              {stack.missedDays[0].closed}/{stack.missedDays[0].target} (short{" "}
+              {stack.missedDays[0].missed}) — catch up
+            </p>
+          ) : null}
         </div>
       ) : null}
       {perf.underTarget ? (
         <p className="mt-1.5 text-[12px] text-amber-100/90">
           Still need {perf.dailyTarget - perf.closedToday} more today. Misses stack into “Behind”.
+          +{perf.dailyTarget} over target = 1 leave day.
         </p>
       ) : (
         <p className="mt-1.5 text-[12px] text-emerald-100/85">
-          Hit today’s {perf.dailyTarget} — stay available if new Ready work lands.
+          {perf.closedToday >= perf.dailyTarget
+            ? `Hit today’s ${perf.dailyTarget}${
+                perf.closedToday > perf.dailyTarget
+                  ? ` (+${perf.closedToday - perf.dailyTarget} toward leave)`
+                  : ""
+              }.`
+            : "Sunday — no 4/day stack target; clear pending queue if needed."}{" "}
+          Stay available if new Ready work lands.
         </p>
       )}
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/55">
