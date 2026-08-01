@@ -73,22 +73,77 @@ function countWorkdaysInclusive(
   return n;
 }
 
+function istYmd(d: Date): string {
+  return d.toLocaleDateString("en-CA", { timeZone: TZ });
+}
+
+/** Snap Sunday (and any non Mon–Sat day) back to the previous stack workday. */
+function previousStackWorkday(ymd: string): string {
+  let cur = ymd;
+  for (let i = 0; i < 14; i++) {
+    if (isStackWorkday("", cur)) return cur;
+    cur = addDaysYmd(cur, -1);
+  }
+  return ymd;
+}
+
+/**
+ * Credit day for a close = day the designer started the job (IST).
+ * Sunday starts/closes never credit Sunday — they land on the prior workday (catch-up).
+ */
+export function creditWorkdayYmd(
+  startedAt: Date | null | undefined,
+  uploadedAt: Date | null | undefined,
+  dueDate?: string | null
+): string | null {
+  const anchor = startedAt ?? uploadedAt;
+  if (anchor) return previousStackWorkday(istYmd(anchor));
+  if (dueDate && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    return previousStackWorkday(dueDate);
+  }
+  return null;
+}
+
+async function loadClosesByCreditDay(
+  assigneeId: string,
+  fromYmd: string,
+  toYmd: string
+): Promise<Map<string, number>> {
+  const byDay = new Map<string, number>();
+  if (fromYmd > toYmd) return byDay;
+  const fetchFrom = addDaysYmd(fromYmd, -14);
+  const fetchTo = addDaysYmd(toYmd, 2);
+  const { start } = istDayBounds(fetchFrom);
+  const { end } = istDayBounds(fetchTo);
+  const rows = await prisma.teamDesignerJob.findMany({
+    where: {
+      assigneeId,
+      status: "DESIGN_DONE",
+      closedByRole: "designer",
+      OR: [
+        { startedAt: { gte: start, lte: end } },
+        { uploadedAt: { gte: start, lte: end } },
+      ],
+    },
+    select: { startedAt: true, uploadedAt: true, dueDate: true },
+  });
+  for (const r of rows) {
+    const credit = creditWorkdayYmd(r.startedAt, r.uploadedAt, r.dueDate);
+    if (!credit || credit < fromYmd || credit > toYmd) continue;
+    byDay.set(credit, (byDay.get(credit) ?? 0) + 1);
+  }
+  return byDay;
+}
+
 async function countDesignerCloses(
   assigneeId: string,
   fromYmd: string,
   toYmd: string
 ): Promise<number> {
-  if (fromYmd > toYmd) return 0;
-  const { start } = istDayBounds(fromYmd);
-  const { end } = istDayBounds(toYmd);
-  return prisma.teamDesignerJob.count({
-    where: {
-      assigneeId,
-      status: "DESIGN_DONE",
-      closedByRole: "designer",
-      uploadedAt: { gte: start, lte: end },
-    },
-  });
+  const byDay = await loadClosesByCreditDay(assigneeId, fromYmd, toYmd);
+  let n = 0;
+  for (const v of byDay.values()) n += v;
+  return n;
 }
 
 async function listMissedWorkdays(
@@ -98,33 +153,19 @@ async function listMissedWorkdays(
   cap = 8
 ): Promise<DesignerMissedDayDto[]> {
   if (fromYmd > toYmd) return [];
-  const { start } = istDayBounds(fromYmd);
-  const { end } = istDayBounds(toYmd);
-  const uploads = await prisma.teamDesignerJob.findMany({
-    where: {
-      assigneeId,
-      status: "DESIGN_DONE",
-      closedByRole: "designer",
-      uploadedAt: { gte: start, lte: end },
-    },
-    select: { uploadedAt: true },
-  });
-  const closedByDay = new Map<string, number>();
-  for (const u of uploads) {
-    if (!u.uploadedAt) continue;
-    const key = u.uploadedAt.toLocaleDateString("en-CA", { timeZone: TZ });
-    closedByDay.set(key, (closedByDay.get(key) ?? 0) + 1);
-  }
+  const closedByDay = await loadClosesByCreditDay(assigneeId, fromYmd, toYmd);
   const missed: DesignerMissedDayDto[] = [];
   let cur = toYmd;
   for (let i = 0; i < 400 && cur >= fromYmd; i++) {
     if (isStackWorkday(assigneeId, cur)) {
-      // Don’t ding “today” before work hours end — only closed days / after red-flag hour
       const closed = closedByDay.get(cur) ?? 0;
       if (closed < DESIGNER_DAILY_TARGET) {
-        if (cur === toYmd && istHourNow() < DESIGNER_RED_FLAG_HOUR_IST) {
-          // still in progress today
-        } else {
+        // Grace only while that workday is still in progress (not on Sunday / after)
+        const stillToday =
+          cur === toYmd &&
+          isStackWorkday(assigneeId, toYmd) &&
+          istHourNow() < DESIGNER_RED_FLAG_HOUR_IST;
+        if (!stillToday) {
           missed.push({
             date: cur,
             closed,
@@ -292,30 +333,24 @@ export async function listReadyToStartJobs(assigneeId: string): Promise<ReadyJob
   });
 }
 
-/** Designer closes (Upload & close) on a single IST calendar day. */
+/** Designer closes credited to a workday (by start day, Sunday → prior Sat). */
 export async function designerClosesOnDay(
   assigneeId: string,
   ymd: string
 ): Promise<number> {
-  const { closed } = await dayActivity(assigneeId, ymd);
-  return closed;
+  const byDay = await loadClosesByCreditDay(assigneeId, ymd, ymd);
+  return byDay.get(ymd) ?? 0;
 }
 
 async function dayActivity(assigneeId: string, ymd: string): Promise<{
   closed: number;
+  uploadsOnCalendarDay: number;
   firstStart: Date | null;
   lastEnd: Date | null;
 }> {
   const { start, end } = istDayBounds(ymd);
-  const [closed, starts, ends] = await Promise.all([
-    prisma.teamDesignerJob.count({
-      where: {
-        assigneeId,
-        status: "DESIGN_DONE",
-        closedByRole: "designer",
-        uploadedAt: { gte: start, lte: end },
-      },
-    }),
+  const [creditClosed, starts, ends] = await Promise.all([
+    designerClosesOnDay(assigneeId, ymd),
     prisma.teamDesignerJob.findMany({
       where: {
         assigneeId,
@@ -335,11 +370,11 @@ async function dayActivity(assigneeId: string, ymd: string): Promise<{
       },
       select: { uploadedAt: true },
       orderBy: { uploadedAt: "desc" },
-      take: 1,
     }),
   ]);
   return {
-    closed,
+    closed: creditClosed,
+    uploadsOnCalendarDay: ends.length,
     firstStart: starts[0]?.startedAt ?? null,
     lastEnd: ends[0]?.uploadedAt ?? null,
   };
@@ -350,7 +385,16 @@ async function buildSeries(assigneeId: string, today: string): Promise<DesignerD
   const { start } = istDayBounds(from);
   const { end } = istDayBounds(today);
 
-  const [uploads, starts] = await Promise.all([
+  const [closedByDay, starts, uploads] = await Promise.all([
+    loadClosesByCreditDay(assigneeId, from, today),
+    prisma.teamDesignerJob.findMany({
+      where: {
+        assigneeId,
+        startedByRole: "designer",
+        startedAt: { gte: start, lte: end },
+      },
+      select: { startedAt: true },
+    }),
     prisma.teamDesignerJob.findMany({
       where: {
         assigneeId,
@@ -360,30 +404,20 @@ async function buildSeries(assigneeId: string, today: string): Promise<DesignerD
       },
       select: { uploadedAt: true },
     }),
-    prisma.teamDesignerJob.findMany({
-      where: {
-        assigneeId,
-        startedByRole: "designer",
-        startedAt: { gte: start, lte: end },
-      },
-      select: { startedAt: true },
-    }),
   ]);
 
-  const closedByDay = new Map<string, number>();
   const firstStartByDay = new Map<string, Date>();
   const lastEndByDay = new Map<string, Date>();
 
   for (const u of uploads) {
     if (!u.uploadedAt) continue;
-    const key = u.uploadedAt.toLocaleDateString("en-CA", { timeZone: TZ });
-    closedByDay.set(key, (closedByDay.get(key) ?? 0) + 1);
+    const key = istYmd(u.uploadedAt);
     const prev = lastEndByDay.get(key);
     if (!prev || u.uploadedAt > prev) lastEndByDay.set(key, u.uploadedAt);
   }
   for (const s of starts) {
     if (!s.startedAt) continue;
-    const key = s.startedAt.toLocaleDateString("en-CA", { timeZone: TZ });
+    const key = istYmd(s.startedAt);
     const prev = firstStartByDay.get(key);
     if (!prev || s.startedAt < prev) firstStartByDay.set(key, s.startedAt);
   }
@@ -391,10 +425,11 @@ async function buildSeries(assigneeId: string, today: string): Promise<DesignerD
   const series: DesignerDaySeriesPoint[] = [];
   for (let i = 0; i < SERIES_DAYS; i++) {
     const date = addDaysYmd(from, i);
+    const workday = isStackWorkday("", date);
     series.push({
       date,
-      closed: closedByDay.get(date) ?? 0,
-      target: DESIGNER_DAILY_TARGET,
+      closed: workday ? closedByDay.get(date) ?? 0 : 0,
+      target: workday ? DESIGNER_DAILY_TARGET : 0,
       firstStart: firstStartByDay.get(date)?.toISOString() ?? null,
       lastEnd: lastEndByDay.get(date)?.toISOString() ?? null,
     });
@@ -428,13 +463,14 @@ export async function computeDesignerPerformance(
     })
   ).length;
 
-  const closedToday = activity.closed;
   const isSunday = dayIdForYmd(today) === "sun";
-  // Sunday is off the 4/day stack target (queue work can still happen)
+  // Credit by start day — Sunday never has a daily target / closedToday score
+  const closedToday = isSunday ? 0 : activity.closed;
+  const catchUpClosedToday = isSunday ? activity.uploadsOnCalendarDay : 0;
+  const dailyTarget = isSunday ? 0 : DESIGNER_DAILY_TARGET;
   const underTarget = !isSunday && closedToday < DESIGNER_DAILY_TARGET;
   const redFlag =
     (underTarget && hour >= DESIGNER_RED_FLAG_HOUR_IST) || stack.stackedBehind > 0;
-  // On pace if at least ~1 job per ~4.5 working hours toward 4 by evening (rough)
   const expectedByNow = isSunday
     ? 0
     : hour < 11
@@ -454,7 +490,9 @@ export async function computeDesignerPerformance(
     name: designerDisplayName(assigneeId),
     today,
     closedToday,
-    dailyTarget: DESIGNER_DAILY_TARGET,
+    dailyTarget,
+    isSundayHoliday: isSunday,
+    catchUpClosedToday,
     readyToStart,
     inProgress: metrics.inProgress,
     overdueReady,

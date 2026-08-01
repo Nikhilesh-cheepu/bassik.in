@@ -245,8 +245,14 @@ export type DesignerPerformanceDto = {
   assigneeId: string;
   name: string;
   today: string;
+  /** Closes credited to today (start-day). Always 0 on Sunday. */
   closedToday: number;
+  /** 0 on Sunday — no daily target on holiday */
   dailyTarget: number;
+  /** True when today is Sunday (fixed holiday) */
+  isSundayHoliday: boolean;
+  /** Closes uploaded today that count as catch-up toward earlier workdays */
+  catchUpClosedToday: number;
   readyToStart: number;
   inProgress: number;
   overdueReady: number;
@@ -255,7 +261,7 @@ export type DesignerPerformanceDto = {
   firstStartedAt: string | null;
   /** Max uploadedAt today IST */
   lastEndedAt: string | null;
-  /** Under daily target (always) */
+  /** Under daily target (false on Sunday) */
   underTarget: boolean;
   /** Strict red after 18:00 IST when still under target */
   redFlag: boolean;

@@ -86,7 +86,7 @@ function isBeforeWorkStart(hour: number): boolean {
 
 function sundayNote(todayYmd: string): string | null {
   if (dayIdForYmd(todayYmd) !== "sun") return null;
-  return "It’s Sunday — you still need to complete pending work and meet the daily target.";
+  return "It’s Sunday (holiday) — no daily target. Anything you finish counts as catch-up toward Sat / earlier.";
 }
 
 function seriousCloser(): string {
@@ -244,6 +244,14 @@ export async function kindsDueNow(opts?: {
   const hour = opts?.hour ?? istHourNow();
   const minute = opts?.minute ?? istMinuteNow();
   const kinds: DesignerNudgeKind[] = [];
+  const sunday = dayIdForYmd(getTodayKey()) === "sun";
+
+  // Sunday = holiday — only slow-task / overdue catch-up, no “today’s 4” nudges
+  if (sunday) {
+    if (hour >= NO_START_HOUR_IST && hour < 21) kinds.push("slow_task");
+    kinds.push("deadline_soon");
+    return kinds;
+  }
 
   // From 11:20 IST — haven’t started
   const afterNoStart =
@@ -513,11 +521,32 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
         activeAgeMs: extra?.activeAgeMs,
       });
 
+    const sunday = dayIdForYmd(today) === "sun";
+
     // Overnight / early morning: only ask about yesterday + stack — not “today”
     if (beforeWork) {
       const missedYesterday = closedYesterday < DESIGNER_DAILY_TARGET;
       if (missedYesterday || stack.stackedBehind > 0) {
         push("missed_target", "", bodyFor("missed_target", readyJobs));
+      }
+      continue;
+    }
+
+    // Sunday holiday — catch-up / slow only (no today’s 4 score)
+    if (sunday) {
+      if (active && activeAgeMs != null && activeAgeMs >= SLOW_TASK_MS) {
+        push(
+          "slow_task",
+          active.id,
+          bodyFor("slow_task", readyJobs, {
+            activeTitle: active.title,
+            activeAgeMs,
+          })
+        );
+      }
+      const hotSun = readyJobs.filter((j) => j.isOverdue || j.isDueToday);
+      if (hotSun.length > 0 || stack.stackedBehind > 0) {
+        push("deadline_soon", "", bodyFor("deadline_soon", hotSun.length ? hotSun : readyJobs));
       }
       continue;
     }

@@ -1001,14 +1001,13 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
 
       <div className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
         <p className="text-[12px] leading-snug text-white/65">
-          Finish <span className="font-semibold text-white/90">catch-up</span> first, then today’s{" "}
-          <span className="font-semibold text-emerald-200">{DESIGNER_DAILY_TARGET}</span>. Sunday =
-          holiday. {DESIGNER_OPTIONAL_LEAVES_PER_MONTH} optional leaves/month (no stack). Advance
-          work unlocks leave (ask permission).
+          Finish <span className="font-semibold text-white/90">catch-up</span> first, then the focus
+          pack. Closes count on the day you <span className="font-semibold text-white/90">Start</span>
+          . Sunday = holiday (no daily target — Sunday work = catch-up).
         </p>
         <span
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/15 text-[12px] font-bold text-white/45"
-          title={`4/day Mon–Sat (24/week). Sunday holiday. ${DESIGNER_OPTIONAL_LEAVES_PER_MONTH} optional leaves/month — unused don’t carry. +${DESIGNER_POINTS_PER_LEAVE} advance closes unlock 1 leave (needs permission). Weekly TV calendar: C53/Boiler/Firefly, due Tuesday.`}
+          title={`Start Mon → close Tue still counts as Mon. Sunday work always catch-up toward Sat/earlier. 4/day Mon–Sat. ${DESIGNER_OPTIONAL_LEAVES_PER_MONTH} optional leaves/mo. +${DESIGNER_POINTS_PER_LEAVE} advance = 1 leave (ask permission).`}
         >
           i
         </span>
@@ -2101,15 +2100,19 @@ https://instagram.com/…"
                   "text-orange-200"
                 )}
                 {renderSection(
-                  `Today’s ${DESIGNER_DAILY_TARGET}`,
-                  "Your focus pack. New priority work lands here; extras move to Up next.",
+                  visiblePerf[0]?.isSundayHoliday
+                    ? "Catch-up pack"
+                    : `Today’s ${DESIGNER_DAILY_TARGET}`,
+                  visiblePerf[0]?.isSundayHoliday
+                    ? "Sunday holiday — work here counts toward Sat / earlier (by start day)."
+                    : "Your focus pack. Closes count on the day you Start. Extras move to Up next.",
                   openParts.todayPack,
                   "today",
                   "text-emerald-200"
                 )}
                 {renderSection(
                   "Up next",
-                  "Later in priority — after today’s four.",
+                  "Later in priority — after the focus pack.",
                   openParts.upNext,
                   "next",
                   "text-white/50"
@@ -2139,15 +2142,19 @@ https://instagram.com/…"
                         "text-orange-200",
                       ],
                       [
-                        `Today’s ${DESIGNER_DAILY_TARGET}`,
-                        "Your focus pack. Drag ≡ to reorder; extras spill to Up next.",
+                        visiblePerf[0]?.isSundayHoliday
+                          ? "Catch-up pack"
+                          : `Today’s ${DESIGNER_DAILY_TARGET}`,
+                        visiblePerf[0]?.isSundayHoliday
+                          ? "Sunday holiday — work here counts toward Sat / earlier (by start day)."
+                          : "Your focus pack. Drag ≡ to reorder; closes count on Start day.",
                         openParts.todayPack,
                         "today",
                         "text-emerald-200",
                       ],
                       [
                         "Up next",
-                        "Later in priority — after today’s four.",
+                        "Later in priority — after the focus pack.",
                         openParts.upNext,
                         "next",
                         "text-white/50",
@@ -2482,16 +2489,27 @@ function DesignerPerformanceCard({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
-            {perf.name} · today
+            {perf.name} · {perf.isSundayHoliday ? "Sunday holiday" : "today"}
           </p>
-          <p
-            className={`mt-0.5 text-[22px] font-semibold tabular-nums ${
-              flag ? "text-red-200" : "text-emerald-200"
-            }`}
-          >
-            {perf.closedToday}/{perf.dailyTarget}
-            <span className="ml-2 text-[12px] font-medium text-white/45">closed</span>
-          </p>
+          {perf.isSundayHoliday ? (
+            <p className="mt-0.5 text-[18px] font-semibold text-white/90">
+              No daily target
+              <span className="ml-2 text-[12px] font-medium text-white/45">
+                · catch-up done {perf.catchUpClosedToday} (counts to Sat / earlier)
+              </span>
+            </p>
+          ) : (
+            <p
+              className={`mt-0.5 text-[22px] font-semibold tabular-nums ${
+                flag ? "text-red-200" : "text-emerald-200"
+              }`}
+            >
+              {perf.closedToday}/{perf.dailyTarget}
+              <span className="ml-2 text-[12px] font-medium text-white/45">
+                closed (by start day)
+              </span>
+            </p>
+          )}
         </div>
         {isAdmin ? (
           <button
