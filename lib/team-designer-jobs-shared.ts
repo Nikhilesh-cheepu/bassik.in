@@ -197,6 +197,7 @@ export type DesignerNudgeKind =
   | "behind_pace"
   | "deadline_soon"
   | "missed_target"
+  | "slow_task"
   | "priority_pause_now"
   | "priority_after_current";
 
@@ -210,6 +211,17 @@ export type DesignerReminderLogDto = {
   metaMessageId: string | null;
   shareUrl: string | null;
   createdAt: string;
+};
+
+/** Live click-to-send WA suggestions (works before Cloud API is configured). */
+export type DesignerSuggestedNudgeDto = {
+  assigneeId: string;
+  name: string;
+  kind: DesignerNudgeKind;
+  label: string;
+  body: string;
+  shareUrl: string;
+  jobId: string;
 };
 
 export const DESIGNER_PERFORMANCE_IDS = [

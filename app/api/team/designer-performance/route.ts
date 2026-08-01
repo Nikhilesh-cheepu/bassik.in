@@ -3,6 +3,7 @@ import { getTeamFromRequest } from "@/lib/team-auth";
 import { isTeamDesignerMember } from "@/lib/team-members";
 import {
   DESIGNER_PERFORMANCE_IDS,
+  type DesignerNudgeKind,
 } from "@/lib/team-designer-jobs-shared";
 import {
   computeAllDesignerPerformance,
@@ -11,8 +12,9 @@ import {
 import {
   evaluateAndSendDesignerNudges,
   listRecentReminderLogs,
+  listSuggestedDesignerNudges,
+  markSuggestedNudgeOpened,
 } from "@/lib/team-designer-nudges";
-import type { DesignerNudgeKind } from "@/lib/team-designer-jobs-shared";
 
 export const runtime = "nodejs";
 
@@ -25,19 +27,25 @@ export async function GET(req: NextRequest) {
 
   try {
     if (isAdmin) {
-      const [designers, reminders] = await Promise.all([
+      const [designers, reminders, suggested] = await Promise.all([
         computeAllDesignerPerformance(),
         listRecentReminderLogs(50),
+        listSuggestedDesignerNudges(),
       ]);
-      return NextResponse.json({ ok: true, designers, reminders });
+      return NextResponse.json({ ok: true, designers, reminders, suggested });
     }
 
-    if (!isTeamDesignerMember(memberId) || !DESIGNER_PERFORMANCE_IDS.includes(memberId as typeof DESIGNER_PERFORMANCE_IDS[number])) {
+    if (
+      !isTeamDesignerMember(memberId) ||
+      !DESIGNER_PERFORMANCE_IDS.includes(
+        memberId as (typeof DESIGNER_PERFORMANCE_IDS)[number]
+      )
+    ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const me = await computeDesignerPerformance(memberId);
-    return NextResponse.json({ ok: true, designers: [me], reminders: [] });
+    return NextResponse.json({ ok: true, designers: [me], reminders: [], suggested: [] });
   } catch (err) {
     console.error("[team/designer-performance] GET", err);
     return NextResponse.json(
@@ -59,7 +67,36 @@ export async function POST(req: NextRequest) {
       action?: string;
       assigneeId?: string;
       kind?: DesignerNudgeKind;
+      nudgeBody?: string;
+      jobId?: string;
     };
+
+    if (body.action === "open-share") {
+      const assigneeId =
+        typeof body.assigneeId === "string" ? body.assigneeId.trim() : "";
+      const kind = body.kind;
+      const nudgeBody = typeof body.nudgeBody === "string" ? body.nudgeBody : "";
+      if (
+        !DESIGNER_PERFORMANCE_IDS.includes(
+          assigneeId as (typeof DESIGNER_PERFORMANCE_IDS)[number]
+        ) ||
+        !kind ||
+        !nudgeBody.trim()
+      ) {
+        return NextResponse.json({ error: "assigneeId, kind, nudgeBody required" }, { status: 400 });
+      }
+      const log = await markSuggestedNudgeOpened({
+        assigneeId,
+        kind,
+        body: nudgeBody,
+        jobId: typeof body.jobId === "string" ? body.jobId : "",
+      });
+      const [reminders, suggested] = await Promise.all([
+        listRecentReminderLogs(50),
+        listSuggestedDesignerNudges(),
+      ]);
+      return NextResponse.json({ ok: true, log, reminders, suggested });
+    }
 
     if (body.action !== "nudge") {
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });
@@ -67,22 +104,27 @@ export async function POST(req: NextRequest) {
 
     const assigneeId =
       typeof body.assigneeId === "string" ? body.assigneeId.trim() : "";
-    if (!DESIGNER_PERFORMANCE_IDS.includes(assigneeId as typeof DESIGNER_PERFORMANCE_IDS[number])) {
+    if (
+      !DESIGNER_PERFORMANCE_IDS.includes(
+        assigneeId as (typeof DESIGNER_PERFORMANCE_IDS)[number]
+      )
+    ) {
       return NextResponse.json({ error: "assigneeId required (mahesh|jeslyn)" }, { status: 400 });
     }
 
     const kind = body.kind;
-    const forceKinds: DesignerNudgeKind[] = kind
-      ? [kind]
-      : ["behind_pace"];
+    const forceKinds: DesignerNudgeKind[] = kind ? [kind] : ["behind_pace"];
 
     const result = await evaluateAndSendDesignerNudges({
       assigneeIds: [assigneeId],
       forceKinds,
       force: true,
     });
-    const reminders = await listRecentReminderLogs(50);
-    return NextResponse.json({ ...result, reminders });
+    const [reminders, suggested] = await Promise.all([
+      listRecentReminderLogs(50),
+      listSuggestedDesignerNudges(),
+    ]);
+    return NextResponse.json({ ...result, reminders, suggested });
   } catch (err) {
     console.error("[team/designer-performance] POST", err);
     return NextResponse.json(

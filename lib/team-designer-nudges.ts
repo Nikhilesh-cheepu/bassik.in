@@ -8,10 +8,12 @@ import {
   type DesignerNudgeKind,
   type DesignerPriorityMode,
   type DesignerReminderLogDto,
+  type DesignerSuggestedNudgeDto,
 } from "@/lib/team-designer-jobs-shared";
 import {
   computeDesignerPerformance,
   istHourNow,
+  istMinuteNow,
   listReadyToStartJobs,
   type ReadyJobLine,
 } from "@/lib/team-designer-performance";
@@ -20,6 +22,11 @@ import { teamOutletLabel } from "@/lib/team-outlets";
 
 const PAUSE_SUGGEST_MAX_MS = 45 * 60 * 1000;
 const FINISH_ASAP_MIN_MS = 60 * 60 * 1000;
+/** Follow up when a single job has been In progress this long. */
+export const SLOW_TASK_MS = 3 * 60 * 60 * 1000;
+/** Morning “haven’t started” window starts (IST). */
+export const NO_START_HOUR_IST = 11;
+export const NO_START_MINUTE_IST = 20;
 
 function formatDuration(ms: number): string {
   const m = Math.max(1, Math.round(ms / 60000));
@@ -40,12 +47,35 @@ function formatReadyList(jobs: ReadyJobLine[], cap = 5): string {
   return lines.join("\n") + more;
 }
 
+function nudgeLabel(kind: DesignerNudgeKind): string {
+  switch (kind) {
+    case "no_start":
+      return "Haven’t started today";
+    case "slow_task":
+      return "Task over 3 hours";
+    case "behind_pace":
+      return "Behind daily pace";
+    case "deadline_soon":
+      return "Deadline soon";
+    case "missed_target":
+      return "Missed 4/day target";
+    case "priority_pause_now":
+      return "Priority — pause now";
+    case "priority_after_current":
+      return "Priority — after current";
+    default:
+      return kind;
+  }
+}
+
 function buildNudgeBody(params: {
   kind: DesignerNudgeKind;
   name: string;
   closedToday: number;
   readyToStart: number;
   readyJobs: ReadyJobLine[];
+  activeTitle?: string | null;
+  activeAgeMs?: number | null;
 }): string {
   const list = formatReadyList(params.readyJobs);
   const targetNote =
@@ -54,13 +84,24 @@ function buildNudgeBody(params: {
   switch (params.kind) {
     case "no_start":
       return [
-        `Hey ${params.name} — you haven’t started any work today.`,
+        `Hey ${params.name} — you haven’t started any task today.`,
         `${params.readyToStart} job(s) ready to start:`,
         list,
         "",
         targetNote,
         "Open /team → Monthly designer queue → Start Job.",
       ].join("\n");
+    case "slow_task":
+      return [
+        `Hey ${params.name} — follow-up: you’ve been on “${params.activeTitle ?? "this job"}” for ~${formatDuration(params.activeAgeMs ?? SLOW_TASK_MS)}.`,
+        "Please wrap this up and move faster so we can hit today’s target.",
+        params.readyToStart > 0 ? `\nStill ready after this:\n${list}` : "",
+        "",
+        `Today so far: ${params.closedToday}/${DESIGNER_DAILY_TARGET}.`,
+        targetNote,
+      ]
+        .filter(Boolean)
+        .join("\n");
     case "behind_pace":
       return [
         `Hey ${params.name} — only ${params.closedToday} done today (target ${DESIGNER_DAILY_TARGET}).`,
@@ -96,43 +137,56 @@ function templateParamsFor(
   name: string,
   closedToday: number,
   readyToStart: number,
-  readyJobs: ReadyJobLine[]
+  readyJobs: ReadyJobLine[],
+  activeTitle?: string | null
 ): [string, string, string] {
   const summary =
     kind === "no_start"
       ? `Haven't started — ${readyToStart} ready`
-      : kind === "behind_pace"
-        ? `Only ${closedToday}/${DESIGNER_DAILY_TARGET} done`
-        : kind === "deadline_soon"
-          ? "Deadline soon on ready jobs"
-          : `Missed target ${closedToday}/${DESIGNER_DAILY_TARGET}`;
+      : kind === "slow_task"
+        ? `Over 3h on ${activeTitle ?? "task"} — move faster`
+        : kind === "behind_pace"
+          ? `Only ${closedToday}/${DESIGNER_DAILY_TARGET} done`
+          : kind === "deadline_soon"
+            ? "Deadline soon on ready jobs"
+            : `Missed target ${closedToday}/${DESIGNER_DAILY_TARGET}`;
   const jobList = formatReadyList(readyJobs, 3).replace(/\n/g, " | ").slice(0, 200) || "-";
   return [name, summary, jobList];
 }
 
+/** Cron windows (IST). */
 export async function kindsDueNow(opts?: {
   forceKinds?: DesignerNudgeKind[];
   hour?: number;
+  minute?: number;
 }): Promise<DesignerNudgeKind[]> {
   if (opts?.forceKinds?.length) return opts.forceKinds;
   const hour = opts?.hour ?? istHourNow();
+  const minute = opts?.minute ?? istMinuteNow();
   const kinds: DesignerNudgeKind[] = [];
-  // ~12:00 IST window (cron 06:30 UTC)
-  if (hour >= 11 && hour < 14) kinds.push("no_start");
-  // mid-afternoon
-  if (hour >= 14 && hour < 17) kinds.push("behind_pace", "deadline_soon");
-  // evening red flag
-  if (hour >= 18) kinds.push("missed_target", "deadline_soon");
+
+  // From 11:20 IST — haven’t started
+  const afterNoStart =
+    hour > NO_START_HOUR_IST ||
+    (hour === NO_START_HOUR_IST && minute >= NO_START_MINUTE_IST);
+  if (afterNoStart && hour < 14) kinds.push("no_start");
+
+  // Slow task check whenever we’re in work hours after morning start
+  if (afterNoStart && hour < 21) kinds.push("slow_task");
+
+  if (hour >= 14 && hour < 18) kinds.push("behind_pace", "deadline_soon");
+  if (hour >= 18) kinds.push("missed_target", "deadline_soon", "behind_pace");
   return kinds;
 }
 
 async function alreadyLogged(
   assigneeId: string,
   kind: DesignerNudgeKind,
-  dateKey: string
+  dateKey: string,
+  jobId = ""
 ): Promise<boolean> {
   const existing = await prisma.teamDesignerReminderLog.findFirst({
-    where: { assigneeId, kind, dateKey, jobId: "" },
+    where: { assigneeId, kind, dateKey, jobId },
     select: { id: true },
   });
   return Boolean(existing);
@@ -145,40 +199,124 @@ export type NudgeRunResult = {
   reason?: string;
   delivery?: DesignerReminderLogDto["delivery"];
   logId?: string;
+  shareUrl?: string;
 };
+
+async function logAndMaybeSend(params: {
+  assigneeId: string;
+  kind: DesignerNudgeKind;
+  dateKey: string;
+  jobId: string;
+  body: string;
+  templateParams: [string, string, string];
+  force?: boolean;
+}): Promise<NudgeRunResult> {
+  if (!params.force && (await alreadyLogged(params.assigneeId, params.kind, params.dateKey, params.jobId))) {
+    return {
+      assigneeId: params.assigneeId,
+      kind: params.kind,
+      skipped: true,
+      reason: "already sent today",
+    };
+  }
+
+  const send = await sendDesignerWhatsApp({
+    assigneeId: params.assigneeId,
+    body: params.body,
+    templateParams: params.templateParams,
+  });
+
+  const delivery: DesignerReminderLogDto["delivery"] = send.ok
+    ? "sent"
+    : send.skipped
+      ? "skipped_no_config"
+      : "failed";
+
+  const log = await prisma.teamDesignerReminderLog.upsert({
+    where: {
+      assigneeId_kind_dateKey_jobId: {
+        assigneeId: params.assigneeId,
+        kind: params.kind,
+        dateKey: params.dateKey,
+        jobId: params.jobId,
+      },
+    },
+    create: {
+      assigneeId: params.assigneeId,
+      kind: params.kind,
+      dateKey: params.dateKey,
+      jobId: params.jobId,
+      body: params.body,
+      delivery,
+      metaMessageId: send.ok ? send.messageId : null,
+      shareUrl: send.shareUrl,
+      error: send.ok ? null : send.error,
+    },
+    update: {
+      body: params.body,
+      delivery,
+      metaMessageId: send.ok ? send.messageId : null,
+      shareUrl: send.shareUrl,
+      error: send.ok ? null : send.error,
+    },
+  });
+
+  return {
+    assigneeId: params.assigneeId,
+    kind: params.kind,
+    skipped: false,
+    delivery,
+    logId: log.id,
+    shareUrl: send.shareUrl,
+    reason: send.ok ? undefined : send.error,
+  };
+}
 
 export async function evaluateAndSendDesignerNudges(opts?: {
   assigneeIds?: string[];
   forceKinds?: DesignerNudgeKind[];
-  /** Bypass dedupe (manual admin send) */
   force?: boolean;
   hour?: number;
+  minute?: number;
 }): Promise<{ ok: true; results: NudgeRunResult[]; dateKey: string }> {
   const dateKey = getTodayKey();
   const assignees = opts?.assigneeIds?.length
     ? opts.assigneeIds
     : [...DESIGNER_PERFORMANCE_IDS];
-  const kinds = await kindsDueNow({ forceKinds: opts?.forceKinds, hour: opts?.hour });
+  const kinds = await kindsDueNow({
+    forceKinds: opts?.forceKinds,
+    hour: opts?.hour,
+    minute: opts?.minute,
+  });
   const results: NudgeRunResult[] = [];
 
   for (const assigneeId of assignees) {
     const perf = await computeDesignerPerformance(assigneeId);
     const readyJobs = await listReadyToStartJobs(assigneeId);
     const name = designerDisplayName(assigneeId);
+    const active = await findActiveDesignerJob(assigneeId);
+    const activeAgeMs =
+      active?.startedAt != null ? Date.now() - active.startedAt.getTime() : null;
 
     for (const kind of kinds) {
       let shouldSend = false;
       let reason = "";
+      let jobId = "";
+      let jobsForBody = readyJobs;
 
       if (kind === "no_start") {
         shouldSend = !perf.firstStartedAt && perf.readyToStart > 0 && perf.closedToday === 0;
         reason = shouldSend ? "" : "already started or no ready work";
+      } else if (kind === "slow_task") {
+        shouldSend = Boolean(active && activeAgeMs != null && activeAgeMs >= SLOW_TASK_MS);
+        jobId = active?.id ?? "";
+        reason = shouldSend ? "" : "no job over 3 hours";
       } else if (kind === "behind_pace") {
         shouldSend = perf.closedToday < 2 && perf.readyToStart > 0;
         reason = shouldSend ? "" : "on pace or no ready work";
       } else if (kind === "deadline_soon") {
-        const hot = readyJobs.filter((j) => j.isOverdue || j.isDueToday);
-        shouldSend = hot.length > 0;
+        jobsForBody = readyJobs.filter((j) => j.isOverdue || j.isDueToday);
+        shouldSend = jobsForBody.length > 0;
         reason = shouldSend ? "" : "no due-soon ready jobs";
       } else if (kind === "missed_target") {
         shouldSend = perf.closedToday < DESIGNER_DAILY_TARGET;
@@ -190,83 +328,188 @@ export async function evaluateAndSendDesignerNudges(opts?: {
         continue;
       }
 
-      if (!opts?.force && (await alreadyLogged(assigneeId, kind, dateKey))) {
-        results.push({ assigneeId, kind, skipped: true, reason: "already sent today" });
-        continue;
-      }
-
-      const jobsForBody =
-        kind === "deadline_soon"
-          ? readyJobs.filter((j) => j.isOverdue || j.isDueToday)
-          : readyJobs;
-
       const body = buildNudgeBody({
         kind,
         name,
         closedToday: perf.closedToday,
         readyToStart: perf.readyToStart,
         readyJobs: jobsForBody.length ? jobsForBody : readyJobs,
+        activeTitle: active?.title,
+        activeAgeMs,
       });
 
-      const send = await sendDesignerWhatsApp({
-        assigneeId,
-        body,
-        templateParams: templateParamsFor(
-          kind,
-          name,
-          perf.closedToday,
-          perf.readyToStart,
-          jobsForBody.length ? jobsForBody : readyJobs
-        ),
-      });
-
-      const delivery: DesignerReminderLogDto["delivery"] = send.ok
-        ? "sent"
-        : send.skipped
-          ? "skipped_no_config"
-          : "failed";
-
-      const log = await prisma.teamDesignerReminderLog.upsert({
-        where: {
-          assigneeId_kind_dateKey_jobId: {
-            assigneeId,
-            kind,
-            dateKey,
-            jobId: "",
-          },
-        },
-        create: {
+      results.push(
+        await logAndMaybeSend({
           assigneeId,
           kind,
           dateKey,
-          jobId: "",
+          jobId,
           body,
-          delivery,
-          metaMessageId: send.ok ? send.messageId : null,
-          shareUrl: send.shareUrl,
-          error: send.ok ? null : send.error,
-        },
-        update: {
-          body,
-          delivery,
-          metaMessageId: send.ok ? send.messageId : null,
-          shareUrl: send.shareUrl,
-          error: send.ok ? null : send.error,
-        },
-      });
-
-      results.push({
-        assigneeId,
-        kind,
-        skipped: false,
-        delivery,
-        logId: log.id,
-        reason: send.ok ? undefined : send.error,
-      });
+          templateParams: templateParamsFor(
+            kind,
+            name,
+            perf.closedToday,
+            perf.readyToStart,
+            jobsForBody.length ? jobsForBody : readyJobs,
+            active?.title
+          ),
+          force: opts?.force,
+        })
+      );
     }
   }
 
   return { ok: true, results, dateKey };
+}
+
+/**
+ * Live suggestions for admin click-to-WhatsApp (no Cloud API required).
+ * Shows whenever conditions are true — not only inside cron windows.
+ */
+export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNudgeDto[]> {
+  const out: DesignerSuggestedNudgeDto[] = [];
+  const hour = istHourNow();
+  const minute = istMinuteNow();
+  const afterNoStart =
+    hour > NO_START_HOUR_IST ||
+    (hour === NO_START_HOUR_IST && minute >= NO_START_MINUTE_IST);
+
+  for (const assigneeId of DESIGNER_PERFORMANCE_IDS) {
+    const perf = await computeDesignerPerformance(assigneeId);
+    const readyJobs = await listReadyToStartJobs(assigneeId);
+    const name = designerDisplayName(assigneeId);
+    const active = await findActiveDesignerJob(assigneeId);
+    const activeAgeMs =
+      active?.startedAt != null ? Date.now() - active.startedAt.getTime() : null;
+    const phone = designerWaPhone(assigneeId);
+
+    const push = (kind: DesignerNudgeKind, jobId: string, body: string) => {
+      out.push({
+        assigneeId,
+        name,
+        kind,
+        label: nudgeLabel(kind),
+        body,
+        shareUrl: whatsAppShareUrl(phone, body),
+        jobId,
+      });
+    };
+
+    if (afterNoStart && !perf.firstStartedAt && perf.readyToStart > 0 && perf.closedToday === 0) {
+      push(
+        "no_start",
+        "",
+        buildNudgeBody({
+          kind: "no_start",
+          name,
+          closedToday: perf.closedToday,
+          readyToStart: perf.readyToStart,
+          readyJobs,
+        })
+      );
+    }
+
+    if (active && activeAgeMs != null && activeAgeMs >= SLOW_TASK_MS) {
+      push(
+        "slow_task",
+        active.id,
+        buildNudgeBody({
+          kind: "slow_task",
+          name,
+          closedToday: perf.closedToday,
+          readyToStart: perf.readyToStart,
+          readyJobs,
+          activeTitle: active.title,
+          activeAgeMs,
+        })
+      );
+    }
+
+    if (perf.closedToday < 2 && perf.readyToStart > 0 && afterNoStart && hour >= 14) {
+      push(
+        "behind_pace",
+        "",
+        buildNudgeBody({
+          kind: "behind_pace",
+          name,
+          closedToday: perf.closedToday,
+          readyToStart: perf.readyToStart,
+          readyJobs,
+        })
+      );
+    }
+
+    const hot = readyJobs.filter((j) => j.isOverdue || j.isDueToday);
+    if (hot.length > 0) {
+      push(
+        "deadline_soon",
+        "",
+        buildNudgeBody({
+          kind: "deadline_soon",
+          name,
+          closedToday: perf.closedToday,
+          readyToStart: perf.readyToStart,
+          readyJobs: hot,
+        })
+      );
+    }
+
+    if (hour >= 18 && perf.closedToday < DESIGNER_DAILY_TARGET) {
+      push(
+        "missed_target",
+        "",
+        buildNudgeBody({
+          kind: "missed_target",
+          name,
+          closedToday: perf.closedToday,
+          readyToStart: perf.readyToStart,
+          readyJobs,
+        })
+      );
+    }
+  }
+
+  return out;
+}
+
+/** Admin clicked Open WA — log it so we don’t spam the same suggestion blindly. */
+export async function markSuggestedNudgeOpened(params: {
+  assigneeId: string;
+  kind: DesignerNudgeKind;
+  body: string;
+  jobId?: string;
+}): Promise<DesignerReminderLogDto> {
+  const dateKey = getTodayKey();
+  const jobId = params.jobId ?? "";
+  const phone = designerWaPhone(params.assigneeId);
+  const shareUrl = whatsAppShareUrl(phone, params.body);
+  const log = await prisma.teamDesignerReminderLog.upsert({
+    where: {
+      assigneeId_kind_dateKey_jobId: {
+        assigneeId: params.assigneeId,
+        kind: params.kind,
+        dateKey,
+        jobId,
+      },
+    },
+    create: {
+      assigneeId: params.assigneeId,
+      kind: params.kind,
+      dateKey,
+      jobId,
+      body: params.body,
+      delivery: "skipped_no_config",
+      shareUrl,
+      error: "Opened WhatsApp share link (manual send)",
+    },
+    update: {
+      body: params.body,
+      shareUrl,
+      delivery: "skipped_no_config",
+      error: "Opened WhatsApp share link (manual send)",
+    },
+  });
+  return toReminderLogDto(log);
 }
 
 export function toReminderLogDto(row: {
@@ -363,57 +606,17 @@ export async function sendPriorityJobAlert(params: {
     ].join("\n");
   }
 
-  const send = await sendDesignerWhatsApp({
+  return logAndMaybeSend({
     assigneeId: params.assigneeId,
+    kind,
+    dateKey,
+    jobId: params.jobId,
     body,
     templateParams: [
       name,
       params.priorityMode === "PAUSE_NOW" ? "Priority — pause & start now" : "Priority — after current",
       params.title.slice(0, 200),
     ],
+    force: true,
   });
-
-  const delivery: DesignerReminderLogDto["delivery"] = send.ok
-    ? "sent"
-    : send.skipped
-      ? "skipped_no_config"
-      : "failed";
-
-  const log = await prisma.teamDesignerReminderLog.upsert({
-    where: {
-      assigneeId_kind_dateKey_jobId: {
-        assigneeId: params.assigneeId,
-        kind,
-        dateKey,
-        jobId: params.jobId,
-      },
-    },
-    create: {
-      assigneeId: params.assigneeId,
-      kind,
-      dateKey,
-      jobId: params.jobId,
-      body,
-      delivery,
-      metaMessageId: send.ok ? send.messageId : null,
-      shareUrl: send.shareUrl,
-      error: send.ok ? null : send.error,
-    },
-    update: {
-      body,
-      delivery,
-      metaMessageId: send.ok ? send.messageId : null,
-      shareUrl: send.shareUrl,
-      error: send.ok ? null : send.error,
-    },
-  });
-
-  return {
-    assigneeId: params.assigneeId,
-    kind,
-    skipped: false,
-    delivery,
-    logId: log.id,
-    reason: send.ok ? undefined : send.error,
-  };
 }

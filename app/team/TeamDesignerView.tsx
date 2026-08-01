@@ -39,6 +39,7 @@ import {
   type DesignerPerformanceDto,
   type DesignerPriorityMode,
   type DesignerReminderLogDto,
+  type DesignerSuggestedNudgeDto,
 } from "@/lib/team-designer-jobs-shared";
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { uploadTeamFile } from "@/lib/team-client-upload";
@@ -335,6 +336,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const [expiredBusy, setExpiredBusy] = useState(false);
   const [perfDesigners, setPerfDesigners] = useState<DesignerPerformanceDto[]>([]);
   const [reminders, setReminders] = useState<DesignerReminderLogDto[]>([]);
+  const [suggestedNudges, setSuggestedNudges] = useState<DesignerSuggestedNudgeDto[]>(
+    []
+  );
   const [nudgeBusy, setNudgeBusy] = useState<string | null>(null);
   const loadGen = useRef(0);
   const queueViewRef = useRef(queueView);
@@ -347,6 +351,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       if (!res.ok) return;
       setPerfDesigners((data.designers as DesignerPerformanceDto[]) ?? []);
       setReminders((data.reminders as DesignerReminderLogDto[]) ?? []);
+      setSuggestedNudges((data.suggested as DesignerSuggestedNudgeDto[]) ?? []);
     } catch {
       /* non-blocking */
     }
@@ -381,24 +386,29 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     void load({ view: queueView });
   }, [load, queueView]);
 
-  const sendManualNudge = async (assigneeId: string) => {
+  const sendManualNudge = async (assigneeId: string, kind?: DesignerSuggestedNudgeDto["kind"]) => {
     setNudgeBusy(assigneeId);
     try {
       const res = await fetch("/api/team/designer-performance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "nudge", assigneeId }),
+        body: JSON.stringify({ action: "nudge", assigneeId, kind }),
       });
       const data = await readJson(res);
       if (!res.ok) {
         throw new Error(typeof data.error === "string" ? data.error : "Nudge failed");
       }
       setReminders((data.reminders as DesignerReminderLogDto[]) ?? []);
-      const first = (data.results as Array<{ delivery?: string; reason?: string }>)?.[0];
-      const share = (data.reminders as DesignerReminderLogDto[])?.[0]?.shareUrl;
+      setSuggestedNudges((data.suggested as DesignerSuggestedNudgeDto[]) ?? []);
+      const first = (
+        data.results as Array<{ delivery?: string; reason?: string; shareUrl?: string }>
+      )?.[0];
+      const share =
+        first?.shareUrl ||
+        (data.reminders as DesignerReminderLogDto[])?.[0]?.shareUrl;
       if (first?.delivery === "skipped_no_config" && share) {
         openWhatsAppShareUrl(share);
-        setError("Cloud WA not configured — opened share link.");
+        setError("Opened WhatsApp — tap Send on your phone.");
       } else if (first?.delivery === "sent") {
         setError(`Nudge sent to ${designerDisplayName(assigneeId)}.`);
       } else {
@@ -407,6 +417,35 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       void loadPerformance();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Nudge failed");
+    } finally {
+      setNudgeBusy(null);
+    }
+  };
+
+  const openSuggestedWa = async (s: DesignerSuggestedNudgeDto) => {
+    const key = `${s.assigneeId}:${s.kind}:${s.jobId}`;
+    setNudgeBusy(key);
+    try {
+      openWhatsAppShareUrl(s.shareUrl);
+      const res = await fetch("/api/team/designer-performance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "open-share",
+          assigneeId: s.assigneeId,
+          kind: s.kind,
+          nudgeBody: s.body,
+          jobId: s.jobId,
+        }),
+      });
+      const data = await readJson(res);
+      if (res.ok) {
+        setReminders((data.reminders as DesignerReminderLogDto[]) ?? []);
+        setSuggestedNudges((data.suggested as DesignerSuggestedNudgeDto[]) ?? []);
+      }
+      setError(`WhatsApp opened for ${s.name} — tap Send.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open WA");
     } finally {
       setNudgeBusy(null);
     }
@@ -999,36 +1038,80 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         <DesignerPerformanceGraph designers={visiblePerf} />
       ) : null}
 
-      {isAdmin && reminders.length > 0 ? (
-        <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
-            WA follow-ups (admin)
-          </p>
-          <ul className="mt-2 max-h-40 space-y-1.5 overflow-y-auto">
-            {reminders.slice(0, 12).map((r) => (
-              <li
-                key={r.id}
-                className="flex flex-wrap items-baseline justify-between gap-2 text-[11px] text-white/60"
-              >
-                <span>
-                  <span className="font-medium text-white/80">
-                    {designerDisplayName(r.assigneeId)}
-                  </span>{" "}
-                  · {r.kind.replace(/_/g, " ")} · {r.delivery}
-                  <span className="text-white/35"> · {r.dateKey}</span>
-                </span>
-                {r.shareUrl ? (
-                  <button
-                    type="button"
-                    onClick={() => openWhatsAppShareUrl(r.shareUrl!)}
-                    className="text-cyan-300/90 underline-offset-2 hover:underline"
+      {isAdmin ? (
+        <div className="space-y-2 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.06] px-3 py-2.5">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90">
+              WA reminders — tap Send
+            </p>
+            <p className="mt-0.5 text-[11px] text-white/45">
+              Auto Cloud API later. Until then: open WhatsApp with text ready. Rules: no start after
+              11:20 · task over 3h → move faster · evening under 4/day.
+            </p>
+          </div>
+          {suggestedNudges.length === 0 ? (
+            <p className="text-[12px] text-white/40">
+              No reminder due right now (or already opened today).
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {suggestedNudges.map((s) => {
+                const key = `${s.assigneeId}:${s.kind}:${s.jobId}`;
+                return (
+                  <li
+                    key={key}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2"
                   >
-                    Open WA
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-semibold text-white/90">
+                        {s.name} · {s.label}
+                      </p>
+                      <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap text-[11px] text-white/50">
+                        {s.body}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={nudgeBusy === key}
+                      onClick={() => void openSuggestedWa(s)}
+                      className="h-9 shrink-0 rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black disabled:opacity-40"
+                    >
+                      {nudgeBusy === key ? "…" : "Send WA"}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {reminders.length > 0 ? (
+            <div className="border-t border-white/10 pt-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/35">
+                Recent
+              </p>
+              <ul className="mt-1 max-h-28 space-y-1 overflow-y-auto">
+                {reminders.slice(0, 8).map((r) => (
+                  <li
+                    key={r.id}
+                    className="flex flex-wrap items-baseline justify-between gap-2 text-[11px] text-white/50"
+                  >
+                    <span>
+                      {designerDisplayName(r.assigneeId)} · {r.kind.replace(/_/g, " ")}
+                      <span className="text-white/30"> · {r.dateKey}</span>
+                    </span>
+                    {r.shareUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => openWhatsAppShareUrl(r.shareUrl!)}
+                        className="text-cyan-300/90 underline-offset-2 hover:underline"
+                      >
+                        Open again
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

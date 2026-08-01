@@ -4,8 +4,9 @@ import { evaluateAndSendDesignerNudges } from "@/lib/team-designer-nudges";
 export const runtime = "nodejs";
 
 /**
- * Designer daily-target WhatsApp nudges (Meta Cloud API when configured).
- * Schedules (UTC → IST): 06:30→12:00, 09:30→15:00, 12:30→18:00
+ * Designer WhatsApp nudges (Cloud API when configured; else logs + share URLs).
+ * UTC → IST: 05:50→11:20 (no start), 07:00→12:30, 09:00→14:30, 11:00→16:30 (slow 3h+),
+ * 12:30→18:00 (missed target).
  */
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization")?.trim() || "";
