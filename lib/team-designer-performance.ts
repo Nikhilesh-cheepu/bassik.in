@@ -10,6 +10,7 @@ import {
   DESIGNER_WEEKLY_TARGET,
   designerDisplayName,
   type DesignerDaySeriesPoint,
+  type DesignerHolidaySundayDto,
   type DesignerMissedDayDto,
   type DesignerMetricsDto,
   type DesignerPerformanceDto,
@@ -77,7 +78,7 @@ function istYmd(d: Date): string {
   return d.toLocaleDateString("en-CA", { timeZone: TZ });
 }
 
-/** Snap Sunday (and any non Mon–Sat day) back to the previous stack workday. */
+/** Snap non Mon–Sat days back to the previous stack workday. */
 function previousStackWorkday(ymd: string): string {
   let cur = ymd;
   for (let i = 0; i < 14; i++) {
@@ -87,35 +88,108 @@ function previousStackWorkday(ymd: string): string {
   return ymd;
 }
 
+type CloseRow = {
+  startedAt: Date | null;
+  uploadedAt: Date | null;
+  dueDate: string;
+};
+
+type ClassifiedClose =
+  | { kind: "workday"; creditYmd: string; sameDay: boolean }
+  | { kind: "sunday_same_day"; sundayYmd: string }
+  | { kind: "skip" };
+
 /**
- * Credit day for a close = day the designer started the job (IST).
- * Sunday starts/closes never credit Sunday — they land on the prior workday (catch-up).
+ * Anti-cheat attribution:
+ * - Start Mon–Sat → credit that workday (close can be later).
+ * - Start Sun + close Sun → Sunday pool (catch-up first, else holiday points).
+ * - Start Sun + close Mon+ → credit the close workday only (no Sunday points).
+ * Holiday points only from same-day extras (workday) or leftover Sunday same-day.
  */
+export function classifyDesignerClose(row: CloseRow): ClassifiedClose {
+  const startYmd = row.startedAt ? istYmd(row.startedAt) : null;
+  const closeYmd = row.uploadedAt
+    ? istYmd(row.uploadedAt)
+    : startYmd;
+  if (!closeYmd && !startYmd) {
+    if (row.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(row.dueDate)) {
+      return {
+        kind: "workday",
+        creditYmd: previousStackWorkday(row.dueDate),
+        sameDay: false,
+      };
+    }
+    return { kind: "skip" };
+  }
+
+  const startSun = startYmd ? dayIdForYmd(startYmd) === "sun" : false;
+  const closeSun = closeYmd ? dayIdForYmd(closeYmd) === "sun" : false;
+
+  if (startSun && closeSun && startYmd && closeYmd) {
+    return { kind: "sunday_same_day", sundayYmd: closeYmd };
+  }
+
+  // Started Sunday, finished later → counts on the close workday only
+  if (startSun && closeYmd && !closeSun) {
+    return {
+      kind: "workday",
+      creditYmd: previousStackWorkday(closeYmd),
+      sameDay: false,
+    };
+  }
+
+  if (startYmd && !startSun) {
+    return {
+      kind: "workday",
+      creditYmd: previousStackWorkday(startYmd),
+      sameDay: Boolean(closeYmd && startYmd === closeYmd),
+    };
+  }
+
+  // No designer start stamp — credit close day, never award points
+  if (closeYmd) {
+    return {
+      kind: "workday",
+      creditYmd: previousStackWorkday(closeYmd),
+      sameDay: false,
+    };
+  }
+  return { kind: "skip" };
+}
+
+/** @deprecated — prefer classifyDesignerClose + ledger */
 export function creditWorkdayYmd(
   startedAt: Date | null | undefined,
   uploadedAt: Date | null | undefined,
   dueDate?: string | null
 ): string | null {
-  const anchor = startedAt ?? uploadedAt;
-  if (anchor) return previousStackWorkday(istYmd(anchor));
-  if (dueDate && /^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
-    return previousStackWorkday(dueDate);
-  }
+  const c = classifyDesignerClose({
+    startedAt: startedAt ?? null,
+    uploadedAt: uploadedAt ?? null,
+    dueDate: dueDate ?? "",
+  });
+  if (c.kind === "workday") return c.creditYmd;
+  if (c.kind === "sunday_same_day") return previousStackWorkday(addDaysYmd(c.sundayYmd, -1));
   return null;
 }
 
-async function loadClosesByCreditDay(
+type DayBucket = { total: number; sameDay: number };
+
+type CloseLedger = {
+  byWorkday: Map<string, number>;
+  holidayPoints: number;
+};
+
+async function fetchCloseRows(
   assigneeId: string,
   fromYmd: string,
   toYmd: string
-): Promise<Map<string, number>> {
-  const byDay = new Map<string, number>();
-  if (fromYmd > toYmd) return byDay;
+): Promise<CloseRow[]> {
   const fetchFrom = addDaysYmd(fromYmd, -14);
   const fetchTo = addDaysYmd(toYmd, 2);
   const { start } = istDayBounds(fetchFrom);
   const { end } = istDayBounds(fetchTo);
-  const rows = await prisma.teamDesignerJob.findMany({
+  return prisma.teamDesignerJob.findMany({
     where: {
       assigneeId,
       status: "DESIGN_DONE",
@@ -127,12 +201,86 @@ async function loadClosesByCreditDay(
     },
     select: { startedAt: true, uploadedAt: true, dueDate: true },
   });
+}
+
+function holidayPointsFromWorkday(total: number, sameDay: number): number {
+  const nonSame = Math.max(0, total - sameDay);
+  const targetFilledByNonSame = Math.min(DESIGNER_DAILY_TARGET, nonSame);
+  const sameDayNeededForTarget = Math.max(0, DESIGNER_DAILY_TARGET - targetFilledByNonSame);
+  return Math.max(0, sameDay - sameDayNeededForTarget);
+}
+
+/**
+ * Build workday credits + holiday points for [fromYmd, toYmd].
+ * Sunday same-day closes fill oldest deficits first, then become points.
+ */
+async function computeCloseLedger(
+  assigneeId: string,
+  fromYmd: string,
+  toYmd: string
+): Promise<CloseLedger> {
+  const byWorkday = new Map<string, number>();
+  const buckets = new Map<string, DayBucket>();
+  let holidayPoints = 0;
+  if (fromYmd > toYmd) return { byWorkday, holidayPoints };
+
+  const rows = await fetchCloseRows(assigneeId, fromYmd, toYmd);
+  const sundayPool: string[] = [];
+
   for (const r of rows) {
-    const credit = creditWorkdayYmd(r.startedAt, r.uploadedAt, r.dueDate);
-    if (!credit || credit < fromYmd || credit > toYmd) continue;
-    byDay.set(credit, (byDay.get(credit) ?? 0) + 1);
+    const c = classifyDesignerClose(r);
+    if (c.kind === "skip") continue;
+    if (c.kind === "sunday_same_day") {
+      if (c.sundayYmd >= fromYmd && c.sundayYmd <= toYmd) sundayPool.push(c.sundayYmd);
+      continue;
+    }
+    if (c.creditYmd < fromYmd || c.creditYmd > toYmd) continue;
+    // Don't credit onto Sunday
+    if (!isStackWorkday(assigneeId, c.creditYmd)) continue;
+    const b = buckets.get(c.creditYmd) ?? { total: 0, sameDay: 0 };
+    b.total += 1;
+    if (c.sameDay) b.sameDay += 1;
+    buckets.set(c.creditYmd, b);
   }
-  return byDay;
+
+  for (const [ymd, b] of buckets) {
+    byWorkday.set(ymd, b.total);
+  }
+
+  // Workday same-day extras → holiday points (before Sunday catch-up mutates totals)
+  for (const b of buckets.values()) {
+    holidayPoints += holidayPointsFromWorkday(b.total, b.sameDay);
+  }
+
+  // Sunday same-day → catch-up on oldest short workdays, else holiday points
+  sundayPool.sort();
+  for (const sundayYmd of sundayPool) {
+    let placed = false;
+    let cur = addDaysYmd(sundayYmd, -1);
+    for (let i = 0; i < 60 && cur >= fromYmd; i++) {
+      if (isStackWorkday(assigneeId, cur)) {
+        const have = byWorkday.get(cur) ?? 0;
+        if (have < DESIGNER_DAILY_TARGET) {
+          byWorkday.set(cur, have + 1);
+          placed = true;
+          break;
+        }
+      }
+      cur = addDaysYmd(cur, -1);
+    }
+    if (!placed) holidayPoints += 1;
+  }
+
+  return { byWorkday, holidayPoints };
+}
+
+async function loadClosesByCreditDay(
+  assigneeId: string,
+  fromYmd: string,
+  toYmd: string
+): Promise<Map<string, number>> {
+  const { byWorkday } = await computeCloseLedger(assigneeId, fromYmd, toYmd);
+  return byWorkday;
 }
 
 async function countDesignerCloses(
@@ -144,6 +292,30 @@ async function countDesignerCloses(
   let n = 0;
   for (const v of byDay.values()) n += v;
   return n;
+}
+
+function listMonthSundays(monthKey: string, today: string): DesignerHolidaySundayDto[] {
+  const start = `${monthKey}-01`;
+  const [y, m] = monthKey.split("-").map(Number);
+  const last = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
+  const out: DesignerHolidaySundayDto[] = [];
+  for (let d = 1; d <= last; d++) {
+    const ymd = `${monthKey}-${String(d).padStart(2, "0")}`;
+    if (dayIdForYmd(ymd) !== "sun") continue;
+    const label = new Date(`${ymd}T12:00:00+05:30`).toLocaleDateString("en-GB", {
+      timeZone: "Asia/Kolkata",
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    });
+    out.push({
+      date: ymd,
+      label,
+      isPast: ymd < today,
+      isToday: ymd === today,
+    });
+  }
+  return out;
 }
 
 async function listMissedWorkdays(
@@ -221,8 +393,13 @@ export async function computeDesignerStack(
   const net = closedSoFar - targetSoFar - lastMonthDeficit;
   const stackedBehind = Math.max(0, -net);
   const surplusSoFar = Math.max(0, net);
-  const advancePoints = surplusSoFar;
-  const leaveDaysEarned = Math.floor(advancePoints / DESIGNER_POINTS_PER_LEAVE);
+
+  // Holiday points from ledger (same-day extras + Sunday extras after catch-up)
+  const ledgerFrom = rangeStart < countFrom ? countFrom : rangeStart;
+  const ledger = await computeCloseLedger(assigneeId, ledgerFrom, effectiveToday);
+  const holidayPoints = ledger.holidayPoints;
+  const leaveDaysEarned = Math.floor(holidayPoints / DESIGNER_POINTS_PER_LEAVE);
+  const advancePoints = holidayPoints;
 
   const weekStart = weekStartMonday(today);
   const weekKey = weekStart;
@@ -251,10 +428,13 @@ export async function computeDesignerStack(
     lastMonthDeficit,
     stackedBehind,
     surplusSoFar,
+    holidayPoints,
     leaveDaysEarned,
     advancePoints,
     sundayHoliday: true,
     optionalLeavesPerMonth: DESIGNER_OPTIONAL_LEAVES_PER_MONTH,
+    monthSundays: listMonthSundays(monthKey, today),
+    pointsPerLeave: DESIGNER_POINTS_PER_LEAVE,
     weekKey,
     weekTargetSoFar,
     weekClosed,
@@ -344,7 +524,7 @@ export async function designerClosesOnDay(
 
 async function dayActivity(assigneeId: string, ymd: string): Promise<{
   closed: number;
-  uploadsOnCalendarDay: number;
+  sundaySameDayCloses: number;
   firstStart: Date | null;
   lastEnd: Date | null;
 }> {
@@ -368,13 +548,18 @@ async function dayActivity(assigneeId: string, ymd: string): Promise<{
         closedByRole: "designer",
         uploadedAt: { gte: start, lte: end },
       },
-      select: { uploadedAt: true },
+      select: { startedAt: true, uploadedAt: true, dueDate: true },
       orderBy: { uploadedAt: "desc" },
     }),
   ]);
+  let sundaySameDayCloses = 0;
+  for (const e of ends) {
+    const c = classifyDesignerClose(e);
+    if (c.kind === "sunday_same_day") sundaySameDayCloses += 1;
+  }
   return {
     closed: creditClosed,
-    uploadsOnCalendarDay: ends.length,
+    sundaySameDayCloses,
     firstStart: starts[0]?.startedAt ?? null,
     lastEnd: ends[0]?.uploadedAt ?? null,
   };
@@ -466,7 +651,8 @@ export async function computeDesignerPerformance(
   const isSunday = dayIdForYmd(today) === "sun";
   // Credit by start day — Sunday never has a daily target / closedToday score
   const closedToday = isSunday ? 0 : activity.closed;
-  const catchUpClosedToday = isSunday ? activity.uploadsOnCalendarDay : 0;
+  // Sunday: uploads that started+closed today (true catch-up / holiday-point work)
+  const catchUpClosedToday = isSunday ? activity.sundaySameDayCloses : 0;
   const dailyTarget = isSunday ? 0 : DESIGNER_DAILY_TARGET;
   const underTarget = !isSunday && closedToday < DESIGNER_DAILY_TARGET;
   const redFlag =

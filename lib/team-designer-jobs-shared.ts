@@ -23,8 +23,8 @@ export const DESIGNER_DAILY_TARGET = 4;
 export const DESIGNER_WEEKLY_TARGET = DESIGNER_DAILY_TARGET * 6;
 /** Optional leaves each month — use or lose (do not stack). */
 export const DESIGNER_OPTIONAL_LEAVES_PER_MONTH = 2;
-/** Advance closes needed to unlock one permission leave. */
-export const DESIGNER_POINTS_PER_LEAVE = DESIGNER_DAILY_TARGET;
+/** Holiday points needed to unlock one permission leave. */
+export const DESIGNER_POINTS_PER_LEAVE = 7;
 /** Always schedule this many days forward from today (not calendar months). */
 export const DESIGNER_WINDOW_DAYS = 30;
 /** Cumulative 4/day stack starts here (IST). Misses carry forward. Sunday = break. */
@@ -182,6 +182,13 @@ export type DesignerMissedDayDto = {
   missed: number;
 };
 
+export type DesignerHolidaySundayDto = {
+  date: string;
+  label: string;
+  isPast: boolean;
+  isToday: boolean;
+};
+
 /** Cumulative target vs done from DESIGNER_STACK_START_DATE (Mon–Sat workdays). */
 export type DesignerStackDto = {
   countFrom: string;
@@ -198,16 +205,21 @@ export type DesignerStackDto = {
   lastMonthDeficit: number;
   /** What they still owe overall: this-month deficit + last-month carry */
   stackedBehind: number;
-  /** Extra closes beyond target (after clearing carry) */
+  /** Extra closes beyond target (after clearing carry) — legacy alias of holidayPoints */
   surplusSoFar: number;
-  /** floor(surplus / POINTS) — unlocks leave that still needs permission */
+  /** Holiday points (same-day extras + Sunday extras after catch-up) */
+  holidayPoints: number;
+  /** floor(holidayPoints / 7) — unlocks leave that still needs permission */
   leaveDaysEarned: number;
-  /** Advance points (= surplus closes after clearing behind) */
+  /** @deprecated use holidayPoints */
   advancePoints: number;
   /** Always true — Sunday is a fixed holiday */
   sundayHoliday: boolean;
   /** 2/month optional leaves — do not carry unused into next month */
   optionalLeavesPerMonth: number;
+  /** Sundays in the current month (for Holiday tab) */
+  monthSundays: DesignerHolidaySundayDto[];
+  pointsPerLeave: number;
   /** This ISO week (Mon–Sat): target through today and closes */
   weekKey: string;
   weekTargetSoFar: number;

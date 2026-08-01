@@ -288,7 +288,7 @@ async function readJson(res: Response) {
 export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   /** Who's queue you're looking at — filters instantly (no refetch). */
   const [designerTab, setDesignerTab] = useState<"all" | "mahesh" | "jeslyn">("all");
-  const [queueView, setQueueView] = useState<"open" | "closed">("open");
+  const [queueView, setQueueView] = useState<"open" | "closed" | "holiday">("open");
   const [outletFilter, setOutletFilter] = useState<"all" | string>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [allJobs, setAllJobs] = useState<DesignerJobDto[]>([]);
@@ -361,7 +361,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     }
   }, []);
 
-  const load = useCallback(async (opts?: { soft?: boolean; view?: "open" | "closed" }) => {
+  const load = useCallback(async (opts?: {
+    soft?: boolean;
+    view?: "open" | "closed" | "holiday";
+  }) => {
     const view = opts?.view ?? queueViewRef.current;
     const gen = ++loadGen.current;
     if (opts?.soft) setRefreshing(true);
@@ -934,6 +937,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
             [
               ["open", "Open"],
               ["closed", "Done"],
+              ["holiday", "Holiday"],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -950,7 +954,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
               }}
               className={`h-9 min-w-[4.5rem] rounded-md px-3 text-[13px] font-semibold ${
                 queueView === id
-                  ? "bg-white text-black"
+                  ? id === "holiday"
+                    ? "bg-violet-400 text-black"
+                    : "bg-white text-black"
                   : "text-white/50 hover:text-white/80"
               }`}
             >
@@ -999,36 +1005,44 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         ) : null}
       </div>
 
-      <div className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-        <p className="text-[12px] leading-snug text-white/65">
-          Finish <span className="font-semibold text-white/90">catch-up</span> first, then the focus
-          pack. Closes count on the day you <span className="font-semibold text-white/90">Start</span>
-          . Sunday = holiday (no daily target — Sunday work = catch-up).
-        </p>
-        <span
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/15 text-[12px] font-bold text-white/45"
-          title={`Start Mon → close Tue still counts as Mon. Sunday work always catch-up toward Sat/earlier. 4/day Mon–Sat. ${DESIGNER_OPTIONAL_LEAVES_PER_MONTH} optional leaves/mo. +${DESIGNER_POINTS_PER_LEAVE} advance = 1 leave (ask permission).`}
-        >
-          i
-        </span>
-      </div>
+      {queueView !== "holiday" ? (
+        <div className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+          <p className="text-[12px] leading-snug text-white/65">
+            Catch-up first, then focus pack. Closes count on{" "}
+            <span className="font-semibold text-white/90">Start</span> day. Sunday = holiday — same-day
+            Sunday work fills catch-up, then holiday points.
+          </p>
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/15 text-[12px] font-bold text-white/45"
+            title={`Start Sun + close Mon = Monday only (no Sunday points). Holiday points need same-day open+close. ${DESIGNER_POINTS_PER_LEAVE} points = 1 leave (ask permission). ${DESIGNER_OPTIONAL_LEAVES_PER_MONTH} optional leaves/mo.`}
+          >
+            i
+          </span>
+        </div>
+      ) : null}
 
-      {visiblePerf.map((p) => (
-        <DesignerPerformanceCard
-          key={p.assigneeId}
-          perf={p}
-          isAdmin={isAdmin}
-          compact={!isAdmin}
-          nudgeBusy={nudgeBusy === p.assigneeId}
-          onNudge={() => void sendManualNudge(p.assigneeId)}
-        />
-      ))}
+      {queueView !== "holiday"
+        ? visiblePerf.map((p) => (
+            <DesignerPerformanceCard
+              key={p.assigneeId}
+              perf={p}
+              isAdmin={isAdmin}
+              compact={!isAdmin}
+              nudgeBusy={nudgeBusy === p.assigneeId}
+              onNudge={() => void sendManualNudge(p.assigneeId)}
+            />
+          ))
+        : null}
 
-      {isAdmin && visiblePerf.length > 0 ? (
+      {isAdmin && visiblePerf.length > 0 && queueView !== "holiday" ? (
         <DesignerPerformanceGraph designers={visiblePerf} />
       ) : null}
 
-      {isAdmin ? (
+      {queueView === "holiday" ? (
+        <HolidayTabPanel designers={visiblePerf} />
+      ) : null}
+
+      {isAdmin && queueView !== "holiday" ? (
         <div className="space-y-2 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.06] px-3 py-2.5">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90">
@@ -1180,6 +1194,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         </div>
       ) : null}
 
+      {queueView !== "holiday" ? (
+      <>
       <div className="flex gap-1.5 overflow-x-auto pb-0.5">
         <button
           type="button"
@@ -2279,6 +2295,8 @@ https://instagram.com/…"
           </div>
         ) : null}
       </section>
+      </>
+      ) : null}
       </div>
       </div>
 
@@ -2457,6 +2475,80 @@ function PriorityModePicker({
   );
 }
 
+function HolidayTabPanel({ designers }: { designers: DesignerPerformanceDto[] }) {
+  if (designers.length === 0) {
+    return (
+      <p className="text-[13px] text-white/40">Loading holiday info…</p>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      {designers.map((perf) => {
+        const stack = perf.stack;
+        const points = stack?.holidayPoints ?? 0;
+        const per = stack?.pointsPerLeave ?? DESIGNER_POINTS_PER_LEAVE;
+        const unlocked = stack?.leaveDaysEarned ?? 0;
+        const sundays = stack?.monthSundays ?? [];
+        return (
+          <div
+            key={perf.assigneeId}
+            className="rounded-xl border border-violet-400/30 bg-violet-400/[0.07] px-3 py-3"
+          >
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-100/80">
+              {perf.name} · holidays
+            </p>
+            <p className="mt-1 text-[20px] font-semibold tabular-nums text-white">
+              {points}
+              <span className="ml-1.5 text-[12px] font-medium text-white/45">
+                holiday points · {per} = 1 leave
+              </span>
+            </p>
+            <p className="mt-1 text-[12px] text-white/55">
+              Unlocked leaves (ask permission):{" "}
+              <span className="font-semibold text-cyan-200">{unlocked}</span>
+              <span className="text-white/35">
+                {" "}
+                · Optional {stack?.optionalLeavesPerMonth ?? DESIGNER_OPTIONAL_LEAVES_PER_MONTH}
+                /mo (use or lose)
+              </span>
+            </p>
+            <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-white/40">
+              Sundays this month
+            </p>
+            <ul className="mt-1.5 space-y-1">
+              {sundays.length === 0 ? (
+                <li className="text-[12px] text-white/35">No Sundays listed.</li>
+              ) : (
+                sundays.map((s) => (
+                  <li
+                    key={s.date}
+                    className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[13px] ${
+                      s.isToday
+                        ? "bg-violet-400/20 text-violet-50"
+                        : s.isPast
+                          ? "text-white/45"
+                          : "text-white/75"
+                    }`}
+                  >
+                    <span>{s.label}</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-white/40">
+                      {s.isToday ? "Today · holiday" : "Holiday"}
+                    </span>
+                  </li>
+                ))
+              )}
+            </ul>
+            <p className="mt-2 text-[11px] leading-snug text-white/40">
+              Same-day Sunday work fills catch-up first, then points. Start Sun / close Mon counts as
+              Monday only — no free Sunday points.
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function DesignerPerformanceCard({
   perf,
   isAdmin,
@@ -2474,7 +2566,8 @@ function DesignerPerformanceCard({
   const behind = stack?.stackedBehind ?? 0;
   const flag = behind > 0 || perf.redFlag || perf.underTarget;
   const optional = stack?.optionalLeavesPerMonth ?? DESIGNER_OPTIONAL_LEAVES_PER_MONTH;
-  const points = stack?.advancePoints ?? stack?.surplusSoFar ?? 0;
+  const points = stack?.holidayPoints ?? stack?.advancePoints ?? 0;
+  const perLeave = stack?.pointsPerLeave ?? DESIGNER_POINTS_PER_LEAVE;
   const unlocked = stack?.leaveDaysEarned ?? 0;
   return (
     <div
@@ -2495,7 +2588,7 @@ function DesignerPerformanceCard({
             <p className="mt-0.5 text-[18px] font-semibold text-white/90">
               No daily target
               <span className="ml-2 text-[12px] font-medium text-white/45">
-                · catch-up done {perf.catchUpClosedToday} (counts to Sat / earlier)
+                · Sunday same-day done {perf.catchUpClosedToday}
               </span>
             </p>
           ) : (
@@ -2523,11 +2616,14 @@ function DesignerPerformanceCard({
         ) : null}
       </div>
       <p className="mt-1.5 text-[11px] text-white/55">
-        Sun holiday · Optional leaves {optional}/mo (no stack) · Advance {points}/
-        {DESIGNER_POINTS_PER_LEAVE}
+        Holiday points{" "}
+        <span className="font-semibold text-violet-200">
+          {points}/{perLeave}
+        </span>
         {unlocked > 0 ? (
           <span className="text-cyan-200"> · {unlocked} leave unlocked (ask permission)</span>
         ) : null}
+        <span className="text-white/35"> · Optional {optional}/mo</span>
         {behind > 0 ? <span className="text-red-300"> · Behind {behind}</span> : null}
       </p>
       {stack?.missedDays?.[0] ? (
