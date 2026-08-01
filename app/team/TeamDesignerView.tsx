@@ -58,6 +58,86 @@ function formatIstClock(iso: string | null | undefined): string {
   });
 }
 
+function formatIstDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return "—";
+  return d.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function formatDurationBetween(
+  startIso: string | null | undefined,
+  endIso: string | null | undefined,
+  nowMs = Date.now()
+): string | null {
+  if (!startIso) return null;
+  const start = Date.parse(startIso);
+  if (!Number.isFinite(start)) return null;
+  const end = endIso ? Date.parse(endIso) : nowMs;
+  if (!Number.isFinite(end) || end < start) return null;
+  const totalMin = Math.max(0, Math.round((end - start) / 60000));
+  if (totalMin < 1) return "<1m";
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+function JobTimingRow({ job }: { job: DesignerJobDto }) {
+  if (!job.startedAt && job.status !== "DESIGN_DONE") return null;
+  const ended =
+    job.status === "DESIGN_DONE" ? job.uploadedAt : null;
+  const duration = formatDurationBetween(
+    job.startedAt,
+    ended,
+    job.status === "IN_PROGRESS" || job.status === "PAUSED" ? Date.now() : undefined
+  );
+  if (!job.startedAt && !ended) return null;
+  return (
+    <p className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[12px] text-white/55">
+      <span>
+        Start{" "}
+        <span className="font-medium text-white/80">
+          {job.startedAt ? formatIstDateTime(job.startedAt) : "—"}
+        </span>
+      </span>
+      <span className="text-white/25">·</span>
+      <span>
+        End{" "}
+        <span className="font-medium text-white/80">
+          {job.status === "IN_PROGRESS"
+            ? "ongoing"
+            : job.status === "PAUSED"
+              ? "paused"
+              : ended
+                ? formatIstDateTime(ended)
+                : "—"}
+        </span>
+      </span>
+      {duration ? (
+        <>
+          <span className="text-white/25">·</span>
+          <span>
+            Duration{" "}
+            <span className="font-semibold text-cyan-200/90">{duration}</span>
+            {job.status === "IN_PROGRESS" ? (
+              <span className="text-white/40"> so far</span>
+            ) : null}
+          </span>
+        </>
+      ) : null}
+    </p>
+  );
+}
+
 function jobBriefText(job: DesignerJobDto): string | null {
   if (isBoilerplateDesignerDescription(job.description, job.title)) return null;
   const t = job.description?.trim() ?? "";
@@ -221,6 +301,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     unlockAt: number;
   } | null>(null);
   const [, setUploadGateTick] = useState(0);
+  /** Re-render so in-progress “duration so far” stays fresh. */
+  const [timingTick, setTimingTick] = useState(0);
   /** Only one brief editor open — avoids 40+ textareas killing the UI. */
   const [briefJobId, setBriefJobId] = useState<string | null>(null);
   const [briefDrafts, setBriefDrafts] = useState<Record<string, string>>({});
@@ -658,6 +740,16 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     }, 500);
     return () => window.clearInterval(id);
   }, [uploadGate]);
+
+  const hasInProgress = useMemo(
+    () => allJobs.some((j) => j.status === "IN_PROGRESS"),
+    [allJobs]
+  );
+  useEffect(() => {
+    if (!hasInProgress) return;
+    const id = window.setInterval(() => setTimingTick((n) => n + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, [hasInProgress]);
 
   const tryOpenUpload = (job: DesignerJobDto, mode: "close" | "attach") => {
     if (!isAdmin && job.status === "IN_PROGRESS" && mode === "close") {
@@ -1273,6 +1365,8 @@ https://instagram.com/…"
                     {job.lane === "WEEKDAY" ? " (day before)" : " (−4 days)"}
                   </span>
                 </div>
+                {/* timingTick refreshes in-progress duration */}
+                <JobTimingRow key={timingTick} job={job} />
                 {brief ? (
                   <p className="mt-2 whitespace-pre-wrap text-[14px] leading-snug text-white/75">
                     {brief}
