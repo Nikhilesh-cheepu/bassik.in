@@ -16,12 +16,16 @@ import {
 } from "@/lib/team-designer-jobs-shared";
 import { computeDesignerMetrics } from "@/lib/team-designer-jobs";
 
-/** Stack target days — Sunday is a break (no 4/day owed). */
+/**
+ * Days that add +4 to the cumulative target.
+ * Sunday posts still exist in the queue — Sunday just isn’t a required workday for the stack.
+ */
 const STACK_WEEKEND_DAYS: ChecklistDayId[] = ["fri", "sat"];
 const STACK_WEEKDAY_DAYS: ChecklistDayId[] = ["mon", "tue", "wed", "thu"];
 
 function isStackWorkday(assigneeId: string, ymd: string): boolean {
   const day = dayIdForYmd(ymd);
+  // Break from target only — does not remove Sunday go-live jobs from Mahesh’s queue
   if (day === "sun") return false;
   if (assigneeId === DESIGNER_ASSIGNEE_WEEKEND) return STACK_WEEKEND_DAYS.includes(day);
   if (assigneeId === DESIGNER_ASSIGNEE_WEEKDAY) return STACK_WEEKDAY_DAYS.includes(day);
