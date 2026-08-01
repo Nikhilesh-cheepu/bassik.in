@@ -34,9 +34,10 @@ import {
   DESIGNER_POINTS_PER_LEAVE,
   DESIGNER_STACK_START_DATE,
   DESIGNER_WINDOW_DAYS,
+  catchUpMetaFromStack,
   designerFormatLabel,
   isBoilerplateDesignerDescription,
-  partitionOpenDesignerQueue,
+  partitionOpenDesignerQueueByAssignee,
   sortDesignerJobs,
   type DesignerJobDto,
   type DesignerPerformanceDto,
@@ -44,6 +45,12 @@ import {
   type DesignerReminderLogDto,
   type DesignerSuggestedNudgeDto,
 } from "@/lib/team-designer-jobs-shared";
+
+type QueueView = "catchUp" | "open" | "closed" | "holiday";
+
+function isOpenQueueView(view: QueueView): boolean {
+  return view === "open" || view === "catchUp";
+}
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { uploadTeamFile } from "@/lib/team-client-upload";
 import { teamDownloadHref } from "@/lib/team-download";
@@ -254,6 +261,47 @@ function formatPostDateParts(ymd: string): { dayName: string; dateLabel: string 
   };
 }
 
+function istYmdFromIso(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+/** Group Done jobs by close day (uploadedAt), newest day first. */
+function groupDoneJobsByDay(jobs: DesignerJobDto[]): {
+  key: string;
+  dayName: string;
+  dateLabel: string;
+  jobs: DesignerJobDto[];
+}[] {
+  const map = new Map<string, DesignerJobDto[]>();
+  for (const j of jobs) {
+    const key =
+      istYmdFromIso(j.uploadedAt) ||
+      istYmdFromIso(j.updatedAt) ||
+      j.postDate ||
+      "unknown";
+    const list = map.get(key) ?? [];
+    list.push(j);
+    map.set(key, list);
+  }
+  return [...map.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([key, list]) => {
+      const parts =
+        key === "unknown"
+          ? { dayName: "Unknown", dateLabel: "" }
+          : formatPostDateParts(key);
+      return {
+        key,
+        dayName: parts.dayName,
+        dateLabel: parts.dateLabel,
+        jobs: list,
+      };
+    });
+}
+
 function designerDisplayName(assigneeId: string): string {
   if (assigneeId === "mahesh") return "Mahesh";
   if (assigneeId === "jeslyn") return "Jeslyn";
@@ -287,7 +335,7 @@ async function readJson(res: Response) {
 export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   /** Who's queue you're looking at — filters instantly (no refetch). */
   const [designerTab, setDesignerTab] = useState<"all" | "mahesh" | "jeslyn">("all");
-  const [queueView, setQueueView] = useState<"open" | "closed" | "holiday">("open");
+  const [queueView, setQueueView] = useState<QueueView>("catchUp");
   const [outletFilter, setOutletFilter] = useState<"all" | string>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [allJobs, setAllJobs] = useState<DesignerJobDto[]>([]);
@@ -362,7 +410,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
 
   const load = useCallback(async (opts?: {
     soft?: boolean;
-    view?: "open" | "closed" | "holiday";
+    view?: QueueView;
   }) => {
     const view = opts?.view ?? queueViewRef.current;
     const gen = ++loadGen.current;
@@ -474,6 +522,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
    */
   const designerVisibleJobs = useMemo(() => {
     if (queueView === "closed") return scopedJobs;
+    if (queueView === "holiday") return [];
     return scopedJobs.filter(
       (j) =>
         j.status === "READY_TO_DESIGN" ||
@@ -552,7 +601,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       const updated = data.job as DesignerJobDto | undefined;
       if (updated) {
         setAllJobs((prev) => {
-          if (queueViewRef.current === "open" && updated.status === "DESIGN_DONE") {
+          if (
+            isOpenQueueView(queueViewRef.current) &&
+            updated.status === "DESIGN_DONE"
+          ) {
             return prev.filter((j) => j.id !== id);
           }
           if (queueViewRef.current === "closed" && updated.status !== "DESIGN_DONE") {
@@ -917,13 +969,31 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   };
 
   const queue = jobs;
-  const openParts = useMemo(
-    () =>
-      queueView === "open"
-        ? partitionOpenDesignerQueue(queue, DESIGNER_DAILY_TARGET)
-        : { catchUp: [] as DesignerJobDto[], todayPack: [] as DesignerJobDto[], upNext: [] as DesignerJobDto[] },
-    [queue, queueView]
-  );
+  /** Always from open statuses (so Catch up tab badge stays correct on Done/Holiday). */
+  const openJobsForPartition = useMemo(() => {
+    let list = scopedJobs.filter(
+      (j) =>
+        j.status === "READY_TO_DESIGN" ||
+        j.status === "IN_PROGRESS" ||
+        j.status === "PAUSED"
+    );
+    if (outletFilter !== "all") {
+      list = list.filter((j) => j.outletId === outletFilter);
+    }
+    return sortDesignerJobs(list);
+  }, [scopedJobs, outletFilter]);
+
+  const openParts = useMemo(() => {
+    const metaMap = new Map(
+      perfDesigners.map((p) => [p.assigneeId, catchUpMetaFromStack(p.stack)] as const)
+    );
+    return partitionOpenDesignerQueueByAssignee(
+      openJobsForPartition,
+      metaMap,
+      DESIGNER_DAILY_TARGET
+    );
+  }, [openJobsForPartition, perfDesigners]);
+  const catchUpCount = openParts.catchUp.length;
   const canDragQueue = isAdmin && queueView === "open" && queue.length > 1;
 
   return (
@@ -931,9 +1001,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-28 [-webkit-overflow-scrolling:touch] xl:pb-10">
       <div className="mx-auto w-full max-w-3xl space-y-4 py-3">
       <div className="relative z-[1] flex flex-wrap items-end gap-2">
-        <div className="flex rounded-lg bg-black/35 p-1">
+        <div className="flex flex-wrap rounded-lg bg-black/35 p-1">
           {(
             [
+              ["catchUp", catchUpCount > 0 ? `Catch up (${catchUpCount})` : "Catch up"],
               ["open", "Open"],
               ["closed", "Done"],
               ["holiday", "Holiday"],
@@ -955,8 +1026,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
                 queueView === id
                   ? id === "holiday"
                     ? "bg-violet-400 text-black"
-                    : "bg-white text-black"
-                  : "text-white/50 hover:text-white/80"
+                    : id === "catchUp"
+                      ? "bg-orange-400 text-black"
+                      : "bg-white text-black"
+                  : id === "catchUp" && catchUpCount > 0
+                    ? "text-orange-200 hover:text-orange-100"
+                    : "text-white/50 hover:text-white/80"
               }`}
             >
               {label}
@@ -1157,7 +1232,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         </div>
       ) : null}
 
-      {isAdmin && queueView === "open" ? (
+      {isAdmin && isOpenQueueView(queueView) ? (
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -1816,7 +1891,7 @@ https://instagram.com/…"
               </div>
             ) : null}
 
-            {isAdmin && queueView === "open" && job.status !== "DESIGN_DONE" ? (
+            {isAdmin && isOpenQueueView(queueView) && job.status !== "DESIGN_DONE" ? (
               <div className="mt-3 border-t border-white/[0.08] pt-3">
                 {briefJobId === job.id ? (
                   <div className="space-y-2">
@@ -2094,33 +2169,79 @@ https://instagram.com/…"
           };
 
           if (queueView === "closed") {
+            const groups = groupDoneJobsByDay(queue);
             return (
-              <div className="space-y-2">
+              <div className="space-y-5">
                 <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/50">
-                  Done ({queue.length})
+                  Done · {queue.length} total
                 </h2>
-                {queue.map((job) => renderJob(job, undefined, "done"))}
+                {groups.map((g) => (
+                  <div key={g.key} className="space-y-2">
+                    <h3 className="text-[13px] font-semibold text-white/80">
+                      {g.dayName} · {g.dateLabel}
+                      <span className="ml-2 text-[11px] font-medium text-white/40">
+                        ({g.jobs.length})
+                      </span>
+                    </h3>
+                    {g.jobs.map((job) => renderJob(job, undefined, "done"))}
+                  </div>
+                ))}
               </div>
             );
           }
 
-          if (!canDragQueue) {
+          if (queueView === "catchUp") {
+            if (openParts.catchUp.length === 0) {
+              return (
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center">
+                  <p className="text-[14px] font-semibold text-white/80">No catch-up</p>
+                  <p className="mt-1 text-[12px] text-white/45">
+                    Past days are clear. Use Open for today’s pack.
+                  </p>
+                </div>
+              );
+            }
             return (
               <div className="space-y-5">
                 {renderSection(
-                  "Catch up first",
-                  "Missed / past due — finish these before today’s list.",
+                  "Catch up",
+                  openParts.catchUpHint,
                   openParts.catchUp,
                   "catchUp",
                   "text-orange-200"
                 )}
+              </div>
+            );
+          }
+
+          const focusTitle = visiblePerf[0]?.isSundayHoliday
+            ? "Next day pack"
+            : `Today’s ${DESIGNER_DAILY_TARGET}`;
+          const focusHint = visiblePerf[0]?.isSundayHoliday
+            ? catchUpCount > 0
+              ? "Optional — earn holiday points today. Finish Catch up tab first."
+              : "Optional — complete these today to earn holiday points."
+            : catchUpCount > 0
+              ? "Focus pack after Catch up. Extra = Start + Close same day."
+              : "Focus pack. Extra points only if you Start + Close the same day.";
+
+          if (!canDragQueue) {
+            return (
+              <div className="space-y-5">
+                {catchUpCount > 0 ? (
+                  <div className="rounded-lg border border-orange-400/35 bg-orange-400/10 px-3 py-2 text-[12px] text-orange-100">
+                    {catchUpCount} in Catch up — finish that tab first
+                    {openParts.catchUpHint ? (
+                      <span className="text-orange-100/70">
+                        {" "}
+                        · {openParts.catchUpHint.replace(/\s*Finish this before today’s pack\.\s*$/, "")}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
                 {renderSection(
-                  visiblePerf[0]?.isSundayHoliday
-                    ? "Next day pack"
-                    : `Today’s ${DESIGNER_DAILY_TARGET}`,
-                  visiblePerf[0]?.isSundayHoliday
-                    ? "Optional — complete these today to earn holiday points (after any catch-up)."
-                    : "Focus pack. Extra points only if you Start + Close the same day.",
+                  focusTitle,
+                  focusHint,
                   openParts.todayPack,
                   "today",
                   "text-emerald-200"
@@ -2143,26 +2264,20 @@ https://instagram.com/…"
               onDragEnd={onQueueDragEnd}
             >
               <SortableContext
-                items={queue.map((j) => j.id)}
+                items={[...openParts.todayPack, ...openParts.upNext].map((j) => j.id)}
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-5">
+                  {catchUpCount > 0 ? (
+                    <div className="rounded-lg border border-orange-400/35 bg-orange-400/10 px-3 py-2 text-[12px] text-orange-100">
+                      {catchUpCount} in Catch up — finish that tab first
+                    </div>
+                  ) : null}
                   {(
                     [
                       [
-                        "Catch up first",
-                        "Missed / past due — finish these before the focus pack.",
-                        openParts.catchUp,
-                        "catchUp",
-                        "text-orange-200",
-                      ],
-                      [
-                        visiblePerf[0]?.isSundayHoliday
-                          ? "Next day pack"
-                          : `Today’s ${DESIGNER_DAILY_TARGET}`,
-                        visiblePerf[0]?.isSundayHoliday
-                          ? "Optional — complete these today to earn holiday points (after any catch-up)."
-                          : "Focus pack. Drag ≡ to reorder. Extra = Start + Close same day.",
+                        focusTitle,
+                        focusHint,
                         openParts.todayPack,
                         "today",
                         "text-emerald-200",
@@ -2177,7 +2292,7 @@ https://instagram.com/…"
                     ] as const
                   ).map(([title, hint, list, tone, headingClass]) =>
                     list.length === 0 ? null : (
-                      <div key={title} className="space-y-2">
+                      <div key={String(title)} className="space-y-2">
                         <div>
                           <h2
                             className={`text-[12px] font-semibold uppercase tracking-wide ${headingClass}`}
@@ -2203,7 +2318,7 @@ https://instagram.com/…"
           );
         })()}
 
-        {isAdmin && queueView === "open" && sendableJobs.length > 0 ? (
+        {isAdmin && isOpenQueueView(queueView) && sendableJobs.length > 0 ? (
           <div className="mt-5 space-y-2 border-t border-white/[0.08] pt-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-[12px] font-semibold uppercase tracking-wide text-amber-200/80">

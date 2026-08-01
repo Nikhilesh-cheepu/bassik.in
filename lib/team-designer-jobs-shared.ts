@@ -229,21 +229,112 @@ export type DesignerStackDto = {
   missedDays: DesignerMissedDayDto[];
 };
 
+export type DesignerCatchUpMeta = {
+  /** Past-day shortfalls (not today’s unfinished 4) */
+  catchUpSlots: number;
+  /** e.g. "Saturday · 1 Aug" */
+  pendingFromLabel: string | null;
+};
+
+export function catchUpMetaFromStack(stack: {
+  missedDays?: Array<{ date: string; missed: number }>;
+} | null | undefined): DesignerCatchUpMeta {
+  const missed = stack?.missedDays ?? [];
+  const catchUpSlots = missed.reduce((n, d) => n + (d.missed ?? 0), 0);
+  const miss = missed[0];
+  if (!miss?.date) return { catchUpSlots, pendingFromLabel: null };
+  const [y, m, d] = miss.date.split("-").map(Number);
+  if (!y || !m || !d) return { catchUpSlots, pendingFromLabel: miss.date };
+  const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  const dayName = dt.toLocaleDateString("en-IN", { weekday: "long", timeZone: "UTC" });
+  const dateLabel = dt.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+  return { catchUpSlots, pendingFromLabel: `${dayName} · ${dateLabel}` };
+}
+
 /** Split open queue into catch-up / today's 4 / later (extras spill out of today). */
 export function partitionOpenDesignerQueue(
   jobs: DesignerJobDto[],
+  dailyTarget = DESIGNER_DAILY_TARGET,
+  opts?: {
+    /** How many closes still owed from earlier days (stacked behind) */
+    catchUpSlots?: number;
+    /** e.g. "Saturday · 1 Aug" */
+    pendingFromLabel?: string | null;
+  }
+): {
+  catchUp: DesignerJobDto[];
+  todayPack: DesignerJobDto[];
+  upNext: DesignerJobDto[];
+  catchUpHint: string;
+} {
+  const sorted = sortDesignerJobs(jobs.filter((j) => j.status !== "DESIGN_DONE"));
+  const overdue = sorted.filter((j) => j.isOverdue);
+  const notOverdue = sorted.filter((j) => !j.isOverdue);
+  const slots = Math.max(overdue.length, opts?.catchUpSlots ?? 0);
+  const fromRest = Math.max(0, slots - overdue.length);
+  const catchUp = [...overdue, ...notOverdue.slice(0, fromRest)];
+  const catchIds = new Set(catchUp.map((j) => j.id));
+  const remaining = sorted.filter((j) => !catchIds.has(j.id));
+  const todayPack = remaining.slice(0, dailyTarget);
+  const upNext = remaining.slice(dailyTarget);
+  const from = opts?.pendingFromLabel?.trim();
+  const catchUpHint = from
+    ? `Pending work from ${from}. Finish this before today’s pack.`
+    : overdue.length > 0
+      ? "Past due — finish this before today’s pack."
+      : slots > 0
+        ? "Pending work from earlier days. Finish this before today’s pack."
+        : "Finish this before today’s pack.";
+  return { catchUp, todayPack, upNext, catchUpHint };
+}
+
+/**
+ * Partition open jobs per assignee (so Mahesh’s missed day doesn’t steal Jeslyn’s queue).
+ */
+export function partitionOpenDesignerQueueByAssignee(
+  jobs: DesignerJobDto[],
+  perfByAssignee: Map<string, DesignerCatchUpMeta>,
   dailyTarget = DESIGNER_DAILY_TARGET
 ): {
   catchUp: DesignerJobDto[];
   todayPack: DesignerJobDto[];
   upNext: DesignerJobDto[];
+  catchUpHint: string;
 } {
-  const sorted = sortDesignerJobs(jobs.filter((j) => j.status !== "DESIGN_DONE"));
-  const catchUp = sorted.filter((j) => j.isOverdue);
-  const rest = sorted.filter((j) => !j.isOverdue);
-  const todayPack = rest.slice(0, dailyTarget);
-  const upNext = rest.slice(dailyTarget);
-  return { catchUp, todayPack, upNext };
+  const byAssignee = new Map<string, DesignerJobDto[]>();
+  for (const j of jobs) {
+    const list = byAssignee.get(j.assigneeId) ?? [];
+    list.push(j);
+    byAssignee.set(j.assigneeId, list);
+  }
+  const catchUp: DesignerJobDto[] = [];
+  const todayPack: DesignerJobDto[] = [];
+  const upNext: DesignerJobDto[] = [];
+  let catchUpHint = "";
+  for (const [assigneeId, list] of byAssignee) {
+    const meta = perfByAssignee.get(assigneeId) ?? {
+      catchUpSlots: 0,
+      pendingFromLabel: null,
+    };
+    const parts = partitionOpenDesignerQueue(list, dailyTarget, {
+      catchUpSlots: meta.catchUpSlots,
+      pendingFromLabel: meta.pendingFromLabel,
+    });
+    catchUp.push(...parts.catchUp);
+    todayPack.push(...parts.todayPack);
+    upNext.push(...parts.upNext);
+    if (!catchUpHint && parts.catchUp.length > 0) catchUpHint = parts.catchUpHint;
+  }
+  return {
+    catchUp: sortDesignerJobs(catchUp),
+    todayPack: sortDesignerJobs(todayPack),
+    upNext: sortDesignerJobs(upNext),
+    catchUpHint,
+  };
 }
 
 export function designerFormatLabel(format: string): string {
