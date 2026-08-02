@@ -3055,7 +3055,10 @@ function DesignerPerformanceCard({
           You can earn holiday points by working today (next-day pack below). Check the{" "}
           <span className="font-semibold text-violet-200">Holiday</span> tab for points and Sundays.
           {perf.catchUpClosedToday > 0 ? (
-            <span className="text-white/45"> · Sunday work done {perf.catchUpClosedToday}</span>
+            <span className="text-white/45">
+              {" "}
+              · Catch-up done today {perf.catchUpClosedToday}
+            </span>
           ) : null}
         </p>
       ) : (
@@ -3067,8 +3070,14 @@ function DesignerPerformanceCard({
           {unlocked > 0 ? (
             <span className="text-cyan-200"> · {unlocked} leave unlocked (ask permission)</span>
           ) : null}
+          {perf.catchUpClosedToday > 0 ? (
+            <span className="text-violet-200">
+              {" "}
+              · Catch-up done today {perf.catchUpClosedToday}
+            </span>
+          ) : null}
           {pastCatchUp > 0 ? (
-            <span className="text-orange-200"> · Catch-up {pastCatchUp}</span>
+            <span className="text-orange-200"> · Catch-up owed {pastCatchUp}</span>
           ) : null}
           {showStackBehind ? (
             <span className="text-red-300"> · Behind {behind}</span>

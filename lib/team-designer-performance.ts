@@ -216,9 +216,31 @@ function holidayPointsFromWorkday(total: number, sameDay: number): number {
   return Math.max(0, sameDay - sameDayNeededForTarget);
 }
 
+/** Credit one close onto the oldest short workday before `beforeYmd`, if any. */
+function placeCatchUpFill(
+  assigneeId: string,
+  byWorkday: Map<string, number>,
+  fromYmd: string,
+  beforeYmd: string
+): boolean {
+  let cur = addDaysYmd(beforeYmd, -1);
+  for (let i = 0; i < 60 && cur >= fromYmd; i++) {
+    if (isStackWorkday(assigneeId, cur)) {
+      const have = byWorkday.get(cur) ?? 0;
+      if (have < DESIGNER_DAILY_TARGET) {
+        byWorkday.set(cur, have + 1);
+        return true;
+      }
+    }
+    cur = addDaysYmd(cur, -1);
+  }
+  return false;
+}
+
 /**
  * Build workday credits + holiday points for [fromYmd, toYmd].
- * Sunday same-day closes fill oldest deficits first, then become points.
+ * Catch-up first: any close (weekday or Sunday start) fills oldest past shortfall
+ * before it counts toward the start day’s 4/day — so Catch up work doesn’t fake “4/4 today”.
  */
 async function computeCloseLedger(
   assigneeId: string,
@@ -231,7 +253,16 @@ async function computeCloseLedger(
   if (fromYmd > toYmd) return { byWorkday, holidayPoints };
 
   const rows = await fetchCloseRows(assigneeId, fromYmd, toYmd);
+  // Chronological: earlier finishes apply to catch-up debt first
+  rows.sort((a, b) => {
+    const at = (a.uploadedAt ?? a.startedAt)?.getTime() ?? 0;
+    const bt = (b.uploadedAt ?? b.startedAt)?.getTime() ?? 0;
+    return at - bt;
+  });
+
   const sundayPool: string[] = [];
+  type Pending = { creditYmd: string; sameDay: boolean; dueDate: string };
+  const pendingWorkdays: Pending[] = [];
 
   for (const r of rows) {
     const c = classifyDesignerClose(r);
@@ -241,19 +272,44 @@ async function computeCloseLedger(
       continue;
     }
     if (c.creditYmd < fromYmd || c.creditYmd > toYmd) continue;
-    // Don't credit onto Sunday
     if (!isStackWorkday(assigneeId, c.creditYmd)) continue;
-    const b = buckets.get(c.creditYmd) ?? { total: 0, sameDay: 0 };
+    pendingWorkdays.push({
+      creditYmd: c.creditYmd,
+      sameDay: c.sameDay,
+      dueDate: r.dueDate || "",
+    });
+  }
+
+  // Weekday closes: (1) fill past 4/day holes (2) past-due deadlines ≠ today’s 4 (3) else today
+  for (const p of pendingWorkdays) {
+    if (placeCatchUpFill(assigneeId, byWorkday, fromYmd, p.creditYmd)) {
+      continue; // calendar catch-up — not today’s pack
+    }
+    // Design due before the start day = missed-deadline catch-up (e.g. Mon story due Sun)
+    if (p.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(p.dueDate) && p.dueDate < p.creditYmd) {
+      const dueDay = previousStackWorkday(p.dueDate);
+      if (
+        dueDay >= fromYmd &&
+        dueDay < p.creditYmd &&
+        isStackWorkday(assigneeId, dueDay)
+      ) {
+        const have = byWorkday.get(dueDay) ?? 0;
+        if (have < DESIGNER_DAILY_TARGET) {
+          byWorkday.set(dueDay, have + 1);
+          continue;
+        }
+      }
+      // Still catch-up work — do not inflate today’s 4/4
+      continue;
+    }
+    const b = buckets.get(p.creditYmd) ?? { total: 0, sameDay: 0 };
     b.total += 1;
-    if (c.sameDay) b.sameDay += 1;
-    buckets.set(c.creditYmd, b);
+    if (p.sameDay) b.sameDay += 1;
+    buckets.set(p.creditYmd, b);
+    byWorkday.set(p.creditYmd, (byWorkday.get(p.creditYmd) ?? 0) + 1);
   }
 
-  for (const [ymd, b] of buckets) {
-    byWorkday.set(ymd, b.total);
-  }
-
-  // Workday same-day extras → holiday points (before Sunday catch-up mutates totals)
+  // Same-day extras on a day’s own pack → holiday points
   for (const b of buckets.values()) {
     holidayPoints += holidayPointsFromWorkday(b.total, b.sameDay);
   }
@@ -261,20 +317,9 @@ async function computeCloseLedger(
   // Sunday-started work → catch-up on oldest short workdays, else holiday points
   sundayPool.sort();
   for (const sundayYmd of sundayPool) {
-    let placed = false;
-    let cur = addDaysYmd(sundayYmd, -1);
-    for (let i = 0; i < 60 && cur >= fromYmd; i++) {
-      if (isStackWorkday(assigneeId, cur)) {
-        const have = byWorkday.get(cur) ?? 0;
-        if (have < DESIGNER_DAILY_TARGET) {
-          byWorkday.set(cur, have + 1);
-          placed = true;
-          break;
-        }
-      }
-      cur = addDaysYmd(cur, -1);
+    if (!placeCatchUpFill(assigneeId, byWorkday, fromYmd, sundayYmd)) {
+      holidayPoints += 1;
     }
-    if (!placed) holidayPoints += 1;
   }
 
   return { byWorkday, holidayPoints };
@@ -564,10 +609,17 @@ async function dayActivity(assigneeId: string, ymd: string): Promise<{
       orderBy: { uploadedAt: "desc" },
     }),
   ]);
+  // Uploads today that were catch-up (Sunday start, or design due before start day)
   let sundaySameDayCloses = 0;
   for (const e of ends) {
     const c = classifyDesignerClose(e);
-    if (c.kind === "sunday_work") sundaySameDayCloses += 1;
+    if (c.kind === "sunday_work") {
+      sundaySameDayCloses += 1;
+      continue;
+    }
+    if (c.kind === "workday" && e.dueDate && e.dueDate < c.creditYmd) {
+      sundaySameDayCloses += 1; // reused as catch-up closes today (UI label)
+    }
   }
   return {
     closed: creditClosed,
@@ -661,10 +713,10 @@ export async function computeDesignerPerformance(
   ).length;
 
   const isSunday = dayIdForYmd(today) === "sun";
-  // Credit by start day — Sunday never has a daily target / closedToday score
+  // Today’s 4/day — catch-up / past-due closes are excluded in the ledger
   const closedToday = isSunday ? 0 : activity.closed;
-  // Sunday: uploads that started+closed today (true catch-up / holiday-point work)
-  const catchUpClosedToday = isSunday ? activity.sundaySameDayCloses : 0;
+  // Catch-up uploads today (Sunday starts, or design due before start day)
+  const catchUpClosedToday = activity.sundaySameDayCloses;
   const dailyTarget = isSunday ? 0 : DESIGNER_DAILY_TARGET;
   const underTarget = !isSunday && closedToday < DESIGNER_DAILY_TARGET;
   const pastCatchUp = (stack.missedDays ?? []).reduce(
