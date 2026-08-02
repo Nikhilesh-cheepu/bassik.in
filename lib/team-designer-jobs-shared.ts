@@ -96,12 +96,12 @@ export function isBoilerplateDesignerDescription(
 }
 
 /**
- * sortOrder &lt; this = admin drag / interrupt pin (floats above date queue).
- * Natural event-date keys are YYYYMMDD*100+… (≥ ~2026010100).
+ * sortOrder &lt; this = admin drag / interrupt pin (floats above deadline queue).
+ * Natural deadline keys are YYYYMMDD*100+… (≥ ~2026010100).
  */
 export const DESIGNER_MANUAL_SORT_CEILING = 1_000_000;
 
-/** Outlet rotation within a go-live day: C53 → Boiler → Firefly → Komma. */
+/** Outlet rotation within the same deadline: C53 → Boiler → Firefly → Komma. */
 export function designerOutletRank(outletId: string): number {
   const i = DESIGNER_MONTH_OUTLET_IDS.indexOf(
     outletId as (typeof DESIGNER_MONTH_OUTLET_IDS)[number]
@@ -110,15 +110,16 @@ export function designerOutletRank(outletId: string): number {
 }
 
 /**
- * Natural queue key from **event/go-live date**, then outlet, then format.
- * Same Friday = all outlets together, then Saturday — not one outlet’s whole weekend first.
+ * Natural queue key from **design deadline**, then outlet, then format.
+ * Fri events (due Mon) → Sat (due Tue) → Sun (due Wed). Extra tasks with an
+ * earlier deadline slot ahead of later weekend work.
  */
 export function naturalDesignerSortOrder(
-  postDate: string,
+  dueDate: string,
   outletId: string,
   format = "post"
 ): number {
-  const day = Number(String(postDate).replace(/-/g, ""));
+  const day = Number(String(dueDate).replace(/-/g, ""));
   if (!Number.isFinite(day) || day <= 0) {
     return DESIGNER_MANUAL_SORT_CEILING + designerOutletRank(outletId);
   }
@@ -140,9 +141,9 @@ function isManualDesignerSortOrder(sortOrder: number | null | undefined): boolea
 /**
  * Queue order:
  * 1) In progress / Paused pin
- * 2) Interrupt mode (Pause now → After current → by date)
- * 3) Manual band (drag / interrupt sortOrder &lt; 1e6) above date queue
- * 4) Event date → outlet → format → due (never random)
+ * 2) Interrupt mode (ASAP / after current)
+ * 3) Manual band (drag / interrupt sortOrder &lt; 1e6)
+ * 4) Deadline → event date → outlet → format (never random)
  */
 export function sortDesignerJobs(jobs: DesignerJobDto[]): DesignerJobDto[] {
   const pinRank = (s: DesignerJobStatus) => {
@@ -172,7 +173,10 @@ export function sortDesignerJobs(jobs: DesignerJobDto[]): DesignerJobDto[] {
       return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
     }
 
-    // Date queue (and tie-break when both natural)
+    // Deadline queue — earliest design due first (Fri pack Mon, Sat Tue, …)
+    if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
+    if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+    if (a.isDueToday !== b.isDueToday) return a.isDueToday ? -1 : 1;
     if (a.postDate !== b.postDate) return a.postDate.localeCompare(b.postDate);
     const oa = designerOutletRank(a.outletId);
     const ob = designerOutletRank(b.outletId);
@@ -183,10 +187,7 @@ export function sortDesignerJobs(jobs: DesignerJobDto[]): DesignerJobDto[] {
     if (!aManual && !bManual && (a.sortOrder ?? 0) !== (b.sortOrder ?? 0)) {
       return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
     }
-    if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
-    if (a.isDueToday !== b.isDueToday) return a.isDueToday ? -1 : 1;
     if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
-    if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
     return (a.title || "").localeCompare(b.title || "");
   });
 }

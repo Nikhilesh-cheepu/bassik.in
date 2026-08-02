@@ -374,6 +374,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     title: "",
     description: "",
     links: "",
+    dueDate: "",
     postDate: "",
     urgent: false,
     priorityMode: "NONE" as DesignerPriorityMode,
@@ -930,8 +931,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           title: adhoc.title.trim(),
           description: adhoc.description,
           links: adhoc.links,
-          postDate: adhoc.postDate.trim() || undefined,
-          dueDate: adhoc.postDate.trim() || undefined,
+          dueDate: adhoc.dueDate.trim() || undefined,
+          postDate: adhoc.postDate.trim() || adhoc.dueDate.trim() || undefined,
           urgent: adhoc.urgent || adhoc.priorityMode !== "NONE",
           priorityMode: adhoc.priorityMode,
         }),
@@ -944,6 +945,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         title: "",
         description: "",
         links: "",
+        dueDate: "",
         postDate: "",
         urgent: false,
         priorityMode: "NONE",
@@ -1087,8 +1089,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         <div className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
           <p className="text-[12px] leading-snug text-white/65">
             WFH — your work, your responsibility. Minimum{" "}
-            <span className="font-semibold text-white/90">4/day</span> Mon–Sat. Extra same-day closes
-            earn holiday points (see Holiday tab).
+            <span className="font-semibold text-white/90">4/day</span> Mon–Sat. Queue is by{" "}
+            <span className="font-semibold text-white/90">design deadline</span> (earliest first).
+            Extra same-day closes earn holiday points (see Holiday tab).
           </p>
           <span
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/15 text-[12px] font-bold text-white/45"
@@ -1332,8 +1335,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           <div>
             <p className="text-[13px] font-semibold text-amber-50">Add task</p>
             <p className="text-[11px] text-white/45">
-              Set the event / go-live date — queue slots by date (C53 → Boiler → Firefly → Komma
-              that day). Leave blank = today ({todayYmdLocal()}).
+              Queue is ordered by design deadline (Fri posts → Mon due, Sat → Tue, Sun → Wed). Set
+              a deadline so extras land in the right place when he’s free.
             </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -1352,7 +1355,16 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
               </select>
             </label>
             <label className="block text-[11px] text-white/50">
-              Event / go-live date
+              Design deadline
+              <input
+                type="date"
+                value={adhoc.dueDate}
+                onChange={(e) => setAdhoc((a) => ({ ...a, dueDate: e.target.value }))}
+                className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2 text-[13px] text-white"
+              />
+            </label>
+            <label className="block text-[11px] text-white/50">
+              Event / go-live (optional)
               <input
                 type="date"
                 value={adhoc.postDate}
@@ -1360,7 +1372,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
                 className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2 text-[13px] text-white"
               />
             </label>
-            <label className="block text-[11px] text-white/50 sm:col-span-2">
+            <label className="block text-[11px] text-white/50">
               Send to
               <div className="mt-1 flex gap-1 rounded-lg bg-black/30 p-0.5">
                 {(
@@ -1417,11 +1429,25 @@ https://instagram.com/…"
           </label>
           <PriorityModePicker
             value={adhoc.priorityMode}
-            onChange={(priorityMode) => setAdhoc((a) => ({ ...a, priorityMode }))}
+            onChange={(priorityMode) =>
+              setAdhoc((a) => ({
+                ...a,
+                priorityMode,
+                // ASAP defaults deadline to today if empty
+                dueDate:
+                  priorityMode === "PAUSE_NOW" && !a.dueDate.trim()
+                    ? todayYmdLocal()
+                    : a.dueDate,
+              }))
+            }
           />
           <button
             type="button"
-            disabled={!adhoc.title.trim() || busyId === "adhoc"}
+            disabled={
+              !adhoc.title.trim() ||
+              busyId === "adhoc" ||
+              (adhoc.priorityMode === "NONE" && !adhoc.dueDate.trim())
+            }
             onClick={() => void createAdhoc()}
             className="h-9 rounded-lg bg-amber-400 px-4 text-[12px] font-semibold text-black disabled:opacity-40"
           >
@@ -2563,24 +2589,24 @@ function PriorityModePicker({
   const options: Array<{ id: DesignerPriorityMode; label: string; hint: string }> = [
     {
       id: "NONE",
-      label: "By event date",
-      hint: "Slots with that day’s posts (availability order)",
+      label: "By deadline",
+      hint: "Slots by design due date with weekend pack",
     },
     {
       id: "AFTER_CURRENT",
-      label: "Finish current → start",
-      hint: "Complete what’s in progress, then this",
+      label: "After current work",
+      hint: "Finish what’s in progress, then this",
     },
     {
       id: "PAUSE_NOW",
-      label: "Pause current → start",
-      hint: "Auto-pauses in-progress, then this first",
+      label: "ASAP — pause & start",
+      hint: "Due today; pauses current and starts this",
     },
   ];
   return (
     <div className="space-y-1.5">
       <p className="text-[11px] font-medium uppercase tracking-wide text-white/40">
-        When to start
+        Priority / when to start
       </p>
       <div className="flex flex-col gap-1.5 sm:flex-row">
         {options.map((o) => (

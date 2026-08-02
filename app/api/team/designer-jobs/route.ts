@@ -296,27 +296,29 @@ export async function POST(req: NextRequest) {
 
     const format = `adhoc-${Date.now().toString(36)}`;
     const priorityMode = parseDesignerPriorityMode(body.priorityMode);
-    const ymd =
-      typeof body.postDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.postDate.trim())
-        ? body.postDate.trim()
-        : typeof body.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate.trim())
-          ? body.dueDate.trim()
-          : today;
-    const dueYmd =
+    const dueYmdRaw =
       typeof body.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate.trim())
         ? body.dueDate.trim()
-        : ymd;
+        : null;
+    const postYmdRaw =
+      typeof body.postDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.postDate.trim())
+        ? body.postDate.trim()
+        : null;
+    // ASAP → due today so it competes at the front of the deadline queue too
+    const dueYmd =
+      priorityMode === "PAUSE_NOW" ? dueYmdRaw ?? today : dueYmdRaw ?? postYmdRaw ?? today;
+    const postYmd = postYmdRaw ?? dueYmd;
     const urgent =
       typeof body.urgent === "boolean" ? body.urgent : priorityMode !== "NONE";
     const sortOrder =
       priorityMode !== "NONE"
         ? await nextManualDesignerSortOrder(assigneeId)
-        : naturalDesignerSortOrder(ymd, outletId, format);
+        : naturalDesignerSortOrder(dueYmd, outletId, format);
 
     const job = await prisma.teamDesignerJob.create({
       data: {
-        monthKey: monthKeyFromYmd(ymd),
-        postDate: ymd,
+        monthKey: monthKeyFromYmd(postYmd),
+        postDate: postYmd,
         dueDate: dueYmd,
         dueTime: DESIGNER_UPLOAD_DUE_TIME,
         outletId,

@@ -379,7 +379,7 @@ type SeedResult = {
 };
 
 /**
- * Rewrite natural-band sortOrder from event date.
+ * Rewrite natural-band sortOrder from design deadline.
  * Skips interrupt/drag pins (sortOrder &lt; 1e6) and priorityMode inserts.
  */
 export async function repairNaturalDesignerSortOrders(): Promise<number> {
@@ -389,13 +389,20 @@ export async function repairNaturalDesignerSortOrders(): Promise<number> {
       priorityMode: "NONE",
       sortOrder: { gte: DESIGNER_MANUAL_SORT_CEILING },
     },
-    select: { id: true, postDate: true, outletId: true, format: true, sortOrder: true },
+    select: {
+      id: true,
+      postDate: true,
+      dueDate: true,
+      outletId: true,
+      format: true,
+      sortOrder: true,
+    },
   });
 
   let repaired = 0;
   const ops: Prisma.PrismaPromise<unknown>[] = [];
   for (const j of open) {
-    const next = naturalDesignerSortOrder(j.postDate, j.outletId, j.format);
+    const next = naturalDesignerSortOrder(j.dueDate, j.outletId, j.format);
     if (j.sortOrder === next) continue;
     repaired += 1;
     ops.push(
@@ -497,7 +504,7 @@ export async function seedDesignerRollingWindow(params: {
           format: "post",
           title: `${teamOutletLabel(outletId)} ${CHECKLIST_DAY_LABELS[dayId]} Post`,
           description: null,
-          sortOrder: naturalDesignerSortOrder(postDate, outletId, "post"),
+          sortOrder: naturalDesignerSortOrder(dueDate, outletId, "post"),
           assigneeId: DESIGNER_ASSIGNEE_WEEKEND,
           status: past ? "DESIGN_DONE" : "WAITING_BRIEF",
           createdBy: params.createdBy,
@@ -525,7 +532,7 @@ export async function seedDesignerRollingWindow(params: {
           format: "story",
           title: `${teamOutletLabel(outletId)} ${CHECKLIST_DAY_LABELS[dayId]} Story`,
           description: null,
-          sortOrder: naturalDesignerSortOrder(postDate, outletId, "story"),
+          sortOrder: naturalDesignerSortOrder(dueDate, outletId, "story"),
           assigneeId: DESIGNER_ASSIGNEE_WEEKDAY,
           status: past ? "DESIGN_DONE" : "WAITING_BRIEF",
           createdBy: params.createdBy,
@@ -554,7 +561,7 @@ export async function seedDesignerRollingWindow(params: {
           title: `${teamOutletLabel(outletId)} Weekend TV Calendar (Fri–Sun)`,
           description:
             "One TV-size calendar video covering Friday + Saturday + Sunday for this weekend.",
-          sortOrder: naturalDesignerSortOrder(friday, outletId, "calendar"),
+          sortOrder: naturalDesignerSortOrder(dueDate, outletId, "calendar"),
           assigneeId: DESIGNER_ASSIGNEE_WEEKEND,
           status: past ? "DESIGN_DONE" : "WAITING_BRIEF",
           createdBy: params.createdBy,
