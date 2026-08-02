@@ -46,17 +46,23 @@ import {
   type DesignerReminderLogDto,
   type DesignerSuggestedNudgeDto,
 } from "@/lib/team-designer-jobs-shared";
-
-type QueueView = "catchUp" | "open" | "closed" | "holiday";
-
-function isOpenQueueView(view: QueueView): boolean {
-  return view === "open" || view === "catchUp";
-}
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { uploadTeamFile } from "@/lib/team-client-upload";
 import { teamDownloadHref } from "@/lib/team-download";
 import { teamOutletLabel } from "@/lib/team-outlets";
 import { IconTrash, IconUnsend } from "./TeamIcons";
+
+type QueueView = "catchUp" | "open" | "closed" | "holiday" | "expired";
+
+function isOpenQueueView(view: QueueView): boolean {
+  return view === "open" || view === "catchUp";
+}
+
+function jobsFetchKind(view: QueueView): "open" | "closed" | "expired" {
+  if (view === "closed") return "closed";
+  if (view === "expired") return "expired";
+  return "open";
+}
 
 function formatIstClock(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -179,7 +185,7 @@ function SortableDesignerJob({
   );
 }
 
-const HANDOFF_TTL_DAYS = 7;
+const HANDOFF_TTL_DAYS = 3;
 /** Designers wait this long after Start before Upload & close. Admin bypasses. */
 const DESIGNER_UPLOAD_WAIT_MS = 2 * 60 * 1000;
 
@@ -424,7 +430,13 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       else setLoading(true);
     }
     try {
-      const qs = view === "closed" ? "?view=closed" : "";
+      const kind = jobsFetchKind(view);
+      const qs =
+        kind === "closed"
+          ? "?view=closed"
+          : kind === "expired"
+            ? "?view=expired"
+            : "";
       const res = await fetch(`/api/team/designer-jobs${qs}`, {
         cache: "no-store",
       });
@@ -447,9 +459,17 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     }
   }, [loadPerformance]);
 
+  const jobsFetchKindRef = useRef<"open" | "closed" | "expired" | null>(null);
   useEffect(() => {
+    const next = jobsFetchKind(queueView);
+    // Catch up ↔ Open ↔ Holiday share the same open payload — no refetch
+    if (next === jobsFetchKindRef.current) {
+      void loadPerformance();
+      return;
+    }
+    jobsFetchKindRef.current = next;
     void load({ view: queueView });
-  }, [load, queueView]);
+  }, [load, queueView, loadPerformance]);
 
   const pauseLivePollRef = useRef(false);
   pauseLivePollRef.current = Boolean(
@@ -556,7 +576,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
    * "Not sent" never appears here — admin handles those in a separate section.
    */
   const designerVisibleJobs = useMemo(() => {
-    if (queueView === "closed") return scopedJobs;
+    if (queueView === "closed" || queueView === "expired") return scopedJobs;
     if (queueView === "holiday") return [];
     return scopedJobs.filter(
       (j) =>
@@ -571,7 +591,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     if (outletFilter !== "all") {
       list = list.filter((j) => j.outletId === outletFilter);
     }
-    if (queueView === "closed") {
+    if (queueView === "closed" || queueView === "expired") {
       // Most recent done on top
       return [...list].sort((a, b) => {
         const au = a.uploadedAt || a.updatedAt || "";
@@ -1058,6 +1078,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
               ["open", "Open"],
               ["closed", "Done"],
               ["holiday", "Holiday"],
+              ["expired", "Expired"],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -1078,7 +1099,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
                     ? "bg-violet-400 text-black"
                     : id === "catchUp"
                       ? "bg-orange-400 text-black"
-                      : "bg-white text-black"
+                      : id === "expired"
+                        ? "bg-amber-400 text-black"
+                        : "bg-white text-black"
                   : id === "catchUp" && catchUpCount > 0
                     ? "text-orange-200 hover:text-orange-100"
                     : "text-white/50 hover:text-white/80"
@@ -1129,24 +1152,17 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         ) : null}
       </div>
 
-      {queueView !== "holiday" ? (
-        <div className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+      {queueView !== "holiday" && queueView !== "expired" ? (
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
           <p className="text-[12px] leading-snug text-white/65">
-            WFH — minimum <span className="font-semibold text-white/90">4/day</span> Mon–Sat. Don’t
-            sit idle: always take the next Ready jobs by{" "}
-            <span className="font-semibold text-white/90">deadline</span> (Fri→Mon, Sat→Tue,
-            Sun→Wed). New tasks auto-slot by their deadline. Extra same-day closes → holiday points.
+            Minimum <span className="font-semibold text-white/90">4/day</span> Mon–Sat · queue by{" "}
+            <span className="font-semibold text-white/90">deadline</span>. Extra same-day closes →
+            holiday points.
           </p>
-          <span
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/15 text-[12px] font-bold text-white/45"
-            title={`No fixed optional leaves. ${DESIGNER_POINTS_PER_LEAVE} holiday points = 1 leave (ask permission). Sunday: enjoy the day, or work the next-day pack for points.`}
-          >
-            i
-          </span>
         </div>
       ) : null}
 
-      {queueView !== "holiday"
+      {queueView !== "holiday" && queueView !== "expired"
         ? visiblePerf.map((p) => (
             <DesignerPerformanceCard
               key={p.assigneeId}
@@ -1159,128 +1175,53 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           ))
         : null}
 
-      {isAdmin && visiblePerf.length > 0 && queueView !== "holiday" ? (
-        <DesignerPerformanceGraph designers={visiblePerf} />
-      ) : null}
-
       {queueView === "holiday" ? (
         <HolidayTabPanel designers={visiblePerf} />
       ) : null}
 
-      {isAdmin && queueView !== "holiday" ? (
+      {isAdmin &&
+      queueView !== "holiday" &&
+      queueView !== "expired" &&
+      suggestedNudges.length > 0 ? (
         <div className="space-y-2 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.06] px-3 py-2.5">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90">
-              WA reminders — tap Send
-            </p>
-            <p className="mt-0.5 text-[11px] text-white/45">
-              Auto Cloud API later. Until then: open WhatsApp with text ready.
-            </p>
-          </div>
-          {suggestedNudges.length === 0 ? (
-            <p className="text-[12px] text-white/40">
-              No reminder due right now (or already opened today).
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {suggestedNudges.map((s) => {
-                const key = `${s.assigneeId}:${s.kind}:${s.jobId}`;
-                return (
-                  <li
-                    key={key}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2"
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90">
+            Send now
+          </p>
+          <ul className="space-y-1.5">
+            {suggestedNudges.slice(0, 4).map((s) => {
+              const key = `${s.assigneeId}:${s.kind}:${s.jobId}`;
+              const preview = s.body.split("\n").filter(Boolean).slice(0, 2).join(" · ");
+              return (
+                <li
+                  key={key}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-semibold text-white/90">
+                      {s.name} · {s.label}
+                    </p>
+                    <p className="mt-0.5 line-clamp-1 text-[11px] text-white/50">{preview}</p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={nudgeBusy === key}
+                    onClick={() => void openSuggestedWa(s)}
+                    className="h-9 shrink-0 rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black disabled:opacity-40"
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-semibold text-white/90">
-                        {s.name} · {s.label}
-                      </p>
-                      <p className="mt-0.5 line-clamp-2 whitespace-pre-wrap text-[11px] text-white/50">
-                        {s.body}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={nudgeBusy === key}
-                      onClick={() => void openSuggestedWa(s)}
-                      className="h-9 shrink-0 rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black disabled:opacity-40"
-                    >
-                      {nudgeBusy === key ? "…" : "Send WA"}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {reminders.length > 0 ? (
-            <div className="border-t border-white/10 pt-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-white/35">
-                Recent
-              </p>
-              <ul className="mt-1 max-h-28 space-y-1 overflow-y-auto">
-                {reminders.slice(0, 8).map((r) => (
-                  <li
-                    key={r.id}
-                    className="flex flex-wrap items-baseline justify-between gap-2 text-[11px] text-white/50"
-                  >
-                    <span>
-                      {designerDisplayName(r.assigneeId)} · {r.kind.replace(/_/g, " ")}
-                      <span className="text-white/30"> · {r.dateKey}</span>
-                    </span>
-                    {r.shareUrl ? (
-                      <button
-                        type="button"
-                        onClick={() => openWhatsAppShareUrl(r.shareUrl!)}
-                        className="text-cyan-300/90 underline-offset-2 hover:underline"
-                      >
-                        Open again
-                      </button>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+                    {nudgeBusy === key ? "…" : "Send"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       ) : null}
 
-      {isAdmin && queueView === "closed" ? (
-        <p className="text-[11px] leading-relaxed text-white/40">
-          Done jobs · Edit / Delete upload · Files auto-expire after {HANDOFF_TTL_DAYS} days
+      {queueView === "expired" ? (
+        <p className="text-[11px] leading-relaxed text-white/45">
+          Past event dates (and extras {HANDOFF_TTL_DAYS}+ days after upload). Delete clears the
+          file from storage.
         </p>
-      ) : null}
-
-      {isAdmin && queueView === "closed" ? (
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={expiredBusy}
-            onClick={() => {
-              void (async () => {
-                setExpiredBusy(true);
-                try {
-                  const res = await fetch("/api/team/handoff-blobs");
-                  const data = await readJson(res);
-                  setExpiredBlobs(
-                    (data.blobs as Array<{
-                      url: string;
-                      pathname: string;
-                      uploadedAt: string;
-                      size: number;
-                    }>) ?? []
-                  );
-                  setExpiredOpen(true);
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : "Failed to list expired files");
-                } finally {
-                  setExpiredBusy(false);
-                }
-              })();
-            }}
-            className="h-9 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 text-[12px] font-semibold text-amber-100"
-          >
-            Expired files ({HANDOFF_TTL_DAYS}d+)
-          </button>
-        </div>
       ) : null}
 
       {isAdmin && isOpenQueueView(queueView) ? (
@@ -1547,7 +1488,9 @@ https://instagram.com/…"
           <p className="text-[13px] text-white/35">
             {queueView === "closed"
               ? "No done jobs for this view."
-              : "Nothing ready — only Ready / In progress / Paused show here."}
+              : queueView === "expired"
+                ? "No expired files — nothing to clear."
+                : "Nothing ready — only Ready / In progress / Paused show here."}
           </p>
         ) : null}
         {(() => {
@@ -1944,6 +1887,35 @@ https://instagram.com/…"
               </p>
             ) : null}
 
+            {queueView === "expired" && job.status === "DESIGN_DONE" ? (
+              <div className="mt-3 flex flex-wrap gap-2 border-t border-white/[0.08] pt-3">
+                {job.fileUrl ? (
+                  <a
+                    href={teamDownloadHref(job.fileUrl)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-9 items-center rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
+                  >
+                    Download
+                  </a>
+                ) : null}
+                {(isAdmin || job.assigneeId === memberId) ? (
+                  <button
+                    type="button"
+                    disabled={busyId === job.id || !job.fileUrl}
+                    onClick={() =>
+                      void patchJob(job.id, { action: "purge-file" }).then((ok) => {
+                        if (ok) setError("Cleared from storage.");
+                      })
+                    }
+                    className="h-9 rounded-lg border border-red-400/35 bg-red-400/10 px-3 text-[12px] font-semibold text-red-100 disabled:opacity-40"
+                  >
+                    Delete file
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
             {queueView === "closed" && job.status === "DESIGN_DONE" ? (
               <div className="mt-3 space-y-2 border-t border-white/[0.08] pt-3">
                 <div className="flex flex-wrap gap-2">
@@ -2291,13 +2263,39 @@ https://instagram.com/…"
             );
           };
 
-          if (queueView === "closed") {
+          if (queueView === "closed" || queueView === "expired") {
             const groups = groupDoneJobsByDay(queue);
             return (
               <div className="space-y-5">
-                <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/50">
-                  Done · {queue.length} total
-                </h2>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/50">
+                    {queueView === "expired" ? "Expired" : "Done"} · {queue.length} total
+                  </h2>
+                  {queueView === "expired" && queue.length > 0 ? (
+                    <button
+                      type="button"
+                      disabled={Boolean(busyId)}
+                      onClick={() => {
+                        void (async () => {
+                          setBusyId("purge-all");
+                          try {
+                            for (const j of queue) {
+                              if (!j.fileUrl) continue;
+                              await patchJob(j.id, { action: "purge-file" }, { quiet: true });
+                            }
+                            setError("Cleared expired files.");
+                            await load({ soft: true, view: "expired" });
+                          } finally {
+                            setBusyId(null);
+                          }
+                        })();
+                      }}
+                      className="h-8 rounded-lg border border-red-400/35 bg-red-400/10 px-2.5 text-[11px] font-semibold text-red-100"
+                    >
+                      Delete all
+                    </button>
+                  ) : null}
+                </div>
                 {groups.map((g) => (
                   <div key={g.key} className="space-y-2">
                     <h3 className="text-[13px] font-semibold text-white/80">
@@ -2804,7 +2802,8 @@ function DesignerPerformanceCard({
 }) {
   const stack = perf.stack;
   const behind = stack?.stackedBehind ?? 0;
-  const flag = !perf.isSundayHoliday && (behind > 0 || perf.redFlag || perf.underTarget);
+  // Red only when truly behind / evening flag — not “0/4” at 1am
+  const flag = !perf.isSundayHoliday && (behind > 0 || perf.redFlag);
   const points = stack?.holidayPoints ?? stack?.advancePoints ?? 0;
   const perLeave = stack?.pointsPerLeave ?? DESIGNER_POINTS_PER_LEAVE;
   const unlocked = stack?.leaveDaysEarned ?? 0;
@@ -2911,88 +2910,3 @@ function DesignerPerformanceCard({
   );
 }
 
-function DesignerPerformanceGraph({ designers }: { designers: DesignerPerformanceDto[] }) {
-  const series = designers[0]?.series ?? [];
-  if (series.length === 0) return null;
-  const maxY = Math.max(
-    DESIGNER_DAILY_TARGET,
-    ...designers.flatMap((d) => d.series.map((p) => p.closed)),
-    1
-  );
-  const w = 320;
-  const h = 88;
-  const pad = 8;
-
-  return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
-        Last 14 days · closed vs {DESIGNER_DAILY_TARGET}/day
-      </p>
-      <div className="mt-2 overflow-x-auto">
-        <svg viewBox={`0 0 ${w} ${h}`} className="h-24 w-full min-w-[280px]" role="img">
-          {/* target line */}
-          {(() => {
-            const y =
-              pad + (1 - DESIGNER_DAILY_TARGET / maxY) * (h - pad * 2);
-            return (
-              <line
-                x1={pad}
-                x2={w - pad}
-                y1={y}
-                y2={y}
-                stroke="rgba(255,255,255,0.2)"
-                strokeDasharray="4 3"
-              />
-            );
-          })()}
-          {designers.map((d, di) => {
-            const color = di === 0 ? "#22d3ee" : "#a78bfa";
-            const pts = d.series
-              .map((p, i) => {
-                const x = pad + (i / Math.max(1, d.series.length - 1)) * (w - pad * 2);
-                const y = pad + (1 - p.closed / maxY) * (h - pad * 2);
-                return `${x},${y}`;
-              })
-              .join(" ");
-            return (
-              <g key={d.assigneeId}>
-                <polyline
-                  fill="none"
-                  stroke={color}
-                  strokeWidth="2"
-                  points={pts}
-                />
-                {d.series.map((p, i) => {
-                  const x = pad + (i / Math.max(1, d.series.length - 1)) * (w - pad * 2);
-                  const y = pad + (1 - p.closed / maxY) * (h - pad * 2);
-                  const miss = p.closed < p.target;
-                  return (
-                    <circle
-                      key={`${d.assigneeId}-${p.date}`}
-                      cx={x}
-                      cy={y}
-                      r={miss ? 3.2 : 2.4}
-                      fill={miss ? "#f87171" : color}
-                    />
-                  );
-                })}
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-      <div className="mt-1 flex flex-wrap gap-3 text-[10px] text-white/45">
-        {designers.map((d, di) => (
-          <span key={d.assigneeId} className="inline-flex items-center gap-1.5">
-            <span
-              className="inline-block h-2 w-2 rounded-full"
-              style={{ background: di === 0 ? "#22d3ee" : "#a78bfa" }}
-            />
-            {d.name}
-          </span>
-        ))}
-        <span className="text-white/30">Red dots = under target</span>
-      </div>
-    </div>
-  );
-}

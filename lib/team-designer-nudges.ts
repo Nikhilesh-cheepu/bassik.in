@@ -523,11 +523,30 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
 
     const sunday = dayIdForYmd(today) === "sun";
 
-    // Overnight / early morning: only ask about yesterday + stack — not “today”
+    // Before ~11 IST: gentle start nudge only — no “missed target” scare
     if (beforeWork) {
-      const missedYesterday = closedYesterday < DESIGNER_DAILY_TARGET;
-      if (missedYesterday || stack.stackedBehind > 0) {
-        push("missed_target", "", bodyFor("missed_target", readyJobs));
+      const ready = perf.readyToStart;
+      const behind = stack.stackedBehind;
+      if (ready > 0 || behind > 0) {
+        const lines = [
+          `${name} — day ahead.`,
+          behind > 0
+            ? `${behind} catch-up still open — finish those first.`
+            : null,
+          `${ready} ready for today.`,
+          "Starting by 11 keeps the day clean.",
+          "",
+          `Open: ${designerQueueLink()}`,
+        ].filter(Boolean) as string[];
+        out.push({
+          assigneeId,
+          name,
+          kind: "no_start",
+          label: "Morning start",
+          body: lines.join("\n"),
+          shareUrl: whatsAppShareUrl(phone, lines.join("\n")),
+          jobId: "",
+        });
       }
       continue;
     }

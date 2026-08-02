@@ -16,10 +16,13 @@ import {
   syncDesignerJobToChecklistHandoff,
   toDesignerJobDto,
 } from "@/lib/team-designer-jobs";
+import { addDaysYmd, getTodayKey } from "@/lib/team-checklists";
 import {
   isBoilerplateDesignerDescription,
   parseDesignerPriorityMode,
+  type DesignerPriorityMode,
 } from "@/lib/team-designer-jobs-shared";
+import { deleteTeamHandoffBlobUrl } from "@/lib/team-handoff-blobs";
 import { sendPriorityJobAlert } from "@/lib/team-designer-nudges";
 
 async function jobDtoWithLinks(job: Parameters<typeof toDesignerJobDto>[0]) {
@@ -60,7 +63,8 @@ type Action =
   | "pause"
   | "resume"
   | "unsend"
-  | "delete";
+  | "delete"
+  | "purge-file";
 
 /** Designers must wait this long after Start before Upload & close. Admin bypasses. */
 const DESIGNER_UPLOAD_WAIT_MS = 2 * 60 * 1000;
@@ -139,10 +143,21 @@ export async function PATCH(
         status = job.status;
       }
 
-      const priorityMode =
+      let priorityMode: DesignerPriorityMode | undefined =
         body.priorityMode !== undefined
           ? parseDesignerPriorityMode(body.priorityMode)
           : undefined;
+      // Late / tight deadline Send → jump the queue (Thu send for Mon-due Friday pack, etc.)
+      if (action === "brief-ready") {
+        const mode = priorityMode ?? "NONE";
+        if (mode === "NONE") {
+          const today = getTodayKey();
+          const soon = addDaysYmd(today, 1);
+          if (job.dueDate <= soon) {
+            priorityMode = "AFTER_CURRENT";
+          }
+        }
+      }
       const urgent =
         typeof body.urgent === "boolean"
           ? body.urgent
@@ -237,6 +252,7 @@ export async function PATCH(
           { status: 400 }
         );
       }
+      await deleteTeamHandoffBlobUrl(job.fileUrl);
       try {
         await clearDesignerJobChecklistHandoff(job);
       } catch (e) {
@@ -269,6 +285,7 @@ export async function PATCH(
       if (!job.fileUrl) {
         return NextResponse.json({ error: "No upload to delete" }, { status: 400 });
       }
+      await deleteTeamHandoffBlobUrl(job.fileUrl);
       try {
         await clearDesignerJobChecklistHandoff(job);
       } catch (e) {
@@ -289,6 +306,28 @@ export async function PATCH(
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
         message: "Upload deleted — Ready removed from Daily",
+      });
+    }
+
+    /** Expired creatives: delete blob + job. Admin or assignee. */
+    if (action === "purge-file") {
+      if (!isAdmin && !canDesignerAct) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+      if (job.status !== "DESIGN_DONE" || !job.fileUrl) {
+        return NextResponse.json({ error: "Nothing to purge" }, { status: 400 });
+      }
+      await deleteTeamHandoffBlobUrl(job.fileUrl);
+      try {
+        await clearDesignerJobChecklistHandoff(job);
+      } catch (e) {
+        console.error("[designer-jobs] clear handoff on purge-file", e);
+      }
+      await prisma.teamDesignerJob.delete({ where: { id } });
+      return NextResponse.json({
+        ok: true,
+        deleted: true,
+        message: "File cleared",
       });
     }
 
@@ -738,6 +777,7 @@ export async function PATCH(
     /** Admin hard-delete job (and clear Amit Ready if synced). */
     if (action === "delete") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      await deleteTeamHandoffBlobUrl(job.fileUrl);
       try {
         await clearDesignerJobChecklistHandoff(job);
       } catch (e) {

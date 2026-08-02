@@ -1,7 +1,7 @@
 import { del, list } from "@vercel/blob";
 
-/** Handoff creatives for Amit — auto-delete from Blob after this many days. */
-export const TEAM_HANDOFF_BLOB_TTL_DAYS = 7;
+/** Handoff creatives — auto-delete from Blob after download window (days). */
+export const TEAM_HANDOFF_BLOB_TTL_DAYS = 3;
 
 const HANDOFF_PREFIX = "team/handoff/";
 
@@ -74,6 +74,19 @@ export async function deleteTeamHandoffBlobs(urls: string[]): Promise<{
     }
   }
   return { deleted, errors };
+}
+
+/** Best-effort delete one handoff URL (ignores non-handoff / missing). */
+export async function deleteTeamHandoffBlobUrl(
+  url: string | null | undefined
+): Promise<boolean> {
+  if (typeof url !== "string" || !url.includes("/team/handoff/")) return false;
+  try {
+    await del(url);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

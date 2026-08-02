@@ -12,7 +12,6 @@ import {
   naturalDesignerSortOrder,
   nextManualDesignerSortOrder,
   parseDesignerLinks,
-  repairNaturalDesignerSortOrders,
   rollingWindowBounds,
   seedDesignerRollingWindow,
   setDesignerJobLinks,
@@ -64,9 +63,71 @@ export async function GET(req: NextRequest) {
   const { fromDate, toDate, days } = rollingWindowBounds(today, DESIGNER_WINDOW_DAYS);
   const memberId = session.memberId ?? session.username;
   const isAdmin = session.role === "admin";
-  const view = req.nextUrl.searchParams.get("view") === "closed" ? "closed" : "open";
+  const viewParam = req.nextUrl.searchParams.get("view");
+  const view =
+    viewParam === "closed" || viewParam === "expired" ? viewParam : "open";
 
   try {
+    if (view === "expired") {
+      // Event date passed, or adhoc upload older than 3 days — clear blob storage
+      const adhocCutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      const whereExpired: {
+        status: "DESIGN_DONE";
+        assigneeId?: string;
+        OR: Array<
+          | { postDate: { lt: string }; fileUrl: { not: null } }
+          | {
+              format: { startsWith: string };
+              uploadedAt: { lte: Date };
+              fileUrl: { not: null };
+            }
+        >;
+      } = {
+        status: "DESIGN_DONE",
+        OR: [
+          { postDate: { lt: today }, fileUrl: { not: null } },
+          {
+            format: { startsWith: "adhoc" },
+            uploadedAt: { lte: adhocCutoff },
+            fileUrl: { not: null },
+          },
+        ],
+      };
+      if (!isAdmin) whereExpired.assigneeId = memberId;
+
+      const rows = await prisma.teamDesignerJob.findMany({
+        where: whereExpired,
+        select: JOB_SELECT,
+        orderBy: [{ postDate: "desc" }, { uploadedAt: "desc" }],
+        take: 150,
+      });
+      const ids = rows.map((r) => r.id);
+      const [linksMap, editMap] = await Promise.all([
+        loadDesignerJobLinksByIds(ids),
+        loadDesignerEditMetaByIds(ids),
+      ]);
+      const jobs = rows.map((r) => {
+        const edit = editMap.get(r.id);
+        return toDesignerJobDto(
+          {
+            ...r,
+            links: linksMap.get(r.id) ?? [],
+            editRequestedAt: edit?.editRequestedAt ?? null,
+            editRequestNote: edit?.editRequestNote ?? null,
+            pauseRequestedAt: edit?.pauseRequestedAt ?? null,
+            pauseRequestNote: edit?.pauseRequestNote ?? null,
+          },
+          today
+        );
+      });
+      return NextResponse.json({
+        view: "expired",
+        window: { fromDate, toDate, days },
+        jobs,
+        today,
+      });
+    }
+
     if (view === "closed") {
       // Look back 30 days — not the forward rolling window (fromDate = today would hide
       // yesterday’s closes like Mahesh’s Jul 31 uploads).
@@ -137,14 +198,7 @@ export async function GET(req: NextRequest) {
       ...(isAdmin ? {} : { assigneeId: memberId }),
     };
 
-    // Keep legacy due-date sortKeys aligned to event dates (no-op once repaired).
-    if (isAdmin) {
-      try {
-        await repairNaturalDesignerSortOrders();
-      } catch (e) {
-        console.error("[team/designer-jobs] repair sortOrder", e);
-      }
-    }
+    // sortOrder repair runs on Seed only — not every tab switch (was slow).
 
     let rows;
     try {
