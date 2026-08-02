@@ -116,6 +116,7 @@ export async function GET(req: NextRequest) {
             editRequestNote: edit?.editRequestNote ?? null,
             pauseRequestedAt: edit?.pauseRequestedAt ?? null,
             pauseRequestNote: edit?.pauseRequestNote ?? null,
+            catchUpExempt: edit?.catchUpExempt ?? false,
           },
           today
         );
@@ -175,6 +176,7 @@ export async function GET(req: NextRequest) {
             editRequestNote: edit?.editRequestNote ?? null,
             pauseRequestedAt: edit?.pauseRequestedAt ?? null,
             pauseRequestNote: edit?.pauseRequestNote ?? null,
+            catchUpExempt: edit?.catchUpExempt ?? false,
           },
           today
         );
@@ -237,6 +239,7 @@ export async function GET(req: NextRequest) {
             editRequestNote: edit?.editRequestNote ?? null,
             pauseRequestedAt: edit?.pauseRequestedAt ?? null,
             pauseRequestNote: edit?.pauseRequestNote ?? null,
+            catchUpExempt: edit?.catchUpExempt ?? false,
           },
           today
         );

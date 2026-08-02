@@ -184,7 +184,19 @@ type DesignerJobRow = Omit<
   editRequestNote?: string | null;
   pauseRequestedAt?: Date | string | null;
   pauseRequestNote?: string | null;
+  catchUpExempt?: boolean | null;
 };
+
+let catchUpExemptColumnReady = false;
+
+/** Prod-safe: add column if migration hasn’t run yet. */
+export async function ensureCatchUpExemptColumn(): Promise<void> {
+  if (catchUpExemptColumnReady) return;
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "catchUpExempt" BOOLEAN NOT NULL DEFAULT false`
+  );
+  catchUpExemptColumnReady = true;
+}
 
 /** Raw SQL — safe when a stale Prisma client hasn't learned the `links` column yet. */
 export async function loadDesignerJobLinksByIds(
@@ -214,6 +226,7 @@ export type DesignerRequestMeta = {
   editRequestNote: string | null;
   pauseRequestedAt: string | null;
   pauseRequestNote: string | null;
+  catchUpExempt: boolean;
 };
 
 export async function loadDesignerEditMetaByIds(
@@ -222,6 +235,7 @@ export async function loadDesignerEditMetaByIds(
   const map = new Map<string, DesignerRequestMeta>();
   if (ids.length === 0) return map;
   try {
+    await ensureCatchUpExemptColumn();
     const rows = await prisma.$queryRaw<
       Array<{
         id: string;
@@ -229,9 +243,11 @@ export async function loadDesignerEditMetaByIds(
         editRequestNote: string | null;
         pauseRequestedAt: Date | null;
         pauseRequestNote: string | null;
+        catchUpExempt: boolean | null;
       }>
     >`
-      SELECT id, "editRequestedAt", "editRequestNote", "pauseRequestedAt", "pauseRequestNote"
+      SELECT id, "editRequestedAt", "editRequestNote", "pauseRequestedAt", "pauseRequestNote",
+             "catchUpExempt"
       FROM "TeamDesignerJob"
       WHERE id IN (${Prisma.join(ids)})
     `;
@@ -241,12 +257,13 @@ export async function loadDesignerEditMetaByIds(
         editRequestNote: row.editRequestNote ?? null,
         pauseRequestedAt: row.pauseRequestedAt ? row.pauseRequestedAt.toISOString() : null,
         pauseRequestNote: row.pauseRequestNote ?? null,
+        catchUpExempt: Boolean(row.catchUpExempt),
       });
     }
     return map;
   } catch (err) {
-    // Older DBs before pause migration — still load edit meta so the queue can render.
-    console.error("[designer-jobs] pause meta load failed, falling back", err);
+    // Older DBs before pause / catch-up-exempt migration — still load edit meta.
+    console.error("[designer-jobs] meta load failed, falling back", err);
     const rows = await prisma.$queryRaw<
       Array<{
         id: string;
@@ -264,10 +281,27 @@ export async function loadDesignerEditMetaByIds(
         editRequestNote: row.editRequestNote ?? null,
         pauseRequestedAt: null,
         pauseRequestNote: null,
+        catchUpExempt: false,
       });
     }
     return map;
   }
+}
+
+/** Admin: leave Catch up → Open, sorted by normal deadline priority. */
+export async function releaseDesignerJobFromCatchUp(id: string): Promise<void> {
+  await ensureCatchUpExemptColumn();
+  const job = await prisma.teamDesignerJob.findUnique({
+    where: { id },
+    select: { dueDate: true, outletId: true, format: true },
+  });
+  if (!job) throw new Error("Not found");
+  const sortOrder = naturalDesignerSortOrder(job.dueDate, job.outletId, job.format);
+  await prisma.$executeRawUnsafe(
+    `UPDATE "TeamDesignerJob" SET "catchUpExempt" = true, "sortOrder" = $1, "updatedAt" = NOW() WHERE id = $2`,
+    sortOrder,
+    id
+  );
 }
 
 export async function setDesignerEditRequest(
@@ -353,6 +387,7 @@ export function toDesignerJobDto(job: DesignerJobRow, today = getTodayKey()): De
         : job.pauseRequestedAt.toISOString()
       : null,
     pauseRequestNote: job.pauseRequestNote ?? null,
+    catchUpExempt: Boolean(job.catchUpExempt),
     createdBy: job.createdBy,
     createdAt: job.createdAt.toISOString(),
     updatedAt: job.updatedAt.toISOString(),

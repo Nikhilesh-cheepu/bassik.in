@@ -10,6 +10,7 @@ import {
   loadDesignerJobLinksByIds,
   nextManualDesignerSortOrder,
   parseDesignerLinks,
+  releaseDesignerJobFromCatchUp,
   setDesignerEditRequest,
   setDesignerJobLinks,
   setDesignerPauseRequest,
@@ -41,6 +42,7 @@ async function jobDtoWithLinks(job: Parameters<typeof toDesignerJobDto>[0]) {
     editRequestNote: edit?.editRequestNote ?? null,
     pauseRequestedAt: edit?.pauseRequestedAt ?? null,
     pauseRequestNote: edit?.pauseRequestNote ?? null,
+    catchUpExempt: edit?.catchUpExempt ?? false,
   });
 }
 
@@ -67,7 +69,8 @@ type Action =
   | "resume"
   | "unsend"
   | "delete"
-  | "purge-file";
+  | "purge-file"
+  | "release-catch-up";
 
 /** Designers must wait this long after Start before Upload & close. Admin bypasses. */
 const DESIGNER_UPLOAD_WAIT_MS = 2 * 60 * 1000;
@@ -312,6 +315,21 @@ export async function PATCH(
           job.status === "DESIGN_DONE"
             ? "Upload deleted — Done entry kept"
             : "Upload deleted — Ready removed from Daily",
+      });
+    }
+
+    /** Admin: move overdue job out of Catch up into normal Open priority. */
+    if (action === "release-catch-up") {
+      if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      if (job.status === "DESIGN_DONE") {
+        return NextResponse.json({ error: "Done jobs stay in Done" }, { status: 400 });
+      }
+      await releaseDesignerJobFromCatchUp(id);
+      const refreshed = await prisma.teamDesignerJob.findUnique({ where: { id } });
+      if (!refreshed) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json({
+        job: await jobDtoWithLinks({ ...refreshed, catchUpExempt: true }),
+        message: "Moved to Open — sorted by deadline with the normal list",
       });
     }
 

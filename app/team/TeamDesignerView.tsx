@@ -1061,8 +1061,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     return partitionOpenDesignerQueueByAssignee(
       openJobsForPartition,
       metaMap,
-      DESIGNER_DAILY_TARGET,
-      todayYmdLocal()
+      DESIGNER_DAILY_TARGET
     );
   }, [openJobsForPartition, perfDesigners]);
   const catchUpCount = openParts.catchUp.length;
@@ -1714,6 +1713,23 @@ https://instagram.com/…"
                     className="h-11 min-h-[44px] rounded-lg bg-cyan-500 px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
                   >
                     Start Job
+                  </button>
+                ) : null}
+                {isAdmin && tone === "catchUp" && job.status !== "DESIGN_DONE" ? (
+                  <button
+                    type="button"
+                    disabled={busyId === job.id}
+                    title="Remove from Catch up — joins Open sorted by deadline"
+                    onClick={() =>
+                      void patchJob(job.id, { action: "release-catch-up" }).then((ok) => {
+                        if (ok) {
+                          setError("Sent to Open — sorted by deadline with the normal list.");
+                        }
+                      })
+                    }
+                    className="h-11 min-h-[44px] rounded-lg border border-white/20 bg-white/10 px-3 text-[13px] font-semibold text-white/90 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                  >
+                    Send to Open
                   </button>
                 ) : null}
                 {job.status === "PAUSED" && (isAdmin || job.assigneeId === memberId) ? (
@@ -2443,8 +2459,8 @@ https://instagram.com/…"
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center">
                   <p className="text-[14px] font-semibold text-white/80">No catch-up</p>
                   <p className="mt-1 text-[12px] text-white/45">
-                    Catch up is only earlier days that already missed their deadline. Today’s 8 PM
-                    pack stays in Open — use that tab.
+                    Catch up only after due date + due time are missed. Until then, everything stays
+                    in Open. Admin can Send to Open to move a catch-up job back to the normal list.
                   </p>
                 </div>
               );

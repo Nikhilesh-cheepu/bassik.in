@@ -62,6 +62,8 @@ export type DesignerJobDto = {
   urgent: boolean;
   /** NONE | AFTER_CURRENT | PAUSE_NOW — set by admin when sending */
   priorityMode: DesignerPriorityMode;
+  /** Admin released from Catch up — stays in Open even if overdue */
+  catchUpExempt: boolean;
   /** Admin drag priority — lower first */
   sortOrder: number;
   startedAt: string | null;
@@ -179,7 +181,10 @@ export function sortDesignerJobs(jobs: DesignerJobDto[]): DesignerJobDto[] {
     }
 
     // Deadline queue — earliest design due first (Fri pack Mon, Sat Tue, …)
-    if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
+    // Released catch-up jobs sort with the normal pack, not the overdue band.
+    const aLate = a.isOverdue && !a.catchUpExempt;
+    const bLate = b.isOverdue && !b.catchUpExempt;
+    if (aLate !== bLate) return aLate ? -1 : 1;
     if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
     if (a.isDueToday !== b.isDueToday) return a.isDueToday ? -1 : 1;
     if (a.postDate !== b.postDate) return a.postDate.localeCompare(b.postDate);
@@ -325,16 +330,13 @@ export function catchUpMetaFromStack(stack: {
 
 /**
  * Split open queue into catch-up / today's 4 / later.
- * Catch up = deadlines from a *previous calendar day* that are already past.
- * Never puts “due today (8 PM)” work in Catch up — that stays in Open (even after 8 PM).
- * Missed-day score debt does not invent Catch up rows.
+ * Catch up = due date + due time already missed (`isOverdue`), unless admin released it.
+ * Score debt never invents Catch up rows. Till the deadline passes, job stays in Open.
  */
 export function partitionOpenDesignerQueue(
   jobs: DesignerJobDto[],
   dailyTarget = DESIGNER_DAILY_TARGET,
   opts?: {
-    /** IST today YYYY-MM-DD — required for dueDate < today catch-up rule */
-    todayYmd?: string;
     /** @deprecated Ignored — kept for call-site compat. */
     catchUpSlots?: number;
     /** e.g. "Saturday · 1 Aug" — used in hint when overdue items exist */
@@ -346,12 +348,8 @@ export function partitionOpenDesignerQueue(
   upNext: DesignerJobDto[];
   catchUpHint: string;
 } {
-  const today = opts?.todayYmd?.trim() || "";
   const sorted = sortDesignerJobs(jobs.filter((j) => j.status !== "DESIGN_DONE"));
-  // Previous-day past-due only — not today’s 8 PM pack
-  const catchUp = sorted.filter(
-    (j) => j.isOverdue && (!today || j.dueDate < today)
-  );
+  const catchUp = sorted.filter((j) => j.isOverdue && !j.catchUpExempt);
   const catchIds = new Set(catchUp.map((j) => j.id));
   const remaining = sorted.filter((j) => !catchIds.has(j.id));
   const todayPack = remaining.slice(0, dailyTarget);
@@ -360,8 +358,8 @@ export function partitionOpenDesignerQueue(
   const catchUpHint =
     catchUp.length > 0
       ? from
-        ? `Past-due from earlier days (also behind from ${from}). Finish this before today’s pack.`
-        : "Past-due from earlier days — finish this before today’s pack."
+        ? `Due date/time missed (also score behind from ${from}). Finish or admin can Send to Open.`
+        : "Due date and time already missed — finish these, or admin can Send to Open."
       : "Finish this before today’s pack.";
   return { catchUp, todayPack, upNext, catchUpHint };
 }
@@ -372,8 +370,7 @@ export function partitionOpenDesignerQueue(
 export function partitionOpenDesignerQueueByAssignee(
   jobs: DesignerJobDto[],
   perfByAssignee: Map<string, DesignerCatchUpMeta>,
-  dailyTarget = DESIGNER_DAILY_TARGET,
-  todayYmd?: string
+  dailyTarget = DESIGNER_DAILY_TARGET
 ): {
   catchUp: DesignerJobDto[];
   todayPack: DesignerJobDto[];
@@ -396,7 +393,6 @@ export function partitionOpenDesignerQueueByAssignee(
       pendingFromLabel: null,
     };
     const parts = partitionOpenDesignerQueue(list, dailyTarget, {
-      todayYmd,
       catchUpSlots: meta.catchUpSlots,
       pendingFromLabel: meta.pendingFromLabel,
     });

@@ -579,6 +579,8 @@ model TeamDesignerJob {
   urgent        Boolean                @default(false)
   /// Admin interrupt when sending: NONE | AFTER_CURRENT | PAUSE_NOW
   priorityMode  String                 @default("NONE")
+  /// Admin moved overdue job out of Catch up → normal Open priority list
+  catchUpExempt Boolean                @default(false)
   /// Admin drag priority — lower = higher on Open queue
   sortOrder     Int                    @default(0)
   startedAt     DateTime?
