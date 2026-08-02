@@ -32,7 +32,6 @@ import {
   DESIGNER_DAILY_TARGET,
   DESIGNER_MONTH_OUTLET_IDS,
   DESIGNER_POINTS_PER_LEAVE,
-  DESIGNER_STACK_START_DATE,
   DESIGNER_WINDOW_DAYS,
   catchUpMetaFromStack,
   designerFormatLabel,
@@ -868,8 +867,6 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     }
   };
 
-  const startJob = (job: DesignerJobDto) => void patchJob(job.id, { action: "start" });
-
   useEffect(() => {
     if (!uploadGate) return;
     const id = window.setInterval(() => {
@@ -1108,6 +1105,33 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   /** Effective catch-up debt after admin Drop catch-up (not raw missed slots). */
   const catchUpDebt = openPartsRaw.effectiveCatchUpSlots;
   const catchUpBadgeN = catchUpDebt;
+  const catchUpJobIds = useMemo(
+    () => new Set(openPartsRaw.catchUp.map((j) => j.id)),
+    [openPartsRaw.catchUp]
+  );
+
+  const startJob = (
+    job: DesignerJobDto,
+    opts?: { tone?: "catchUp" | "today" | "next" | "done" }
+  ) => {
+    const mayStart =
+      opts?.tone === "catchUp" ||
+      catchUpJobIds.has(job.id) ||
+      job.catchUpExempt ||
+      catchUpBadgeN <= 0;
+    if (!mayStart) {
+      setError(
+        openPartsRaw.catchUpHint
+          ? `${openPartsRaw.catchUpHint} Don’t start Today until Catch up is done.`
+          : "Complete the pending Catch up task before starting today’s work."
+      );
+      return;
+    }
+    void patchJob(job.id, {
+      action: job.status === "PAUSED" ? "resume" : "start",
+    });
+  };
+
   const canDragQueue = isAdmin && queueView === "open" && queue.length > 1;
   const toSendCount = sendableJobs.length;
   const toSendVisible = useMemo(
@@ -1188,10 +1212,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
                       : id === "toSend"
                         ? "bg-amber-300 text-black"
                         : id === "open" && catchUpBadgeN > 0
-                          ? "bg-red-400 text-black"
+                          ? "bg-amber-300 text-black"
                           : "bg-white text-black"
                   : id === "open" && catchUpBadgeN > 0
-                    ? "text-red-200 hover:text-red-100"
+                    ? "text-amber-200/90 hover:text-amber-100"
                     : id === "toSend" && toSendCount > 0
                       ? "text-amber-200/90 hover:text-amber-100"
                       : "text-white/50 hover:text-white/80"
@@ -1245,13 +1269,15 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       {queueView === "open" ? (
         <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
           <p className="text-[12px] leading-snug text-white/65">
-            Minimum <span className="font-semibold text-white/90">4/day</span> Mon–Sat · queue by{" "}
-            <span className="font-semibold text-white/90">deadline</span>. Extra same-day closes →
-            holiday points.
+            Minimum <span className="font-semibold text-white/90">4/day</span> Mon–Sat.
+            <span className="text-white/45">
+              {" "}
+              + Extra tasks earn holiday points.
+            </span>
             {isAdmin && toSendCount > 0 ? (
               <span className="text-amber-200/80">
                 {" "}
-                · {toSendCount} not sent — use{" "}
+                · {toSendCount} not sent —{" "}
                 <button
                   type="button"
                   className="font-semibold underline decoration-amber-200/40 underline-offset-2"
@@ -1615,7 +1641,18 @@ https://instagram.com/…"
         </div>
       ) : null}
 
-      {error ? <p className="text-[12px] text-amber-200/90">{error}</p> : null}
+      {error ? (
+        <div
+          className={`rounded-xl px-3.5 py-3 text-[14px] font-semibold leading-snug ${
+            /catch up|pending task/i.test(error)
+              ? "border border-amber-300/50 bg-amber-400/15 text-amber-50"
+              : "border border-amber-400/25 bg-amber-400/[0.08] text-amber-100"
+          }`}
+          role="alert"
+        >
+          {error}
+        </div>
+      ) : null}
       {loading ? <p className="text-[13px] text-white/40">Loading queue…</p> : null}
 
       <section className="space-y-3">
@@ -1642,18 +1679,16 @@ https://instagram.com/…"
           const brief = jobBriefText(job);
           const toneClass =
             tone === "catchUp"
-              ? "border-red-400/60 bg-red-500/[0.12] ring-1 ring-red-400/35"
-              : tone === "today"
-                ? "border-emerald-400/55 bg-emerald-400/[0.12] ring-1 ring-emerald-400/30"
-                : job.isOverdue
-                  ? "border-red-500/55 bg-red-500/[0.12] ring-1 ring-red-400/25"
-                  : selected
-                    ? "border-cyan-400/40 bg-cyan-400/[0.07]"
-                    : job.status === "IN_PROGRESS"
-                      ? "border-amber-400/35 bg-amber-400/[0.07]"
-                      : job.status === "PAUSED"
-                        ? "border-violet-400/35 bg-violet-400/[0.07]"
-                        : "border-white/[0.08] bg-white/[0.03]";
+              ? "border-amber-400/45 bg-amber-400/[0.08] ring-1 ring-amber-400/20"
+              : job.status === "IN_PROGRESS"
+                ? "border-cyan-400/45 bg-cyan-400/[0.08] ring-1 ring-cyan-400/20"
+                : job.status === "PAUSED"
+                  ? "border-violet-400/35 bg-violet-400/[0.07]"
+                  : tone === "today"
+                    ? "border-white/[0.12] bg-white/[0.04]"
+                    : selected
+                      ? "border-cyan-400/40 bg-cyan-400/[0.07]"
+                      : "border-white/[0.08] bg-white/[0.03]";
           return (
           <article
             key={job.id}
@@ -1814,7 +1849,7 @@ https://instagram.com/…"
                   <button
                     type="button"
                     disabled={busyId === job.id}
-                    onClick={() => startJob(job)}
+                    onClick={() => startJob(job, { tone })}
                     className="h-11 min-h-[44px] rounded-lg bg-cyan-500 px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
                   >
                     Start Job
@@ -1843,11 +1878,7 @@ https://instagram.com/…"
                   <button
                     type="button"
                     disabled={busyId === job.id}
-                    onClick={() =>
-                      void patchJob(job.id, { action: "resume" }).then((ok) => {
-                        if (ok) setError("Started again — upload wait timer restarted.");
-                      })
-                    }
+                    onClick={() => startJob(job, { tone })}
                     className="h-11 min-h-[44px] rounded-lg bg-cyan-500 px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
                   >
                     Start again
@@ -2429,10 +2460,10 @@ https://instagram.com/…"
                 <div>
                   <h2 className={`text-[12px] font-semibold uppercase tracking-wide ${headingClass}`}>
                     {title} ({list.length})
-                    {designerTab !== "all" ? ` · ${designerDisplayName(designerTab)}` : ""}
-                    {outletFilter !== "all" ? ` · ${teamOutletLabel(outletFilter)}` : ""}
                   </h2>
-                  <p className="mt-0.5 text-[11px] text-white/45">{hint}</p>
+                  {hint ? (
+                    <p className="mt-0.5 text-[12px] leading-snug text-white/55">{hint}</p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   {list.map((job) => renderJob(job, undefined, tone))}
@@ -2686,31 +2717,14 @@ https://instagram.com/…"
             );
           }
 
-          const focusTitle = visiblePerf[0]?.isSundayHoliday
-            ? "Today’s pack"
-            : `Today (${DESIGNER_DAILY_TARGET})`;
-          const focusHint = visiblePerf[0]?.isSundayHoliday
-            ? catchUpBadgeN > 0
-              ? "Optional Sunday — after Catch up above. Points if you work."
-              : "Optional Sunday — earliest deadlines. Work these for holiday points."
-            : catchUpBadgeN > 0
-              ? "After Catch up above — today’s 4 by deadline."
-              : "Today’s 4 by earliest design deadline. Extra same-day closes → holiday points.";
+          const focusTitle = visiblePerf[0]?.isSundayHoliday ? "Today" : "Today";
+          const focusHint = "";
 
           if (!canDragQueue) {
             return (
               <div className="space-y-5">
-                {catchUpBadgeN > 0 ? (
-                  <div className="rounded-lg border border-red-400/45 bg-red-500/[0.12] px-3 py-2 text-[12px] text-red-100">
-                    <span className="font-semibold">Catch up first ({catchUpBadgeN})</span>
-                    <span className="text-red-100/75">
-                      {" "}
-                      — finish these before starting today’s pack
-                    </span>
-                  </div>
-                ) : null}
-                {catchUpDebt > openParts.catchUp.length && catchUpDebt > 0 ? (
-                  <p className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-[12px] text-red-100/90">
+                {catchUpDebt > openParts.catchUp.length && catchUpDebt > 0 && isAdmin ? (
+                  <p className="rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-[12px] text-white/60">
                     Owed {catchUpDebt} · showing {openParts.catchUp.length}
                     {outletFilter !== "all" ? " in this outlet — switch to All" : ""}.
                   </p>
@@ -2718,24 +2732,24 @@ https://instagram.com/…"
                 {renderSection(
                   "Catch up",
                   openParts.catchUpHint ||
-                    "Past day missed 4/day — complete before Today.",
+                    "Complete this before starting a new task.",
                   openParts.catchUp,
                   "catchUp",
-                  "text-red-200"
+                  "text-amber-200"
                 )}
                 {renderSection(
                   focusTitle,
                   focusHint,
                   openParts.todayPack,
                   "today",
-                  "text-emerald-200"
+                  "text-white/70"
                 )}
                 {renderSection(
                   "Upcoming",
-                  "After today’s pack — later deadlines.",
+                  "",
                   openParts.upNext,
                   "next",
-                  "text-white/50"
+                  "text-white/45"
                 )}
               </div>
             );
@@ -2748,22 +2762,13 @@ https://instagram.com/…"
               onDragEnd={onQueueDragEnd}
             >
               <div className="space-y-5">
-                {catchUpBadgeN > 0 ? (
-                  <div className="rounded-lg border border-red-400/45 bg-red-500/[0.12] px-3 py-2 text-[12px] text-red-100">
-                    <span className="font-semibold">Catch up first ({catchUpBadgeN})</span>
-                    <span className="text-red-100/75">
-                      {" "}
-                      — finish these before starting today’s pack
-                    </span>
-                  </div>
-                ) : null}
                 {renderSection(
                   "Catch up",
                   openParts.catchUpHint ||
-                    "Past day missed 4/day — complete before Today.",
+                    "Complete this before starting a new task.",
                   openParts.catchUp,
                   "catchUp",
-                  "text-red-200"
+                  "text-amber-200"
                 )}
                 <SortableContext
                   items={[...openParts.todayPack, ...openParts.upNext].map((j) => j.id)}
@@ -2776,14 +2781,14 @@ https://instagram.com/…"
                         focusHint,
                         openParts.todayPack,
                         "today",
-                        "text-emerald-200",
+                        "text-white/70",
                       ],
                       [
                         "Upcoming",
-                        "After today’s pack — later deadlines.",
+                        "",
                         openParts.upNext,
                         "next",
-                        "text-white/50",
+                        "text-white/45",
                       ],
                     ] as const
                   ).map(([title, hint, list, tone, headingClass]) =>
@@ -2795,7 +2800,9 @@ https://instagram.com/…"
                           >
                             {title} ({list.length}) · drag ≡
                           </h2>
-                          <p className="mt-0.5 text-[11px] text-white/45">{hint}</p>
+                          {hint ? (
+                            <p className="mt-0.5 text-[11px] text-white/45">{hint}</p>
+                          ) : null}
                         </div>
                         <div className="space-y-2">
                           {list.map((job) => (
@@ -3075,76 +3082,46 @@ function DesignerPerformanceCard({
   perf,
   isAdmin,
   compact,
-  catchUpOwed,
   nudgeBusy,
   onNudge,
 }: {
   perf: DesignerPerformanceDto;
   isAdmin: boolean;
   compact?: boolean;
-  /** After admin Drop catch-up — matches Open catch-up band */
+  /** kept for call-site compat — catch-up copy lives on the Catch up section */
   catchUpOwed?: number;
   nudgeBusy: boolean;
   onNudge: () => void;
 }) {
-  const stack = perf.stack;
-  const behind = stack?.stackedBehind ?? 0;
-  const pastCatchUpRaw = (stack?.missedDays ?? []).reduce(
-    (n, d) => n + (d.missed ?? 0),
-    0
-  );
-  const pastCatchUp =
-    typeof catchUpOwed === "number" ? catchUpOwed : pastCatchUpRaw;
-  // Stack “Behind” only after ~8 PM; catch-up = past full days that missed 4/day
-  const hourIst = Number(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Kolkata",
-      hour: "2-digit",
-      hour12: false,
-    }).format(new Date())
-  );
-  const showStackBehind = hourIst >= 20 && behind > 0;
-  const flag =
-    !perf.isSundayHoliday && (pastCatchUp > 0 || perf.redFlag || showStackBehind);
-  const points = stack?.holidayPoints ?? stack?.advancePoints ?? 0;
-  const perLeave = stack?.pointsPerLeave ?? DESIGNER_POINTS_PER_LEAVE;
-  const unlocked = stack?.leaveDaysEarned ?? 0;
   const sunday = Boolean(perf.isSundayHoliday);
+  const done = perf.closedToday >= perf.dailyTarget && !sunday;
   return (
     <div
-      className={`rounded-xl border px-3 py-2.5 ${
+      className={`rounded-xl border px-3.5 py-3 ${
         sunday
-          ? "border-violet-400/35 bg-violet-400/[0.08]"
-          : flag
-            ? "border-red-500/50 bg-red-500/[0.12]"
-            : pastCatchUp > 0
-              ? "border-orange-400/35 bg-orange-400/[0.08]"
-              : perf.underTarget
-                ? "border-amber-400/35 bg-amber-400/[0.07]"
-                : "border-emerald-400/25 bg-emerald-400/[0.06]"
+          ? "border-violet-400/30 bg-violet-400/[0.07]"
+          : done
+            ? "border-emerald-400/30 bg-emerald-400/[0.07]"
+            : "border-white/10 bg-white/[0.03]"
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
             {perf.name}
             {sunday ? " · Sunday" : " · today"}
           </p>
           {sunday ? (
             <>
-              <p className="mt-0.5 text-[20px] font-semibold text-violet-100">
+              <p className="mt-0.5 text-[22px] font-semibold text-violet-100">
                 Happy holiday
               </p>
-              <p className="mt-0.5 text-[13px] text-white/60">Enjoy your day.</p>
+              <p className="mt-0.5 text-[13px] text-white/50">Enjoy your day.</p>
             </>
           ) : (
-            <p
-              className={`mt-0.5 text-[22px] font-semibold tabular-nums ${
-                flag ? "text-red-200" : "text-emerald-200"
-              }`}
-            >
+            <p className="mt-0.5 text-[28px] font-semibold tabular-nums tracking-tight text-white">
               {perf.closedToday}/{perf.dailyTarget}
-              <span className="ml-2 text-[12px] font-medium text-white/45">closed</span>
+              <span className="ml-2 text-[13px] font-medium text-white/40">closed</span>
             </p>
           )}
         </div>
@@ -3159,84 +3136,16 @@ function DesignerPerformanceCard({
           </button>
         ) : null}
       </div>
-      {sunday ? (
-        <p className="mt-2 text-[12px] leading-snug text-white/60">
-          You can earn holiday points by working today (next-day pack below). Check the{" "}
-          <span className="font-semibold text-violet-200">Holiday</span> tab for points and Sundays.
-          {perf.catchUpClosedToday > 0 ? (
-            <span className="text-white/45">
-              {" "}
-              · Catch-up done today {perf.catchUpClosedToday}
-            </span>
-          ) : null}
-        </p>
-      ) : (
-        <p className="mt-1.5 text-[11px] text-white/55">
-          Holiday points{" "}
-          <span className="font-semibold text-violet-200">
-            {points}/{perLeave}
-          </span>
-          {unlocked > 0 ? (
-            <span className="text-cyan-200"> · {unlocked} leave unlocked (ask permission)</span>
-          ) : null}
-          {perf.catchUpClosedToday > 0 ? (
-            <span className="text-violet-200">
-              {" "}
-              · Catch-up done today {perf.catchUpClosedToday}
-            </span>
-          ) : null}
-          {pastCatchUp > 0 ? (
-            <span className="text-orange-200"> · Catch-up owed {pastCatchUp}</span>
-          ) : null}
-          {showStackBehind ? (
-            <span className="text-red-300"> · Behind {behind}</span>
-          ) : null}
-        </p>
-      )}
-      {!sunday && stack?.missedDays?.[0] ? (
-        <p className="mt-1 text-[11px] text-orange-200/90">
-          Missed {stack.missedDays[0].date.slice(8)}/{stack.missedDays[0].date.slice(5, 7)} — short{" "}
-          {stack.missedDays[0].missed} (that day ended under 4/day). Catch up first.
+      {!sunday && perf.inProgress > 0 ? (
+        <p className="mt-1.5 text-[12px] text-cyan-200/90">
+          {perf.inProgress} in progress
         </p>
       ) : null}
-      {!compact && stack ? (
-        <div className="mt-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">
-            From {DESIGNER_STACK_START_DATE}
-            {hourIst < 20 ? " · stack score after 8 PM" : ""}
-          </p>
-          <p className="mt-1 text-[13px] font-semibold tabular-nums text-white/90">
-            {hourIst >= 20 ? (
-              <>
-                Target {stack.targetSoFar} · Reached {stack.closedSoFar}
-                {behind > 0 ? (
-                  <span className="text-red-300"> · Behind {behind}</span>
-                ) : (
-                  <span className="text-emerald-300"> · On track</span>
-                )}
-              </>
-            ) : (
-              <>
-                Today {perf.closedToday}/{perf.dailyTarget}
-                {pastCatchUp > 0 ? (
-                  <span className="text-orange-200"> · Catch-up {pastCatchUp}</span>
-                ) : (
-                  <span className="text-white/45"> · day in progress</span>
-                )}
-              </>
-            )}
-          </p>
-          <p className="mt-0.5 text-[11px] text-white/45">
-            Week {stack.weekClosed}/{stack.weekTargetFull}
-          </p>
-        </div>
-      ) : null}
-      {!compact ? (
-        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/45">
-          <span>In progress {perf.inProgress}</span>
-          <span>Started {formatIstClock(perf.firstStartedAt)}</span>
-          <span>Last end {formatIstClock(perf.lastEndedAt)}</span>
-        </div>
+      {!compact && !sunday && isAdmin ? (
+        <p className="mt-1.5 text-[11px] text-white/35">
+          Started {formatIstClock(perf.firstStartedAt)} · Last end{" "}
+          {formatIstClock(perf.lastEndedAt)}
+        </p>
       ) : null}
     </div>
   );

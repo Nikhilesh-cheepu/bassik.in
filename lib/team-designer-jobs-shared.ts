@@ -378,9 +378,9 @@ export function partitionOpenDesignerQueue(
   const catchUpHint =
     catchUp.length > 0
       ? from
-        ? `Missed the 4/day target on ${from} (day fully over). Finish before Today — or admin can Drop catch-up (forgives 1).`
-        : "Missed the 4/day target on an earlier day. Finish before Today — or admin can Drop catch-up (forgives 1)."
-      : "Finish this before today’s pack.";
+        ? `You missed work on ${from}. Complete this before starting a new task.`
+        : "You missed work on an earlier day. Complete this before starting a new task."
+      : "";
   return { catchUp, todayPack, upNext, catchUpHint, effectiveCatchUpSlots: slots };
 }
 
