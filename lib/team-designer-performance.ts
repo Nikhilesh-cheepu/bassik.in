@@ -324,6 +324,11 @@ function listMonthSundays(monthKey: string, today: string): DesignerHolidaySunda
   return out;
 }
 
+/**
+ * Past workdays where closes &lt; 4.
+ * A day only counts after it fully ends (IST calendar: after 11:59 PM → next day).
+ * Today is never “missed” until tomorrow 12:00 AM.
+ */
 async function listMissedWorkdays(
   assigneeId: string,
   fromYmd: string,
@@ -331,27 +336,23 @@ async function listMissedWorkdays(
   cap = 8
 ): Promise<DesignerMissedDayDto[]> {
   if (fromYmd > toYmd) return [];
-  const closedByDay = await loadClosesByCreditDay(assigneeId, fromYmd, toYmd);
+  // Only score days strictly before today — full 00:00–23:59 window must be over
+  const lastCompletable = addDaysYmd(toYmd, -1);
+  if (fromYmd > lastCompletable) return [];
+  const closedByDay = await loadClosesByCreditDay(assigneeId, fromYmd, lastCompletable);
   const missed: DesignerMissedDayDto[] = [];
-  let cur = toYmd;
+  let cur = lastCompletable;
   for (let i = 0; i < 400 && cur >= fromYmd; i++) {
     if (isStackWorkday(assigneeId, cur)) {
       const closed = closedByDay.get(cur) ?? 0;
       if (closed < DESIGNER_DAILY_TARGET) {
-        // Grace only while that workday is still in progress (not on Sunday / after)
-        const stillToday =
-          cur === toYmd &&
-          isStackWorkday(assigneeId, toYmd) &&
-          istHourNow() < DESIGNER_RED_FLAG_HOUR_IST;
-        if (!stillToday) {
-          missed.push({
-            date: cur,
-            closed,
-            target: DESIGNER_DAILY_TARGET,
-            missed: DESIGNER_DAILY_TARGET - closed,
-          });
-          if (missed.length >= cap) break;
-        }
+        missed.push({
+          date: cur,
+          closed,
+          target: DESIGNER_DAILY_TARGET,
+          missed: DESIGNER_DAILY_TARGET - closed,
+        });
+        if (missed.length >= cap) break;
       }
     }
     cur = addDaysYmd(cur, -1);

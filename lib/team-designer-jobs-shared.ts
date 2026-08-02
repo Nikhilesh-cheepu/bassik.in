@@ -303,7 +303,7 @@ export type DesignerStackDto = {
 };
 
 export type DesignerCatchUpMeta = {
-  /** Past-day shortfalls (not today’s unfinished 4) */
+  /** Past full workdays under 4/day (today never counts until tomorrow 12 AM) */
   catchUpSlots: number;
   /** e.g. "Saturday · 1 Aug" */
   pendingFromLabel: string | null;
@@ -330,16 +330,17 @@ export function catchUpMetaFromStack(stack: {
 
 /**
  * Split open queue into catch-up / today's 4 / later.
- * Catch up = due date + due time already missed (`isOverdue`), unless admin released it.
- * Score debt never invents Catch up rows. Till the deadline passes, job stays in Open.
+ * Catch up = shortfall from past calendar days (4/day target), not job deadlines.
+ * A missed day only counts after that day fully ends (after 11:59 PM IST).
+ * Pulls the next N open jobs by queue order; admin “Send to Open” skips a job (catchUpExempt).
  */
 export function partitionOpenDesignerQueue(
   jobs: DesignerJobDto[],
   dailyTarget = DESIGNER_DAILY_TARGET,
   opts?: {
-    /** @deprecated Ignored — kept for call-site compat. */
+    /** Closes still owed from earlier full workdays */
     catchUpSlots?: number;
-    /** e.g. "Saturday · 1 Aug" — used in hint when overdue items exist */
+    /** e.g. "Saturday · 1 Aug" */
     pendingFromLabel?: string | null;
   }
 ): {
@@ -349,7 +350,9 @@ export function partitionOpenDesignerQueue(
   catchUpHint: string;
 } {
   const sorted = sortDesignerJobs(jobs.filter((j) => j.status !== "DESIGN_DONE"));
-  const catchUp = sorted.filter((j) => j.isOverdue && !j.catchUpExempt);
+  const slots = Math.max(0, opts?.catchUpSlots ?? 0);
+  const fillable = sorted.filter((j) => !j.catchUpExempt);
+  const catchUp = fillable.slice(0, slots);
   const catchIds = new Set(catchUp.map((j) => j.id));
   const remaining = sorted.filter((j) => !catchIds.has(j.id));
   const todayPack = remaining.slice(0, dailyTarget);
@@ -358,8 +361,8 @@ export function partitionOpenDesignerQueue(
   const catchUpHint =
     catchUp.length > 0
       ? from
-        ? `Due date/time missed (also score behind from ${from}). Finish or admin can Send to Open.`
-        : "Due date and time already missed — finish these, or admin can Send to Open."
+        ? `Missed the 4/day target on ${from} (day fully over). Finish these first — or admin can Send to Open.`
+        : "Missed the 4/day target on an earlier day. Finish these first — or admin can Send to Open."
       : "Finish this before today’s pack.";
   return { catchUp, todayPack, upNext, catchUpHint };
 }

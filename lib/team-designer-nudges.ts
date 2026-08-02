@@ -29,7 +29,7 @@ const FINISH_ASAP_MIN_MS = 60 * 60 * 1000;
 export const SLOW_TASK_MS = 3 * 60 * 60 * 1000;
 /** Morning “haven’t started” window starts (IST). */
 export const NO_START_HOUR_IST = 11;
-export const NO_START_MINUTE_IST = 20;
+export const NO_START_MINUTE_IST = 30;
 
 function formatDuration(ms: number): string {
   const m = Math.max(1, Math.round(ms / 60000));
@@ -298,10 +298,10 @@ function buildNudgeBody(params: {
   switch (params.kind) {
     case "no_start":
       head = [
-        `${params.name} — work has started and you haven’t begun today’s queue.`,
+        `${params.name} — ${greetingForHourIst(params.hour)}.`,
+        "You haven’t started yet. Please start soon and complete today’s tasks.",
         dayMiss,
-        pendingBit ?? `${params.readyToStart} job(s) waiting.`,
-        stackBit,
+        `Target today: ${DESIGNER_DAILY_TARGET}. Check the Design tab and press Start Job.`,
       ].filter(Boolean) as string[];
       break;
     case "slow_task":
@@ -395,7 +395,7 @@ export async function kindsDueNow(opts?: {
     return kinds;
   }
 
-  // From 11:20 IST — haven’t started
+  // From 11:30 IST — haven’t started
   const afterNoStart =
     hour > NO_START_HOUR_IST ||
     (hour === NO_START_HOUR_IST && minute >= NO_START_MINUTE_IST);
@@ -665,21 +665,40 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
 
     const sunday = dayIdForYmd(today) === "sun";
 
-    // Before ~11 IST: generic “today’s pack” only — don’t invent Catch up from score debt
+    // Before 11:30 IST: brief for the day (+ catch-up only if a prior full day missed 4/day)
     if (beforeWork) {
+      const catchUpN = (stack.missedDays ?? []).reduce(
+        (n, d) => n + (d.missed ?? 0),
+        0
+      );
+      const miss = stack.missedDays?.[0];
+      const missLabel = miss?.date ? formatDayLabel(miss.date) : null;
       const daily = sunday ? 0 : DESIGNER_DAILY_TARGET;
-      if (daily > 0 || perf.readyToStart > 0) {
-        const lines: string[] = [
-          `${name} — ${greetingForHourIst(hour)}.`,
-          daily > 0
-            ? `You have ${daily} tasks for today. Check the Design tab (Open) and complete today’s pack.`
-            : "Check the Design tab for today’s queue.",
+      if (catchUpN > 0 || daily > 0 || perf.readyToStart > 0) {
+        const lines: string[] = [`${name} — ${greetingForHourIst(hour)}.`];
+        if (catchUpN > 0) {
+          lines.push(
+            `Catch-up: ${catchUpN} from a past day${
+              missLabel ? ` (${missLabel})` : ""
+            } — that day ended without 4 closes. Finish Catch up first.`
+          );
+          if (daily > 0) {
+            lines.push(`Then complete your ${daily} tasks for today.`);
+          }
+        } else if (daily > 0) {
+          lines.push(
+            `You have ${daily} tasks for today. Start soon and complete them.`
+          );
+        } else {
+          lines.push("Check the Design tab for today’s queue.");
+        }
+        lines.push(
           "",
           "Open the Design tab and refresh before you start — order and priority can change anytime. Always follow the website flow.",
           "Don’t start work before pressing Start Job on the task.",
           "",
-          designerQueueLink(),
-        ];
+          designerQueueLink()
+        );
         const body = lines.join("\n");
         out.push({
           assigneeId,

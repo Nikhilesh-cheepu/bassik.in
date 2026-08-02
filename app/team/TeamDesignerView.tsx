@@ -2459,8 +2459,9 @@ https://instagram.com/…"
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center">
                   <p className="text-[14px] font-semibold text-white/80">No catch-up</p>
                   <p className="mt-1 text-[12px] text-white/45">
-                    Catch up only after due date + due time are missed. Until then, everything stays
-                    in Open. Admin can Send to Open to move a catch-up job back to the normal list.
+                    Catch up only after a full workday (12 AM–11:59 PM) ends under 4 closes. Today’s
+                    unfinished 4 stay in Open until tomorrow. Admin can Send to Open on a catch-up
+                    card to put that job back in the normal list.
                   </p>
                 </div>
               );
@@ -2945,11 +2946,11 @@ function DesignerPerformanceCard({
 }) {
   const stack = perf.stack;
   const behind = stack?.stackedBehind ?? 0;
-  const pastCatchUpRaw = (stack?.missedDays ?? []).reduce(
+  const pastCatchUp = (stack?.missedDays ?? []).reduce(
     (n, d) => n + (d.missed ?? 0),
     0
   );
-  // Stack “Behind” only after ~8 PM; score “Catch-up N” only after work start (~11)
+  // Stack “Behind” only after ~8 PM; catch-up = past full days that missed 4/day
   const hourIst = Number(
     new Intl.DateTimeFormat("en-GB", {
       timeZone: "Asia/Kolkata",
@@ -2957,10 +2958,9 @@ function DesignerPerformanceCard({
       hour12: false,
     }).format(new Date())
   );
-  const pastCatchUp = hourIst >= 11 ? pastCatchUpRaw : 0;
   const showStackBehind = hourIst >= 20 && behind > 0;
   const flag =
-    !perf.isSundayHoliday && (pastCatchUp > 0 || (hourIst >= 11 && perf.redFlag) || showStackBehind);
+    !perf.isSundayHoliday && (pastCatchUp > 0 || perf.redFlag || showStackBehind);
   const points = stack?.holidayPoints ?? stack?.advancePoints ?? 0;
   const perLeave = stack?.pointsPerLeave ?? DESIGNER_POINTS_PER_LEAVE;
   const unlocked = stack?.leaveDaysEarned ?? 0;
@@ -3039,11 +3039,10 @@ function DesignerPerformanceCard({
           ) : null}
         </p>
       )}
-      {!sunday && hourIst >= 11 && stack?.missedDays?.[0] ? (
+      {!sunday && stack?.missedDays?.[0] ? (
         <p className="mt-1 text-[11px] text-orange-200/90">
           Missed {stack.missedDays[0].date.slice(8)}/{stack.missedDays[0].date.slice(5, 7)} — short{" "}
-          {stack.missedDays[0].missed}. Extra closes in Open clear it (Catch up is for past-due
-          only).
+          {stack.missedDays[0].missed} (that day ended under 4/day). Catch up first.
         </p>
       ) : null}
       {!compact && stack ? (
