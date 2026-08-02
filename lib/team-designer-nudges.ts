@@ -119,9 +119,94 @@ function nudgeLabel(kind: DesignerNudgeKind): string {
       return "Priority — pause now";
     case "priority_after_current":
       return "Priority — after current";
+    case "amit_ready":
+      return "Ready for Amit";
     default:
       return kind;
   }
+}
+
+function checklistLink(): string {
+  const base =
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "")?.trim() || "https://bassik.in";
+  return `${base}/team?tab=tasks`;
+}
+
+function amitReadyAction(format: string): string {
+  const f = format.toLowerCase();
+  if (f === "story") return "ready to add the story";
+  if (f === "calendar") return "ready for the weekend TV calendar";
+  if (f === "ad" || f.includes("ad")) return "ready for the ad";
+  return "ready to post";
+}
+
+/** WA copy when a designer closes a creative for Amit’s checklist. */
+export function buildAmitReadyNudge(job: {
+  id: string;
+  title: string;
+  outletId: string;
+  format: string;
+  postDate: string;
+}): DesignerSuggestedNudgeDto {
+  const hour = istHourNow();
+  const outlet = teamOutletLabel(job.outletId);
+  const event = formatDayLabel(job.postDate);
+  const action = amitReadyAction(job.format);
+  const body = [
+    `Hey Amit — ${greetingForHourIst(hour)}.`,
+    "",
+    `${job.title} (${outlet}) is ${action} — event ${event}.`,
+    "Please check the Daily Checklist and complete it. Thank you.",
+    "",
+    checklistLink(),
+  ].join("\n");
+  const phone = designerWaPhone("amit");
+  return {
+    assigneeId: "amit",
+    name: "Amit",
+    kind: "amit_ready",
+    label: "Ready for Amit",
+    body,
+    shareUrl: whatsAppShareUrl(phone, body),
+    jobId: job.id,
+  };
+}
+
+/** Pending handoffs closed in the last ~36h that admin hasn’t opened WA for yet. */
+export async function listAmitHandoffNudges(): Promise<DesignerSuggestedNudgeDto[]> {
+  const since = new Date(Date.now() - 36 * 60 * 60 * 1000);
+  const jobs = await prisma.teamDesignerJob.findMany({
+    where: {
+      status: "DESIGN_DONE",
+      fileUrl: { not: null },
+      uploadedAt: { gte: since },
+    },
+    select: {
+      id: true,
+      title: true,
+      outletId: true,
+      format: true,
+      postDate: true,
+      uploadedAt: true,
+    },
+    orderBy: { uploadedAt: "desc" },
+    take: 25,
+  });
+  if (jobs.length === 0) return [];
+
+  const ids = jobs.map((j) => j.id);
+  const opened = await prisma.teamDesignerReminderLog.findMany({
+    where: {
+      assigneeId: "amit",
+      kind: "amit_ready",
+      jobId: { in: ids },
+    },
+    select: { jobId: true },
+  });
+  const openedSet = new Set(opened.map((o) => o.jobId));
+  return jobs
+    .filter((j) => !openedSet.has(j.id))
+    .map((j) => buildAmitReadyNudge(j));
 }
 
 function buildNudgeBody(params: {
@@ -630,7 +715,8 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
     }
   }
 
-  return out;
+  const amit = await listAmitHandoffNudges();
+  return [...amit, ...out];
 }
 
 /** Admin clicked Open WA — log it so we don’t spam the same suggestion blindly. */

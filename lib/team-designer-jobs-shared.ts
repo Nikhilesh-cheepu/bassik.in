@@ -556,7 +556,8 @@ export type DesignerNudgeKind =
   | "missed_target"
   | "slow_task"
   | "priority_pause_now"
-  | "priority_after_current";
+  | "priority_after_current"
+  | "amit_ready";
 
 export type DesignerReminderLogDto = {
   id: string;

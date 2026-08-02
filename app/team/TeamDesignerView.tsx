@@ -951,9 +951,20 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       } else {
         setAllJobs((prev) => prev.filter((j) => j.id !== id));
       }
+      const amitNudge = data.amitNudge as DesignerSuggestedNudgeDto | undefined;
+      if (amitNudge?.shareUrl && isAdmin) {
+        setSuggestedNudges((prev) => {
+          if (prev.some((s) => s.jobId === amitNudge.jobId && s.kind === "amit_ready")) {
+            return prev;
+          }
+          return [amitNudge, ...prev];
+        });
+        setError("Creative ready — Send WA to Amit (Send now).");
+      } else if (typeof data.message === "string") {
+        setError(data.message);
+      }
       setUploadJobId(null);
       setUploadForm({ postingNotes: "", scheduleNote: "", waApproved: false, fileUrl: "" });
-      if (typeof data.message === "string") setError(data.message);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Close failed";
       const waitMatch = /wait (\d+)s/i.exec(msg);
@@ -1183,7 +1194,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       queueView !== "holiday" &&
       queueView !== "expired" &&
       suggestedNudges.filter(
-        (s) => designerTab === "all" || s.assigneeId === designerTab
+        (s) =>
+          s.kind === "amit_ready" ||
+          designerTab === "all" ||
+          s.assigneeId === designerTab
       ).length > 0 ? (
         <div className="space-y-2 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.06] px-3 py-2.5">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90">
@@ -1191,8 +1205,13 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           </p>
           <ul className="space-y-1.5">
             {suggestedNudges
-              .filter((s) => designerTab === "all" || s.assigneeId === designerTab)
-              .slice(0, 4)
+              .filter(
+                (s) =>
+                  s.kind === "amit_ready" ||
+                  designerTab === "all" ||
+                  s.assigneeId === designerTab
+              )
+              .slice(0, 6)
               .map((s) => {
               const key = `${s.assigneeId}:${s.kind}:${s.jobId}`;
               const preview = s.body.split("\n").filter(Boolean).slice(0, 2).join(" · ");

@@ -76,13 +76,12 @@ export async function POST(req: NextRequest) {
         typeof body.assigneeId === "string" ? body.assigneeId.trim() : "";
       const kind = body.kind;
       const nudgeBody = typeof body.nudgeBody === "string" ? body.nudgeBody : "";
-      if (
-        !DESIGNER_PERFORMANCE_IDS.includes(
+      const allowedAssignee =
+        assigneeId === "amit" ||
+        DESIGNER_PERFORMANCE_IDS.includes(
           assigneeId as (typeof DESIGNER_PERFORMANCE_IDS)[number]
-        ) ||
-        !kind ||
-        !nudgeBody.trim()
-      ) {
+        );
+      if (!allowedAssignee || !kind || !nudgeBody.trim()) {
         return NextResponse.json({ error: "assigneeId, kind, nudgeBody required" }, { status: 400 });
       }
       const log = await markSuggestedNudgeOpened({

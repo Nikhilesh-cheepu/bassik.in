@@ -23,7 +23,10 @@ import {
   type DesignerPriorityMode,
 } from "@/lib/team-designer-jobs-shared";
 import { deleteTeamHandoffBlobUrl } from "@/lib/team-handoff-blobs";
-import { sendPriorityJobAlert } from "@/lib/team-designer-nudges";
+import {
+  buildAmitReadyNudge,
+  sendPriorityJobAlert,
+} from "@/lib/team-designer-nudges";
 
 async function jobDtoWithLinks(job: Parameters<typeof toDesignerJobDto>[0]) {
   const [linksMap, editMap] = await Promise.all([
@@ -508,7 +511,10 @@ export async function PATCH(
         console.error("[designer-jobs] checklist sync", e);
       }
 
-      return NextResponse.json({ job: await jobDtoWithLinks(updated) });
+      return NextResponse.json({
+        job: await jobDtoWithLinks(updated),
+        amitNudge: buildAmitReadyNudge(updated),
+      });
     }
 
     // Admin: attach creative without closing the job
@@ -552,6 +558,7 @@ export async function PATCH(
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
         message: "Upload saved — job still open until you Mark done",
+        amitNudge: buildAmitReadyNudge(updated),
       });
     }
 
@@ -609,6 +616,7 @@ export async function PATCH(
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
         message: "Marked done (admin) — does not count toward designer daily target",
+        amitNudge: buildAmitReadyNudge(updated),
       });
     }
 
@@ -668,6 +676,7 @@ export async function PATCH(
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
         message: "Upload updated — Amit Ready refreshed",
+        amitNudge: buildAmitReadyNudge(updated),
       });
     }
 
