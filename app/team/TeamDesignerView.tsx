@@ -39,6 +39,7 @@ import {
   isBoilerplateDesignerDescription,
   partitionOpenDesignerQueueByAssignee,
   sortDesignerJobs,
+  suggestDesignerFreeDeadlineSlots,
   type DesignerJobDto,
   type DesignerPerformanceDto,
   type DesignerPriorityMode,
@@ -412,26 +413,34 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
 
   const load = useCallback(async (opts?: {
     soft?: boolean;
+    /** Poll / focus refresh — no loading spinner flicker */
+    quiet?: boolean;
     view?: QueueView;
   }) => {
     const view = opts?.view ?? queueViewRef.current;
     const gen = ++loadGen.current;
-    if (opts?.soft) setRefreshing(true);
-    else setLoading(true);
+    if (!opts?.quiet) {
+      if (opts?.soft) setRefreshing(true);
+      else setLoading(true);
+    }
     try {
       const qs = view === "closed" ? "?view=closed" : "";
-      const res = await fetch(`/api/team/designer-jobs${qs}`);
+      const res = await fetch(`/api/team/designer-jobs${qs}`, {
+        cache: "no-store",
+      });
       const data = await readJson(res);
       if (gen !== loadGen.current) return;
       setAllJobs((data.jobs as DesignerJobDto[]) ?? []);
       setWindowMeta((data.window as WindowMeta) ?? null);
-      setError(null);
+      if (!opts?.quiet) setError(null);
       void loadPerformance();
     } catch (err) {
       if (gen !== loadGen.current) return;
-      setError(err instanceof Error ? err.message : "Failed to load");
+      if (!opts?.quiet) {
+        setError(err instanceof Error ? err.message : "Failed to load");
+      }
     } finally {
-      if (gen === loadGen.current) {
+      if (gen === loadGen.current && !opts?.quiet) {
         setLoading(false);
         setRefreshing(false);
       }
@@ -441,6 +450,30 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   useEffect(() => {
     void load({ view: queueView });
   }, [load, queueView]);
+
+  const pauseLivePollRef = useRef(false);
+  pauseLivePollRef.current = Boolean(
+    uploadJobId || briefJobId || busyId || adhocOpen || uploadGate
+  );
+
+  /** Teammates Start / Done — pick up without manual refresh. */
+  useEffect(() => {
+    const softRefresh = () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
+      if (pauseLivePollRef.current) return;
+      void load({ soft: true, quiet: true });
+    };
+    const id = window.setInterval(softRefresh, 8_000);
+    window.addEventListener("focus", softRefresh);
+    document.addEventListener("visibilitychange", softRefresh);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", softRefresh);
+      document.removeEventListener("visibilitychange", softRefresh);
+    };
+  }, [load]);
 
   const sendManualNudge = async (assigneeId: string, kind?: DesignerSuggestedNudgeDto["kind"]) => {
     setNudgeBusy(assigneeId);
@@ -1002,6 +1035,17 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const catchUpCount = openParts.catchUp.length;
   const canDragQueue = isAdmin && queueView === "open" && queue.length > 1;
 
+  const freeDeadlineSlots = useMemo(
+    () =>
+      suggestDesignerFreeDeadlineSlots(
+        allJobs,
+        adhoc.assigneeId,
+        todayYmdLocal(),
+        { count: 3 }
+      ),
+    [allJobs, adhoc.assigneeId]
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#06060a]">
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-28 [-webkit-overflow-scrolling:touch] xl:pb-10">
@@ -1363,6 +1407,45 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
                 className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2 text-[13px] text-white"
               />
             </label>
+            {adhoc.priorityMode === "NONE" ? (
+              <div className="sm:col-span-2 space-y-1.5">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-white/40">
+                  Free slots (pick one)
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {freeDeadlineSlots.map((s) => {
+                    const on = adhoc.dueDate === s.date;
+                    return (
+                      <button
+                        key={s.date}
+                        type="button"
+                        onClick={() =>
+                          setAdhoc((a) => ({
+                            ...a,
+                            dueDate: s.date,
+                            priorityMode: "NONE",
+                          }))
+                        }
+                        className={`rounded-lg border px-2.5 py-1.5 text-left ${
+                          on
+                            ? "border-emerald-400/50 bg-emerald-400/15 text-emerald-50"
+                            : s.free > 0
+                              ? "border-white/15 bg-black/30 text-white/80 hover:border-white/30"
+                              : "border-amber-400/30 bg-amber-400/10 text-amber-50/90"
+                        }`}
+                      >
+                        <span className="block text-[12px] font-semibold">{s.label}</span>
+                        <span className="block text-[10px] opacity-75">{s.note}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-white/40">
+                  Target: stay ahead (Fri pack by Mon; slip to Wed only if stuck). Prefer clear
+                  days so sudden work has room.
+                </p>
+              </div>
+            ) : null}
             <label className="block text-[11px] text-white/50">
               Event / go-live (optional)
               <input
@@ -2588,19 +2671,19 @@ function PriorityModePicker({
 }) {
   const options: Array<{ id: DesignerPriorityMode; label: string; hint: string }> = [
     {
-      id: "NONE",
-      label: "By deadline",
-      hint: "Slots by design due date with weekend pack",
+      id: "PAUSE_NOW",
+      label: "Start immediately",
+      hint: "Pause current — this first (stuck / must-do)",
     },
     {
       id: "AFTER_CURRENT",
-      label: "After current work",
-      hint: "Finish what’s in progress, then this",
+      label: "After current",
+      hint: "Finish in-progress, then this",
     },
     {
-      id: "PAUSE_NOW",
-      label: "ASAP — pause & start",
-      hint: "Due today; pauses current and starts this",
+      id: "NONE",
+      label: "Not sure / deadline",
+      hint: "Pick a free slot below (or set date)",
     },
   ];
   return (
@@ -2620,7 +2703,7 @@ function PriorityModePicker({
                   ? "border-rose-400/50 bg-rose-400/15 text-rose-50"
                   : o.id === "AFTER_CURRENT"
                     ? "border-orange-400/45 bg-orange-400/12 text-orange-50"
-                    : "border-white/25 bg-white/10 text-white"
+                    : "border-emerald-400/45 bg-emerald-400/12 text-emerald-50"
                 : "border-white/10 bg-black/25 text-white/55 hover:text-white/80"
             }`}
           >

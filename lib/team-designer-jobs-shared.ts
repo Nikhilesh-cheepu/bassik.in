@@ -29,6 +29,11 @@ export const DESIGNER_POINTS_PER_LEAVE = 7;
 export const DESIGNER_WINDOW_DAYS = 30;
 /** Cumulative 4/day stack starts here (IST). Misses carry forward. Sunday = break. */
 export const DESIGNER_STACK_START_DATE = "2026-08-01";
+/**
+ * Weekend posts target due = go-live − 4 days (Fri→Mon).
+ * Absolute last comfort slip for a Friday pack: +2 days (Mon→Wed). Prefer never.
+ */
+export const DESIGNER_WEEKEND_DEADLINE_SLIP_DAYS = 2;
 
 export type DesignerJobLane = "WEEKEND" | "WEEKDAY";
 export type DesignerJobStatus =
@@ -405,6 +410,105 @@ export function designerFormatLabel(format: string): string {
   if (format === "calendar") return "TV calendar";
   if (format === "ad") return "Ad";
   return "Post";
+}
+
+function addDaysYmdLocal(ymd: string, delta: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y!, m! - 1, d!, 12, 0, 0));
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  return dt.toISOString().slice(0, 10);
+}
+
+function weekdayShortUtc(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y!, m! - 1, d!, 12, 0, 0));
+  return dt.toLocaleDateString("en-IN", { weekday: "short", timeZone: "UTC" });
+}
+
+function isSundayYmd(ymd: string): boolean {
+  return weekdayShortUtc(ymd) === "Sun";
+}
+
+export type DesignerFreeSlotSuggestion = {
+  date: string;
+  /** e.g. "Mon 4 Aug" */
+  label: string;
+  /** Open jobs already due that day for this designer */
+  openDue: number;
+  /** Remaining capacity toward 4/day */
+  free: number;
+  note: string;
+};
+
+/**
+ * Suggest up to 3 Mon–Sat deadline days with the most free capacity (next ~2 weeks).
+ * Prefer sooner light days so extras land when he’s ahead — not piled on Monday.
+ */
+export function suggestDesignerFreeDeadlineSlots(
+  jobs: DesignerJobDto[],
+  assigneeId: string,
+  today: string,
+  opts?: { count?: number; lookAheadDays?: number; dailyTarget?: number }
+): DesignerFreeSlotSuggestion[] {
+  const count = opts?.count ?? 3;
+  const lookAhead = opts?.lookAheadDays ?? 14;
+  const dailyTarget = opts?.dailyTarget ?? DESIGNER_DAILY_TARGET;
+  const open = jobs.filter(
+    (j) =>
+      j.assigneeId === assigneeId &&
+      j.status !== "DESIGN_DONE" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(j.dueDate)
+  );
+  const dueCount = new Map<string, number>();
+  for (const j of open) {
+    dueCount.set(j.dueDate, (dueCount.get(j.dueDate) ?? 0) + 1);
+  }
+
+  const candidates: DesignerFreeSlotSuggestion[] = [];
+  for (let i = 0; i < lookAhead; i++) {
+    const date = addDaysYmdLocal(today, i);
+    if (isSundayYmd(date)) continue;
+    const openDue = dueCount.get(date) ?? 0;
+    const free = Math.max(0, dailyTarget - openDue);
+    const [y, m, d] = date.split("-").map(Number);
+    const dt = new Date(Date.UTC(y!, m! - 1, d!, 12, 0, 0));
+    const label = `${weekdayShortUtc(date)} ${dt.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    })}`;
+    const note =
+      free >= dailyTarget
+        ? "Clear — best for extras"
+        : free > 0
+          ? `${free} free of ${dailyTarget}`
+          : openDue > dailyTarget
+            ? `Overloaded (${openDue})`
+            : "Full (4)";
+    candidates.push({ date, label, openDue, free, note });
+  }
+
+  // Prefer free capacity, then sooner dates; always return `count` lightest options
+  const withRoom = candidates
+    .filter((c) => c.free > 0)
+    .sort((a, b) => b.free - a.free || a.date.localeCompare(b.date));
+  const picked: DesignerFreeSlotSuggestion[] = [];
+  const seen = new Set<string>();
+  for (const c of withRoom) {
+    if (picked.length >= count) break;
+    picked.push(c);
+    seen.add(c.date);
+  }
+  if (picked.length < count) {
+    const rest = [...candidates]
+      .filter((c) => !seen.has(c.date))
+      .sort((a, b) => a.openDue - b.openDue || a.date.localeCompare(b.date));
+    for (const c of rest) {
+      if (picked.length >= count) break;
+      picked.push(c);
+    }
+  }
+  return picked.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export type DesignerPerformanceDto = {
