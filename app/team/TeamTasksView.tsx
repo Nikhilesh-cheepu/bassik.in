@@ -247,49 +247,69 @@ function collectWaitItems(board: ChecklistBoardDto): TeamChecklistItemDto[] {
   });
 }
 
-function shortOutletLabel(raw: string | null | undefined): string {
-  const t = (raw || "gen").trim();
-  if (!t) return "gen";
-  const parts = t.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return parts.map((p) => p[0] ?? "").join("").toLowerCase();
-  return t.toLowerCase();
+function teamChecklistLink(): string {
+  const base =
+    (typeof window !== "undefined" ? window.location.origin : "") ||
+    "https://bassik.in";
+  return `${base.replace(/\/$/, "")}/team?tab=tasks`;
 }
 
-function simpleWaItemLine(item: TeamChecklistItemDto): string {
-  const outlet = shortOutletLabel(item.outletTitle || item.outletId);
-  const day = (item.dayOfWeek || "").toLowerCase();
-  const kind =
-    item.kind === "stories"
-      ? "story"
-      : item.kind === "ads"
-        ? "ad"
-        : item.kind === "posts"
-          ? "post"
-          : item.title.toLowerCase().includes("story")
-            ? "story"
-            : item.title.toLowerCase().includes("ad")
-              ? "ad"
-              : "post";
-  if (day) return `${outlet} ${day} ${kind}`;
-  return `${outlet} ${item.title.toLowerCase()}`;
+function formatIstWaStamp(d = new Date()): string {
+  return d.toLocaleString("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
-function buildAllReadyWhatsAppMessage(items: TeamChecklistItemDto[]): string {
-  return ["ready to post", ...items.map(simpleWaItemLine)].join("\n");
+function itemDateKey(item: TeamChecklistItemDto, focusDate: string): string {
+  return item.targetDate ?? focusDate;
 }
 
-function buildWaitNudgeWhatsAppMessage(items: TeamChecklistItemDto[]): string {
-  const overdue = items.filter((i) => i.isOverdue);
-  const waiting = items.filter((i) => !i.isOverdue);
-  const lines: string[] = [];
-  if (overdue.length > 0) {
-    lines.push("overdue", ...overdue.map(simpleWaItemLine));
-  }
-  if (waiting.length > 0) {
-    if (lines.length) lines.push("");
-    lines.push("need ready", ...waiting.map(simpleWaItemLine));
-  }
-  return lines.join("\n");
+/** Ready WA: today’s Ready items only (no cryptic outlet codes). */
+function collectTodayReadyItems(
+  board: ChecklistBoardDto,
+  todayYmd: string
+): TeamChecklistItemDto[] {
+  const focus = board.day.focusDate;
+  return collectReadyItems(board).filter((i) => itemDateKey(i, focus) === todayYmd);
+}
+
+/** Generic Amit ping — check today’s Daily Checklist on the site. */
+function buildAllReadyWhatsAppMessage(todayCount: number): string {
+  const stamp = formatIstWaStamp();
+  const countBit =
+    todayCount > 1
+      ? `Today’s tasks are ready (${todayCount}) on the Daily Checklist.`
+      : "Today’s tasks are ready on the Daily Checklist.";
+  return [
+    "Hey Amit —",
+    "",
+    `New update as of ${stamp}.`,
+    "",
+    `${countBit} Please check today’s list on the website and complete them. Thank you.`,
+    "",
+    teamChecklistLink(),
+  ].join("\n");
+}
+
+function buildWaitNudgeWhatsAppMessage(waitCount: number): string {
+  const stamp = formatIstWaStamp();
+  return [
+    "Hey —",
+    "",
+    `Update as of ${stamp}.`,
+    "",
+    waitCount > 1
+      ? `${waitCount} items still need Ready upload. Please check today’s Wait list on the website.`
+      : "An item still needs Ready upload. Please check today’s Wait list on the website.",
+    "",
+    teamChecklistLink(),
+  ].join("\n");
 }
 
 function handoffStatusOf(item: TeamChecklistItemDto): HandoffStatus {
@@ -1265,27 +1285,32 @@ export default function TeamTasksView({
 
   const sendAllReadyWhatsApp = () => {
     if (!isAdmin || !board) return;
-    const readyItems = collectReadyItems(board);
+    const todayYmd = getTodayKey();
+    const readyItems = collectTodayReadyItems(board, todayYmd);
     if (readyItems.length === 0) {
-      setError("Mark at least one item Ready (green) first.");
+      setError("Nothing Ready for today yet — only today’s greens go on WhatsApp.");
       return;
     }
     openWhatsAppMessage(
-      buildAllReadyWhatsAppMessage(readyItems),
+      buildAllReadyWhatsAppMessage(readyItems.length),
       readyItems.length,
-      "Ready list for WhatsApp"
+      "Today ready — WhatsApp"
     );
   };
 
   const sendWaitNudgeWhatsApp = () => {
     if (isAdmin || !board) return;
-    const waitItems = collectWaitItems(board);
+    const todayYmd = getTodayKey();
+    const focus = board.day.focusDate;
+    const waitItems = collectWaitItems(board).filter(
+      (i) => itemDateKey(i, focus) === todayYmd
+    );
     if (waitItems.length === 0) {
-      setError("Nothing on Wait — all greens are Ready.");
+      setError("Nothing on Wait for today — all greens are Ready.");
       return;
     }
     openWhatsAppMessage(
-      buildWaitNudgeWhatsAppMessage(waitItems),
+      buildWaitNudgeWhatsAppMessage(waitItems.length),
       waitItems.length,
       "Need Ready — WhatsApp"
     );
@@ -1486,8 +1511,13 @@ export default function TeamTasksView({
 
   const readyItemsAll = board ? collectReadyItems(board) : [];
   const readyCount = readyItemsAll.length;
+  const todayYmd = getTodayKey();
+  const todayReadyCount = board ? collectTodayReadyItems(board, todayYmd).length : 0;
   const waitingItemsAll = board ? collectWaitItems(board) : [];
   const waitCount = waitingItemsAll.length;
+  const todayWaitCount = board
+    ? waitingItemsAll.filter((i) => itemDateKey(i, board.day.focusDate) === todayYmd).length
+    : 0;
   const doneItemsAll = board?.doneItems ?? [];
   const doneCount = doneItemsAll.length;
 
@@ -1994,31 +2024,31 @@ export default function TeamTasksView({
               <button
                 type="button"
                 onClick={sendAllReadyWhatsApp}
-                disabled={readyCount === 0}
+                disabled={todayReadyCount === 0}
                 title={
-                  readyCount === 0
-                    ? "Flip items to Ready (green) first"
-                    : `Send ${readyCount} ready item${readyCount === 1 ? "" : "s"} on WhatsApp`
+                  todayReadyCount === 0
+                    ? "Nothing Ready for today yet"
+                    : "Send a generic WhatsApp — check today’s Ready on the site"
                 }
                 className="text-[13px] font-medium text-[#25D366]/80 underline decoration-[#25D366]/35 underline-offset-4 hover:text-[#25D366] disabled:cursor-not-allowed disabled:text-white/25 disabled:no-underline"
               >
-                WhatsApp ready list
-                {readyCount > 0 ? ` (${readyCount})` : ""}
+                WhatsApp today ready
+                {todayReadyCount > 0 ? ` (${todayReadyCount})` : ""}
               </button>
             ) : (
               <button
                 type="button"
                 onClick={sendWaitNudgeWhatsApp}
-                disabled={waitCount === 0}
+                disabled={todayWaitCount === 0}
                 title={
-                  waitCount === 0
-                    ? "No Wait items — everything Ready"
-                    : `Ping HQ about ${waitCount} not-ready item${waitCount === 1 ? "" : "s"}`
+                  todayWaitCount === 0
+                    ? "No Wait items for today"
+                    : "Send a generic WhatsApp — check today’s Wait on the site"
                 }
                 className="text-[13px] font-medium text-[#25D366]/80 underline decoration-[#25D366]/35 underline-offset-4 hover:text-[#25D366] disabled:cursor-not-allowed disabled:text-white/25 disabled:no-underline"
               >
                 WhatsApp need ready
-                {waitCount > 0 ? ` (${waitCount})` : ""}
+                {todayWaitCount > 0 ? ` (${todayWaitCount})` : ""}
               </button>
             )}
           </div>
