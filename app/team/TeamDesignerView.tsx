@@ -1088,10 +1088,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       {queueView !== "holiday" ? (
         <div className="flex items-start justify-between gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
           <p className="text-[12px] leading-snug text-white/65">
-            WFH — your work, your responsibility. Minimum{" "}
-            <span className="font-semibold text-white/90">4/day</span> Mon–Sat. Queue is by{" "}
-            <span className="font-semibold text-white/90">design deadline</span> (earliest first).
-            Extra same-day closes earn holiday points (see Holiday tab).
+            WFH — minimum <span className="font-semibold text-white/90">4/day</span> Mon–Sat. Don’t
+            sit idle: always take the next Ready jobs by{" "}
+            <span className="font-semibold text-white/90">deadline</span> (Fri→Mon, Sat→Tue,
+            Sun→Wed). New tasks auto-slot by their deadline. Extra same-day closes → holiday points.
           </p>
           <span
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/15 text-[12px] font-bold text-white/45"
@@ -2255,15 +2255,15 @@ https://instagram.com/…"
           }
 
           const focusTitle = visiblePerf[0]?.isSundayHoliday
-            ? "Next day pack"
-            : `Today’s ${DESIGNER_DAILY_TARGET}`;
+            ? "Next by deadline"
+            : `Next ${DESIGNER_DAILY_TARGET} by deadline`;
           const focusHint = visiblePerf[0]?.isSundayHoliday
             ? catchUpCount > 0
-              ? "Optional — earn holiday points today. Finish Catch up tab first."
-              : "Optional — complete these today to earn holiday points."
+              ? "Optional Sunday — earliest deadlines. Finish Catch up first; points if you work."
+              : "Optional Sunday — earliest deadlines next. Work these for holiday points."
             : catchUpCount > 0
-              ? "Focus pack after Catch up. Extra = Start + Close same day."
-              : "Focus pack. Extra points only if you Start + Close the same day.";
+              ? "After Catch up: earliest design deadlines (pull Friday/Sat/Sun work forward). Don’t sit idle."
+              : "Earliest design deadlines first — pull weekend work forward when free. Extra = Start + Close same day.";
 
           if (!canDragQueue) {
             return (
