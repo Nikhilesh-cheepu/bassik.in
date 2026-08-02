@@ -461,14 +461,43 @@ export default function TeamClient() {
     void probeSession();
   }, [probeSession]);
 
+  /** Restore last tab on refresh (?tab=… or localStorage). */
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const allowed = new Set(TEAM_TABS.map((t) => t.id));
     const tabParam = new URLSearchParams(window.location.search).get("tab");
-    const allowed = TEAM_TABS.map((t) => t.id) as TeamTab[];
-    if (tabParam && allowed.includes(tabParam as TeamTab)) {
-      setTab(tabParam as TeamTab);
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem("bassik.team.tab");
+    } catch {
+      /* private mode */
     }
+    const next =
+      tabParam && allowed.has(tabParam as TeamTab)
+        ? (tabParam as TeamTab)
+        : stored && allowed.has(stored as TeamTab)
+          ? (stored as TeamTab)
+          : null;
+    if (next) setTab(next);
   }, []);
+
+  /** Keep URL + storage in sync so refresh stays on the same page. */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem("bassik.team.tab", tab);
+    } catch {
+      /* ignore */
+    }
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("tab") === tab) return;
+    url.searchParams.set("tab", tab);
+    window.history.replaceState(
+      null,
+      "",
+      `${url.pathname}${url.search}${url.hash}`
+    );
+  }, [tab]);
 
   useEffect(() => {
     if (!user) return;
