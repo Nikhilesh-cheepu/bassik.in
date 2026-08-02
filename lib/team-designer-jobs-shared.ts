@@ -331,8 +331,7 @@ export function catchUpMetaFromStack(stack: {
 /**
  * Split open queue into catch-up / today's 4 / later.
  * Catch up = shortfall from past calendar days (4/day target), not job deadlines.
- * A missed day only counts after that day fully ends (after 11:59 PM IST).
- * Pulls the next N open jobs by queue order; admin “Send to Open” skips a job (catchUpExempt).
+ * Admin “Send to Open” (catchUpExempt) reduces the catch-up count by 1 — does not pull a replacement.
  */
 export function partitionOpenDesignerQueue(
   jobs: DesignerJobDto[],
@@ -348,9 +347,14 @@ export function partitionOpenDesignerQueue(
   todayPack: DesignerJobDto[];
   upNext: DesignerJobDto[];
   catchUpHint: string;
+  /** Debt after admin releases (Send to Open) */
+  effectiveCatchUpSlots: number;
 } {
   const sorted = sortDesignerJobs(jobs.filter((j) => j.status !== "DESIGN_DONE"));
-  const slots = Math.max(0, opts?.catchUpSlots ?? 0);
+  const released = sorted.filter((j) => j.catchUpExempt).length;
+  const owed = Math.max(0, opts?.catchUpSlots ?? 0);
+  // Each Send to Open forgives one slot — remaining catch-up stays, no backfill
+  const slots = Math.max(0, owed - released);
   const fillable = sorted.filter((j) => !j.catchUpExempt);
   const catchUp = fillable.slice(0, slots);
   const catchIds = new Set(catchUp.map((j) => j.id));
@@ -361,10 +365,10 @@ export function partitionOpenDesignerQueue(
   const catchUpHint =
     catchUp.length > 0
       ? from
-        ? `Missed the 4/day target on ${from} (day fully over). Finish these first — or admin can Send to Open.`
-        : "Missed the 4/day target on an earlier day. Finish these first — or admin can Send to Open."
+        ? `Missed the 4/day target on ${from} (day fully over). Finish these first — or admin can Send to Open (reduces catch-up by 1).`
+        : "Missed the 4/day target on an earlier day. Finish these first — or admin can Send to Open (reduces catch-up by 1)."
       : "Finish this before today’s pack.";
-  return { catchUp, todayPack, upNext, catchUpHint };
+  return { catchUp, todayPack, upNext, catchUpHint, effectiveCatchUpSlots: slots };
 }
 
 /**
@@ -379,6 +383,7 @@ export function partitionOpenDesignerQueueByAssignee(
   todayPack: DesignerJobDto[];
   upNext: DesignerJobDto[];
   catchUpHint: string;
+  effectiveCatchUpSlots: number;
 } {
   const byAssignee = new Map<string, DesignerJobDto[]>();
   for (const j of jobs) {
@@ -390,6 +395,7 @@ export function partitionOpenDesignerQueueByAssignee(
   const todayPack: DesignerJobDto[] = [];
   const upNext: DesignerJobDto[] = [];
   let catchUpHint = "";
+  let effectiveCatchUpSlots = 0;
   for (const [assigneeId, list] of byAssignee) {
     const meta = perfByAssignee.get(assigneeId) ?? {
       catchUpSlots: 0,
@@ -402,6 +408,7 @@ export function partitionOpenDesignerQueueByAssignee(
     catchUp.push(...parts.catchUp);
     todayPack.push(...parts.todayPack);
     upNext.push(...parts.upNext);
+    effectiveCatchUpSlots += parts.effectiveCatchUpSlots;
     if (!catchUpHint && parts.catchUp.length > 0) catchUpHint = parts.catchUpHint;
   }
   return {
@@ -409,6 +416,7 @@ export function partitionOpenDesignerQueueByAssignee(
     todayPack: sortDesignerJobs(todayPack),
     upNext: sortDesignerJobs(upNext),
     catchUpHint,
+    effectiveCatchUpSlots,
   };
 }
 

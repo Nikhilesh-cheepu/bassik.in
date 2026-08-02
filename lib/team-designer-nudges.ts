@@ -667,10 +667,24 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
 
     // Before 11:30 IST: brief for the day (+ catch-up only if a prior full day missed 4/day)
     if (beforeWork) {
-      const catchUpN = (stack.missedDays ?? []).reduce(
+      const catchUpRaw = (stack.missedDays ?? []).reduce(
         (n, d) => n + (d.missed ?? 0),
         0
       );
+      // Admin “Send to Open” forgives one slot each (same as Catch up tab)
+      let released = 0;
+      try {
+        released = await prisma.teamDesignerJob.count({
+          where: {
+            assigneeId,
+            catchUpExempt: true,
+            status: { not: "DESIGN_DONE" },
+          },
+        });
+      } catch {
+        released = 0;
+      }
+      const catchUpN = Math.max(0, catchUpRaw - released);
       const miss = stack.missedDays?.[0];
       const missLabel = miss?.date ? formatDayLabel(miss.date) : null;
       const daily = sunday ? 0 : DESIGNER_DAILY_TARGET;

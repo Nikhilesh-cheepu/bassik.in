@@ -1075,23 +1075,13 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       todayPack: filt(openPartsRaw.todayPack),
       upNext: filt(openPartsRaw.upNext),
       catchUpHint: openPartsRaw.catchUpHint,
+      effectiveCatchUpSlots: openPartsRaw.effectiveCatchUpSlots,
     };
   }, [openPartsRaw, outletFilter]);
 
-  /** Jobs currently in the Catch up band (unfiltered by outlet). */
+  /** Jobs in Catch up band + effective debt after admin Send to Open. */
   const catchUpCount = openPartsRaw.catchUp.length;
-  /** 4/day shortfall from past full days — source of truth for the badge. */
-  const catchUpDebt = useMemo(
-    () =>
-      perfDesigners
-        .filter((p) => {
-          if (!isAdmin) return p.assigneeId === memberId;
-          if (designerTab === "all") return true;
-          return p.assigneeId === designerTab;
-        })
-        .reduce((n, p) => n + catchUpMetaFromStack(p.stack).catchUpSlots, 0),
-    [perfDesigners, isAdmin, memberId, designerTab]
-  );
+  const catchUpDebt = openPartsRaw.effectiveCatchUpSlots;
   const catchUpBadgeN = Math.max(catchUpDebt, catchUpCount);
   const canDragQueue = isAdmin && queueView === "open" && queue.length > 1;
 
@@ -1751,7 +1741,9 @@ https://instagram.com/…"
                     onClick={() =>
                       void patchJob(job.id, { action: "release-catch-up" }).then((ok) => {
                         if (ok) {
-                          setError("Sent to Open — sorted by deadline with the normal list.");
+                          setError(
+                            "Sent to Open — catch-up count reduced by 1 (no replacement added)."
+                          );
                         }
                       })
                     }
