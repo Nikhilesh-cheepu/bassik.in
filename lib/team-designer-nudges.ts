@@ -120,7 +120,7 @@ function nudgeLabel(kind: DesignerNudgeKind): string {
     case "priority_after_current":
       return "Priority — after current";
     case "amit_ready":
-      return "Ready for Amit";
+      return "New tasks · Amit";
     default:
       return kind;
   }
@@ -132,31 +132,37 @@ function checklistLink(): string {
   return `${base}/team?tab=tasks`;
 }
 
-function amitReadyAction(format: string): string {
-  const f = format.toLowerCase();
-  if (f === "story") return "ready to add the story";
-  if (f === "calendar") return "ready for the weekend TV calendar";
-  if (f === "ad" || f.includes("ad")) return "ready for the ad";
-  return "ready to post";
+const AMIT_BATCH_JOB_ID = "batch";
+
+function formatIstDateTime(d = new Date()): string {
+  return d.toLocaleString("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
-/** WA copy when a designer closes a creative for Amit’s checklist. */
-export function buildAmitReadyNudge(job: {
-  id: string;
-  title: string;
-  outletId: string;
-  format: string;
-  postDate: string;
+/** One generic WA when creatives are ready for Amit (timestamp refreshes on new handoffs). */
+export function buildAmitReadyNudge(params: {
+  asOf: Date;
+  pendingCount: number;
 }): DesignerSuggestedNudgeDto {
-  const hour = istHourNow();
-  const outlet = teamOutletLabel(job.outletId);
-  const event = formatDayLabel(job.postDate);
-  const action = amitReadyAction(job.format);
+  const hour = istHourNow(params.asOf);
+  const stamp = formatIstDateTime(params.asOf);
+  const countNote =
+    params.pendingCount > 1
+      ? `New tasks are added (${params.pendingCount}) on the Daily Checklist.`
+      : "New tasks are added on the Daily Checklist.";
   const body = [
     `Hey Amit — ${greetingForHourIst(hour)}.`,
     "",
-    `${job.title} (${outlet}) is ${action} — event ${event}.`,
-    "Please check the Daily Checklist and complete it. Thank you.",
+    `New update as of ${stamp}.`,
+    "",
+    `${countNote} Please check the website and complete them. Thank you.`,
     "",
     checklistLink(),
   ].join("\n");
@@ -165,15 +171,16 @@ export function buildAmitReadyNudge(job: {
     assigneeId: "amit",
     name: "Amit",
     kind: "amit_ready",
-    label: "Ready for Amit",
+    label: "New tasks · Amit",
     body,
     shareUrl: whatsAppShareUrl(phone, body),
-    jobId: job.id,
+    jobId: AMIT_BATCH_JOB_ID,
   };
 }
 
-/** Pending handoffs closed in the last ~36h that admin hasn’t opened WA for yet. */
-export async function listAmitHandoffNudges(): Promise<DesignerSuggestedNudgeDto[]> {
+async function listPendingAmitHandoffJobs(): Promise<
+  { id: string; uploadedAt: Date | null }[]
+> {
   const since = new Date(Date.now() - 36 * 60 * 60 * 1000);
   const jobs = await prisma.teamDesignerJob.findMany({
     where: {
@@ -181,16 +188,9 @@ export async function listAmitHandoffNudges(): Promise<DesignerSuggestedNudgeDto
       fileUrl: { not: null },
       uploadedAt: { gte: since },
     },
-    select: {
-      id: true,
-      title: true,
-      outletId: true,
-      format: true,
-      postDate: true,
-      uploadedAt: true,
-    },
+    select: { id: true, uploadedAt: true },
     orderBy: { uploadedAt: "desc" },
-    take: 25,
+    take: 40,
   });
   if (jobs.length === 0) return [];
 
@@ -204,9 +204,59 @@ export async function listAmitHandoffNudges(): Promise<DesignerSuggestedNudgeDto
     select: { jobId: true },
   });
   const openedSet = new Set(opened.map((o) => o.jobId));
-  return jobs
-    .filter((j) => !openedSet.has(j.id))
-    .map((j) => buildAmitReadyNudge(j));
+  return jobs.filter((j) => !openedSet.has(j.id));
+}
+
+/** At most one Send card — regenerated when new handoffs arrive. */
+export async function getAmitReadyNudge(): Promise<DesignerSuggestedNudgeDto | null> {
+  const pending = await listPendingAmitHandoffJobs();
+  if (pending.length === 0) return null;
+  const asOf = pending[0]!.uploadedAt ?? new Date();
+  return buildAmitReadyNudge({ asOf, pendingCount: pending.length });
+}
+
+export async function listAmitHandoffNudges(): Promise<DesignerSuggestedNudgeDto[]> {
+  const nudge = await getAmitReadyNudge();
+  return nudge ? [nudge] : [];
+}
+
+/** After admin opens Amit WA — clear all currently pending handoffs from Send now. */
+async function markPendingAmitHandoffsOpened(body: string): Promise<void> {
+  const pending = await listPendingAmitHandoffJobs();
+  if (pending.length === 0) return;
+  const dateKey = getTodayKey();
+  const phone = designerWaPhone("amit");
+  const shareUrl = whatsAppShareUrl(phone, body);
+  await Promise.all(
+    pending.map((j) =>
+      prisma.teamDesignerReminderLog.upsert({
+        where: {
+          assigneeId_kind_dateKey_jobId: {
+            assigneeId: "amit",
+            kind: "amit_ready",
+            dateKey,
+            jobId: j.id,
+          },
+        },
+        create: {
+          assigneeId: "amit",
+          kind: "amit_ready",
+          dateKey,
+          jobId: j.id,
+          body,
+          delivery: "skipped_no_config",
+          shareUrl,
+          error: "Opened WhatsApp share link (manual send)",
+        },
+        update: {
+          body,
+          shareUrl,
+          delivery: "skipped_no_config",
+          error: "Opened WhatsApp share link (manual send)",
+        },
+      })
+    )
+  );
 }
 
 function buildNudgeBody(params: {
@@ -726,8 +776,14 @@ export async function markSuggestedNudgeOpened(params: {
   body: string;
   jobId?: string;
 }): Promise<DesignerReminderLogDto> {
+  if (params.assigneeId === "amit" && params.kind === "amit_ready") {
+    await markPendingAmitHandoffsOpened(params.body);
+  }
   const dateKey = getTodayKey();
-  const jobId = params.jobId ?? "";
+  const jobId =
+    params.assigneeId === "amit" && params.kind === "amit_ready"
+      ? AMIT_BATCH_JOB_ID
+      : (params.jobId ?? "");
   const phone = designerWaPhone(params.assigneeId);
   const shareUrl = whatsAppShareUrl(phone, params.body);
   const log = await prisma.teamDesignerReminderLog.upsert({

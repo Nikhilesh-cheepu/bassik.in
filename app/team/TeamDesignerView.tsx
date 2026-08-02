@@ -954,12 +954,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       const amitNudge = data.amitNudge as DesignerSuggestedNudgeDto | undefined;
       if (amitNudge?.shareUrl && isAdmin) {
         setSuggestedNudges((prev) => {
-          if (prev.some((s) => s.jobId === amitNudge.jobId && s.kind === "amit_ready")) {
-            return prev;
-          }
-          return [amitNudge, ...prev];
+          const rest = prev.filter((s) => s.kind !== "amit_ready");
+          return [amitNudge, ...rest];
         });
-        setError("Creative ready — Send WA to Amit (Send now).");
+        setError("New tasks for Amit — Send WA (Send now).");
       } else if (typeof data.message === "string") {
         setError(data.message);
       }
@@ -1211,10 +1209,20 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
                   designerTab === "all" ||
                   s.assigneeId === designerTab
               )
-              .slice(0, 6)
+              .sort((a, b) => {
+                if (a.kind === "amit_ready") return -1;
+                if (b.kind === "amit_ready") return 1;
+                return 0;
+              })
+              .slice(0, 5)
               .map((s) => {
               const key = `${s.assigneeId}:${s.kind}:${s.jobId}`;
-              const preview = s.body.split("\n").filter(Boolean).slice(0, 2).join(" · ");
+              const preview = s.body
+                .split("\n")
+                .map((line) => line.trim())
+                .filter(Boolean)
+                .slice(0, 3)
+                .join(" · ");
               return (
                 <li
                   key={key}
@@ -1224,7 +1232,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
                     <p className="text-[13px] font-semibold text-white/90">
                       {s.name} · {s.label}
                     </p>
-                    <p className="mt-0.5 line-clamp-1 text-[11px] text-white/50">{preview}</p>
+                    <p className="mt-0.5 line-clamp-2 text-[11px] text-white/50">{preview}</p>
                   </div>
                   <button
                     type="button"

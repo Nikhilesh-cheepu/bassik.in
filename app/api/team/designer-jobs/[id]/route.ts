@@ -24,7 +24,7 @@ import {
 } from "@/lib/team-designer-jobs-shared";
 import { deleteTeamHandoffBlobUrl } from "@/lib/team-handoff-blobs";
 import {
-  buildAmitReadyNudge,
+  getAmitReadyNudge,
   sendPriorityJobAlert,
 } from "@/lib/team-designer-nudges";
 
@@ -513,7 +513,7 @@ export async function PATCH(
 
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
-        amitNudge: buildAmitReadyNudge(updated),
+        amitNudge: await getAmitReadyNudge(),
       });
     }
 
@@ -558,7 +558,6 @@ export async function PATCH(
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
         message: "Upload saved — job still open until you Mark done",
-        amitNudge: buildAmitReadyNudge(updated),
       });
     }
 
@@ -616,7 +615,7 @@ export async function PATCH(
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
         message: "Marked done (admin) — does not count toward designer daily target",
-        amitNudge: buildAmitReadyNudge(updated),
+        amitNudge: await getAmitReadyNudge(),
       });
     }
 
@@ -676,7 +675,7 @@ export async function PATCH(
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
         message: "Upload updated — Amit Ready refreshed",
-        amitNudge: buildAmitReadyNudge(updated),
+        amitNudge: await getAmitReadyNudge(),
       });
     }
 
