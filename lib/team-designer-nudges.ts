@@ -523,28 +523,50 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
 
     const sunday = dayIdForYmd(today) === "sun";
 
-    // Before ~11 IST: gentle start nudge only — no “missed target” scare
+    // Before ~11 IST: clear manager brief — catch-up jobs (not stack “behind”)
     if (beforeWork) {
-      const ready = perf.readyToStart;
-      const behind = stack.stackedBehind;
-      if (ready > 0 || behind > 0) {
-        const lines = [
-          `${name} — day ahead.`,
-          behind > 0
-            ? `${behind} catch-up still open — finish those first.`
-            : null,
-          `${ready} ready for today.`,
-          "Starting by 11 keeps the day clean.",
+      const catchUpN = (stack.missedDays ?? []).reduce(
+        (n, d) => n + (d.missed ?? 0),
+        0
+      );
+      const miss = stack.missedDays?.[0];
+      const missLabel = miss?.date ? formatDayLabel(miss.date) : null;
+      const daily = sunday ? 0 : DESIGNER_DAILY_TARGET;
+      if (catchUpN > 0 || daily > 0 || perf.readyToStart > 0) {
+        const lines: string[] = [`${name} — good morning.`];
+        if (catchUpN > 0) {
+          lines.push(
+            `You have ${catchUpN} catch-up task${catchUpN === 1 ? "" : "s"}${
+              missLabel ? ` (missed ${missLabel})` : ""
+            }. Finish that first — start early.`
+          );
+          if (daily > 0) {
+            lines.push(
+              `Then complete your ${daily} tasks for today.`
+            );
+          }
+        } else if (daily > 0) {
+          lines.push(
+            `You have ${daily} tasks for today. Start early and clear them.`
+          );
+        } else {
+          lines.push("Check the Design tab for today’s queue.");
+        }
+        lines.push(
           "",
-          `Open: ${designerQueueLink()}`,
-        ].filter(Boolean) as string[];
+          "Open the Design tab and refresh before you start — order and priority can change anytime. Always follow the website flow.",
+          "Press Start Job on a task before you begin work (don’t work from WhatsApp alone).",
+          "",
+          designerQueueLink()
+        );
+        const body = lines.join("\n");
         out.push({
           assigneeId,
           name,
           kind: "no_start",
           label: "Morning start",
-          body: lines.join("\n"),
-          shareUrl: whatsAppShareUrl(phone, lines.join("\n")),
+          body,
+          shareUrl: whatsAppShareUrl(phone, body),
           jobId: "",
         });
       }

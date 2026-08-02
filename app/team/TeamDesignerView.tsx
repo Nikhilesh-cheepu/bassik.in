@@ -1182,13 +1182,18 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       {isAdmin &&
       queueView !== "holiday" &&
       queueView !== "expired" &&
-      suggestedNudges.length > 0 ? (
+      suggestedNudges.filter(
+        (s) => designerTab === "all" || s.assigneeId === designerTab
+      ).length > 0 ? (
         <div className="space-y-2 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.06] px-3 py-2.5">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90">
             Send now
           </p>
           <ul className="space-y-1.5">
-            {suggestedNudges.slice(0, 4).map((s) => {
+            {suggestedNudges
+              .filter((s) => designerTab === "all" || s.assigneeId === designerTab)
+              .slice(0, 4)
+              .map((s) => {
               const key = `${s.assigneeId}:${s.kind}:${s.jobId}`;
               const preview = s.body.split("\n").filter(Boolean).slice(0, 2).join(" · ");
               return (
@@ -2802,8 +2807,21 @@ function DesignerPerformanceCard({
 }) {
   const stack = perf.stack;
   const behind = stack?.stackedBehind ?? 0;
-  // Red only when truly behind / evening flag — not “0/4” at 1am
-  const flag = !perf.isSundayHoliday && (behind > 0 || perf.redFlag);
+  const pastCatchUp = (stack?.missedDays ?? []).reduce(
+    (n, d) => n + (d.missed ?? 0),
+    0
+  );
+  // Stack “Behind” only after ~8 PM; catch-up from past days shows anytime
+  const hourIst = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      hour12: false,
+    }).format(new Date())
+  );
+  const showStackBehind = hourIst >= 20 && behind > 0;
+  const flag =
+    !perf.isSundayHoliday && (pastCatchUp > 0 || perf.redFlag || showStackBehind);
   const points = stack?.holidayPoints ?? stack?.advancePoints ?? 0;
   const perLeave = stack?.pointsPerLeave ?? DESIGNER_POINTS_PER_LEAVE;
   const unlocked = stack?.leaveDaysEarned ?? 0;
@@ -2815,9 +2833,11 @@ function DesignerPerformanceCard({
           ? "border-violet-400/35 bg-violet-400/[0.08]"
           : flag
             ? "border-red-500/50 bg-red-500/[0.12]"
-            : perf.underTarget
-              ? "border-amber-400/35 bg-amber-400/[0.07]"
-              : "border-emerald-400/25 bg-emerald-400/[0.06]"
+            : pastCatchUp > 0
+              ? "border-orange-400/35 bg-orange-400/[0.08]"
+              : perf.underTarget
+                ? "border-amber-400/35 bg-amber-400/[0.07]"
+                : "border-emerald-400/25 bg-emerald-400/[0.06]"
       }`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -2872,7 +2892,12 @@ function DesignerPerformanceCard({
           {unlocked > 0 ? (
             <span className="text-cyan-200"> · {unlocked} leave unlocked (ask permission)</span>
           ) : null}
-          {behind > 0 ? <span className="text-red-300"> · Behind {behind}</span> : null}
+          {pastCatchUp > 0 ? (
+            <span className="text-orange-200"> · Catch-up {pastCatchUp}</span>
+          ) : null}
+          {showStackBehind ? (
+            <span className="text-red-300"> · Behind {behind}</span>
+          ) : null}
         </p>
       )}
       {!sunday && stack?.missedDays?.[0] ? (
@@ -2885,13 +2910,27 @@ function DesignerPerformanceCard({
         <div className="mt-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">
             From {DESIGNER_STACK_START_DATE}
+            {hourIst < 20 ? " · stack score after 8 PM" : ""}
           </p>
           <p className="mt-1 text-[13px] font-semibold tabular-nums text-white/90">
-            Target {stack.targetSoFar} · Reached {stack.closedSoFar}
-            {behind > 0 ? (
-              <span className="text-red-300"> · Behind {behind}</span>
+            {hourIst >= 20 ? (
+              <>
+                Target {stack.targetSoFar} · Reached {stack.closedSoFar}
+                {behind > 0 ? (
+                  <span className="text-red-300"> · Behind {behind}</span>
+                ) : (
+                  <span className="text-emerald-300"> · On track</span>
+                )}
+              </>
             ) : (
-              <span className="text-emerald-300"> · On track</span>
+              <>
+                Today {perf.closedToday}/{perf.dailyTarget}
+                {pastCatchUp > 0 ? (
+                  <span className="text-orange-200"> · Catch-up {pastCatchUp}</span>
+                ) : (
+                  <span className="text-white/45"> · day in progress</span>
+                )}
+              </>
             )}
           </p>
           <p className="mt-0.5 text-[11px] text-white/45">

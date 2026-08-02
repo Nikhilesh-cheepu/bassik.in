@@ -35,6 +35,11 @@ const TZ = "Asia/Kolkata";
 const SERIES_DAYS = 14;
 /** After this IST hour, under-target becomes a hard red flag. */
 export const DESIGNER_RED_FLAG_HOUR_IST = 18;
+/**
+ * Cumulative “Behind / Reached” stack is scored for the day only after this hour.
+ * Catch-up from past missed days still shows earlier.
+ */
+export const DESIGNER_STACK_SCORE_HOUR_IST = 20;
 
 
 function monthKeyFromYmd(ymd: string): string {
@@ -644,8 +649,14 @@ export async function computeDesignerPerformance(
   const catchUpClosedToday = isSunday ? activity.sundaySameDayCloses : 0;
   const dailyTarget = isSunday ? 0 : DESIGNER_DAILY_TARGET;
   const underTarget = !isSunday && closedToday < DESIGNER_DAILY_TARGET;
+  const pastCatchUp = (stack.missedDays ?? []).reduce(
+    (n, d) => n + (d.missed ?? 0),
+    0
+  );
   const redFlag =
-    (underTarget && hour >= DESIGNER_RED_FLAG_HOUR_IST) || stack.stackedBehind > 0;
+    (underTarget && hour >= DESIGNER_RED_FLAG_HOUR_IST) ||
+    pastCatchUp > 0 ||
+    (hour >= DESIGNER_STACK_SCORE_HOUR_IST && stack.stackedBehind > 0);
   const expectedByNow = isSunday
     ? 0
     : hour < 11
