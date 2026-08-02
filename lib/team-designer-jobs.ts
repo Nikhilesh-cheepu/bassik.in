@@ -288,7 +288,7 @@ export async function loadDesignerEditMetaByIds(
   }
 }
 
-/** Admin: leave Catch up → Open, sorted by normal deadline priority. */
+/** Admin only: leave Catch up → Open, sorted by normal deadline priority (no auto-drop). */
 export async function releaseDesignerJobFromCatchUp(id: string): Promise<void> {
   await ensureCatchUpExemptColumn();
   const job = await prisma.teamDesignerJob.findUnique({
@@ -296,6 +296,7 @@ export async function releaseDesignerJobFromCatchUp(id: string): Promise<void> {
     select: { dueDate: true, outletId: true, format: true },
   });
   if (!job) throw new Error("Not found");
+  // Keep natural deadline key so it interleaves with seeded jobs by due date.
   const sortOrder = naturalDesignerSortOrder(job.dueDate, job.outletId, job.format);
   await prisma.$executeRawUnsafe(
     `UPDATE "TeamDesignerJob" SET "catchUpExempt" = true, "sortOrder" = $1, "updatedAt" = NOW() WHERE id = $2`,

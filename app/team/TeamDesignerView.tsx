@@ -52,15 +52,16 @@ import { teamDownloadHref } from "@/lib/team-download";
 import { teamOutletLabel } from "@/lib/team-outlets";
 import { IconTrash, IconUnsend } from "./TeamIcons";
 
-type QueueView = "catchUp" | "open" | "closed" | "holiday" | "expired";
+type QueueView = "open" | "toSend" | "closed" | "holiday" | "expired";
 
 function isOpenQueueView(view: QueueView): boolean {
-  return view === "open" || view === "catchUp";
+  return view === "open";
 }
 
 function jobsFetchKind(view: QueueView): "open" | "closed" | "expired" {
   if (view === "closed") return "closed";
   if (view === "expired") return "expired";
+  // open / toSend / holiday share the open payload
   return "open";
 }
 
@@ -343,7 +344,7 @@ async function readJson(res: Response) {
 export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   /** Who's queue you're looking at — filters instantly (no refetch). */
   const [designerTab, setDesignerTab] = useState<"all" | "mahesh" | "jeslyn">("all");
-  const [queueView, setQueueView] = useState<QueueView>("catchUp");
+  const [queueView, setQueueView] = useState<QueueView>("open");
   const [outletFilter, setOutletFilter] = useState<"all" | string>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [allJobs, setAllJobs] = useState<DesignerJobDto[]>([]);
@@ -578,7 +579,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
    */
   const designerVisibleJobs = useMemo(() => {
     if (queueView === "closed" || queueView === "expired") return scopedJobs;
-    if (queueView === "holiday") return [];
+    if (queueView === "holiday" || queueView === "toSend") return [];
     return scopedJobs.filter(
       (j) =>
         j.status === "READY_TO_DESIGN" ||
@@ -618,11 +619,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const outletCounts = useMemo(() => {
     const map = new Map<string, number>();
     for (const id of DESIGNER_MONTH_OUTLET_IDS) map.set(id, 0);
-    for (const j of designerVisibleJobs) {
+    const source = queueView === "toSend" ? sendableJobs : designerVisibleJobs;
+    for (const j of source) {
       map.set(j.outletId, (map.get(j.outletId) ?? 0) + 1);
     }
     return map;
-  }, [designerVisibleJobs]);
+  }, [designerVisibleJobs, queueView, sendableJobs]);
 
   const visiblePerf = useMemo(() => {
     if (!isAdmin) return perfDesigners.filter((p) => p.assigneeId === memberId);
@@ -1079,11 +1081,35 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     };
   }, [openPartsRaw, outletFilter]);
 
-  /** Jobs in Catch up band + effective debt after admin Send to Open. */
-  const catchUpCount = openPartsRaw.catchUp.length;
+  /** Effective catch-up debt after admin Drop catch-up (not raw missed slots). */
   const catchUpDebt = openPartsRaw.effectiveCatchUpSlots;
-  const catchUpBadgeN = Math.max(catchUpDebt, catchUpCount);
+  const catchUpBadgeN = catchUpDebt;
   const canDragQueue = isAdmin && queueView === "open" && queue.length > 1;
+  const toSendCount = sendableJobs.length;
+  const toSendVisible = useMemo(
+    () =>
+      sendableJobs
+        .filter((j) => outletFilter === "all" || j.outletId === outletFilter)
+        .slice()
+        .sort((a, b) => {
+          if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+          if (a.postDate !== b.postDate) return a.postDate.localeCompare(b.postDate);
+          return (a.title || "").localeCompare(b.title || "");
+        }),
+    [sendableJobs, outletFilter]
+  );
+
+  const catchUpOwedByAssignee = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of perfDesigners) {
+      const raw = (p.stack?.missedDays ?? []).reduce((n, d) => n + (d.missed ?? 0), 0);
+      const released = openJobsForPartition.filter(
+        (j) => j.assigneeId === p.assigneeId && j.catchUpExempt
+      ).length;
+      map.set(p.assigneeId, Math.max(0, raw - released));
+    }
+    return map;
+  }, [perfDesigners, openJobsForPartition]);
 
   const freeDeadlineSlots = useMemo(
     () =>
@@ -1104,8 +1130,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         <div className="flex flex-wrap rounded-lg bg-black/35 p-1">
           {(
             [
-              ["catchUp", catchUpBadgeN > 0 ? `Catch up (${catchUpBadgeN})` : "Catch up"],
-              ["open", "Open"],
+              ["open", catchUpBadgeN > 0 ? `Open · ${catchUpBadgeN} catch-up` : "Open"],
+              ...(isAdmin
+                ? ([["toSend", toSendCount > 0 ? `To send (${toSendCount})` : "To send"]] as const)
+                : []),
               ["closed", "Done"],
               ["holiday", "Holiday"],
               ["expired", "Expired"],
@@ -1127,14 +1155,18 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
                 queueView === id
                   ? id === "holiday"
                     ? "bg-violet-400 text-black"
-                    : id === "catchUp"
-                      ? "bg-orange-400 text-black"
-                      : id === "expired"
-                        ? "bg-amber-400 text-black"
-                        : "bg-white text-black"
-                  : id === "catchUp" && catchUpBadgeN > 0
-                    ? "text-orange-200 hover:text-orange-100"
-                    : "text-white/50 hover:text-white/80"
+                    : id === "expired"
+                      ? "bg-amber-400 text-black"
+                      : id === "toSend"
+                        ? "bg-amber-300 text-black"
+                        : id === "open" && catchUpBadgeN > 0
+                          ? "bg-red-400 text-black"
+                          : "bg-white text-black"
+                  : id === "open" && catchUpBadgeN > 0
+                    ? "text-red-200 hover:text-red-100"
+                    : id === "toSend" && toSendCount > 0
+                      ? "text-amber-200/90 hover:text-amber-100"
+                      : "text-white/50 hover:text-white/80"
               }`}
             >
               {label}
@@ -1182,23 +1214,46 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         ) : null}
       </div>
 
-      {queueView !== "holiday" && queueView !== "expired" ? (
+      {queueView === "open" ? (
         <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
           <p className="text-[12px] leading-snug text-white/65">
             Minimum <span className="font-semibold text-white/90">4/day</span> Mon–Sat · queue by{" "}
             <span className="font-semibold text-white/90">deadline</span>. Extra same-day closes →
             holiday points.
+            {isAdmin && toSendCount > 0 ? (
+              <span className="text-amber-200/80">
+                {" "}
+                · {toSendCount} not sent — use{" "}
+                <button
+                  type="button"
+                  className="font-semibold underline decoration-amber-200/40 underline-offset-2"
+                  onClick={() => startTransition(() => setQueueView("toSend"))}
+                >
+                  To send
+                </button>
+              </span>
+            ) : null}
           </p>
         </div>
       ) : null}
 
-      {queueView !== "holiday" && queueView !== "expired"
+      {queueView === "toSend" ? (
+        <div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.07] px-3 py-2">
+          <p className="text-[12px] leading-snug text-amber-50/85">
+            Briefs not sent yet (calendar / fixed not ready). Sorted by design due date → event date.
+            Send when ready — they join Open and reshuffle by deadline.
+          </p>
+        </div>
+      ) : null}
+
+      {queueView === "open" || queueView === "toSend"
         ? visiblePerf.map((p) => (
             <DesignerPerformanceCard
               key={p.assigneeId}
               perf={p}
               isAdmin={isAdmin}
               compact={!isAdmin}
+              catchUpOwed={catchUpOwedByAssignee.get(p.assigneeId) ?? 0}
               nudgeBusy={nudgeBusy === p.assigneeId}
               onNudge={() => void sendManualNudge(p.assigneeId)}
             />
@@ -1210,8 +1265,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       ) : null}
 
       {isAdmin &&
-      queueView !== "holiday" &&
-      queueView !== "expired" &&
+      queueView === "open" &&
       suggestedNudges.filter(
         (s) =>
           s.kind === "amit_ready" ||
@@ -1277,7 +1331,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         </p>
       ) : null}
 
-      {isAdmin && isOpenQueueView(queueView) ? (
+      {isAdmin && (queueView === "open" || queueView === "toSend") ? (
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -1334,7 +1388,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
               outletFilter === "all" ? "bg-black/20 text-black" : "bg-white/10 text-white/80"
             }`}
           >
-            {designerVisibleJobs.length}
+            {queueView === "toSend" ? toSendCount : designerVisibleJobs.length}
           </span>
         </button>
         {DESIGNER_MONTH_OUTLET_IDS.map((id) => {
@@ -1537,13 +1591,13 @@ https://instagram.com/…"
       {loading ? <p className="text-[13px] text-white/40">Loading queue…</p> : null}
 
       <section className="space-y-3">
-        {queue.length === 0 && !loading ? (
+        {queue.length === 0 && !loading && queueView !== "toSend" ? (
           <p className="text-[13px] text-white/35">
             {queueView === "closed"
               ? "No done jobs for this view."
               : queueView === "expired"
                 ? "No expired files — nothing to clear."
-                : "Nothing ready — only Ready / In progress / Paused show here."}
+                : "Nothing ready — only Ready / In progress / Paused show here. Unsent briefs are in To send."}
           </p>
         ) : null}
         {(() => {
@@ -1560,7 +1614,7 @@ https://instagram.com/…"
           const brief = jobBriefText(job);
           const toneClass =
             tone === "catchUp"
-              ? "border-orange-400/55 bg-orange-400/[0.12] ring-1 ring-orange-400/30"
+              ? "border-red-400/60 bg-red-500/[0.12] ring-1 ring-red-400/35"
               : tone === "today"
                 ? "border-emerald-400/55 bg-emerald-400/[0.12] ring-1 ring-emerald-400/30"
                 : job.isOverdue
@@ -1618,6 +1672,11 @@ https://instagram.com/…"
                     → {designer}
                   </span>
                   <span className={statusColor(job.status)}>{statusLabel(job.status)}</span>
+                  {job.catchUpExempt ? (
+                    <span className="font-semibold uppercase text-white/45">
+                      Dropped from catch-up
+                    </span>
+                  ) : null}
                   {job.urgent ? (
                     <span className="font-bold uppercase text-amber-300">Urgent</span>
                   ) : null}
@@ -1737,19 +1796,19 @@ https://instagram.com/…"
                   <button
                     type="button"
                     disabled={busyId === job.id}
-                    title="Remove from Catch up — joins Open sorted by deadline"
+                    title="Drop from Catch up — job joins Today/Upcoming by deadline; owed −1"
                     onClick={() =>
                       void patchJob(job.id, { action: "release-catch-up" }).then((ok) => {
                         if (ok) {
                           setError(
-                            "Sent to Open — catch-up count reduced by 1 (no replacement added)."
+                            "Dropped from Catch up — count −1 (no replacement). Job is in Today/Upcoming."
                           );
                         }
                       })
                     }
                     className="h-11 min-h-[44px] rounded-lg border border-white/20 bg-white/10 px-3 text-[13px] font-semibold text-white/90 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
                   >
-                    Send to Open
+                    Drop catch-up
                   </button>
                 ) : null}
                 {job.status === "PAUSED" && (isAdmin || job.assigneeId === memberId) ? (
@@ -2354,6 +2413,129 @@ https://instagram.com/…"
             );
           };
 
+          if (queueView === "toSend") {
+            if (!isAdmin) {
+              return (
+                <p className="text-[13px] text-white/45">Admin only.</p>
+              );
+            }
+            if (toSendVisible.length === 0) {
+              return (
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center">
+                  <p className="text-[14px] font-semibold text-white/80">Nothing to send</p>
+                  <p className="mt-1 text-[12px] text-white/45">
+                    All briefs for this filter are already on Open, or seed more days.
+                  </p>
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-[12px] font-semibold uppercase tracking-wide text-amber-200/90">
+                    To send ({toSendVisible.length})
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="flex items-center gap-1.5 text-[11px] text-white/50">
+                      <input
+                        type="checkbox"
+                        checked={
+                          toSendVisible.length > 0 &&
+                          toSendVisible.every((j) => selectedIds.has(j.id))
+                        }
+                        onChange={() => {
+                          const allOn =
+                            toSendVisible.length > 0 &&
+                            toSendVisible.every((j) => selectedIds.has(j.id));
+                          if (allOn) {
+                            setSelectedIds(new Set());
+                          } else {
+                            setSelectedIds(new Set(toSendVisible.map((j) => j.id)));
+                          }
+                        }}
+                        className="rounded border-white/30"
+                      />
+                      Select all
+                    </label>
+                    <button
+                      type="button"
+                      disabled={selectedIds.size === 0 || busyId === "bulk-send"}
+                      onClick={() => void sendSelected()}
+                      className="h-8 rounded-lg bg-cyan-500 px-3 text-[11px] font-semibold text-black disabled:opacity-35"
+                    >
+                      {busyId === "bulk-send"
+                        ? "Sending…"
+                        : `Send selected (${selectedIds.size})`}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {toSendVisible.map((job) => {
+                    const { dayName, dateLabel } = formatPostDateParts(job.postDate);
+                    const designer = designerDisplayName(job.assigneeId);
+                    const selected = selectedIds.has(job.id);
+                    return (
+                      <article
+                        key={job.id}
+                        className={`rounded-xl border px-3.5 py-3 ${
+                          selected
+                            ? "border-cyan-400/40 bg-cyan-400/[0.07]"
+                            : "border-amber-400/20 bg-amber-400/[0.04]"
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="flex min-w-0 flex-1 gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => toggleSelected(job.id)}
+                              className="mt-1.5 shrink-0 rounded border-white/30"
+                              aria-label={`Select ${job.title}`}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
+                                {dayName} · {dateLabel}
+                              </p>
+                              <p className="mt-0.5 text-[15px] font-semibold text-white/85">
+                                {job.outletLabel}{" "}
+                                <span className="text-[12px] font-medium text-white/40">
+                                  {job.format === "story" ? "Story" : "Post"}
+                                </span>
+                              </p>
+                              <p className="text-[13px] text-white/70">{job.title}</p>
+                              <p className="mt-1 text-[12px] text-white/45">
+                                → {designer} · Not sent · design due{" "}
+                                {job.dueDate.slice(8)}/{job.dueDate.slice(5, 7)}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              disabled={busyId === job.id || busyId === "bulk-send"}
+                              onClick={() => void sendToDesigner(job)}
+                              className="h-10 min-h-[44px] rounded-lg bg-cyan-500 px-3 text-[13px] font-semibold text-black disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                            >
+                              Send to {designer}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busyId === job.id}
+                              onClick={() => void deleteJob(job)}
+                              className="h-10 min-h-[44px] rounded-lg border border-red-400/35 bg-red-500/10 px-3 text-[13px] font-semibold text-red-200 disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          }
+
           if (queueView === "expired") {
             const files = queue.filter((j) => Boolean(j.fileUrl));
             return (
@@ -2473,65 +2655,43 @@ https://instagram.com/…"
             );
           }
 
-          if (queueView === "catchUp") {
-            if (openParts.catchUp.length === 0) {
-              return (
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center">
-                  <p className="text-[14px] font-semibold text-white/80">
-                    {catchUpDebt > 0 ? "Catch-up owed — nothing in this filter" : "No catch-up"}
-                  </p>
-                  <p className="mt-1 text-[12px] text-white/45">
-                    {catchUpDebt > 0
-                      ? `Still short ${catchUpDebt} from a past day (4/day). Switch outlet to All, or Send briefs so Ready jobs can fill Catch up.`
-                      : "Catch up only after a full workday (12 AM–11:59 PM) ends under 4 closes. Today’s unfinished 4 stay in Open until tomorrow."}
-                  </p>
-                </div>
-              );
-            }
-            return (
-              <div className="space-y-5">
-                {catchUpDebt > openParts.catchUp.length ? (
-                  <p className="rounded-lg border border-orange-400/30 bg-orange-400/10 px-3 py-2 text-[12px] text-orange-100">
-                    Owed {catchUpDebt} from past 4/day shortfall · showing {openParts.catchUp.length}
-                    {outletFilter !== "all" ? " in this outlet" : ""}.
-                  </p>
-                ) : null}
-                {renderSection(
-                  "Catch up",
-                  openParts.catchUpHint,
-                  openParts.catchUp,
-                  "catchUp",
-                  "text-orange-200"
-                )}
-              </div>
-            );
-          }
-
           const focusTitle = visiblePerf[0]?.isSundayHoliday
-            ? "Next by deadline"
-            : `Next ${DESIGNER_DAILY_TARGET} by deadline`;
+            ? "Today’s pack"
+            : `Today (${DESIGNER_DAILY_TARGET})`;
           const focusHint = visiblePerf[0]?.isSundayHoliday
             ? catchUpBadgeN > 0
-              ? "Optional Sunday — earliest deadlines. Finish Catch up first; points if you work."
-              : "Optional Sunday — earliest deadlines next. Work these for holiday points."
+              ? "Optional Sunday — after Catch up above. Points if you work."
+              : "Optional Sunday — earliest deadlines. Work these for holiday points."
             : catchUpBadgeN > 0
-              ? "After Catch up: earliest design deadlines (pull Friday/Sat/Sun work forward). Don’t sit idle."
-              : "Earliest design deadlines first — pull weekend work forward when free. Extra = Start + Close same day.";
+              ? "After Catch up above — today’s 4 by deadline."
+              : "Today’s 4 by earliest design deadline. Extra same-day closes → holiday points.";
 
           if (!canDragQueue) {
             return (
               <div className="space-y-5">
                 {catchUpBadgeN > 0 ? (
-                  <div className="rounded-lg border border-orange-400/35 bg-orange-400/10 px-3 py-2 text-[12px] text-orange-100">
-                    {catchUpBadgeN} in Catch up — finish that tab first
-                    {openParts.catchUpHint ? (
-                      <span className="text-orange-100/70">
-                        {" "}
-                        · {openParts.catchUpHint.replace(/\s*Finish this before today’s pack\.\s*$/, "")}
-                      </span>
-                    ) : null}
+                  <div className="rounded-lg border border-red-400/45 bg-red-500/[0.12] px-3 py-2 text-[12px] text-red-100">
+                    <span className="font-semibold">Catch up first ({catchUpBadgeN})</span>
+                    <span className="text-red-100/75">
+                      {" "}
+                      — finish these before starting today’s pack
+                    </span>
                   </div>
                 ) : null}
+                {catchUpDebt > openParts.catchUp.length && catchUpDebt > 0 ? (
+                  <p className="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-[12px] text-red-100/90">
+                    Owed {catchUpDebt} · showing {openParts.catchUp.length}
+                    {outletFilter !== "all" ? " in this outlet — switch to All" : ""}.
+                  </p>
+                ) : null}
+                {renderSection(
+                  "Catch up",
+                  openParts.catchUpHint ||
+                    "Past day missed 4/day — complete before Today.",
+                  openParts.catchUp,
+                  "catchUp",
+                  "text-red-200"
+                )}
                 {renderSection(
                   focusTitle,
                   focusHint,
@@ -2540,8 +2700,8 @@ https://instagram.com/…"
                   "text-emerald-200"
                 )}
                 {renderSection(
-                  "Up next",
-                  "Later in priority — after the focus pack.",
+                  "Upcoming",
+                  "After today’s pack — later deadlines.",
                   openParts.upNext,
                   "next",
                   "text-white/50"
@@ -2556,16 +2716,28 @@ https://instagram.com/…"
               collisionDetection={closestCenter}
               onDragEnd={onQueueDragEnd}
             >
-              <SortableContext
-                items={[...openParts.todayPack, ...openParts.upNext].map((j) => j.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-5">
-                  {catchUpBadgeN > 0 ? (
-                    <div className="rounded-lg border border-orange-400/35 bg-orange-400/10 px-3 py-2 text-[12px] text-orange-100">
-                      {catchUpBadgeN} in Catch up — finish that tab first
-                    </div>
-                  ) : null}
+              <div className="space-y-5">
+                {catchUpBadgeN > 0 ? (
+                  <div className="rounded-lg border border-red-400/45 bg-red-500/[0.12] px-3 py-2 text-[12px] text-red-100">
+                    <span className="font-semibold">Catch up first ({catchUpBadgeN})</span>
+                    <span className="text-red-100/75">
+                      {" "}
+                      — finish these before starting today’s pack
+                    </span>
+                  </div>
+                ) : null}
+                {renderSection(
+                  "Catch up",
+                  openParts.catchUpHint ||
+                    "Past day missed 4/day — complete before Today.",
+                  openParts.catchUp,
+                  "catchUp",
+                  "text-red-200"
+                )}
+                <SortableContext
+                  items={[...openParts.todayPack, ...openParts.upNext].map((j) => j.id)}
+                  strategy={verticalListSortingStrategy}
+                >
                   {(
                     [
                       [
@@ -2576,8 +2748,8 @@ https://instagram.com/…"
                         "text-emerald-200",
                       ],
                       [
-                        "Up next",
-                        "Later in priority — after the focus pack.",
+                        "Upcoming",
+                        "After today’s pack — later deadlines.",
                         openParts.upNext,
                         "next",
                         "text-white/50",
@@ -2590,8 +2762,7 @@ https://instagram.com/…"
                           <h2
                             className={`text-[12px] font-semibold uppercase tracking-wide ${headingClass}`}
                           >
-                            {title} ({list.length})
-                            {canDragQueue ? " · drag ≡" : ""}
+                            {title} ({list.length}) · drag ≡
                           </h2>
                           <p className="mt-0.5 text-[11px] text-white/45">{hint}</p>
                         </div>
@@ -2605,102 +2776,12 @@ https://instagram.com/…"
                       </div>
                     )
                   )}
-                </div>
-              </SortableContext>
+                </SortableContext>
+              </div>
             </DndContext>
           );
         })()}
 
-        {isAdmin && isOpenQueueView(queueView) && sendableJobs.length > 0 ? (
-          <div className="mt-5 space-y-2 border-t border-white/[0.08] pt-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-[12px] font-semibold uppercase tracking-wide text-amber-200/80">
-                Not sent — admin only ({sendableJobs.length})
-              </h3>
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="flex items-center gap-1.5 text-[11px] text-white/50">
-                  <input
-                    type="checkbox"
-                    checked={
-                      sendableJobs.length > 0 &&
-                      sendableJobs.every((j) => selectedIds.has(j.id))
-                    }
-                    onChange={toggleSelectAllSendable}
-                    className="rounded border-white/30"
-                  />
-                  Select all
-                </label>
-                <button
-                  type="button"
-                  disabled={selectedIds.size === 0 || busyId === "bulk-send"}
-                  onClick={() => void sendSelected()}
-                  className="h-8 rounded-lg bg-cyan-500 px-3 text-[11px] font-semibold text-black disabled:opacity-35"
-                >
-                  {busyId === "bulk-send"
-                    ? "Sending…"
-                    : `Send selected (${selectedIds.size})`}
-                </button>
-              </div>
-            </div>
-            <p className="text-[11px] text-white/40">
-              Designers never see these. Send to put them on Ready queue.
-            </p>
-            <div className="space-y-2">
-              {sendableJobs
-                .filter((j) => outletFilter === "all" || j.outletId === outletFilter)
-                .map((job) => {
-                  const { dayName, dateLabel } = formatPostDateParts(job.postDate);
-                  const designer = designerDisplayName(job.assigneeId);
-                  const selected = selectedIds.has(job.id);
-                  return (
-                    <article
-                      key={job.id}
-                      className={`rounded-xl border px-3.5 py-3 ${
-                        selected
-                          ? "border-cyan-400/40 bg-cyan-400/[0.07]"
-                          : "border-white/[0.08] bg-white/[0.02]"
-                      }`}
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="flex min-w-0 flex-1 gap-2.5">
-                          <input
-                            type="checkbox"
-                            checked={selected}
-                            onChange={() => toggleSelected(job.id)}
-                            className="mt-1.5 shrink-0 rounded border-white/30"
-                            aria-label={`Select ${job.title}`}
-                          />
-                          <div className="min-w-0">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
-                              {dayName} · {dateLabel}
-                            </p>
-                            <p className="mt-0.5 text-[15px] font-semibold text-white/85">
-                              {job.outletLabel}{" "}
-                              <span className="text-[12px] font-medium text-white/40">
-                                {job.format === "story" ? "Story" : "Post"}
-                              </span>
-                            </p>
-                            <p className="text-[13px] text-white/70">{job.title}</p>
-                            <p className="mt-1 text-[12px] text-white/40">
-                              → {designer} · Not sent
-                            </p>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          disabled={busyId === job.id || busyId === "bulk-send"}
-                          onClick={() => void sendToDesigner(job)}
-                          className="h-10 min-h-[44px] rounded-lg bg-cyan-500 px-3 text-[13px] font-semibold text-black disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
-                        >
-                          Send to {designer}
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
-            </div>
-          </div>
-        ) : null}
       </section>
       </>
       ) : null}
@@ -2963,21 +3044,26 @@ function DesignerPerformanceCard({
   perf,
   isAdmin,
   compact,
+  catchUpOwed,
   nudgeBusy,
   onNudge,
 }: {
   perf: DesignerPerformanceDto;
   isAdmin: boolean;
   compact?: boolean;
+  /** After admin Drop catch-up — matches Open catch-up band */
+  catchUpOwed?: number;
   nudgeBusy: boolean;
   onNudge: () => void;
 }) {
   const stack = perf.stack;
   const behind = stack?.stackedBehind ?? 0;
-  const pastCatchUp = (stack?.missedDays ?? []).reduce(
+  const pastCatchUpRaw = (stack?.missedDays ?? []).reduce(
     (n, d) => n + (d.missed ?? 0),
     0
   );
+  const pastCatchUp =
+    typeof catchUpOwed === "number" ? catchUpOwed : pastCatchUpRaw;
   // Stack “Behind” only after ~8 PM; catch-up = past full days that missed 4/day
   const hourIst = Number(
     new Intl.DateTimeFormat("en-GB", {

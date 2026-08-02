@@ -103,8 +103,9 @@ export function isBoilerplateDesignerDescription(
 }
 
 /**
- * sortOrder &lt; this = admin drag / interrupt pin (floats above deadline queue).
- * Natural deadline keys are YYYYMMDD*100+… (≥ ~2026010100).
+ * Drag / interrupt pins use negative sortOrder (see nextManualDesignerSortOrder).
+ * 0 = unset / legacy → deadline order. Natural keys are YYYYMMDD*100+… (≥ ~2026010100).
+ * Values in (0, ceiling) are treated as pins only if ever used; seed uses natural keys.
  */
 export const DESIGNER_MANUAL_SORT_CEILING = 1_000_000;
 
@@ -142,14 +143,17 @@ function priorityInsertRank(mode: DesignerPriorityMode | string | null | undefin
 }
 
 function isManualDesignerSortOrder(sortOrder: number | null | undefined): boolean {
-  return (sortOrder ?? 0) < DESIGNER_MANUAL_SORT_CEILING;
+  const n = sortOrder ?? 0;
+  // Only real drag/interrupt pins (negative). sortOrder 0 must NOT beat deadline order —
+  // otherwise Drop catch-up (natural key) sinks under every legacy 0-row and “disappears”.
+  return n < 0;
 }
 
 /**
  * Queue order:
  * 1) In progress / Paused pin
  * 2) Interrupt mode (ASAP / after current)
- * 3) Manual band (drag / interrupt sortOrder &lt; 1e6)
+ * 3) Manual drag pins (negative sortOrder)
  * 4) Deadline → event date → outlet → format (never random)
  */
 export function sortDesignerJobs(jobs: DesignerJobDto[]): DesignerJobDto[] {
@@ -365,8 +369,8 @@ export function partitionOpenDesignerQueue(
   const catchUpHint =
     catchUp.length > 0
       ? from
-        ? `Missed the 4/day target on ${from} (day fully over). Finish these first — or admin can Send to Open (reduces catch-up by 1).`
-        : "Missed the 4/day target on an earlier day. Finish these first — or admin can Send to Open (reduces catch-up by 1)."
+        ? `Missed the 4/day target on ${from} (day fully over). Finish before Today — or admin can Send to Open (reduces catch-up by 1).`
+        : "Missed the 4/day target on an earlier day. Finish before Today — or admin can Send to Open (reduces catch-up by 1)."
       : "Finish this before today’s pack.";
   return { catchUp, todayPack, upNext, catchUpHint, effectiveCatchUpSlots: slots };
 }

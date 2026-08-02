@@ -671,7 +671,7 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
         (n, d) => n + (d.missed ?? 0),
         0
       );
-      // Admin “Send to Open” forgives one slot each (same as Catch up tab)
+      // Admin “Send to Open” forgives one slot each (same as Open → Catch up band)
       let released = 0;
       try {
         released = await prisma.teamDesignerJob.count({
@@ -694,10 +694,10 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
           lines.push(
             `Catch-up: ${catchUpN} from a past day${
               missLabel ? ` (${missLabel})` : ""
-            } — that day ended without 4 closes. Finish Catch up first.`
+            } — that day ended without 4 closes. Finish Catch up at the top of Open first.`
           );
           if (daily > 0) {
-            lines.push(`Then complete your ${daily} tasks for today.`);
+            lines.push(`Then your ${daily} tasks for today.`);
           }
         } else if (daily > 0) {
           lines.push(
