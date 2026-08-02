@@ -2,6 +2,8 @@ import { prisma } from "@/lib/db";
 import { addDaysYmd, dayIdForYmd, getTodayKey } from "@/lib/team-checklists";
 import { teamOutletLabel } from "@/lib/team-outlets";
 import {
+  DESIGNER_ASSIGNEE_WEEKDAY,
+  DESIGNER_ASSIGNEE_WEEKEND,
   DESIGNER_DAILY_TARGET,
   DESIGNER_OPTIONAL_LEAVES_PER_MONTH,
   DESIGNER_PERFORMANCE_IDS,
@@ -24,11 +26,21 @@ import {
 } from "@/lib/team-designer-jobs";
 
 /**
- * Target workdays for every designer: Mon–Sat (6 × 4 = 24/week).
- * Sunday is off the stacked target — queue/Sunday posts can still exist.
+ * Target workdays by role (queue ownership):
+ * - Jeslyn (weekday): Mon–Fri — Saturday is Mahesh’s lane, not her miss.
+ * - Mahesh (weekend): Mon–Sat — Sunday off the stacked target.
  */
-function isStackWorkday(_assigneeId: string, ymd: string): boolean {
-  return dayIdForYmd(ymd) !== "sun";
+function isStackWorkday(assigneeId: string, ymd: string): boolean {
+  const day = dayIdForYmd(ymd);
+  if (day === "sun") return false;
+  if (assigneeId === DESIGNER_ASSIGNEE_WEEKDAY) {
+    return day !== "sat";
+  }
+  // Mahesh + generic helpers (assigneeId "") — Mon–Sat
+  if (assigneeId === DESIGNER_ASSIGNEE_WEEKEND || !assigneeId) {
+    return true;
+  }
+  return day !== "sat";
 }
 
 const TZ = "Asia/Kolkata";

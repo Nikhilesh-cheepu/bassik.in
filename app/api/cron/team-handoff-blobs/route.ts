@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { purgeExpiredTeamHandoffBlobs } from "@/lib/team-handoff-blobs";
+import { prisma } from "@/lib/db";
+import {
+  listTeamHandoffBlobs,
+  purgeExpiredTeamHandoffBlobs,
+} from "@/lib/team-handoff-blobs";
 
 export const runtime = "nodejs";
 
 /**
- * Deletes team handoff creatives from Vercel Blob after ~7 days.
- * Call daily (same secret pattern as chat-attachments cron).
+ * Deletes expired handoff blobs. Clears fileUrl on jobs — never deletes Done rows.
  */
 export async function GET(req: NextRequest) {
   const secret =
@@ -21,6 +24,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const expired = await listTeamHandoffBlobs({ expiredOnly: true });
+  const urls = expired.map((b) => b.url);
   const result = await purgeExpiredTeamHandoffBlobs();
-  return NextResponse.json({ ok: true, ...result });
+  let jobsCleared = 0;
+  if (urls.length > 0) {
+    const cleared = await prisma.teamDesignerJob.updateMany({
+      where: { fileUrl: { in: urls } },
+      data: { fileUrl: null, waApproved: false },
+    });
+    jobsCleared = cleared.count;
+  }
+  return NextResponse.json({ ok: true, ...result, jobsCleared });
 }

@@ -323,14 +323,18 @@ export function catchUpMetaFromStack(stack: {
   return { catchUpSlots, pendingFromLabel: `${dayName} · ${dateLabel}` };
 }
 
-/** Split open queue into catch-up / today's 4 / later (extras spill out of today). */
+/**
+ * Split open queue into catch-up / today's 4 / later.
+ * Catch up = past-due deadlines only (never pad with not-yet-due / “due today before 8 PM”).
+ * Past-day shortfalls are score/banner debt — extras closed in Open clear them.
+ */
 export function partitionOpenDesignerQueue(
   jobs: DesignerJobDto[],
   dailyTarget = DESIGNER_DAILY_TARGET,
   opts?: {
-    /** How many closes still owed from earlier days (stacked behind) */
+    /** @deprecated Ignored — catch-up is overdue-only (kept for call-site compat). */
     catchUpSlots?: number;
-    /** e.g. "Saturday · 1 Aug" */
+    /** e.g. "Saturday · 1 Aug" — used in hint when overdue items exist */
     pendingFromLabel?: string | null;
   }
 ): {
@@ -341,22 +345,17 @@ export function partitionOpenDesignerQueue(
 } {
   const sorted = sortDesignerJobs(jobs.filter((j) => j.status !== "DESIGN_DONE"));
   const overdue = sorted.filter((j) => j.isOverdue);
-  const notOverdue = sorted.filter((j) => !j.isOverdue);
-  const slots = Math.max(overdue.length, opts?.catchUpSlots ?? 0);
-  const fromRest = Math.max(0, slots - overdue.length);
-  const catchUp = [...overdue, ...notOverdue.slice(0, fromRest)];
-  const catchIds = new Set(catchUp.map((j) => j.id));
-  const remaining = sorted.filter((j) => !catchIds.has(j.id));
+  const remaining = sorted.filter((j) => !j.isOverdue);
+  const catchUp = overdue;
   const todayPack = remaining.slice(0, dailyTarget);
   const upNext = remaining.slice(dailyTarget);
   const from = opts?.pendingFromLabel?.trim();
-  const catchUpHint = from
-    ? `Pending work from ${from}. Finish this before today’s pack.`
-    : overdue.length > 0
-      ? "Past due — finish this before today’s pack."
-      : slots > 0
-        ? "Pending work from earlier days. Finish this before today’s pack."
-        : "Finish this before today’s pack.";
+  const catchUpHint =
+    overdue.length > 0
+      ? from
+        ? `Past due (also behind from ${from}). Finish this before today’s pack.`
+        : "Past due — finish this before today’s pack."
+      : "Finish this before today’s pack.";
   return { catchUp, todayPack, upNext, catchUpHint };
 }
 

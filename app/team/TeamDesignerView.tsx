@@ -275,7 +275,7 @@ function istYmdFromIso(iso: string | null | undefined): string | null {
   return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
-/** Group Done jobs by close day (uploadedAt), newest day first. */
+/** Group Done jobs by work day (Start day), then close day — newest first. */
 function groupDoneJobsByDay(jobs: DesignerJobDto[]): {
   key: string;
   dayName: string;
@@ -285,6 +285,7 @@ function groupDoneJobsByDay(jobs: DesignerJobDto[]): {
   const map = new Map<string, DesignerJobDto[]>();
   for (const j of jobs) {
     const key =
+      istYmdFromIso(j.startedAt) ||
       istYmdFromIso(j.uploadedAt) ||
       istYmdFromIso(j.updatedAt) ||
       j.postDate ||
@@ -883,6 +884,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   }, [hasInProgress]);
 
   const tryOpenUpload = (job: DesignerJobDto, mode: "close" | "attach") => {
+    // Already open for this job — don't reset (wipes a file just picked).
+    if (uploadJobId === job.id) return;
     if (!isAdmin && job.status === "IN_PROGRESS" && mode === "close") {
       const unlockAt = designerUploadUnlockAt(job.startedAt);
       if (!unlockAt || Date.now() < unlockAt) {
@@ -1251,8 +1254,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
 
       {queueView === "expired" ? (
         <p className="text-[11px] leading-relaxed text-white/45">
-          Past event dates (and extras {HANDOFF_TTL_DAYS}+ days after upload). Delete clears the
-          file from storage.
+          Downloadable files past go-live (or adhoc {HANDOFF_TTL_DAYS}+ days). Delete removes the
+          file only — Done history stays.
         </p>
       ) : null}
 
@@ -1729,13 +1732,15 @@ https://instagram.com/…"
                 {/* Started: pause (+ designer upload & close). No force-clear while in progress. */}
                 {job.status === "IN_PROGRESS" && job.assigneeId === memberId && !isAdmin ? (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => tryOpenUpload(job, "close")}
-                      className="h-11 min-h-[44px] rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
-                    >
-                      Upload & close
-                    </button>
+                    {uploadJobId !== job.id ? (
+                      <button
+                        type="button"
+                        onClick={() => tryOpenUpload(job, "close")}
+                        className="h-11 min-h-[44px] rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
+                      >
+                        Upload & close
+                      </button>
+                    ) : null}
                     {!job.pauseRequestedAt ? (
                       <button
                         type="button"
@@ -1761,13 +1766,15 @@ https://instagram.com/…"
                 ) : null}
                 {isAdmin && job.status === "IN_PROGRESS" ? (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => tryOpenUpload(job, "attach")}
-                      className="h-11 min-h-[44px] rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
-                    >
-                      {job.fileUrl ? "Edit upload" : "Upload"}
-                    </button>
+                    {uploadJobId !== job.id ? (
+                      <button
+                        type="button"
+                        onClick={() => tryOpenUpload(job, "attach")}
+                        className="h-11 min-h-[44px] rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
+                      >
+                        {job.fileUrl ? "Edit upload" : "Upload"}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       disabled={busyId === job.id || !job.fileUrl}
@@ -1822,13 +1829,15 @@ https://instagram.com/…"
                 {isAdmin &&
                 (job.status === "READY_TO_DESIGN" || job.status === "WAITING_BRIEF") ? (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => tryOpenUpload(job, "attach")}
-                      className="h-11 min-h-[44px] rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
-                    >
-                      {job.fileUrl ? "Edit upload" : "Upload"}
-                    </button>
+                    {uploadJobId !== job.id ? (
+                      <button
+                        type="button"
+                        onClick={() => tryOpenUpload(job, "attach")}
+                        className="h-11 min-h-[44px] rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
+                      >
+                        {job.fileUrl ? "Edit upload" : "Upload"}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       disabled={busyId === job.id || !job.fileUrl}
@@ -1969,7 +1978,7 @@ https://instagram.com/…"
                         onClick={() =>
                           void patchJob(job.id, { action: "clear-upload" }).then((ok) => {
                             if (ok) {
-                              setError("Upload deleted — Ready cleared from Amit Daily.");
+                              setError("Upload deleted — Done entry kept.");
                             }
                           })
                         }
@@ -2248,18 +2257,31 @@ https://instagram.com/…"
                       (!uploadForm.waApproved && !isAdmin)
                     }
                     onClick={() => void closeUpload()}
-                    className="h-7 rounded bg-emerald-400 px-3 text-[11px] font-semibold text-black disabled:opacity-40"
+                    className="h-9 rounded-lg bg-emerald-400 px-3.5 text-[12px] font-semibold text-black disabled:opacity-40"
                   >
-                    {job.status === "DESIGN_DONE"
-                      ? "Save new upload"
-                      : uploadMode === "attach"
-                        ? "Save upload"
-                        : "Upload & close job"}
+                    {uploading
+                      ? "Uploading…"
+                      : busyId === job.id
+                        ? "Saving…"
+                        : job.status === "DESIGN_DONE"
+                          ? "Save new upload"
+                          : uploadMode === "attach"
+                            ? "Save upload"
+                            : "Save & close"}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setUploadJobId(null)}
-                    className="h-7 px-2 text-[11px] text-white/45"
+                    disabled={busyId === job.id || uploading}
+                    onClick={() => {
+                      setUploadJobId(null);
+                      setUploadForm({
+                        postingNotes: "",
+                        scheduleNote: "",
+                        waApproved: false,
+                        fileUrl: "",
+                      });
+                    }}
+                    className="h-9 px-2 text-[12px] text-white/45 disabled:opacity-40"
                   >
                     Cancel
                   </button>
@@ -2295,15 +2317,15 @@ https://instagram.com/…"
             );
           };
 
-          if (queueView === "closed" || queueView === "expired") {
-            const groups = groupDoneJobsByDay(queue);
+          if (queueView === "expired") {
+            const files = queue.filter((j) => Boolean(j.fileUrl));
             return (
-              <div className="space-y-5">
+              <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/50">
-                    {queueView === "expired" ? "Expired" : "Done"} · {queue.length} total
+                    Expired files · {files.length}
                   </h2>
-                  {queueView === "expired" && queue.length > 0 ? (
+                  {files.length > 0 ? (
                     <button
                       type="button"
                       disabled={Boolean(busyId)}
@@ -2311,11 +2333,10 @@ https://instagram.com/…"
                         void (async () => {
                           setBusyId("purge-all");
                           try {
-                            for (const j of queue) {
-                              if (!j.fileUrl) continue;
+                            for (const j of files) {
                               await patchJob(j.id, { action: "purge-file" }, { quiet: true });
                             }
-                            setError("Cleared expired files.");
+                            setError("Cleared expired files — Done history kept.");
                             await load({ soft: true, view: "expired" });
                           } finally {
                             setBusyId(null);
@@ -2324,9 +2345,81 @@ https://instagram.com/…"
                       }}
                       className="h-8 rounded-lg border border-red-400/35 bg-red-400/10 px-2.5 text-[11px] font-semibold text-red-100"
                     >
-                      Delete all
+                      Delete all files
                     </button>
                   ) : null}
+                </div>
+                {files.length === 0 ? (
+                  <p className="py-6 text-center text-[13px] text-white/35">
+                    No expired files to clear.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {files.map((job) => {
+                      const { dayName, dateLabel } = formatPostDateParts(job.postDate);
+                      return (
+                        <li
+                          key={job.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[14px] font-semibold text-white/90">
+                              {job.outletLabel} · {job.title}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-white/45">
+                              Event {dayName} {dateLabel}
+                              {job.uploadedAt
+                                ? ` · uploaded ${istYmdFromIso(job.uploadedAt) ?? ""}`
+                                : ""}
+                              {" · "}
+                              {designerDisplayName(job.assigneeId)}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 gap-2">
+                            <a
+                              href={teamDownloadHref(
+                                job.fileUrl!,
+                                `${job.outletLabel}-${job.postDate}`
+                              )}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex h-9 items-center rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
+                            >
+                              Download
+                            </a>
+                            <button
+                              type="button"
+                              disabled={busyId === job.id}
+                              onClick={() =>
+                                void patchJob(job.id, { action: "purge-file" }).then((ok) => {
+                                  if (ok) {
+                                    setAllJobs((prev) => prev.filter((j) => j.id !== job.id));
+                                    setError("File deleted — Done entry kept.");
+                                  }
+                                })
+                              }
+                              className="h-9 rounded-lg border border-red-400/35 bg-red-400/10 px-3 text-[12px] font-semibold text-red-100 disabled:opacity-40"
+                            >
+                              Delete file
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            );
+          }
+
+          if (queueView === "closed") {
+            const groups = groupDoneJobsByDay(queue);
+            return (
+              <div className="space-y-5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/50">
+                    Done · {queue.length} total
+                  </h2>
                 </div>
                 {groups.map((g) => (
                   <div key={g.key} className="space-y-2">
@@ -2349,7 +2442,7 @@ https://instagram.com/…"
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center">
                   <p className="text-[14px] font-semibold text-white/80">No catch-up</p>
                   <p className="mt-1 text-[12px] text-white/45">
-                    Past days are clear. Use Open for today’s pack.
+                    Nothing past due yet (due today waits until 8 PM). Use Open for today’s pack.
                   </p>
                 </div>
               );
@@ -2930,7 +3023,8 @@ function DesignerPerformanceCard({
       {!sunday && stack?.missedDays?.[0] ? (
         <p className="mt-1 text-[11px] text-orange-200/90">
           Missed {stack.missedDays[0].date.slice(8)}/{stack.missedDays[0].date.slice(5, 7)} — short{" "}
-          {stack.missedDays[0].missed}. Catch up first.
+          {stack.missedDays[0].missed}. Extra closes in Open clear it (Catch up is for past-due
+          only).
         </p>
       ) : null}
       {!compact && stack ? (

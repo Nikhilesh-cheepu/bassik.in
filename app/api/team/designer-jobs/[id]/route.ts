@@ -294,25 +294,28 @@ export async function PATCH(
       } catch (e) {
         console.error("[designer-jobs] clear handoff on clear-upload", e);
       }
+      // Done stays Done (history). Open jobs just lose the attached file.
       const updated = await prisma.teamDesignerJob.update({
         where: { id },
         data: {
           fileUrl: null,
-          uploadedAt: null,
           waApproved: false,
           ...(job.status === "DESIGN_DONE"
-            ? { status: "READY_TO_DESIGN" as const, startedAt: null }
-            : {}),
+            ? {}
+            : { uploadedAt: null }),
         },
       });
       await setDesignerEditRequest(id, { at: null, note: null });
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
-        message: "Upload deleted — Ready removed from Daily",
+        message:
+          job.status === "DESIGN_DONE"
+            ? "Upload deleted — Done entry kept"
+            : "Upload deleted — Ready removed from Daily",
       });
     }
 
-    /** Expired creatives: delete blob + job. Admin or assignee. */
+    /** Expired creatives: delete blob only — Done history stays. */
     if (action === "purge-file") {
       if (!isAdmin && !canDesignerAct) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -326,11 +329,18 @@ export async function PATCH(
       } catch (e) {
         console.error("[designer-jobs] clear handoff on purge-file", e);
       }
-      await prisma.teamDesignerJob.delete({ where: { id } });
+      const updated = await prisma.teamDesignerJob.update({
+        where: { id },
+        data: {
+          fileUrl: null,
+          waApproved: false,
+          // keep status DESIGN_DONE + uploadedAt so Done tab history stays
+        },
+      });
       return NextResponse.json({
         ok: true,
-        deleted: true,
-        message: "File cleared",
+        job: await jobDtoWithLinks(updated),
+        message: "File cleared — Done entry kept",
       });
     }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import {
   deleteTeamHandoffBlobs,
@@ -8,6 +9,17 @@ import {
 } from "@/lib/team-handoff-blobs";
 
 export const runtime = "nodejs";
+
+/** Clear job fileUrl after blob delete — never delete Done rows. */
+async function clearJobFileUrls(urls: string[]): Promise<number> {
+  const clean = urls.filter((u) => typeof u === "string" && u.includes("/team/handoff/"));
+  if (clean.length === 0) return 0;
+  const result = await prisma.teamDesignerJob.updateMany({
+    where: { fileUrl: { in: clean } },
+    data: { fileUrl: null, waApproved: false },
+  });
+  return result.count;
+}
 
 /** Admin: list expired (or all) handoff uploads for manual cleanup. */
 export async function GET(req: NextRequest) {
@@ -45,15 +57,18 @@ export async function POST(req: NextRequest) {
     };
 
     if (body.action === "purge-expired") {
+      const expired = await listTeamHandoffBlobs({ expiredOnly: true });
+      const urls = expired.map((b) => b.url);
       const result = await purgeExpiredTeamHandoffBlobs();
-      return NextResponse.json({ ok: true, ...result });
+      const jobsCleared = await clearJobFileUrls(urls);
+      return NextResponse.json({ ok: true, ...result, jobsCleared });
     }
 
     if (body.action === "delete" && Array.isArray(body.urls)) {
-      const result = await deleteTeamHandoffBlobs(
-        body.urls.filter((u): u is string => typeof u === "string")
-      );
-      return NextResponse.json({ ok: true, ...result });
+      const urls = body.urls.filter((u): u is string => typeof u === "string");
+      const result = await deleteTeamHandoffBlobs(urls);
+      const jobsCleared = await clearJobFileUrls(urls);
+      return NextResponse.json({ ok: true, ...result, jobsCleared });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
