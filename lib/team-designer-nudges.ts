@@ -58,6 +58,13 @@ function formatDayLabel(ymd: string): string {
   });
 }
 
+/** IST greeting — morning / afternoon / evening (no “night”). */
+function greetingForHourIst(hour: number): string {
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 /** One short line — don’t dump the whole queue into WhatsApp. */
 function shortMissLine(jobs: ReadyJobLine[]): string | null {
   if (jobs.length === 0) return null;
@@ -533,7 +540,9 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
       const missLabel = miss?.date ? formatDayLabel(miss.date) : null;
       const daily = sunday ? 0 : DESIGNER_DAILY_TARGET;
       if (catchUpN > 0 || daily > 0 || perf.readyToStart > 0) {
-        const lines: string[] = [`${name} — good morning.`];
+        const lines: string[] = [
+          `${name} — ${greetingForHourIst(hour)}.`,
+        ];
         if (catchUpN > 0) {
           lines.push(
             `You have ${catchUpN} catch-up task${catchUpN === 1 ? "" : "s"}${
@@ -555,7 +564,7 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
         lines.push(
           "",
           "Open the Design tab and refresh before you start — order and priority can change anytime. Always follow the website flow.",
-          "Press Start Job on a task before you begin work (don’t work from WhatsApp alone).",
+          "Don’t start work before pressing Start Job on the task.",
           "",
           designerQueueLink()
         );
