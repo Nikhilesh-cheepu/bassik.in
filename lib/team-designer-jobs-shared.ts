@@ -311,6 +311,11 @@ export type DesignerCatchUpMeta = {
   catchUpSlots: number;
   /** e.g. "Saturday · 1 Aug" */
   pendingFromLabel: string | null;
+  /**
+   * Admin Drop catch-up forgives — count every non-done exempt job (Ready + To send).
+   * Unsend must not reopen a forgiven slot / pull a replacement into Catch up.
+   */
+  releasedSlots?: number;
 };
 
 export function catchUpMetaFromStack(stack: {
@@ -335,7 +340,8 @@ export function catchUpMetaFromStack(stack: {
 /**
  * Split open queue into catch-up / today's 4 / later.
  * Catch up = shortfall from past calendar days (4/day target), not job deadlines.
- * Admin “Send to Open” (catchUpExempt) reduces the catch-up count by 1 — does not pull a replacement.
+ * Admin Drop catch-up (catchUpExempt) forgives one slot — never pull a replacement,
+ * including when that job is later Unsent to To send.
  */
 export function partitionOpenDesignerQueue(
   jobs: DesignerJobDto[],
@@ -345,19 +351,22 @@ export function partitionOpenDesignerQueue(
     catchUpSlots?: number;
     /** e.g. "Saturday · 1 Aug" */
     pendingFromLabel?: string | null;
+    /** Forgiven slots (Ready + To send exempt). Prefer this over counting only `jobs`. */
+    releasedSlots?: number;
   }
 ): {
   catchUp: DesignerJobDto[];
   todayPack: DesignerJobDto[];
   upNext: DesignerJobDto[];
   catchUpHint: string;
-  /** Debt after admin releases (Send to Open) */
+  /** Debt after admin Drop catch-up */
   effectiveCatchUpSlots: number;
 } {
   const sorted = sortDesignerJobs(jobs.filter((j) => j.status !== "DESIGN_DONE"));
-  const released = sorted.filter((j) => j.catchUpExempt).length;
+  const releasedFromJobs = sorted.filter((j) => j.catchUpExempt).length;
+  const released = Math.max(0, opts?.releasedSlots ?? releasedFromJobs);
   const owed = Math.max(0, opts?.catchUpSlots ?? 0);
-  // Each Send to Open forgives one slot — remaining catch-up stays, no backfill
+  // Each Drop forgives one slot — no backfill when the job is Unsent
   const slots = Math.max(0, owed - released);
   const fillable = sorted.filter((j) => !j.catchUpExempt);
   const catchUp = fillable.slice(0, slots);
@@ -369,8 +378,8 @@ export function partitionOpenDesignerQueue(
   const catchUpHint =
     catchUp.length > 0
       ? from
-        ? `Missed the 4/day target on ${from} (day fully over). Finish before Today — or admin can Send to Open (reduces catch-up by 1).`
-        : "Missed the 4/day target on an earlier day. Finish before Today — or admin can Send to Open (reduces catch-up by 1)."
+        ? `Missed the 4/day target on ${from} (day fully over). Finish before Today — or admin can Drop catch-up (forgives 1).`
+        : "Missed the 4/day target on an earlier day. Finish before Today — or admin can Drop catch-up (forgives 1)."
       : "Finish this before today’s pack.";
   return { catchUp, todayPack, upNext, catchUpHint, effectiveCatchUpSlots: slots };
 }
@@ -404,10 +413,12 @@ export function partitionOpenDesignerQueueByAssignee(
     const meta = perfByAssignee.get(assigneeId) ?? {
       catchUpSlots: 0,
       pendingFromLabel: null,
+      releasedSlots: 0,
     };
     const parts = partitionOpenDesignerQueue(list, dailyTarget, {
       catchUpSlots: meta.catchUpSlots,
       pendingFromLabel: meta.pendingFromLabel,
+      releasedSlots: meta.releasedSlots,
     });
     catchUp.push(...parts.catchUp);
     todayPack.push(...parts.todayPack);

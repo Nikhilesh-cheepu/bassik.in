@@ -678,8 +678,15 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
             return next;
           });
         }
-        if (typeof data.message === "string" && body.action === "unsend") {
-          setError(data.message);
+        if (body.action === "unsend") {
+          setError(
+            typeof data.message === "string"
+              ? data.message
+              : "Unsent — moved to To send"
+          );
+          if (isAdmin) {
+            startTransition(() => setQueueView("toSend"));
+          }
         }
       } else {
         await load({ soft: true });
@@ -1058,15 +1065,32 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   }, [scopedJobs]);
 
   const openPartsRaw = useMemo(() => {
+    const releasedByAssignee = new Map<string, number>();
+    for (const j of scopedJobs) {
+      if (j.status === "DESIGN_DONE" || !j.catchUpExempt) continue;
+      releasedByAssignee.set(
+        j.assigneeId,
+        (releasedByAssignee.get(j.assigneeId) ?? 0) + 1
+      );
+    }
     const metaMap = new Map(
-      perfDesigners.map((p) => [p.assigneeId, catchUpMetaFromStack(p.stack)] as const)
+      perfDesigners.map((p) => {
+        const base = catchUpMetaFromStack(p.stack);
+        return [
+          p.assigneeId,
+          {
+            ...base,
+            releasedSlots: releasedByAssignee.get(p.assigneeId) ?? 0,
+          },
+        ] as const;
+      })
     );
     return partitionOpenDesignerQueueByAssignee(
       openJobsForPartition,
       metaMap,
       DESIGNER_DAILY_TARGET
     );
-  }, [openJobsForPartition, perfDesigners]);
+  }, [openJobsForPartition, perfDesigners, scopedJobs]);
 
   const openParts = useMemo(() => {
     if (outletFilter === "all") return openPartsRaw;
@@ -1103,13 +1127,17 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     const map = new Map<string, number>();
     for (const p of perfDesigners) {
       const raw = (p.stack?.missedDays ?? []).reduce((n, d) => n + (d.missed ?? 0), 0);
-      const released = openJobsForPartition.filter(
-        (j) => j.assigneeId === p.assigneeId && j.catchUpExempt
+      // Include To send — Drop stays forgiven after Unsend
+      const released = scopedJobs.filter(
+        (j) =>
+          j.assigneeId === p.assigneeId &&
+          j.catchUpExempt &&
+          j.status !== "DESIGN_DONE"
       ).length;
       map.set(p.assigneeId, Math.max(0, raw - released));
     }
     return map;
-  }, [perfDesigners, openJobsForPartition]);
+  }, [perfDesigners, scopedJobs]);
 
   const freeDeadlineSlots = useMemo(
     () =>
@@ -2506,6 +2534,9 @@ https://instagram.com/…"
                               <p className="mt-1 text-[12px] text-white/45">
                                 → {designer} · Not sent · design due{" "}
                                 {job.dueDate.slice(8)}/{job.dueDate.slice(5, 7)}
+                                {job.catchUpExempt
+                                  ? " · dropped from catch-up (stays out)"
+                                  : ""}
                               </p>
                             </div>
                           </div>

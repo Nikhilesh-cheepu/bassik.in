@@ -771,14 +771,14 @@ export async function PATCH(
     }
 
     /**
-     * Admin Unsend — reverse of Send: off designer queue, clear upload + Amit Ready.
-     * Works from Ready / In progress / Paused / Done.
+     * Admin Unsend — always → To send (WAITING_BRIEF).
+     * Keeps catchUpExempt so a Drop never re-enters Catch up / reopens a forgiven slot.
      */
     if (action === "unsend") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       if (job.status === "WAITING_BRIEF") {
         return NextResponse.json(
-          { error: "Already unsent — waiting on brief / Send" },
+          { error: "Already unsent — see To send" },
           { status: 400 }
         );
       }
@@ -806,7 +806,7 @@ export async function PATCH(
       await setDesignerPauseRequest(id, { at: null, note: null });
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
-        message: "Unsent — off designer queue; Amit Ready cleared",
+        message: "Unsent — in To send (not Catch up)",
       });
     }
 
