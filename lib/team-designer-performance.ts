@@ -370,16 +370,19 @@ export async function computeDesignerStack(
   const rangeStart =
     thisMonthStart < countFrom ? countFrom : thisMonthStart;
   const effectiveToday = today < countFrom ? countFrom : today;
+  // Stack / behind only counts fully finished calendar days (same rule as Catch up).
+  // Today’s 4 don’t enter the deficit until tomorrow 12:00 AM IST.
+  const scoreThrough = addDaysYmd(effectiveToday, -1);
 
   const workDaysSoFar =
-    effectiveToday < rangeStart
+    scoreThrough < rangeStart
       ? 0
-      : countWorkdaysInclusive(assigneeId, rangeStart, effectiveToday);
+      : countWorkdaysInclusive(assigneeId, rangeStart, scoreThrough);
   const targetSoFar = workDaysSoFar * DESIGNER_DAILY_TARGET;
   const closedSoFar =
-    effectiveToday < rangeStart
+    scoreThrough < rangeStart
       ? 0
-      : await countDesignerCloses(assigneeId, rangeStart, effectiveToday);
+      : await countDesignerCloses(assigneeId, rangeStart, scoreThrough);
   const deficitSoFar = Math.max(0, targetSoFar - closedSoFar);
 
   let lastMonthKey: string | null = null;
@@ -411,15 +414,17 @@ export async function computeDesignerStack(
   const weekStart = weekStartMonday(today);
   const weekKey = weekStart;
   const weekRangeStart = weekStart < countFrom ? countFrom : weekStart;
+  const weekScoreThrough =
+    scoreThrough < weekRangeStart ? addDaysYmd(weekRangeStart, -1) : scoreThrough;
   const weekDaysSoFar =
-    effectiveToday < weekRangeStart
+    weekScoreThrough < weekRangeStart
       ? 0
-      : countWorkdaysInclusive(assigneeId, weekRangeStart, effectiveToday);
+      : countWorkdaysInclusive(assigneeId, weekRangeStart, weekScoreThrough);
   const weekTargetSoFar = weekDaysSoFar * DESIGNER_DAILY_TARGET;
   const weekClosed =
-    effectiveToday < weekRangeStart
+    weekScoreThrough < weekRangeStart
       ? 0
-      : await countDesignerCloses(assigneeId, weekRangeStart, effectiveToday);
+      : await countDesignerCloses(assigneeId, weekRangeStart, weekScoreThrough);
 
   const missFrom = rangeStart < countFrom ? countFrom : rangeStart;
   const missedDays = await listMissedWorkdays(assigneeId, missFrom, effectiveToday);

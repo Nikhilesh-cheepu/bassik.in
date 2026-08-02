@@ -1040,21 +1040,22 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   };
 
   const queue = jobs;
-  /** Always from open statuses (so Catch up tab badge stays correct on Done/Holiday). */
+  /**
+   * Catch-up debt is per designer (4/day shortfall) — never shrink it with outlet chips.
+   * Outlet filter is applied when rendering lists only.
+   */
   const openJobsForPartition = useMemo(() => {
-    let list = scopedJobs.filter(
-      (j) =>
-        j.status === "READY_TO_DESIGN" ||
-        j.status === "IN_PROGRESS" ||
-        j.status === "PAUSED"
+    return sortDesignerJobs(
+      scopedJobs.filter(
+        (j) =>
+          j.status === "READY_TO_DESIGN" ||
+          j.status === "IN_PROGRESS" ||
+          j.status === "PAUSED"
+      )
     );
-    if (outletFilter !== "all") {
-      list = list.filter((j) => j.outletId === outletFilter);
-    }
-    return sortDesignerJobs(list);
-  }, [scopedJobs, outletFilter]);
+  }, [scopedJobs]);
 
-  const openParts = useMemo(() => {
+  const openPartsRaw = useMemo(() => {
     const metaMap = new Map(
       perfDesigners.map((p) => [p.assigneeId, catchUpMetaFromStack(p.stack)] as const)
     );
@@ -1064,7 +1065,34 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       DESIGNER_DAILY_TARGET
     );
   }, [openJobsForPartition, perfDesigners]);
-  const catchUpCount = openParts.catchUp.length;
+
+  const openParts = useMemo(() => {
+    if (outletFilter === "all") return openPartsRaw;
+    const filt = (list: DesignerJobDto[]) =>
+      list.filter((j) => j.outletId === outletFilter);
+    return {
+      catchUp: filt(openPartsRaw.catchUp),
+      todayPack: filt(openPartsRaw.todayPack),
+      upNext: filt(openPartsRaw.upNext),
+      catchUpHint: openPartsRaw.catchUpHint,
+    };
+  }, [openPartsRaw, outletFilter]);
+
+  /** Jobs currently in the Catch up band (unfiltered by outlet). */
+  const catchUpCount = openPartsRaw.catchUp.length;
+  /** 4/day shortfall from past full days — source of truth for the badge. */
+  const catchUpDebt = useMemo(
+    () =>
+      perfDesigners
+        .filter((p) => {
+          if (!isAdmin) return p.assigneeId === memberId;
+          if (designerTab === "all") return true;
+          return p.assigneeId === designerTab;
+        })
+        .reduce((n, p) => n + catchUpMetaFromStack(p.stack).catchUpSlots, 0),
+    [perfDesigners, isAdmin, memberId, designerTab]
+  );
+  const catchUpBadgeN = Math.max(catchUpDebt, catchUpCount);
   const canDragQueue = isAdmin && queueView === "open" && queue.length > 1;
 
   const freeDeadlineSlots = useMemo(
@@ -1086,7 +1114,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         <div className="flex flex-wrap rounded-lg bg-black/35 p-1">
           {(
             [
-              ["catchUp", catchUpCount > 0 ? `Catch up (${catchUpCount})` : "Catch up"],
+              ["catchUp", catchUpBadgeN > 0 ? `Catch up (${catchUpBadgeN})` : "Catch up"],
               ["open", "Open"],
               ["closed", "Done"],
               ["holiday", "Holiday"],
@@ -1114,7 +1142,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
                       : id === "expired"
                         ? "bg-amber-400 text-black"
                         : "bg-white text-black"
-                  : id === "catchUp" && catchUpCount > 0
+                  : id === "catchUp" && catchUpBadgeN > 0
                     ? "text-orange-200 hover:text-orange-100"
                     : "text-white/50 hover:text-white/80"
               }`}
@@ -2457,17 +2485,25 @@ https://instagram.com/…"
             if (openParts.catchUp.length === 0) {
               return (
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center">
-                  <p className="text-[14px] font-semibold text-white/80">No catch-up</p>
+                  <p className="text-[14px] font-semibold text-white/80">
+                    {catchUpDebt > 0 ? "Catch-up owed — nothing in this filter" : "No catch-up"}
+                  </p>
                   <p className="mt-1 text-[12px] text-white/45">
-                    Catch up only after a full workday (12 AM–11:59 PM) ends under 4 closes. Today’s
-                    unfinished 4 stay in Open until tomorrow. Admin can Send to Open on a catch-up
-                    card to put that job back in the normal list.
+                    {catchUpDebt > 0
+                      ? `Still short ${catchUpDebt} from a past day (4/day). Switch outlet to All, or Send briefs so Ready jobs can fill Catch up.`
+                      : "Catch up only after a full workday (12 AM–11:59 PM) ends under 4 closes. Today’s unfinished 4 stay in Open until tomorrow."}
                   </p>
                 </div>
               );
             }
             return (
               <div className="space-y-5">
+                {catchUpDebt > openParts.catchUp.length ? (
+                  <p className="rounded-lg border border-orange-400/30 bg-orange-400/10 px-3 py-2 text-[12px] text-orange-100">
+                    Owed {catchUpDebt} from past 4/day shortfall · showing {openParts.catchUp.length}
+                    {outletFilter !== "all" ? " in this outlet" : ""}.
+                  </p>
+                ) : null}
                 {renderSection(
                   "Catch up",
                   openParts.catchUpHint,
@@ -2483,19 +2519,19 @@ https://instagram.com/…"
             ? "Next by deadline"
             : `Next ${DESIGNER_DAILY_TARGET} by deadline`;
           const focusHint = visiblePerf[0]?.isSundayHoliday
-            ? catchUpCount > 0
+            ? catchUpBadgeN > 0
               ? "Optional Sunday — earliest deadlines. Finish Catch up first; points if you work."
               : "Optional Sunday — earliest deadlines next. Work these for holiday points."
-            : catchUpCount > 0
+            : catchUpBadgeN > 0
               ? "After Catch up: earliest design deadlines (pull Friday/Sat/Sun work forward). Don’t sit idle."
               : "Earliest design deadlines first — pull weekend work forward when free. Extra = Start + Close same day.";
 
           if (!canDragQueue) {
             return (
               <div className="space-y-5">
-                {catchUpCount > 0 ? (
+                {catchUpBadgeN > 0 ? (
                   <div className="rounded-lg border border-orange-400/35 bg-orange-400/10 px-3 py-2 text-[12px] text-orange-100">
-                    {catchUpCount} in Catch up — finish that tab first
+                    {catchUpBadgeN} in Catch up — finish that tab first
                     {openParts.catchUpHint ? (
                       <span className="text-orange-100/70">
                         {" "}
@@ -2533,9 +2569,9 @@ https://instagram.com/…"
                 strategy={verticalListSortingStrategy}
               >
                 <div className="space-y-5">
-                  {catchUpCount > 0 ? (
+                  {catchUpBadgeN > 0 ? (
                     <div className="rounded-lg border border-orange-400/35 bg-orange-400/10 px-3 py-2 text-[12px] text-orange-100">
-                      {catchUpCount} in Catch up — finish that tab first
+                      {catchUpBadgeN} in Catch up — finish that tab first
                     </div>
                   ) : null}
                   {(
