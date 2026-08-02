@@ -1061,7 +1061,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     return partitionOpenDesignerQueueByAssignee(
       openJobsForPartition,
       metaMap,
-      DESIGNER_DAILY_TARGET
+      DESIGNER_DAILY_TARGET,
+      todayYmdLocal()
     );
   }, [openJobsForPartition, perfDesigners]);
   const catchUpCount = openParts.catchUp.length;
@@ -2442,7 +2443,8 @@ https://instagram.com/…"
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center">
                   <p className="text-[14px] font-semibold text-white/80">No catch-up</p>
                   <p className="mt-1 text-[12px] text-white/45">
-                    Nothing past due yet (due today waits until 8 PM). Use Open for today’s pack.
+                    Catch up is only earlier days that already missed their deadline. Today’s 8 PM
+                    pack stays in Open — use that tab.
                   </p>
                 </div>
               );
@@ -2927,11 +2929,11 @@ function DesignerPerformanceCard({
 }) {
   const stack = perf.stack;
   const behind = stack?.stackedBehind ?? 0;
-  const pastCatchUp = (stack?.missedDays ?? []).reduce(
+  const pastCatchUpRaw = (stack?.missedDays ?? []).reduce(
     (n, d) => n + (d.missed ?? 0),
     0
   );
-  // Stack “Behind” only after ~8 PM; catch-up from past days shows anytime
+  // Stack “Behind” only after ~8 PM; score “Catch-up N” only after work start (~11)
   const hourIst = Number(
     new Intl.DateTimeFormat("en-GB", {
       timeZone: "Asia/Kolkata",
@@ -2939,9 +2941,10 @@ function DesignerPerformanceCard({
       hour12: false,
     }).format(new Date())
   );
+  const pastCatchUp = hourIst >= 11 ? pastCatchUpRaw : 0;
   const showStackBehind = hourIst >= 20 && behind > 0;
   const flag =
-    !perf.isSundayHoliday && (pastCatchUp > 0 || perf.redFlag || showStackBehind);
+    !perf.isSundayHoliday && (pastCatchUp > 0 || (hourIst >= 11 && perf.redFlag) || showStackBehind);
   const points = stack?.holidayPoints ?? stack?.advancePoints ?? 0;
   const perLeave = stack?.pointsPerLeave ?? DESIGNER_POINTS_PER_LEAVE;
   const unlocked = stack?.leaveDaysEarned ?? 0;
@@ -3020,7 +3023,7 @@ function DesignerPerformanceCard({
           ) : null}
         </p>
       )}
-      {!sunday && stack?.missedDays?.[0] ? (
+      {!sunday && hourIst >= 11 && stack?.missedDays?.[0] ? (
         <p className="mt-1 text-[11px] text-orange-200/90">
           Missed {stack.missedDays[0].date.slice(8)}/{stack.missedDays[0].date.slice(5, 7)} — short{" "}
           {stack.missedDays[0].missed}. Extra closes in Open clear it (Catch up is for past-due

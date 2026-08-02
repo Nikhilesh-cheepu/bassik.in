@@ -665,44 +665,21 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
 
     const sunday = dayIdForYmd(today) === "sun";
 
-    // Before ~11 IST: clear manager brief — catch-up jobs (not stack “behind”)
+    // Before ~11 IST: generic “today’s pack” only — don’t invent Catch up from score debt
     if (beforeWork) {
-      const catchUpN = (stack.missedDays ?? []).reduce(
-        (n, d) => n + (d.missed ?? 0),
-        0
-      );
-      const miss = stack.missedDays?.[0];
-      const missLabel = miss?.date ? formatDayLabel(miss.date) : null;
       const daily = sunday ? 0 : DESIGNER_DAILY_TARGET;
-      if (catchUpN > 0 || daily > 0 || perf.readyToStart > 0) {
+      if (daily > 0 || perf.readyToStart > 0) {
         const lines: string[] = [
           `${name} — ${greetingForHourIst(hour)}.`,
-        ];
-        if (catchUpN > 0) {
-          lines.push(
-            `You have ${catchUpN} catch-up task${catchUpN === 1 ? "" : "s"}${
-              missLabel ? ` (missed ${missLabel})` : ""
-            }. Finish that first — start early.`
-          );
-          if (daily > 0) {
-            lines.push(
-              `Then complete your ${daily} tasks for today.`
-            );
-          }
-        } else if (daily > 0) {
-          lines.push(
-            `You have ${daily} tasks for today. Start early and clear them.`
-          );
-        } else {
-          lines.push("Check the Design tab for today’s queue.");
-        }
-        lines.push(
+          daily > 0
+            ? `You have ${daily} tasks for today. Check the Design tab (Open) and complete today’s pack.`
+            : "Check the Design tab for today’s queue.",
           "",
           "Open the Design tab and refresh before you start — order and priority can change anytime. Always follow the website flow.",
           "Don’t start work before pressing Start Job on the task.",
           "",
-          designerQueueLink()
-        );
+          designerQueueLink(),
+        ];
         const body = lines.join("\n");
         out.push({
           assigneeId,

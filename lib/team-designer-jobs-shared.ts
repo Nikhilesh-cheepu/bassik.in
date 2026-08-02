@@ -325,14 +325,17 @@ export function catchUpMetaFromStack(stack: {
 
 /**
  * Split open queue into catch-up / today's 4 / later.
- * Catch up = past-due deadlines only (never pad with not-yet-due / “due today before 8 PM”).
- * Past-day shortfalls are score/banner debt — extras closed in Open clear them.
+ * Catch up = deadlines from a *previous calendar day* that are already past.
+ * Never puts “due today (8 PM)” work in Catch up — that stays in Open (even after 8 PM).
+ * Missed-day score debt does not invent Catch up rows.
  */
 export function partitionOpenDesignerQueue(
   jobs: DesignerJobDto[],
   dailyTarget = DESIGNER_DAILY_TARGET,
   opts?: {
-    /** @deprecated Ignored — catch-up is overdue-only (kept for call-site compat). */
+    /** IST today YYYY-MM-DD — required for dueDate < today catch-up rule */
+    todayYmd?: string;
+    /** @deprecated Ignored — kept for call-site compat. */
     catchUpSlots?: number;
     /** e.g. "Saturday · 1 Aug" — used in hint when overdue items exist */
     pendingFromLabel?: string | null;
@@ -343,18 +346,22 @@ export function partitionOpenDesignerQueue(
   upNext: DesignerJobDto[];
   catchUpHint: string;
 } {
+  const today = opts?.todayYmd?.trim() || "";
   const sorted = sortDesignerJobs(jobs.filter((j) => j.status !== "DESIGN_DONE"));
-  const overdue = sorted.filter((j) => j.isOverdue);
-  const remaining = sorted.filter((j) => !j.isOverdue);
-  const catchUp = overdue;
+  // Previous-day past-due only — not today’s 8 PM pack
+  const catchUp = sorted.filter(
+    (j) => j.isOverdue && (!today || j.dueDate < today)
+  );
+  const catchIds = new Set(catchUp.map((j) => j.id));
+  const remaining = sorted.filter((j) => !catchIds.has(j.id));
   const todayPack = remaining.slice(0, dailyTarget);
   const upNext = remaining.slice(dailyTarget);
   const from = opts?.pendingFromLabel?.trim();
   const catchUpHint =
-    overdue.length > 0
+    catchUp.length > 0
       ? from
-        ? `Past due (also behind from ${from}). Finish this before today’s pack.`
-        : "Past due — finish this before today’s pack."
+        ? `Past-due from earlier days (also behind from ${from}). Finish this before today’s pack.`
+        : "Past-due from earlier days — finish this before today’s pack."
       : "Finish this before today’s pack.";
   return { catchUp, todayPack, upNext, catchUpHint };
 }
@@ -365,7 +372,8 @@ export function partitionOpenDesignerQueue(
 export function partitionOpenDesignerQueueByAssignee(
   jobs: DesignerJobDto[],
   perfByAssignee: Map<string, DesignerCatchUpMeta>,
-  dailyTarget = DESIGNER_DAILY_TARGET
+  dailyTarget = DESIGNER_DAILY_TARGET,
+  todayYmd?: string
 ): {
   catchUp: DesignerJobDto[];
   todayPack: DesignerJobDto[];
@@ -388,6 +396,7 @@ export function partitionOpenDesignerQueueByAssignee(
       pendingFromLabel: null,
     };
     const parts = partitionOpenDesignerQueue(list, dailyTarget, {
+      todayYmd,
       catchUpSlots: meta.catchUpSlots,
       pendingFromLabel: meta.pendingFromLabel,
     });
