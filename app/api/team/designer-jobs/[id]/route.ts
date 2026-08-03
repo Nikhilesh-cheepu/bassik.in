@@ -10,7 +10,6 @@ import {
   loadDesignerJobLinksByIds,
   nextManualDesignerSortOrder,
   parseDesignerLinks,
-  ensureCatchUpExemptColumn,
   releaseDesignerJobFromCatchUp,
   setDesignerEditRequest,
   setDesignerJobLinks,
@@ -20,15 +19,10 @@ import {
 } from "@/lib/team-designer-jobs";
 import { addDaysYmd, getTodayKey } from "@/lib/team-checklists";
 import {
-  catchUpMetaFromStack,
-  DESIGNER_DAILY_TARGET,
   isBoilerplateDesignerDescription,
   parseDesignerPriorityMode,
-  partitionOpenDesignerQueue,
-  sortDesignerJobs,
   type DesignerPriorityMode,
 } from "@/lib/team-designer-jobs-shared";
-import { computeDesignerStack } from "@/lib/team-designer-performance";
 import { deleteTeamHandoffBlobUrl } from "@/lib/team-handoff-blobs";
 import {
   getAmitReadyNudge,
@@ -49,61 +43,6 @@ async function jobDtoWithLinks(job: Parameters<typeof toDesignerJobDto>[0]) {
     pauseRequestNote: edit?.pauseRequestNote ?? null,
     catchUpExempt: edit?.catchUpExempt ?? false,
   });
-}
-
-/** Throws Error if job is outside Catch up while debt remains. */
-async function ensureCatchUpGate(assigneeId: string, jobId: string): Promise<void> {
-  await ensureCatchUpExemptColumn();
-  const today = getTodayKey();
-  const [stack, released, rows] = await Promise.all([
-    computeDesignerStack(assigneeId, today),
-    prisma.teamDesignerJob.count({
-      where: {
-        assigneeId,
-        catchUpExempt: true,
-        status: { not: "DESIGN_DONE" },
-      },
-    }),
-    prisma.teamDesignerJob.findMany({
-      where: {
-        assigneeId,
-        status: { in: ["READY_TO_DESIGN", "IN_PROGRESS", "PAUSED"] },
-      },
-    }),
-  ]);
-  const meta = catchUpMetaFromStack(stack);
-  if (meta.catchUpSlots <= 0) return;
-  const ids = rows.map((r) => r.id);
-  const [linksMap, editMap] = await Promise.all([
-    loadDesignerJobLinksByIds(ids),
-    loadDesignerEditMetaByIds(ids),
-  ]);
-  const jobs = sortDesignerJobs(
-    rows.map((r) =>
-      toDesignerJobDto({
-        ...r,
-        links: linksMap.get(r.id) ?? [],
-        editRequestedAt: editMap.get(r.id)?.editRequestedAt ?? null,
-        editRequestNote: editMap.get(r.id)?.editRequestNote ?? null,
-        pauseRequestedAt: editMap.get(r.id)?.pauseRequestedAt ?? null,
-        pauseRequestNote: editMap.get(r.id)?.pauseRequestNote ?? null,
-        catchUpExempt: editMap.get(r.id)?.catchUpExempt ?? false,
-      })
-    )
-  );
-  const parts = partitionOpenDesignerQueue(jobs, DESIGNER_DAILY_TARGET, {
-    catchUpSlots: meta.catchUpSlots,
-    pendingFromLabel: meta.pendingFromLabel,
-    releasedSlots: released,
-  });
-  if (parts.effectiveCatchUpSlots <= 0) return;
-  if (parts.catchUp.some((j) => j.id === jobId)) return;
-  const from = meta.pendingFromLabel?.trim();
-  throw new Error(
-    from
-      ? `Complete Catch up first — finish the pending task from ${from} before starting today’s work.`
-      : "Complete Catch up first — finish the pending task before starting today’s work."
-  );
 }
 
 type Action =
@@ -360,7 +299,7 @@ export async function PATCH(
       });
     }
 
-    /** Admin: move overdue job out of Catch up into normal Open priority. */
+    /** Legacy admin action — no Catch up band; keeps exempt flag for history. */
     if (action === "release-catch-up") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       if (job.status === "DESIGN_DONE") {
@@ -413,17 +352,6 @@ export async function PATCH(
           { error: "Only Ready or Paused jobs can be started" },
           { status: 400 }
         );
-      }
-
-      // Catch up first — don't start Today/Upcoming while past-day debt remains
-      try {
-        await ensureCatchUpGate(job.assigneeId, job.id);
-      } catch (gateErr) {
-        const msg =
-          gateErr instanceof Error
-            ? gateErr.message
-            : "Complete Catch up before starting today’s tasks.";
-        return NextResponse.json({ error: msg }, { status: 409 });
       }
 
       const active = await findActiveDesignerJob(job.assigneeId);
@@ -824,10 +752,7 @@ export async function PATCH(
       });
     }
 
-    /**
-     * Admin Unsend — always → To send (WAITING_BRIEF).
-     * Keeps catchUpExempt so a Drop never re-enters Catch up / reopens a forgiven slot.
-     */
+    /** Admin Unsend — always → To send (WAITING_BRIEF). */
     if (action === "unsend") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       if (job.status === "WAITING_BRIEF") {
@@ -860,7 +785,7 @@ export async function PATCH(
       await setDesignerPauseRequest(id, { at: null, note: null });
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
-        message: "Unsent — in To send (not Catch up)",
+        message: "Unsent — in To send",
       });
     }
 

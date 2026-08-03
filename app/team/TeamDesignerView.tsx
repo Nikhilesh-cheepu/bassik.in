@@ -32,8 +32,8 @@ import {
   DESIGNER_DAILY_TARGET,
   DESIGNER_MONTH_OUTLET_IDS,
   DESIGNER_POINTS_PER_LEAVE,
+  DESIGNER_WEEKLY_TARGET,
   DESIGNER_WINDOW_DAYS,
-  catchUpMetaFromStack,
   designerFormatLabel,
   isBoilerplateDesignerDescription,
   partitionOpenDesignerQueueByAssignee,
@@ -49,7 +49,7 @@ import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { uploadTeamFile } from "@/lib/team-client-upload";
 import { teamDownloadHref } from "@/lib/team-download";
 import { teamOutletLabel } from "@/lib/team-outlets";
-import { IconTrash, IconUnsend } from "./TeamIcons";
+import { IconTrash, IconUnsend, IconWhatsApp } from "./TeamIcons";
 
 type QueueView = "open" | "toSend" | "closed" | "holiday" | "expired";
 
@@ -349,7 +349,6 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const [allJobs, setAllJobs] = useState<DesignerJobDto[]>([]);
   const [windowMeta, setWindowMeta] = useState<WindowMeta | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [uploadJobId, setUploadJobId] = useState<string | null>(null);
@@ -412,7 +411,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       if (!res.ok) return;
       setPerfDesigners((data.designers as DesignerPerformanceDto[]) ?? []);
       setReminders((data.reminders as DesignerReminderLogDto[]) ?? []);
-      setSuggestedNudges((data.suggested as DesignerSuggestedNudgeDto[]) ?? []);
+      const suggested = ((data.suggested as DesignerSuggestedNudgeDto[]) ?? []).filter(
+        (s) => s.assigneeId === "mahesh" || s.assigneeId === "jeslyn"
+      );
+      setSuggestedNudges(suggested);
     } catch {
       /* non-blocking */
     }
@@ -426,9 +428,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   }) => {
     const view = opts?.view ?? queueViewRef.current;
     const gen = ++loadGen.current;
-    if (!opts?.quiet) {
-      if (opts?.soft) setRefreshing(true);
-      else setLoading(true);
+    if (!opts?.quiet && !opts?.soft) {
+      setLoading(true);
     }
     try {
       const kind = jobsFetchKind(view);
@@ -453,9 +454,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         setError(err instanceof Error ? err.message : "Failed to load");
       }
     } finally {
-      if (gen === loadGen.current && !opts?.quiet) {
+      if (gen === loadGen.current && !opts?.quiet && !opts?.soft) {
         setLoading(false);
-        setRefreshing(false);
       }
     }
   }, [loadPerformance]);
@@ -463,7 +463,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const jobsFetchKindRef = useRef<"open" | "closed" | "expired" | null>(null);
   useEffect(() => {
     const next = jobsFetchKind(queueView);
-    // Catch up ↔ Open ↔ Holiday share the same open payload — no refetch
+    // Open ↔ Holiday share the same open payload — no refetch
     if (next === jobsFetchKindRef.current) {
       void loadPerformance();
       return;
@@ -509,7 +509,11 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         throw new Error(typeof data.error === "string" ? data.error : "Nudge failed");
       }
       setReminders((data.reminders as DesignerReminderLogDto[]) ?? []);
-      setSuggestedNudges((data.suggested as DesignerSuggestedNudgeDto[]) ?? []);
+      setSuggestedNudges(
+        ((data.suggested as DesignerSuggestedNudgeDto[]) ?? []).filter(
+          (s) => s.assigneeId === "mahesh" || s.assigneeId === "jeslyn"
+        )
+      );
       const first = (
         data.results as Array<{ delivery?: string; reason?: string; shareUrl?: string }>
       )?.[0];
@@ -518,11 +522,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         (data.reminders as DesignerReminderLogDto[])?.[0]?.shareUrl;
       if (first?.delivery === "skipped_no_config" && share) {
         openWhatsAppShareUrl(share);
-        setError("Opened WhatsApp — tap Send on your phone.");
-      } else if (first?.delivery === "sent") {
-        setError(`Nudge sent to ${designerDisplayName(assigneeId)}.`);
-      } else {
-        setError(first?.reason || "Nudge logged.");
+      } else if (first?.delivery !== "sent" && first?.reason) {
+        setError(first.reason);
       }
       void loadPerformance();
     } catch (err) {
@@ -533,6 +534,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   };
 
   const openSuggestedWa = async (s: DesignerSuggestedNudgeDto) => {
+    if (s.assigneeId === "amit" || s.kind === "amit_ready") return;
     const key = `${s.assigneeId}:${s.kind}:${s.jobId}`;
     setNudgeBusy(key);
     try {
@@ -551,9 +553,11 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       const data = await readJson(res);
       if (res.ok) {
         setReminders((data.reminders as DesignerReminderLogDto[]) ?? []);
-        setSuggestedNudges((data.suggested as DesignerSuggestedNudgeDto[]) ?? []);
+        const suggested = (
+          (data.suggested as DesignerSuggestedNudgeDto[]) ?? []
+        ).filter((x) => x.assigneeId === "mahesh" || x.assigneeId === "jeslyn");
+        setSuggestedNudges(suggested);
       }
-      setError(`WhatsApp opened for ${s.name} — tap Send.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not open WA");
     } finally {
@@ -779,7 +783,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const onQueueDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    // Only Today + Upcoming are sortable (Catch up stays fixed at top)
+    // Only Next up + Later are sortable
     const sortableList = [...openParts.todayPack, ...openParts.upNext];
     const visibleIds = sortableList.map((j) => j.id);
     const oldIndex = visibleIds.indexOf(String(active.id));
@@ -961,16 +965,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       } else {
         setAllJobs((prev) => prev.filter((j) => j.id !== id));
       }
-      const amitNudge = data.amitNudge as DesignerSuggestedNudgeDto | undefined;
-      if (amitNudge?.shareUrl && isAdmin) {
-        setSuggestedNudges((prev) => {
-          const rest = prev.filter((s) => s.kind !== "amit_ready");
-          return [amitNudge, ...rest];
-        });
-        setError("New tasks for Amit — Send WA (Send now).");
-      } else if (typeof data.message === "string") {
+      if (typeof data.message === "string") {
         setError(data.message);
       }
+      void loadPerformance();
       setUploadJobId(null);
       setUploadForm({ postingNotes: "", scheduleNote: "", waApproved: false, fileUrl: "" });
     } catch (err) {
@@ -1047,10 +1045,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   };
 
   const queue = jobs;
-  /**
-   * Catch-up debt is per designer (4/day shortfall) — never shrink it with outlet chips.
-   * Outlet filter is applied when rendering lists only.
-   */
+  /** Outlet filter is applied when rendering lists only. */
   const openJobsForPartition = useMemo(() => {
     return sortDesignerJobs(
       scopedJobs.filter(
@@ -1063,71 +1058,38 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   }, [scopedJobs]);
 
   const openPartsRaw = useMemo(() => {
-    const releasedByAssignee = new Map<string, number>();
-    for (const j of scopedJobs) {
-      if (j.status === "DESIGN_DONE" || !j.catchUpExempt) continue;
-      releasedByAssignee.set(
-        j.assigneeId,
-        (releasedByAssignee.get(j.assigneeId) ?? 0) + 1
-      );
-    }
+    // No Catch up band — one priority queue (Today focus + Upcoming)
     const metaMap = new Map(
-      perfDesigners.map((p) => {
-        const base = catchUpMetaFromStack(p.stack);
-        return [
-          p.assigneeId,
-          {
-            ...base,
-            releasedSlots: releasedByAssignee.get(p.assigneeId) ?? 0,
-          },
-        ] as const;
-      })
+      perfDesigners.map((p) => [
+        p.assigneeId,
+        { catchUpSlots: 0, pendingFromLabel: null as string | null },
+      ] as const)
     );
     return partitionOpenDesignerQueueByAssignee(
       openJobsForPartition,
       metaMap,
       DESIGNER_DAILY_TARGET
     );
-  }, [openJobsForPartition, perfDesigners, scopedJobs]);
+  }, [openJobsForPartition, perfDesigners]);
 
   const openParts = useMemo(() => {
     if (outletFilter === "all") return openPartsRaw;
     const filt = (list: DesignerJobDto[]) =>
       list.filter((j) => j.outletId === outletFilter);
     return {
-      catchUp: filt(openPartsRaw.catchUp),
+      catchUp: [] as DesignerJobDto[],
       todayPack: filt(openPartsRaw.todayPack),
       upNext: filt(openPartsRaw.upNext),
-      catchUpHint: openPartsRaw.catchUpHint,
-      effectiveCatchUpSlots: openPartsRaw.effectiveCatchUpSlots,
+      catchUpHint: "",
+      effectiveCatchUpSlots: 0,
     };
   }, [openPartsRaw, outletFilter]);
 
-  /** Effective catch-up debt after admin Drop catch-up (not raw missed slots). */
-  const catchUpDebt = openPartsRaw.effectiveCatchUpSlots;
-  const catchUpBadgeN = catchUpDebt;
-  const catchUpJobIds = useMemo(
-    () => new Set(openPartsRaw.catchUp.map((j) => j.id)),
-    [openPartsRaw.catchUp]
-  );
-
   const startJob = (
     job: DesignerJobDto,
-    opts?: { tone?: "catchUp" | "today" | "next" | "done" }
+    _opts?: { tone?: "catchUp" | "today" | "next" | "done" }
   ) => {
-    const mayStart =
-      opts?.tone === "catchUp" ||
-      catchUpJobIds.has(job.id) ||
-      job.catchUpExempt ||
-      catchUpBadgeN <= 0;
-    if (!mayStart) {
-      setError(
-        openPartsRaw.catchUpHint
-          ? `${openPartsRaw.catchUpHint} Don’t start Today until Catch up is done.`
-          : "Complete the pending Catch up task before starting today’s work."
-      );
-      return;
-    }
+    void _opts;
     void patchJob(job.id, {
       action: job.status === "PAUSED" ? "resume" : "start",
     });
@@ -1151,22 +1113,6 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     [sendableJobs, outletFilter]
   );
 
-  const catchUpOwedByAssignee = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const p of perfDesigners) {
-      const raw = (p.stack?.missedDays ?? []).reduce((n, d) => n + (d.missed ?? 0), 0);
-      // Include To send — Drop stays forgiven after Unsend
-      const released = scopedJobs.filter(
-        (j) =>
-          j.assigneeId === p.assigneeId &&
-          j.catchUpExempt &&
-          j.status !== "DESIGN_DONE"
-      ).length;
-      map.set(p.assigneeId, Math.max(0, raw - released));
-    }
-    return map;
-  }, [perfDesigners, scopedJobs]);
-
   const freeDeadlineSlots = useMemo(
     () =>
       suggestDesignerFreeDeadlineSlots(
@@ -1186,7 +1132,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         <div className="flex flex-wrap rounded-lg bg-black/35 p-1">
           {(
             [
-              ["open", catchUpBadgeN > 0 ? `Open · ${catchUpBadgeN} catch-up` : "Open"],
+              ["open", "Open"],
               ...(isAdmin
                 ? ([["toSend", toSendCount > 0 ? `To send (${toSendCount})` : "To send"]] as const)
                 : []),
@@ -1215,14 +1161,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
                       ? "bg-amber-400 text-black"
                       : id === "toSend"
                         ? "bg-amber-300 text-black"
-                        : id === "open" && catchUpBadgeN > 0
-                          ? "bg-amber-300 text-black"
-                          : "bg-white text-black"
-                  : id === "open" && catchUpBadgeN > 0
+                        : "bg-white text-black"
+                  : id === "toSend" && toSendCount > 0
                     ? "text-amber-200/90 hover:text-amber-100"
-                    : id === "toSend" && toSendCount > 0
-                      ? "text-amber-200/90 hover:text-amber-100"
-                      : "text-white/50 hover:text-white/80"
+                    : "text-white/50 hover:text-white/80"
               }`}
             >
               {label}
@@ -1265,44 +1207,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
             {windowMeta.fromDate} → {windowMeta.toDate}
           </p>
         ) : null}
-        {refreshing ? (
-          <span className="text-[11px] text-white/35">Refreshing…</span>
-        ) : null}
       </div>
-
-      {queueView === "open" ? (
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-          <p className="text-[12px] leading-snug text-white/65">
-            Minimum <span className="font-semibold text-white/90">4/day</span> Mon–Sat.
-            <span className="text-white/45">
-              {" "}
-              + Extra tasks earn holiday points.
-            </span>
-            {isAdmin && toSendCount > 0 ? (
-              <span className="text-amber-200/80">
-                {" "}
-                · {toSendCount} not sent —{" "}
-                <button
-                  type="button"
-                  className="font-semibold underline decoration-amber-200/40 underline-offset-2"
-                  onClick={() => startTransition(() => setQueueView("toSend"))}
-                >
-                  To send
-                </button>
-              </span>
-            ) : null}
-          </p>
-        </div>
-      ) : null}
-
-      {queueView === "toSend" ? (
-        <div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.07] px-3 py-2">
-          <p className="text-[12px] leading-snug text-amber-50/85">
-            Briefs not sent yet (calendar / fixed not ready). Sorted by design due date → event date.
-            Send when ready — they join Open and reshuffle by deadline.
-          </p>
-        </div>
-      ) : null}
 
       {queueView === "open" || queueView === "toSend"
         ? visiblePerf.map((p) => (
@@ -1310,10 +1215,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
               key={p.assigneeId}
               perf={p}
               isAdmin={isAdmin}
-              compact={!isAdmin}
-              catchUpOwed={catchUpOwedByAssignee.get(p.assigneeId) ?? 0}
-              nudgeBusy={nudgeBusy === p.assigneeId}
+              nudges={suggestedNudges.filter((s) => s.assigneeId === p.assigneeId)}
+              nudgeBusy={nudgeBusy}
               onNudge={() => void sendManualNudge(p.assigneeId)}
+              onOpenNudge={(s) => void openSuggestedWa(s)}
             />
           ))
         : null}
@@ -1322,95 +1227,40 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         <HolidayTabPanel designers={visiblePerf} />
       ) : null}
 
-      {isAdmin &&
-      queueView === "open" &&
-      suggestedNudges.filter(
-        (s) =>
-          s.kind === "amit_ready" ||
-          designerTab === "all" ||
-          s.assigneeId === designerTab
-      ).length > 0 ? (
-        <div className="space-y-2 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.06] px-3 py-2.5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90">
-            Send now
-          </p>
-          <ul className="space-y-1.5">
-            {suggestedNudges
-              .filter(
-                (s) =>
-                  s.kind === "amit_ready" ||
-                  designerTab === "all" ||
-                  s.assigneeId === designerTab
-              )
-              .sort((a, b) => {
-                if (a.kind === "amit_ready") return -1;
-                if (b.kind === "amit_ready") return 1;
-                return 0;
-              })
-              .slice(0, 5)
-              .map((s) => {
-              const key = `${s.assigneeId}:${s.kind}:${s.jobId}`;
-              const preview = s.body
-                .split("\n")
-                .map((line) => line.trim())
-                .filter(Boolean)
-                .slice(0, 3)
-                .join(" · ");
-              return (
-                <li
-                  key={key}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/25 px-2.5 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-semibold text-white/90">
-                      {s.name} · {s.label}
-                    </p>
-                    <p className="mt-0.5 line-clamp-2 text-[11px] text-white/50">{preview}</p>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={nudgeBusy === key}
-                    onClick={() => void openSuggestedWa(s)}
-                    className="h-9 shrink-0 rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black disabled:opacity-40"
-                  >
-                    {nudgeBusy === key ? "…" : "Send"}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+      {queueView === "toSend" ? (
+        <p className="text-[12px] text-white/45">
+          Holding briefs until ready — send to join Open by deadline.
+        </p>
       ) : null}
 
       {queueView === "expired" ? (
-        <p className="text-[11px] leading-relaxed text-white/45">
-          Downloadable files past go-live (or adhoc {HANDOFF_TTL_DAYS}+ days). Delete removes the
-          file only — Done history stays.
+        <p className="text-[11px] text-white/45">
+          Past go-live files. Delete clears the file — Done history stays.
         </p>
       ) : null}
 
       {isAdmin && (queueView === "open" || queueView === "toSend") ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setAdhocOpen((v) => !v)}
-            className="h-9 rounded-lg bg-amber-400 px-3.5 text-[12px] font-semibold text-black"
+            className="h-8 rounded-lg bg-amber-400 px-3 text-[12px] font-semibold text-black"
           >
-            + Add task
+            {adhocOpen ? "Close" : "+ Add task"}
           </button>
           <button
             type="button"
             disabled={busyId === "seed"}
             onClick={() => void seedWindow()}
-            className="h-9 rounded-lg bg-white/10 px-3 text-[11px] font-semibold text-white/80 disabled:opacity-40"
+            className="h-8 px-2 text-[11px] font-medium text-white/40 hover:text-white/70 disabled:opacity-40"
           >
-            Seed next {DESIGNER_WINDOW_DAYS} days
+            Seed {DESIGNER_WINDOW_DAYS}d
           </button>
           <button
             type="button"
             disabled={busyId === "seed"}
             onClick={() => void seedWindow(["WEEKEND"])}
-            className="h-9 rounded-lg bg-white/10 px-3 text-[11px] font-semibold text-white/70"
+            className="h-8 px-2 text-[11px] font-medium text-white/40 hover:text-white/70 disabled:opacity-40"
           >
             Seed Mahesh
           </button>
@@ -1418,7 +1268,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
             type="button"
             disabled={busyId === "seed"}
             onClick={() => void seedWindow(["WEEKDAY"])}
-            className="h-9 rounded-lg bg-white/10 px-3 text-[11px] font-semibold text-white/70"
+            className="h-8 px-2 text-[11px] font-medium text-white/40 hover:text-white/70 disabled:opacity-40"
           >
             Seed Jeslyn
           </button>
@@ -1647,17 +1497,15 @@ https://instagram.com/…"
 
       {error ? (
         <div
-          className={`rounded-xl px-3.5 py-3 text-[14px] font-semibold leading-snug ${
-            /catch up|pending task/i.test(error)
-              ? "border border-amber-300/50 bg-amber-400/15 text-amber-50"
-              : "border border-amber-400/25 bg-amber-400/[0.08] text-amber-100"
-          }`}
+          className="rounded-lg border border-amber-400/25 bg-amber-400/[0.08] px-3 py-2 text-[12px] text-amber-100"
           role="alert"
         >
           {error}
         </div>
       ) : null}
-      {loading ? <p className="text-[13px] text-white/40">Loading queue…</p> : null}
+      {loading && allJobs.length === 0 ? (
+        <p className="text-[12px] text-white/35">Loading…</p>
+      ) : null}
 
       <section className="space-y-3">
         {queue.length === 0 && !loading && queueView !== "toSend" ? (
@@ -1682,17 +1530,15 @@ https://instagram.com/…"
           const selected = selectedIds.has(job.id);
           const brief = jobBriefText(job);
           const toneClass =
-            tone === "catchUp"
-              ? "border-amber-400/45 bg-amber-400/[0.08] ring-1 ring-amber-400/20"
-              : job.status === "IN_PROGRESS"
-                ? "border-cyan-400/45 bg-cyan-400/[0.08] ring-1 ring-cyan-400/20"
-                : job.status === "PAUSED"
-                  ? "border-violet-400/35 bg-violet-400/[0.07]"
-                  : tone === "today"
-                    ? "border-white/[0.12] bg-white/[0.04]"
-                    : selected
-                      ? "border-cyan-400/40 bg-cyan-400/[0.07]"
-                      : "border-white/[0.08] bg-white/[0.03]";
+            job.status === "IN_PROGRESS"
+              ? "border-cyan-400/45 bg-cyan-400/[0.08] ring-1 ring-cyan-400/20"
+              : job.status === "PAUSED"
+                ? "border-violet-400/35 bg-violet-400/[0.07]"
+                : tone === "today"
+                  ? "border-white/[0.12] bg-white/[0.04]"
+                  : selected
+                    ? "border-cyan-400/40 bg-cyan-400/[0.07]"
+                    : "border-white/[0.08] bg-white/[0.03]";
           return (
           <article
             key={job.id}
@@ -1739,29 +1585,26 @@ https://instagram.com/…"
                     → {designer}
                   </span>
                   <span className={statusColor(job.status)}>{statusLabel(job.status)}</span>
-                  {job.catchUpExempt ? (
-                    <span className="font-semibold uppercase text-white/45">
-                      Dropped from catch-up
-                    </span>
-                  ) : null}
                   {job.urgent ? (
-                    <span className="font-bold uppercase text-amber-300">Urgent</span>
+                    <span className="font-semibold uppercase text-amber-300">Urgent</span>
                   ) : null}
                   {job.priorityMode === "PAUSE_NOW" ? (
-                    <span className="font-bold uppercase text-rose-300">
+                    <span className="font-semibold uppercase text-rose-300">
                       Pause & start now
                     </span>
                   ) : null}
                   {job.priorityMode === "AFTER_CURRENT" ? (
-                    <span className="font-bold uppercase text-orange-300">
+                    <span className="font-semibold uppercase text-orange-300">
                       After current
                     </span>
                   ) : null}
                   {job.isOverdue ? (
-                    <span className="font-bold uppercase text-red-300">Overdue</span>
+                    <span className="font-semibold uppercase text-amber-200/80">
+                      Past due
+                    </span>
                   ) : null}
                   {job.isDueToday ? (
-                    <span className="font-bold uppercase text-cyan-300">Due today</span>
+                    <span className="font-semibold uppercase text-cyan-300">Due today</span>
                   ) : null}
                   <span className="text-white/50">
                     Design due {job.dueDate.slice(8)}/{job.dueDate.slice(5, 7)} ·{" "}
@@ -1859,25 +1702,6 @@ https://instagram.com/…"
                     Start Job
                   </button>
                 ) : null}
-                {isAdmin && tone === "catchUp" && job.status !== "DESIGN_DONE" ? (
-                  <button
-                    type="button"
-                    disabled={busyId === job.id}
-                    title="Drop from Catch up — job joins Today/Upcoming by deadline; owed −1"
-                    onClick={() =>
-                      void patchJob(job.id, { action: "release-catch-up" }).then((ok) => {
-                        if (ok) {
-                          setError(
-                            "Dropped from Catch up — count −1 (no replacement). Job is in Today/Upcoming."
-                          );
-                        }
-                      })
-                    }
-                    className="h-11 min-h-[44px] rounded-lg border border-white/20 bg-white/10 px-3 text-[13px] font-semibold text-white/90 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
-                  >
-                    Drop catch-up
-                  </button>
-                ) : null}
                 {job.status === "PAUSED" && (isAdmin || job.assigneeId === memberId) ? (
                   <button
                     type="button"
@@ -1940,7 +1764,7 @@ https://instagram.com/…"
                       title={!job.fileUrl ? "Upload a creative first" : undefined}
                       onClick={() =>
                         void patchJob(job.id, { action: "mark-done" }).then((ok) => {
-                          if (ok) setError("Marked done — Amit Ready synced.");
+                          if (ok) setError("Done.");
                         })
                       }
                       className="h-11 min-h-[44px] rounded-lg bg-white px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
@@ -2003,7 +1827,7 @@ https://instagram.com/…"
                       title={!job.fileUrl ? "Upload a creative first" : undefined}
                       onClick={() =>
                         void patchJob(job.id, { action: "mark-done" }).then((ok) => {
-                          if (ok) setError("Marked done — Amit Ready synced.");
+                          if (ok) setError("Done.");
                         })
                       }
                       className="h-11 min-h-[44px] rounded-lg bg-white px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
@@ -2020,7 +1844,7 @@ https://instagram.com/…"
                       title={!job.fileUrl ? "Upload a creative first" : undefined}
                       onClick={() =>
                         void patchJob(job.id, { action: "mark-done" }).then((ok) => {
-                          if (ok) setError("Marked done — Amit Ready synced.");
+                          if (ok) setError("Done.");
                         })
                       }
                       className="h-9 rounded-lg bg-white px-3 text-[12px] font-semibold text-black disabled:opacity-40"
@@ -2569,9 +2393,6 @@ https://instagram.com/…"
                               <p className="mt-1 text-[12px] text-white/45">
                                 → {designer} · Not sent · design due{" "}
                                 {job.dueDate.slice(8)}/{job.dueDate.slice(5, 7)}
-                                {job.catchUpExempt
-                                  ? " · dropped from catch-up (stays out)"
-                                  : ""}
                               </p>
                             </div>
                           </div>
@@ -2721,39 +2542,18 @@ https://instagram.com/…"
             );
           }
 
-          const focusTitle = visiblePerf[0]?.isSundayHoliday ? "Today" : "Today";
-          const focusHint = "";
+          const focusTitle = "Open";
+          const focusHint = "Priority order — Start → Upload → Done";
 
           if (!canDragQueue) {
             return (
               <div className="space-y-5">
-                {catchUpDebt > openParts.catchUp.length && catchUpDebt > 0 && isAdmin ? (
-                  <p className="rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-[12px] text-white/60">
-                    Owed {catchUpDebt} · showing {openParts.catchUp.length}
-                    {outletFilter !== "all" ? " in this outlet — switch to All" : ""}.
-                  </p>
-                ) : null}
-                {renderSection(
-                  "Catch up",
-                  openParts.catchUpHint ||
-                    "Complete this before starting a new task.",
-                  openParts.catchUp,
-                  "catchUp",
-                  "text-amber-200"
-                )}
                 {renderSection(
                   focusTitle,
                   focusHint,
-                  openParts.todayPack,
+                  [...openParts.todayPack, ...openParts.upNext],
                   "today",
                   "text-white/70"
-                )}
-                {renderSection(
-                  "Upcoming",
-                  "",
-                  openParts.upNext,
-                  "next",
-                  "text-white/45"
                 )}
               </div>
             );
@@ -2766,14 +2566,6 @@ https://instagram.com/…"
               onDragEnd={onQueueDragEnd}
             >
               <div className="space-y-5">
-                {renderSection(
-                  "Catch up",
-                  openParts.catchUpHint ||
-                    "Complete this before starting a new task.",
-                  openParts.catchUp,
-                  "catchUp",
-                  "text-amber-200"
-                )}
                 <SortableContext
                   items={[...openParts.todayPack, ...openParts.upNext].map((j) => j.id)}
                   strategy={verticalListSortingStrategy}
@@ -2781,14 +2573,14 @@ https://instagram.com/…"
                   {(
                     [
                       [
-                        focusTitle,
+                        "Next up",
                         focusHint,
                         openParts.todayPack,
                         "today",
                         "text-white/70",
                       ],
                       [
-                        "Upcoming",
+                        "Later",
                         "",
                         openParts.upNext,
                         "next",
@@ -3082,75 +2874,142 @@ function HolidayTabPanel({ designers }: { designers: DesignerPerformanceDto[] })
   );
 }
 
+const WEEKDAY_FULL = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
+
+function addDaysYmdClient(ymd: string, delta: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y!, (m ?? 1) - 1, (d ?? 1) + delta));
+  const yy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getUTCDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+function dayDateLabel(ymd: string): string {
+  const day = Number(ymd.slice(8, 10));
+  const month = Number(ymd.slice(5, 7));
+  return `${day}/${month}`;
+}
+
 function DesignerPerformanceCard({
   perf,
   isAdmin,
-  compact,
+  nudges,
   nudgeBusy,
   onNudge,
+  onOpenNudge,
 }: {
   perf: DesignerPerformanceDto;
   isAdmin: boolean;
-  compact?: boolean;
-  /** kept for call-site compat — catch-up copy lives on the Catch up section */
-  catchUpOwed?: number;
-  nudgeBusy: boolean;
+  nudges: DesignerSuggestedNudgeDto[];
+  nudgeBusy: string | null;
   onNudge: () => void;
+  onOpenNudge: (s: DesignerSuggestedNudgeDto) => void;
 }) {
   const sunday = Boolean(perf.isSundayHoliday);
-  const done = perf.closedToday >= perf.dailyTarget && !sunday;
+  const weekStart = perf.stack.weekKey;
+  const byDate = new Map(perf.series.map((p) => [p.date, p]));
+  const weekDays = WEEKDAY_FULL.map((label, i) => {
+    const date = addDaysYmdClient(weekStart, i);
+    const pt = byDate.get(date);
+    const closed =
+      date === perf.today && !sunday ? perf.closedToday : pt?.closed ?? 0;
+    const isFuture = date > perf.today;
+    const isToday = date === perf.today;
+    return { label, date, closed, isFuture, isToday };
+  });
+  const weekClosed = Math.max(
+    perf.stack.weekClosed,
+    weekDays.reduce((n, d) => n + (d.isFuture ? 0 : d.closed), 0)
+  );
+  const weekTarget = DESIGNER_WEEKLY_TARGET;
+  const pendingNudges = nudges.slice(0, 3);
+
   return (
-    <div
-      className={`rounded-xl border px-3.5 py-3 ${
-        sunday
-          ? "border-violet-400/30 bg-violet-400/[0.07]"
-          : done
-            ? "border-emerald-400/30 bg-emerald-400/[0.07]"
-            : "border-white/10 bg-white/[0.03]"
-      }`}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[14px] font-semibold text-white/90">
             {perf.name}
-            {sunday ? " · Sunday" : " · today"}
+            <span className="ml-2 text-[12px] font-medium tabular-nums text-white/40">
+              {weekClosed}/{weekTarget} this week
+            </span>
           </p>
           {sunday ? (
-            <>
-              <p className="mt-0.5 text-[22px] font-semibold text-violet-100">
-                Happy holiday
-              </p>
-              <p className="mt-0.5 text-[13px] text-white/50">Enjoy your day.</p>
-            </>
+            <p className="mt-0.5 text-[11px] text-violet-200/70">Sunday off</p>
+          ) : perf.inProgress > 0 ? (
+            <p className="mt-0.5 text-[11px] text-cyan-200/70">
+              {perf.inProgress} in progress · today {perf.closedToday}/
+              {perf.dailyTarget || DESIGNER_DAILY_TARGET}
+            </p>
           ) : (
-            <p className="mt-0.5 text-[28px] font-semibold tabular-nums tracking-tight text-white">
-              {perf.closedToday}/{perf.dailyTarget}
-              <span className="ml-2 text-[13px] font-medium text-white/40">closed</span>
+            <p className="mt-0.5 text-[11px] text-white/35">
+              Today {perf.closedToday}/{perf.dailyTarget || DESIGNER_DAILY_TARGET} · aim 4/day
             </p>
           )}
         </div>
         {isAdmin ? (
-          <button
-            type="button"
-            disabled={nudgeBusy}
-            onClick={onNudge}
-            className="h-8 rounded-lg border border-cyan-400/35 bg-cyan-400/10 px-2.5 text-[11px] font-semibold text-cyan-100 disabled:opacity-40"
-          >
-            {nudgeBusy ? "Sending…" : "Send WA nudge"}
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            {pendingNudges.length > 0
+              ? pendingNudges.map((s) => {
+                  const key = `${s.assigneeId}:${s.kind}:${s.jobId}`;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      title={s.label}
+                      disabled={nudgeBusy === key}
+                      onClick={() => onOpenNudge(s)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/30 disabled:opacity-40"
+                    >
+                      <IconWhatsApp className="h-4 w-4" />
+                    </button>
+                  );
+                })
+              : (
+                <button
+                  type="button"
+                  title="WhatsApp nudge"
+                  disabled={nudgeBusy === perf.assigneeId}
+                  onClick={onNudge}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.06] text-white/55 ring-1 ring-white/10 hover:text-emerald-300 disabled:opacity-40"
+                >
+                  <IconWhatsApp className="h-4 w-4" />
+                </button>
+              )}
+          </div>
         ) : null}
       </div>
-      {!sunday && perf.inProgress > 0 ? (
-        <p className="mt-1.5 text-[12px] text-cyan-200/90">
-          {perf.inProgress} in progress
-        </p>
-      ) : null}
-      {!compact && !sunday && isAdmin ? (
-        <p className="mt-1.5 text-[11px] text-white/35">
-          Started {formatIstClock(perf.firstStartedAt)} · Last end{" "}
-          {formatIstClock(perf.lastEndedAt)}
-        </p>
-      ) : null}
+
+      <ul className="mt-2.5 divide-y divide-white/[0.06]">
+        {weekDays.map((d) => (
+          <li
+            key={d.date}
+            className={`flex items-center justify-between gap-3 py-1.5 text-[13px] ${
+              d.isToday ? "text-white" : d.isFuture ? "text-white/30" : "text-white/70"
+            }`}
+          >
+            <span className={d.isToday ? "font-semibold" : ""}>
+              {d.label}
+              <span className="ml-1.5 text-[11px] font-normal text-white/35">
+                {dayDateLabel(d.date)}
+                {d.isToday ? " · today" : ""}
+              </span>
+            </span>
+            <span className="tabular-nums">
+              {d.isFuture ? "—" : `${d.closed}`}
+              <span className="text-white/30">/{DESIGNER_DAILY_TARGET}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -86,7 +86,7 @@ function missedDaysLine(
 ): string | null {
   if (!missedDays?.length) return null;
   const m = missedDays[0]!;
-  return `Catch up from ${formatDayLabel(m.date)} is at the top of Open.`;
+  return `A few from ${formatDayLabel(m.date)} are still in Open — work the list in order.`;
 }
 
 function isBeforeWorkStart(hour: number): boolean {
@@ -357,7 +357,7 @@ export async function kindsDueNow(opts?: {
   const kinds: DesignerNudgeKind[] = [];
   const sunday = dayIdForYmd(getTodayKey()) === "sun";
 
-  // Sunday = holiday — only slow-task / overdue catch-up, no “today’s 4” nudges
+  // Sunday = holiday — only slow-task / due-soon, no “today’s 4” nudges
   if (sunday) {
     if (hour >= NO_START_HOUR_IST && hour < 21) kinds.push("slow_task");
     kinds.push("deadline_soon");
@@ -637,37 +637,23 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
     const queueNudge = await buildQueueUpdatedSuggestion(assigneeId, name, phone, hour);
     if (queueNudge) out.push(queueNudge);
 
-    // Before 11:30 IST: brief for the day (+ catch-up only if a prior full day missed 4/day)
+    // Before 11:30 IST: brief for the day
     if (beforeWork) {
-      const catchUpRaw = (stack.missedDays ?? []).reduce(
+      const missN = (stack.missedDays ?? []).reduce(
         (n, d) => n + (d.missed ?? 0),
         0
       );
-      // Admin “Send to Open” forgives one slot each (same as Open → Catch up band)
-      let released = 0;
-      try {
-        released = await prisma.teamDesignerJob.count({
-          where: {
-            assigneeId,
-            catchUpExempt: true,
-            status: { not: "DESIGN_DONE" },
-          },
-        });
-      } catch {
-        released = 0;
-      }
-      const catchUpN = Math.max(0, catchUpRaw - released);
       const miss = stack.missedDays?.[0];
       const missLabel = miss?.date ? formatDayLabel(miss.date) : null;
       const daily = sunday ? 0 : DESIGNER_DAILY_TARGET;
-      if (catchUpN > 0 || daily > 0 || perf.readyToStart > 0) {
+      if (missN > 0 || daily > 0 || perf.readyToStart > 0) {
         const lines: string[] = [
           `${name} — ${greetingForHourIst(hour)}.`,
           "Tasks are waiting for you.",
         ];
-        if (catchUpN > 0) {
+        if (missN > 0) {
           lines.push(
-            `Catch up from ${missLabel ?? "a past day"} is at the top of Open.`
+            `A few from ${missLabel ?? "earlier"} are still in Open — work the list in order.`
           );
         }
         lines.push("", designerQueueLink());
@@ -685,7 +671,7 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
       continue;
     }
 
-    // Sunday holiday — catch-up / slow only (no today’s 4 score)
+    // Sunday holiday — slow / due-soon only (no today’s 4 score)
     if (sunday) {
       if (active && activeAgeMs != null && activeAgeMs >= SLOW_TASK_MS) {
         push(
@@ -733,8 +719,8 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
     }
   }
 
-  const amit = await listAmitHandoffNudges();
-  return [...amit, ...out];
+  // Amit handoffs stay on Daily checklist — not Monthly designer queue
+  return out;
 }
 
 async function buildQueueUpdatedSuggestion(
