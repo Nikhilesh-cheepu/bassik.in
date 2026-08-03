@@ -32,7 +32,6 @@ import {
   DESIGNER_DAILY_TARGET,
   DESIGNER_MONTH_OUTLET_IDS,
   DESIGNER_POINTS_PER_LEAVE,
-  DESIGNER_WEEKLY_TARGET,
   DESIGNER_WINDOW_DAYS,
   catchUpMetaFromStack,
   designerFormatLabel,
@@ -3081,18 +3080,14 @@ function HolidayTabPanel({ designers }: { designers: DesignerPerformanceDto[] })
   );
 }
 
-const WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-function addDaysYmdClient(ymd: string, delta: number): string {
+function dayShortLabel(ymd: string): string {
   const [y, m, d] = ymd.split("-").map(Number);
-  const dt = new Date(Date.UTC(y!, (m ?? 1) - 1, (d ?? 1) + delta));
-  const yy = dt.getUTCFullYear();
-  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getUTCDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
+  const dt = new Date(Date.UTC(y!, (m ?? 1) - 1, d ?? 1));
+  return DAY_SHORT[dt.getUTCDay()] ?? "";
 }
 
-/** Calendar day only — never looks like a score (avoid "3/8"). */
 function dayOfMonthLabel(ymd: string): string {
   return String(Number(ymd.slice(8, 10)));
 }
@@ -3113,23 +3108,27 @@ function DesignerPerformanceCard({
   onOpenNudge: (s: DesignerSuggestedNudgeDto) => void;
 }) {
   const sunday = Boolean(perf.isSundayHoliday);
-  const weekStart = perf.stack.weekKey;
-  const byDate = new Map(perf.series.map((p) => [p.date, p]));
-  const weekDays = WEEKDAY_SHORT.map((label, i) => {
-    const date = addDaysYmdClient(weekStart, i);
-    const pt = byDate.get(date);
-    const closed =
-      date === perf.today && !sunday ? perf.closedToday : pt?.closed ?? 0;
-    const isFuture = date > perf.today;
-    const isToday = date === perf.today;
-    return { label, date, closed, isFuture, isToday };
-  });
-  const weekClosed = Math.max(
-    perf.stack.weekClosed,
-    weekDays.reduce((n, d) => n + (d.isFuture ? 0 : d.closed), 0)
-  );
-  const weekTarget = DESIGNER_WEEKLY_TARGET;
+  const catchMeta = catchUpMetaFromStack(perf.stack);
+  const catchUpN = catchMeta.catchUpSlots;
+  const doneTotal = perf.stack.closedSoFar;
+  const targetSoFar = perf.stack.targetSoFar;
   const pendingNudges = nudges.slice(0, 3);
+
+  // Rolling window day-by-day (same span as queue seed), Sundays shown but blocked
+  const dayStrip = perf.series.map((pt) => {
+    const isSunday = dayShortLabel(pt.date) === "Sun";
+    const isOff = pt.target <= 0;
+    const closed =
+      pt.date === perf.today && !sunday ? Math.max(pt.closed, perf.closedToday) : pt.closed;
+    return {
+      ...pt,
+      closed,
+      isSunday,
+      isOff,
+      isToday: pt.date === perf.today,
+      label: dayShortLabel(pt.date),
+    };
+  });
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3">
@@ -3138,19 +3137,38 @@ function DesignerPerformanceCard({
           <p className="text-[14px] font-semibold text-white/90">
             {perf.name}
             <span className="ml-2 text-[12px] font-medium tabular-nums text-white/40">
-              {weekClosed} of {weekTarget} this week
+              {doneTotal} done
+              {targetSoFar > 0 ? (
+                <span className="text-white/30"> · aim {targetSoFar}</span>
+              ) : null}
             </span>
           </p>
-          {sunday ? (
-            <p className="mt-0.5 text-[11px] text-violet-200/70">Sunday off</p>
-          ) : (
-            <p className="mt-0.5 text-[11px] text-white/40">
-              Aim {DESIGNER_DAILY_TARGET}/day
-              {perf.inProgress > 0
-                ? ` · ${perf.inProgress} in progress`
-                : ` · today ${perf.closedToday} done`}
-            </p>
-          )}
+          <p className="mt-0.5 text-[11px] text-white/40">
+            {catchUpN > 0 ? (
+              <span className="text-amber-200/85">
+                Catch up {catchUpN}
+                {catchMeta.pendingFromLabel
+                  ? ` · from ${catchMeta.pendingFromLabel}`
+                  : ""}
+              </span>
+            ) : (
+              <span>Catch up clear</span>
+            )}
+            {sunday ? (
+              <span className="text-violet-200/70"> · Sunday off</span>
+            ) : perf.inProgress > 0 ? (
+              <span>
+                {" "}
+                · {perf.inProgress} in progress · today {perf.closedToday}/
+                {DESIGNER_DAILY_TARGET}
+              </span>
+            ) : (
+              <span>
+                {" "}
+                · today {perf.closedToday}/{DESIGNER_DAILY_TARGET}
+              </span>
+            )}
+          </p>
         </div>
         {isAdmin ? (
           <div className="flex shrink-0 items-center gap-1">
@@ -3185,40 +3203,62 @@ function DesignerPerformanceCard({
         ) : null}
       </div>
 
-      <div className="mt-3 grid grid-cols-6 gap-1.5">
-        {weekDays.map((d) => (
+      <div className="-mx-0.5 mt-3 flex gap-1 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+        {dayStrip.map((d) => (
           <div
             key={d.date}
-            className={`rounded-lg px-1 py-2 text-center ${
-              d.isToday
-                ? "bg-cyan-400/15 ring-1 ring-cyan-400/35"
-                : "bg-white/[0.03]"
+            className={`w-[3.15rem] shrink-0 rounded-lg px-1 py-1.5 text-center ${
+              d.isSunday || d.isOff
+                ? "bg-violet-400/[0.07] ring-1 ring-violet-400/20"
+                : d.isToday
+                  ? "bg-cyan-400/15 ring-1 ring-cyan-400/35"
+                  : d.closed >= DESIGNER_DAILY_TARGET
+                    ? "bg-emerald-400/10"
+                    : "bg-white/[0.03]"
             }`}
+            title={
+              d.isSunday
+                ? `${d.date} · Sunday off${d.closed > 0 ? ` · ${d.closed} extra` : ""}`
+                : d.isOff
+                  ? `${d.date} · off`
+                  : `${d.date} · ${d.closed} of ${DESIGNER_DAILY_TARGET}`
+            }
           >
             <p
-              className={`text-[10px] font-semibold uppercase tracking-wide ${
+              className={`text-[9px] font-semibold uppercase tracking-wide ${
                 d.isToday ? "text-cyan-100" : "text-white/40"
               }`}
             >
               {d.label}
             </p>
             <p className="text-[9px] text-white/30">{dayOfMonthLabel(d.date)}</p>
-            <p
-              className={`mt-1 text-[18px] font-semibold tabular-nums leading-none ${
-                d.isFuture
-                  ? "text-white/20"
-                  : d.closed >= DESIGNER_DAILY_TARGET
-                    ? "text-emerald-200"
-                    : d.isToday
-                      ? "text-white"
-                      : "text-white/75"
-              }`}
-            >
-              {d.isFuture ? "—" : d.closed}
-            </p>
-            <p className="mt-0.5 text-[10px] tabular-nums text-white/30">
-              of {DESIGNER_DAILY_TARGET}
-            </p>
+            {d.isSunday || d.isOff ? (
+              <>
+                <p className="mt-1 text-[15px] font-semibold tabular-nums leading-none text-violet-100/80">
+                  {d.closed > 0 ? d.closed : "—"}
+                </p>
+                <p className="mt-0.5 text-[9px] text-violet-200/60">
+                  {d.closed > 0 ? "extra" : "off"}
+                </p>
+              </>
+            ) : (
+              <>
+                <p
+                  className={`mt-1 text-[15px] font-semibold tabular-nums leading-none ${
+                    d.closed >= DESIGNER_DAILY_TARGET
+                      ? "text-emerald-200"
+                      : d.isToday
+                        ? "text-white"
+                        : "text-white/75"
+                  }`}
+                >
+                  {d.closed}
+                </p>
+                <p className="mt-0.5 text-[9px] tabular-nums text-white/30">
+                  of {DESIGNER_DAILY_TARGET}
+                </p>
+              </>
+            )}
           </div>
         ))}
       </div>

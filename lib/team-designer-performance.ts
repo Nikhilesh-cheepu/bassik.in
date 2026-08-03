@@ -10,6 +10,7 @@ import {
   DESIGNER_POINTS_PER_LEAVE,
   DESIGNER_STACK_START_DATE,
   DESIGNER_WEEKLY_TARGET,
+  DESIGNER_WINDOW_DAYS,
   designerDisplayName,
   type DesignerDaySeriesPoint,
   type DesignerHolidaySundayDto,
@@ -44,7 +45,6 @@ function isStackWorkday(assigneeId: string, ymd: string): boolean {
 }
 
 const TZ = "Asia/Kolkata";
-const SERIES_DAYS = 14;
 /** After this IST hour, under-target becomes a hard red flag. */
 export const DESIGNER_RED_FLAG_HOUR_IST = 18;
 /**
@@ -630,7 +630,10 @@ async function dayActivity(assigneeId: string, ymd: string): Promise<{
 }
 
 async function buildSeries(assigneeId: string, today: string): Promise<DesignerDaySeriesPoint[]> {
-  const from = addDaysYmd(today, -(SERIES_DAYS - 1));
+  // Same rolling window as the queue seed (30d), clipped to stack start (1 Aug)
+  const windowFrom = addDaysYmd(today, -(DESIGNER_WINDOW_DAYS - 1));
+  const from =
+    windowFrom < DESIGNER_STACK_START_DATE ? DESIGNER_STACK_START_DATE : windowFrom;
   const { start } = istDayBounds(from);
   const { end } = istDayBounds(today);
 
@@ -672,16 +675,18 @@ async function buildSeries(assigneeId: string, today: string): Promise<DesignerD
   }
 
   const series: DesignerDaySeriesPoint[] = [];
-  for (let i = 0; i < SERIES_DAYS; i++) {
-    const date = addDaysYmd(from, i);
-    const workday = isStackWorkday("", date);
+  let cur = from;
+  for (let i = 0; i < DESIGNER_WINDOW_DAYS + 7 && cur <= today; i++) {
+    const workday = isStackWorkday(assigneeId, cur);
+    // Always show real closes (incl. Sunday extras); target 0 = blocked / off day
     series.push({
-      date,
-      closed: workday ? closedByDay.get(date) ?? 0 : 0,
+      date: cur,
+      closed: closedByDay.get(cur) ?? 0,
       target: workday ? DESIGNER_DAILY_TARGET : 0,
-      firstStart: firstStartByDay.get(date)?.toISOString() ?? null,
-      lastEnd: lastEndByDay.get(date)?.toISOString() ?? null,
+      firstStart: firstStartByDay.get(cur)?.toISOString() ?? null,
+      lastEnd: lastEndByDay.get(cur)?.toISOString() ?? null,
     });
+    cur = addDaysYmd(cur, 1);
   }
   return series;
 }
