@@ -212,6 +212,32 @@ function todayYmdLocal(): string {
   return `${y}-${m}-${d}`;
 }
 
+function isOpenDesignerStatus(s: DesignerJobDto["status"]): boolean {
+  return s === "READY_TO_DESIGN" || s === "IN_PROGRESS" || s === "PAUSED";
+}
+
+/**
+ * Place sudden / deadline jobs into a clean 1…N order.
+ * In progress / paused stay on top; everything else by design due → post date.
+ */
+function orderOpenJobsByDeadline(jobs: DesignerJobDto[]): DesignerJobDto[] {
+  const active = jobs.filter((j) => j.status === "IN_PROGRESS");
+  const paused = jobs.filter((j) => j.status === "PAUSED");
+  const rest = jobs
+    .filter((j) => j.status !== "IN_PROGRESS" && j.status !== "PAUSED")
+    .slice()
+    .sort((a, b) => {
+      if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      if (a.postDate !== b.postDate) return a.postDate.localeCompare(b.postDate);
+      if (a.outletId !== b.outletId) return a.outletId.localeCompare(b.outletId);
+      const fa = a.format === "calendar" ? 1 : a.format.startsWith("adhoc") ? 2 : 0;
+      const fb = b.format === "calendar" ? 1 : b.format.startsWith("adhoc") ? 2 : 0;
+      if (fa !== fb) return fa - fb;
+      return (a.title || "").localeCompare(b.title || "");
+    });
+  return [...active, ...paused, ...rest];
+}
+
 type Props = {
   isAdmin: boolean;
   memberId: string;
@@ -740,15 +766,36 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       priorityMode,
       urgent: priorityMode !== "NONE" ? true : job.urgent,
     });
-    if (ok) setBriefJobId((cur) => (cur === job.id ? null : cur));
+    if (ok) {
+      setBriefJobId((cur) => (cur === job.id ? null : cur));
+      // Job joined Open — slot by deadline and renumber Q1…Qn
+      setAllJobs((prev) => {
+        const snapshot = prev.map((j) =>
+          j.id === job.id
+            ? {
+                ...j,
+                status: "READY_TO_DESIGN" as const,
+                priorityMode:
+                  priorityMode === "NONE" ? ("NONE" as const) : priorityMode,
+              }
+            : j
+        );
+        queueMicrotask(() =>
+          resyncAssigneeQueueByDeadline(job.assigneeId, snapshot)
+        );
+        return snapshot;
+      });
+    }
     return ok;
   };
 
   const persistQueueOrder = async (orderedIds: string[]) => {
+    if (orderedIds.length === 0) return;
     const orderMap = new Map(
       orderedIds.map((id, i) => [id, i - orderedIds.length] as const)
     );
     setError(null);
+    // Sequential pins → Q1…Qn follow this list immediately (drag + sudden inserts)
     setAllJobs((prev) =>
       sortDesignerJobs(
         prev.map((j) =>
@@ -779,6 +826,18 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       setError(err instanceof Error ? err.message : "Reorder failed");
       void load({ soft: true });
     }
+  };
+
+  /** Re-slot one designer’s Open list by deadline so Q# matches (new task in the middle). */
+  const resyncAssigneeQueueByDeadline = (
+    assigneeId: string,
+    jobsSnapshot: DesignerJobDto[]
+  ) => {
+    const open = jobsSnapshot.filter(
+      (j) => j.assigneeId === assigneeId && isOpenDesignerStatus(j.status)
+    );
+    const ordered = orderOpenJobsByDeadline(open);
+    void persistQueueOrder(ordered.map((j) => j.id));
   };
 
   const onQueueDragEnd = (event: DragEndEvent) => {
@@ -824,6 +883,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     setError(null);
     let okCount = 0;
     try {
+      const touchedAssignees = new Set<string>();
       for (const id of ids) {
         const job = allJobs.find((j) => j.id === id);
         if (!job || job.status !== "WAITING_BRIEF") continue;
@@ -839,9 +899,22 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           },
           { quiet: true }
         );
-        if (ok) okCount += 1;
+        if (ok) {
+          okCount += 1;
+          touchedAssignees.add(job.assigneeId);
+        }
       }
       setSelectedIds(new Set());
+      if (touchedAssignees.size > 0) {
+        setAllJobs((prev) => {
+          queueMicrotask(() => {
+            for (const assigneeId of touchedAssignees) {
+              resyncAssigneeQueueByDeadline(assigneeId, prev);
+            }
+          });
+          return prev;
+        });
+      }
       setError(
         okCount > 0
           ? `Sent ${okCount} job${okCount === 1 ? "" : "s"} to designer.`
@@ -1045,7 +1118,28 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       });
       const created = data.job as DesignerJobDto | undefined;
       if (created) {
-        setAllJobs((prev) => [created, ...prev.filter((j) => j.id !== created.id)]);
+        const merged = [
+          created,
+          ...allJobs.filter((j) => j.id !== created.id),
+        ];
+        setAllJobs(merged);
+        if (created.priorityMode === "PAUSE_NOW" || created.priorityMode === "AFTER_CURRENT") {
+          // Jump near the top (after anything already in progress), then renumber
+          const open = merged.filter(
+            (j) =>
+              j.assigneeId === created.assigneeId && isOpenDesignerStatus(j.status)
+          );
+          const active = open.filter((j) => j.status === "IN_PROGRESS");
+          const rest = orderOpenJobsByDeadline(
+            open.filter((j) => j.id !== created.id && j.status !== "IN_PROGRESS")
+          );
+          void persistQueueOrder(
+            [...active, created, ...rest].map((j) => j.id)
+          );
+        } else {
+          // Insert by deadline + renumber Q1…Qn for that designer
+          resyncAssigneeQueueByDeadline(created.assigneeId, merged);
+        }
       }
       setDesignerTab(adhoc.assigneeId);
       const nudge = data.priorityNudge as { delivery?: string } | null | undefined;
@@ -1120,7 +1214,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
 
   const catchUpDebt = openPartsRaw.effectiveCatchUpSlots;
 
-  /** Per-designer Q# 1…N in current priority order (Catch up → Today → Later). */
+  /**
+   * Live Q# 1…N per designer from current priority order.
+   * Updates whenever drag, deadline insert, send, or close reshuffles the list.
+   */
   const queueNumberById = useMemo(() => {
     const map = new Map<string, number>();
     for (const assigneeId of ["mahesh", "jeslyn"] as const) {
@@ -1624,7 +1721,10 @@ https://instagram.com/…"
                 <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-300/75">
                   {queueNo != null ? (
-                    <span className="mr-2 rounded bg-white/10 px-1.5 py-0.5 tabular-nums text-white/70">
+                    <span
+                      className="mr-2 rounded bg-cyan-400/15 px-1.5 py-0.5 tabular-nums font-bold text-cyan-100/90"
+                      title="Live queue position — updates on drag or new tasks"
+                    >
                       Q{queueNo}
                     </span>
                   ) : null}
