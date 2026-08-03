@@ -83,7 +83,7 @@ function missedDaysLine(
 ): string | null {
   if (!missedDays?.length) return null;
   const m = missedDays[0]!;
-  return `Small heads-up: ${formatDayLabel(m.date)} was ${m.closed}/4 — ${m.missed} still in Catch up at the top of Open when you’re free.`;
+  return `Catch up from ${formatDayLabel(m.date)} is at the top of Open.`;
 }
 
 function isBeforeWorkStart(hour: number): boolean {
@@ -92,12 +92,7 @@ function isBeforeWorkStart(hour: number): boolean {
 
 function sundayNote(todayYmd: string): string | null {
   if (dayIdForYmd(todayYmd) !== "sun") return null;
-  return "Happy Sunday — rest well. If you feel like working the next-day pack, that’s optional and earns holiday points.";
-}
-
-/** Soft closer — reminder tone, not a warning. */
-function softCloser(): string {
-  return "No stress — just a gentle reminder. You’ve got this. Reply if anything’s blocking you and we’ll adjust.";
+  return "Happy Sunday — enjoy your day.";
 }
 
 function nudgeLabel(kind: DesignerNudgeKind): string {
@@ -272,81 +267,53 @@ function buildNudgeBody(params: {
   activeAgeMs?: number | null;
 }): string {
   const link = designerQueueLink();
-  const yesterday = addDaysYmd(params.todayYmd, -1);
-  const beforeWork = isBeforeWorkStart(params.hour);
-  const focusYmd = beforeWork ? yesterday : params.todayYmd;
-  const focusClosed = beforeWork ? params.closedYesterday : params.closedToday;
-  const focusLabel = formatDayLabel(focusYmd);
   const miss = shortMissLine(params.readyJobs);
   const dayMiss = missedDaysLine(params.missedDays);
   const sun = sundayNote(params.todayYmd);
-  const leave = params.leaveDaysEarned ?? 0;
-  const stackBit =
-    params.stackedBehind > 0
-      ? `A little stack from earlier days (${params.stackedBehind}) — clear it whenever the day allows, no rush panic.`
-      : leave > 0
-        ? `Nice — leave banked: ${leave} day(s). Extra closes still help.`
-        : "Aim for 4/day Mon–Sat when you can. Heavy days happen — we just keep the queue tidy.";
-
-  const focusLine = `On ${focusLabel}: ${focusClosed}/${DESIGNER_DAILY_TARGET} closed so far.`;
-  const pendingBit = miss ? `Next up: ${miss}` : null;
 
   let head: string[];
   switch (params.kind) {
     case "no_start":
       head = [
         `${params.name} — ${greetingForHourIst(params.hour)}.`,
-        "Friendly nudge: Open isn’t started yet today. Whenever you’re ready, hit Start Job on the top task.",
+        "Tasks are waiting for you.",
         dayMiss,
       ].filter(Boolean) as string[];
       break;
     case "slow_task":
       head = [
-        `${params.name} — quick check-in on “${params.activeTitle ?? "this job"}” (~${formatDuration(params.activeAgeMs ?? SLOW_TASK_MS)}).`,
-        `Today: ${params.closedToday}/${DESIGNER_DAILY_TARGET}. Take a break if you need — or wrap and move when it feels right.`,
+        `${params.name} — ${greetingForHourIst(params.hour)}.`,
+        `Still on “${params.activeTitle ?? "your task"}” — wrap up when you can.`,
       ];
       break;
     case "behind_pace":
       head = [
-        `${params.name} — ${greetingForHourIst(params.hour)}. Soft reminder for pace.`,
-        dayMiss ?? focusLine,
-        pendingBit,
-        stackBit,
+        `${params.name} — ${greetingForHourIst(params.hour)}.`,
+        "Tasks are waiting for you.",
+        dayMiss,
       ].filter(Boolean) as string[];
       break;
     case "deadline_soon":
       head = [
-        `${params.name} — gentle deadline reminder:`,
-        pendingBit ?? "Some Ready work is past its usual 8 PM window.",
-        dayMiss ?? (beforeWork ? focusLine : null),
-        stackBit,
-      ].filter(Boolean) as string[];
+        `${params.name} — ${greetingForHourIst(params.hour)}.`,
+        miss ? `A few tasks need you: ${miss}` : "Tasks are waiting for you.",
+      ];
       break;
     case "missed_target":
       head = [
-        `${params.name} — end-of-day note (not a scolding).`,
-        dayMiss ?? focusLine,
-        pendingBit,
-        "If today was a heavy creative day, that’s okay — we’ll tidy Catch up when you can.",
-        stackBit,
+        `${params.name} — ${greetingForHourIst(params.hour)}.`,
+        "Tasks are waiting for you.",
+        dayMiss,
       ].filter(Boolean) as string[];
       break;
     default:
       head = [
-        `${params.name} — quick reminder from the Design queue.`,
-        dayMiss ?? focusLine,
-        stackBit,
-      ].filter(Boolean) as string[];
+        `${params.name} — ${greetingForHourIst(params.hour)}.`,
+        "Tasks are waiting for you.",
+      ];
   }
 
-  return [
-    ...head,
-    sun,
-    "",
-    softCloser(),
-    "",
-    `Design tab: ${link}`,
-  ]
+  return [...head, sun, "", link]
     .filter((line): line is string => line != null && line !== undefined)
     .join("\n");
 }
@@ -686,29 +653,16 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
       const missLabel = miss?.date ? formatDayLabel(miss.date) : null;
       const daily = sunday ? 0 : DESIGNER_DAILY_TARGET;
       if (catchUpN > 0 || daily > 0 || perf.readyToStart > 0) {
-        const lines: string[] = [`${name} — ${greetingForHourIst(hour)}.`];
+        const lines: string[] = [
+          `${name} — ${greetingForHourIst(hour)}.`,
+          "Tasks are waiting for you.",
+        ];
         if (catchUpN > 0) {
           lines.push(
-            `There’s a small Catch up from ${
-              missLabel ?? "a past day"
-            } (${catchUpN}) at the top of Open — finish that when you can, then today’s pack.`
+            `Catch up from ${missLabel ?? "a past day"} is at the top of Open.`
           );
-          if (daily > 0) {
-            lines.push(`After that, today’s aim is ${daily}.`);
-          }
-        } else if (daily > 0) {
-          lines.push(
-            `Today’s aim is ${daily} — start whenever you’re ready (Start Job on the top card).`
-          );
-        } else {
-          lines.push("Queue is on the Design tab whenever you need it.");
         }
-        lines.push(
-          "",
-          "Quick tip: refresh Open before you start — order can update. You’ve got this.",
-          "",
-          designerQueueLink()
-        );
+        lines.push("", designerQueueLink());
         const body = lines.join("\n");
         out.push({
           assigneeId,
@@ -885,31 +839,27 @@ export async function sendPriorityJobAlert(params: {
   let body: string;
   if (params.priorityMode === "PAUSE_NOW") {
     const activeBit = active
-      ? `Please pause “${active.title}” and Start this priority job when you can.`
-      : "Nothing in progress — Start this priority job when you’re free.";
+      ? `Pause “${active.title}” and start this when you can.`
+      : "Start this when you’re free.";
     body = [
-      `${name} — priority task for you:`,
+      `${name} — ${greetingForHourIst(istHourNow())}.`,
+      "A priority task is waiting for you:",
       jobLine,
       activeBit,
       "",
-      "Thanks for jumping on this when you can. Reply if timing is tough — we’ll work it out.",
-      "",
-      `Design tab: ${designerQueueLink()}`,
+      designerQueueLink(),
     ].join("\n");
   } else {
     const activeBit = active
-      ? activeAgeMs != null && activeAgeMs >= FINISH_ASAP_MIN_MS
-        ? `After you wrap “${active.title}” (~${formatDuration(activeAgeMs)} so far), Start this next.`
-        : `Finish your current job “${active.title}”, then Start this next.`
-      : "No job in progress — Start this when you’re ready.";
+      ? `After “${active.title}”, start this next.`
+      : "Start this when you’re ready.";
     body = [
-      `${name} — priority after your current job:`,
+      `${name} — ${greetingForHourIst(istHourNow())}.`,
+      "A priority task is waiting for you:",
       jobLine,
       activeBit,
       "",
-      "Thanks — reply if you need a different order.",
-      "",
-      `Design tab: ${designerQueueLink()}`,
+      designerQueueLink(),
     ].join("\n");
   }
 
