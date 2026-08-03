@@ -587,6 +587,7 @@ export type DesignerNudgeKind =
   | "slow_task"
   | "priority_pause_now"
   | "priority_after_current"
+  | "queue_updated"
   | "amit_ready";
 
 export type DesignerReminderLogDto = {

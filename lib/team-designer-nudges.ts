@@ -111,6 +111,8 @@ function nudgeLabel(kind: DesignerNudgeKind): string {
       return "Priority — pause now";
     case "priority_after_current":
       return "Priority — after current";
+    case "queue_updated":
+      return "Queue updated";
     case "amit_ready":
       return "New tasks · Amit";
     default:
@@ -810,8 +812,7 @@ export async function listRecentReminderLogs(limit = 40): Promise<DesignerRemind
 }
 
 /**
- * When admin sends a priority Ready job — WA the designer with interrupt instructions.
- * Only READY_TO_DESIGN (this job) is mentioned; never Waiting brief.
+ * When admin Sends a task (or pins priority) — soft WA that the Open queue changed.
  */
 export async function sendPriorityJobAlert(params: {
   jobId: string;
@@ -821,47 +822,40 @@ export async function sendPriorityJobAlert(params: {
   postDate: string;
   priorityMode: DesignerPriorityMode;
 }): Promise<NudgeRunResult | null> {
-  if (params.priorityMode !== "PAUSE_NOW" && params.priorityMode !== "AFTER_CURRENT") {
-    return null;
-  }
-
   const dateKey = getTodayKey();
   const name = designerDisplayName(params.assigneeId);
   const outlet = teamOutletLabel(params.outletId);
   const jobLine = `• ${params.title} (${outlet} · ${params.postDate})`;
   const active = await findActiveDesignerJob(params.assigneeId);
-  const activeAgeMs =
-    active?.startedAt != null ? Date.now() - active.startedAt.getTime() : null;
 
   const kind: DesignerNudgeKind =
-    params.priorityMode === "PAUSE_NOW" ? "priority_pause_now" : "priority_after_current";
+    params.priorityMode === "PAUSE_NOW"
+      ? "priority_pause_now"
+      : params.priorityMode === "AFTER_CURRENT"
+        ? "priority_after_current"
+        : "queue_updated";
 
-  let body: string;
+  const lines = [
+    `${name} — ${greetingForHourIst(istHourNow())}.`,
+    "Just want to let you know — the priority queue changed. Have a look when you can.",
+  ];
   if (params.priorityMode === "PAUSE_NOW") {
-    const activeBit = active
-      ? `Pause “${active.title}” and start this when you can.`
-      : "Start this when you’re free.";
-    body = [
-      `${name} — ${greetingForHourIst(istHourNow())}.`,
-      "A priority task is waiting for you:",
-      jobLine,
-      activeBit,
-      "",
-      designerQueueLink(),
-    ].join("\n");
-  } else {
-    const activeBit = active
-      ? `After “${active.title}”, start this next.`
-      : "Start this when you’re ready.";
-    body = [
-      `${name} — ${greetingForHourIst(istHourNow())}.`,
-      "A priority task is waiting for you:",
-      jobLine,
-      activeBit,
-      "",
-      designerQueueLink(),
-    ].join("\n");
+    lines.push(jobLine);
+    lines.push(
+      active
+        ? `When free, pause “${active.title}” and start this one.`
+        : "Start this when you’re free."
+    );
+  } else if (params.priorityMode === "AFTER_CURRENT") {
+    lines.push(jobLine);
+    lines.push(
+      active
+        ? `After “${active.title}”, this is next.`
+        : "It’s on Open when you’re ready."
+    );
   }
+  lines.push("", designerQueueLink());
+  const body = lines.join("\n");
 
   return logAndMaybeSend({
     assigneeId: params.assigneeId,
@@ -871,7 +865,7 @@ export async function sendPriorityJobAlert(params: {
     body,
     templateParams: [
       name,
-      params.priorityMode === "PAUSE_NOW" ? "Priority — pause & start now" : "Priority — after current",
+      "Priority queue changed",
       params.title.slice(0, 200),
     ],
     force: true,

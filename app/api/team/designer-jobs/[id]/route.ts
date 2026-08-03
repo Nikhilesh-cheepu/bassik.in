@@ -254,12 +254,7 @@ export async function PATCH(
       }
 
       let priorityNudge: Awaited<ReturnType<typeof sendPriorityJobAlert>> = null;
-      if (
-        action === "brief-ready" &&
-        status === "READY_TO_DESIGN" &&
-        priorityMode &&
-        priorityMode !== "NONE"
-      ) {
+      if (action === "brief-ready" && status === "READY_TO_DESIGN") {
         try {
           priorityNudge = await sendPriorityJobAlert({
             jobId: updated.id,
@@ -267,10 +262,10 @@ export async function PATCH(
             title: updated.title,
             outletId: updated.outletId,
             postDate: updated.postDate,
-            priorityMode,
+            priorityMode: priorityMode ?? "NONE",
           });
         } catch (e) {
-          console.error("[designer-jobs] priority WA", e);
+          console.error("[designer-jobs] queue-updated WA", e);
         }
         if (priorityMode === "PAUSE_NOW") {
           await prisma.teamDesignerJob.updateMany({

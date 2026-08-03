@@ -397,19 +397,17 @@ export async function POST(req: NextRequest) {
     }
 
     let priorityNudge = null;
-    if (priorityMode !== "NONE") {
-      try {
-        priorityNudge = await sendPriorityJobAlert({
-          jobId: job.id,
-          assigneeId: job.assigneeId,
-          title: job.title,
-          outletId: job.outletId,
-          postDate: job.postDate,
-          priorityMode,
-        });
-      } catch (e) {
-        console.error("[designer-jobs] adhoc priority WA", e);
-      }
+    try {
+      priorityNudge = await sendPriorityJobAlert({
+        jobId: job.id,
+        assigneeId: job.assigneeId,
+        title: job.title,
+        outletId: job.outletId,
+        postDate: job.postDate,
+        priorityMode,
+      });
+    } catch (e) {
+      console.error("[designer-jobs] queue-updated WA", e);
     }
 
     if (priorityMode === "PAUSE_NOW") {
