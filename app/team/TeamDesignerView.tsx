@@ -375,6 +375,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const [allJobs, setAllJobs] = useState<DesignerJobDto[]>([]);
   const [windowMeta, setWindowMeta] = useState<WindowMeta | null>(null);
   const [loading, setLoading] = useState(true);
+  /** False until first performance/stack payload — needed for Catch up bands. */
+  const [perfReady, setPerfReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [uploadJobId, setUploadJobId] = useState<string | null>(null);
@@ -430,21 +432,56 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const queueViewRef = useRef(queueView);
   queueViewRef.current = queueView;
 
-  const loadPerformance = useCallback(async () => {
-    try {
-      const res = await fetch("/api/team/designer-performance");
-      const data = await readJson(res);
-      if (!res.ok) return;
-      setPerfDesigners((data.designers as DesignerPerformanceDto[]) ?? []);
-      setReminders((data.reminders as DesignerReminderLogDto[]) ?? []);
-      const suggested = ((data.suggested as DesignerSuggestedNudgeDto[]) ?? []).filter(
+  const applyPerformancePayload = useCallback((data: Record<string, unknown>) => {
+    setPerfDesigners((data.designers as DesignerPerformanceDto[]) ?? []);
+    if (Array.isArray(data.reminders)) {
+      setReminders(data.reminders as DesignerReminderLogDto[]);
+    }
+    if (Array.isArray(data.suggested)) {
+      const suggested = (data.suggested as DesignerSuggestedNudgeDto[]).filter(
         (s) => s.assigneeId === "mahesh" || s.assigneeId === "jeslyn"
       );
       setSuggestedNudges(suggested);
+    }
+    setPerfReady(true);
+  }, []);
+
+  /** Fast path: stack + series only (Catch up / day strip). */
+  const loadPerformanceLite = useCallback(async () => {
+    const res = await fetch("/api/team/designer-performance?lite=1", {
+      cache: "no-store",
+    });
+    const data = await readJson(res);
+    if (!res.ok) {
+      throw new Error(
+        typeof data.error === "string" ? data.error : "Performance failed"
+      );
+    }
+    applyPerformancePayload(data);
+  }, [applyPerformancePayload]);
+
+  /** WA suggestion icons — heavy; never block first paint. */
+  const loadPerformanceExtras = useCallback(async () => {
+    try {
+      const res = await fetch("/api/team/designer-performance", {
+        cache: "no-store",
+      });
+      const data = await readJson(res);
+      if (!res.ok) return;
+      applyPerformancePayload(data);
     } catch {
       /* non-blocking */
     }
-  }, []);
+  }, [applyPerformancePayload]);
+
+  const loadPerformance = useCallback(async () => {
+    try {
+      await loadPerformanceLite();
+      void loadPerformanceExtras();
+    } catch {
+      /* non-blocking on soft refresh */
+    }
+  }, [loadPerformanceLite, loadPerformanceExtras]);
 
   const load = useCallback(async (opts?: {
     soft?: boolean;
@@ -454,7 +491,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   }) => {
     const view = opts?.view ?? queueViewRef.current;
     const gen = ++loadGen.current;
-    if (!opts?.quiet && !opts?.soft) {
+    const blocking = !opts?.quiet && !opts?.soft;
+    if (blocking) {
       setLoading(true);
     }
     try {
@@ -465,26 +503,34 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           : kind === "expired"
             ? "?view=expired"
             : "";
-      const res = await fetch(`/api/team/designer-jobs${qs}`, {
-        cache: "no-store",
-      });
-      const data = await readJson(res);
+      // Jobs + lite performance together — Catch up ready on first paint (no WA wait)
+      const [jobsRes] = await Promise.all([
+        fetch(`/api/team/designer-jobs${qs}`, { cache: "no-store" }),
+        loadPerformanceLite().catch(() => undefined),
+      ]);
+      const data = await readJson(jobsRes);
       if (gen !== loadGen.current) return;
+      if (!jobsRes.ok) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "Failed to load"
+        );
+      }
       setAllJobs((data.jobs as DesignerJobDto[]) ?? []);
       setWindowMeta((data.window as WindowMeta) ?? null);
       if (!opts?.quiet) setError(null);
-      void loadPerformance();
+      // WA nudge icons in background — never block Catch up / day strip
+      void loadPerformanceExtras();
     } catch (err) {
       if (gen !== loadGen.current) return;
       if (!opts?.quiet) {
         setError(err instanceof Error ? err.message : "Failed to load");
       }
     } finally {
-      if (gen === loadGen.current && !opts?.quiet && !opts?.soft) {
+      if (gen === loadGen.current && blocking) {
         setLoading(false);
       }
     }
-  }, [loadPerformance]);
+  }, [loadPerformanceLite, loadPerformanceExtras]);
 
   const jobsFetchKindRef = useRef<"open" | "closed" | "expired" | null>(null);
   useEffect(() => {
@@ -1357,6 +1403,21 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         ) : null}
       </div>
 
+      {loading || ((queueView === "open" || queueView === "toSend") && !perfReady) ? (
+        <div
+          className="flex items-center gap-2.5 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.07] px-3.5 py-3"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-cyan-300/30 border-t-cyan-300" />
+          <p className="text-[13px] font-medium text-cyan-50/90">
+            {loading && allJobs.length === 0
+              ? "Loading queue…"
+              : "Loading Catch up & daily progress…"}
+          </p>
+        </div>
+      ) : null}
+
       {queueView === "open" || queueView === "toSend"
         ? visiblePerf.map((p) => (
             <DesignerPerformanceCard
@@ -1651,12 +1712,13 @@ https://instagram.com/…"
           {error}
         </div>
       ) : null}
-      {loading && allJobs.length === 0 ? (
-        <p className="text-[12px] text-white/35">Loading…</p>
-      ) : null}
-
       <section className="space-y-3">
-        {queue.length === 0 && !loading && queueView !== "toSend" ? (
+        {queueView === "open" && !perfReady ? (
+          <p className="text-[12px] text-white/40">
+            Waiting for progress data so Catch up / Today stay accurate…
+          </p>
+        ) : null}
+        {queue.length === 0 && !loading && perfReady && queueView !== "toSend" ? (
           <p className="text-[13px] text-white/35">
             {queueView === "closed"
               ? "No done jobs for this view."
@@ -2716,6 +2778,11 @@ https://instagram.com/…"
                 ))}
               </div>
             );
+          }
+
+          // Don't paint Open without stack — avoids flash of Today with no Catch up
+          if (queueView === "open" && !perfReady) {
+            return null;
           }
 
           if (!canDragQueue) {

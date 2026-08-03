@@ -27,6 +27,17 @@ export async function GET(req: NextRequest) {
 
   try {
     if (isAdmin) {
+      // lite=1 → stack/series only (fast first paint). Full GET also loads WA suggestions.
+      const lite = req.nextUrl.searchParams.get("lite") === "1";
+      if (lite) {
+        const designers = await computeAllDesignerPerformance();
+        return NextResponse.json({
+          ok: true,
+          designers,
+          reminders: [],
+          suggested: [],
+        });
+      }
       const [designers, reminders, suggested] = await Promise.all([
         computeAllDesignerPerformance(),
         listRecentReminderLogs(50),

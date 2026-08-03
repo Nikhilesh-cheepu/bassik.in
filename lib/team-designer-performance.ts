@@ -325,13 +325,44 @@ async function computeCloseLedger(
   return { byWorkday, holidayPoints };
 }
 
+/**
+ * Closes counted on the day the designer actually started them (IST).
+ * Does NOT re-slot work onto older shortfall days — that was making Mon look like 0
+ * while Sat showed 4/4 after Monday’s closes filled Saturday’s hole.
+ * Holiday-point ledger still uses computeCloseLedger separately.
+ */
+async function loadClosesByStartDay(
+  assigneeId: string,
+  fromYmd: string,
+  toYmd: string
+): Promise<Map<string, number>> {
+  const byWorkday = new Map<string, number>();
+  if (fromYmd > toYmd) return byWorkday;
+  const rows = await fetchCloseRows(assigneeId, fromYmd, toYmd);
+  for (const r of rows) {
+    const c = classifyDesignerClose(r);
+    if (c.kind === "workday") {
+      if (c.creditYmd < fromYmd || c.creditYmd > toYmd) continue;
+      if (!isStackWorkday(assigneeId, c.creditYmd)) continue;
+      byWorkday.set(c.creditYmd, (byWorkday.get(c.creditYmd) ?? 0) + 1);
+      continue;
+    }
+    if (c.kind === "sunday_work") {
+      // Show on Sunday strip as extras; does not fill Mon–Sat 4/day target
+      if (c.sundayYmd < fromYmd || c.sundayYmd > toYmd) continue;
+      byWorkday.set(c.sundayYmd, (byWorkday.get(c.sundayYmd) ?? 0) + 1);
+    }
+  }
+  return byWorkday;
+}
+
+/** @deprecated name — now start-day counts (see loadClosesByStartDay). */
 async function loadClosesByCreditDay(
   assigneeId: string,
   fromYmd: string,
   toYmd: string
 ): Promise<Map<string, number>> {
-  const { byWorkday } = await computeCloseLedger(assigneeId, fromYmd, toYmd);
-  return byWorkday;
+  return loadClosesByStartDay(assigneeId, fromYmd, toYmd);
 }
 
 async function countDesignerCloses(
@@ -339,9 +370,12 @@ async function countDesignerCloses(
   fromYmd: string,
   toYmd: string
 ): Promise<number> {
-  const byDay = await loadClosesByCreditDay(assigneeId, fromYmd, toYmd);
+  const byDay = await loadClosesByStartDay(assigneeId, fromYmd, toYmd);
   let n = 0;
-  for (const v of byDay.values()) n += v;
+  for (const [ymd, v] of byDay) {
+    // Stack / catch-up only counts workdays (skip Sunday extras)
+    if (isStackWorkday(assigneeId, ymd)) n += v;
+  }
   return n;
 }
 
