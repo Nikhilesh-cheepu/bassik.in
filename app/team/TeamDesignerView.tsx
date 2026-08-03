@@ -740,7 +740,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   };
 
   const persistQueueOrder = async (orderedIds: string[]) => {
-    const orderMap = new Map(orderedIds.map((id, i) => [id, i]));
+    const orderMap = new Map(
+      orderedIds.map((id, i) => [id, i - orderedIds.length] as const)
+    );
     setAllJobs((prev) =>
       sortDesignerJobs(
         prev.map((j) =>
@@ -769,24 +771,15 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const onQueueDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const visibleIds = jobs.map((j) => j.id);
+    // Only Today + Upcoming are sortable (Catch up stays fixed at top)
+    const sortableList = [...openParts.todayPack, ...openParts.upNext];
+    const visibleIds = sortableList.map((j) => j.id);
     const oldIndex = visibleIds.indexOf(String(active.id));
     const newIndex = visibleIds.indexOf(String(over.id));
     if (oldIndex < 0 || newIndex < 0) return;
 
-    const fullSorted = sortDesignerJobs(allJobs);
-    const visibleSet = new Set(visibleIds);
-    const nextVisible = arrayMove(
-      fullSorted.filter((j) => visibleSet.has(j.id)),
-      oldIndex,
-      newIndex
-    );
-    let vi = 0;
-    const nextFull = fullSorted.map((j) => {
-      if (visibleSet.has(j.id)) return nextVisible[vi++]!;
-      return j;
-    });
-    void persistQueueOrder(nextFull.map((j) => j.id));
+    const nextVisible = arrayMove(sortableList, oldIndex, newIndex);
+    void persistQueueOrder(nextVisible.map((j) => j.id));
   };
 
   const sendSelected = async () => {

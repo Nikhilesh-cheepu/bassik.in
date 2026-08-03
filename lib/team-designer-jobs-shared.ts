@@ -144,9 +144,15 @@ function priorityInsertRank(mode: DesignerPriorityMode | string | null | undefin
 
 function isManualDesignerSortOrder(sortOrder: number | null | undefined): boolean {
   const n = sortOrder ?? 0;
-  // Only real drag/interrupt pins (negative). sortOrder 0 must NOT beat deadline order —
-  // otherwise Drop catch-up (natural key) sinks under every legacy 0-row and “disappears”.
+  // Drag / interrupt pins are negative (see nextManualDesignerSortOrder + reorder).
+  // sortOrder 0 = unset/legacy → deadline order. Natural keys are ≥ ~2026010100.
   return n < 0;
+}
+
+/** Admin drag reorder → negative pins so order sticks above deadline sort. */
+export function manualSortOrdersFromDragRank(count: number): number[] {
+  const n = Math.max(0, count);
+  return Array.from({ length: n }, (_, index) => index - n);
 }
 
 /**

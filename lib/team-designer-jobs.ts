@@ -47,6 +47,7 @@ export {
   DESIGNER_WEEKEND_DUE_TIME,
   DESIGNER_WINDOW_DAYS,
   linksFromText,
+  manualSortOrdersFromDragRank,
   naturalDesignerSortOrder,
   parseDesignerLinks,
   sortDesignerJobs,

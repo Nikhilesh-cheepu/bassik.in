@@ -17,6 +17,7 @@ import {
   setDesignerJobLinks,
   sortDesignerJobs,
   toDesignerJobDto,
+  manualSortOrdersFromDragRank,
 } from "@/lib/team-designer-jobs";
 import { addDaysYmd, getTodayKey } from "@/lib/team-checklists";
 import { parseDesignerPriorityMode } from "@/lib/team-designer-jobs-shared";
@@ -310,11 +311,13 @@ export async function POST(req: NextRequest) {
       if (ids.length === 0) {
         return NextResponse.json({ error: "orderedIds required" }, { status: 400 });
       }
+      // Negative pins — same band as interrupt drag (must stay < 0 or deadline sort wins)
+      const ranks = manualSortOrdersFromDragRank(ids.length);
       await prisma.$transaction(
         ids.map((id, index) =>
           prisma.teamDesignerJob.update({
             where: { id },
-            data: { sortOrder: index },
+            data: { sortOrder: ranks[index]! },
           })
         )
       );
