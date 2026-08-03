@@ -86,7 +86,7 @@ function missedDaysLine(
 ): string | null {
   if (!missedDays?.length) return null;
   const m = missedDays[0]!;
-  return `A few from ${formatDayLabel(m.date)} are still in Open — work the list in order.`;
+  return `Catch up from ${formatDayLabel(m.date)} first, then today’s 4.`;
 }
 
 function isBeforeWorkStart(hour: number): boolean {
@@ -653,7 +653,7 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
         ];
         if (missN > 0) {
           lines.push(
-            `A few from ${missLabel ?? "earlier"} are still in Open — work the list in order.`
+            `Catch up from ${missLabel ?? "earlier"} first, then today’s 4.`
           );
         }
         lines.push("", designerQueueLink());

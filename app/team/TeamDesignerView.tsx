@@ -34,8 +34,10 @@ import {
   DESIGNER_POINTS_PER_LEAVE,
   DESIGNER_WEEKLY_TARGET,
   DESIGNER_WINDOW_DAYS,
+  catchUpMetaFromStack,
   designerFormatLabel,
   isBoilerplateDesignerDescription,
+  partitionOpenDesignerQueueByAssignee,
   sortDesignerJobs,
   suggestDesignerFreeDeadlineSlots,
   type DesignerJobDto,
@@ -782,31 +784,37 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const onQueueDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
+    // Catch up stays pinned at top — only Today + Later are sortable
+    const sortableList = [...openParts.todayPack, ...openParts.upNext];
     const activeId = String(active.id);
     const overId = String(over.id);
-    const activeJob = openQueueList.find((j) => j.id === activeId);
-    const overJob = openQueueList.find((j) => j.id === overId);
+    const activeJob = sortableList.find((j) => j.id === activeId);
+    const overJob = sortableList.find((j) => j.id === overId);
     if (!activeJob || !overJob) return;
-    // Never mix Mahesh ↔ Jeslyn ranks in one drag
     if (activeJob.assigneeId !== overJob.assigneeId) return;
 
-    // Reorder inside this designer’s full Open list (all outlets), so a
-    // filtered drag can’t shove a job to the bottom of their whole queue.
     const fullAssignee = sortDesignerJobs(
       openJobsForPartition.filter((j) => j.assigneeId === activeJob.assigneeId)
     );
-    const visibleSet = new Set(openQueueList.map((j) => j.id));
-    const visibleInFull = fullAssignee.filter((j) => visibleSet.has(j.id));
-    const oldIndex = visibleInFull.findIndex((j) => j.id === activeId);
-    const newIndex = visibleInFull.findIndex((j) => j.id === overId);
+    const catchIds = new Set(
+      openPartsRaw.catchUp
+        .filter((j) => j.assigneeId === activeJob.assigneeId)
+        .map((j) => j.id)
+    );
+    const pinnedCatch = fullAssignee.filter((j) => catchIds.has(j.id));
+    const restFull = fullAssignee.filter((j) => !catchIds.has(j.id));
+    const visibleSet = new Set(sortableList.map((j) => j.id));
+    const visibleInRest = restFull.filter((j) => visibleSet.has(j.id));
+    const oldIndex = visibleInRest.findIndex((j) => j.id === activeId);
+    const newIndex = visibleInRest.findIndex((j) => j.id === overId);
     if (oldIndex < 0 || newIndex < 0) return;
 
-    const nextVisible = arrayMove(visibleInFull, oldIndex, newIndex);
+    const nextVisible = arrayMove(visibleInRest, oldIndex, newIndex);
     let vi = 0;
-    const nextFull = fullAssignee.map((j) =>
+    const nextRest = restFull.map((j) =>
       visibleSet.has(j.id) ? nextVisible[vi++]! : j
     );
-    void persistQueueOrder(nextFull.map((j) => j.id));
+    void persistQueueOrder([...pinnedCatch, ...nextRest].map((j) => j.id));
   };
 
   const sendSelected = async () => {
@@ -1072,11 +1080,45 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     );
   }, [scopedJobs]);
 
-  /** One priority Open list — unfinished work stays here until Done (no Catch up band). */
-  const openQueueList = useMemo(() => {
-    if (outletFilter === "all") return openJobsForPartition;
-    return openJobsForPartition.filter((j) => j.outletId === outletFilter);
-  }, [openJobsForPartition, outletFilter]);
+  /**
+   * Catch up = unfinished count from past workdays (4/day shortfall).
+   * Top N of the priority queue → Catch up; next 4 → Today; rest → Later.
+   * Debt is per designer — outlet chips only filter what you see.
+   */
+  const openPartsRaw = useMemo(() => {
+    const metaMap = new Map(
+      perfDesigners.map((p) => {
+        const meta = catchUpMetaFromStack(p.stack);
+        const releasedSlots = allJobs.filter(
+          (j) =>
+            j.assigneeId === p.assigneeId &&
+            j.catchUpExempt &&
+            j.status !== "DESIGN_DONE"
+        ).length;
+        return [p.assigneeId, { ...meta, releasedSlots }] as const;
+      })
+    );
+    return partitionOpenDesignerQueueByAssignee(
+      openJobsForPartition,
+      metaMap,
+      DESIGNER_DAILY_TARGET
+    );
+  }, [openJobsForPartition, perfDesigners, allJobs]);
+
+  const openParts = useMemo(() => {
+    if (outletFilter === "all") return openPartsRaw;
+    const filt = (list: DesignerJobDto[]) =>
+      list.filter((j) => j.outletId === outletFilter);
+    return {
+      catchUp: filt(openPartsRaw.catchUp),
+      todayPack: filt(openPartsRaw.todayPack),
+      upNext: filt(openPartsRaw.upNext),
+      catchUpHint: openPartsRaw.catchUpHint,
+      effectiveCatchUpSlots: openPartsRaw.effectiveCatchUpSlots,
+    };
+  }, [openPartsRaw, outletFilter]);
+
+  const catchUpDebt = openPartsRaw.effectiveCatchUpSlots;
 
   const startJob = (
     job: DesignerJobDto,
@@ -1089,7 +1131,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   };
 
   const canDragQueue =
-    isAdmin && queueView === "open" && openQueueList.length > 1;
+    isAdmin &&
+    queueView === "open" &&
+    openParts.todayPack.length + openParts.upNext.length > 1;
   const toSendCount = sendableJobs.length;
   const toSendVisible = useMemo(
     () =>
@@ -1123,7 +1167,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         <div className="flex flex-wrap rounded-lg bg-black/35 p-1">
           {(
             [
-              ["open", "Open"],
+              [
+                "open",
+                catchUpDebt > 0 ? `Open · ${catchUpDebt} catch-up` : "Open",
+              ],
               ...(isAdmin
                 ? ([["toSend", toSendCount > 0 ? `To send (${toSendCount})` : "To send"]] as const)
                 : []),
@@ -1152,10 +1199,14 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
                       ? "bg-amber-400 text-black"
                       : id === "toSend"
                         ? "bg-amber-300 text-black"
-                        : "bg-white text-black"
+                        : id === "open" && catchUpDebt > 0
+                          ? "bg-amber-300 text-black"
+                          : "bg-white text-black"
                   : id === "toSend" && toSendCount > 0
                     ? "text-amber-200/90 hover:text-amber-100"
-                    : "text-white/50 hover:text-white/80"
+                    : id === "open" && catchUpDebt > 0
+                      ? "text-amber-200/80 hover:text-amber-100"
+                      : "text-white/50 hover:text-white/80"
               }`}
             >
               {label}
@@ -1521,15 +1572,17 @@ https://instagram.com/…"
           const selected = selectedIds.has(job.id);
           const brief = jobBriefText(job);
           const toneClass =
-            job.status === "IN_PROGRESS"
-              ? "border-cyan-400/45 bg-cyan-400/[0.08] ring-1 ring-cyan-400/20"
-              : job.status === "PAUSED"
-                ? "border-violet-400/35 bg-violet-400/[0.07]"
-                : tone === "today"
-                  ? "border-white/[0.12] bg-white/[0.04]"
-                  : selected
-                    ? "border-cyan-400/40 bg-cyan-400/[0.07]"
-                    : "border-white/[0.08] bg-white/[0.03]";
+            tone === "catchUp"
+              ? "border-amber-400/35 bg-amber-400/[0.07] ring-1 ring-amber-400/15"
+              : job.status === "IN_PROGRESS"
+                ? "border-cyan-400/45 bg-cyan-400/[0.08] ring-1 ring-cyan-400/20"
+                : job.status === "PAUSED"
+                  ? "border-violet-400/35 bg-violet-400/[0.07]"
+                  : tone === "today"
+                    ? "border-white/[0.12] bg-white/[0.04]"
+                    : selected
+                      ? "border-cyan-400/40 bg-cyan-400/[0.07]"
+                      : "border-white/[0.08] bg-white/[0.03]";
           return (
           <article
             key={job.id}
@@ -1691,6 +1744,23 @@ https://instagram.com/…"
                     className="h-11 min-h-[44px] rounded-lg bg-cyan-500 px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
                   >
                     Start Job
+                  </button>
+                ) : null}
+                {isAdmin && tone === "catchUp" && job.status !== "DESIGN_DONE" ? (
+                  <button
+                    type="button"
+                    disabled={busyId === job.id}
+                    title="Drop from Catch up — forgives 1 unfinished slot"
+                    onClick={() =>
+                      void patchJob(job.id, { action: "release-catch-up" }).then((ok) => {
+                        if (ok) {
+                          setError("Dropped from Catch up — count −1. Job is in Today/Later.");
+                        }
+                      })
+                    }
+                    className="h-11 min-h-[44px] rounded-lg border border-white/20 bg-white/10 px-3 text-[13px] font-semibold text-white/90 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                  >
+                    Drop catch-up
                   </button>
                 ) : null}
                 {job.status === "PAUSED" && (isAdmin || job.assigneeId === memberId) ? (
@@ -2536,12 +2606,35 @@ https://instagram.com/…"
           if (!canDragQueue) {
             return (
               <div className="space-y-5">
+                {catchUpDebt > openParts.catchUp.length &&
+                catchUpDebt > 0 &&
+                isAdmin ? (
+                  <p className="rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-[12px] text-white/60">
+                    Owed {catchUpDebt} · showing {openParts.catchUp.length}
+                    {outletFilter !== "all" ? " in this outlet — switch to All" : ""}.
+                  </p>
+                ) : null}
                 {renderSection(
-                  "Open",
-                  "Priority order — Start → Upload → Done. Unfinished stay here.",
-                  openQueueList,
+                  "Catch up",
+                  openParts.catchUpHint ||
+                    "Unfinished from earlier days — finish these first.",
+                  openParts.catchUp,
+                  "catchUp",
+                  "text-amber-200/90"
+                )}
+                {renderSection(
+                  "Today",
+                  "Next 4 in priority order — Start → Upload → Done",
+                  openParts.todayPack,
                   "today",
                   "text-white/70"
+                )}
+                {renderSection(
+                  "Later",
+                  "",
+                  openParts.upNext,
+                  "next",
+                  "text-white/45"
                 )}
               </div>
             );
@@ -2553,26 +2646,61 @@ https://instagram.com/…"
               collisionDetection={closestCenter}
               onDragEnd={onQueueDragEnd}
             >
-              <div className="space-y-2">
-                <div>
-                  <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/70">
-                    Open ({openQueueList.length}) · drag ≡
-                  </h2>
-                  <p className="mt-0.5 text-[11px] text-white/45">
-                    Priority order — Start → Upload → Done. Unfinished stay here.
-                  </p>
-                </div>
+              <div className="space-y-5">
+                {renderSection(
+                  "Catch up",
+                  openParts.catchUpHint ||
+                    "Unfinished from earlier days — finish these first.",
+                  openParts.catchUp,
+                  "catchUp",
+                  "text-amber-200/90"
+                )}
                 <SortableContext
-                  items={openQueueList.map((j) => j.id)}
+                  items={[...openParts.todayPack, ...openParts.upNext].map((j) => j.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  <div className="space-y-2">
-                    {openQueueList.map((job) => (
-                      <SortableDesignerJob key={job.id} id={job.id}>
-                        {(dragHandleProps) => renderJob(job, dragHandleProps, "today")}
-                      </SortableDesignerJob>
-                    ))}
-                  </div>
+                  {(
+                    [
+                      [
+                        "Today",
+                        "Next 4 in priority order — Start → Upload → Done · drag ≡",
+                        openParts.todayPack,
+                        "today",
+                        "text-white/70",
+                      ],
+                      [
+                        "Later",
+                        "drag ≡",
+                        openParts.upNext,
+                        "next",
+                        "text-white/45",
+                      ],
+                    ] as const
+                  ).map(([title, hint, list, tone, headingClass]) =>
+                    list.length === 0 ? null : (
+                      <div key={String(title)} className="space-y-2">
+                        <div>
+                          <h2
+                            className={`text-[12px] font-semibold uppercase tracking-wide ${headingClass}`}
+                          >
+                            {title} ({list.length})
+                          </h2>
+                          {hint ? (
+                            <p className="mt-0.5 text-[11px] text-white/45">{hint}</p>
+                          ) : null}
+                        </div>
+                        <div className="space-y-2">
+                          {list.map((job) => (
+                            <SortableDesignerJob key={job.id} id={job.id}>
+                              {(dragHandleProps) =>
+                                renderJob(job, dragHandleProps, tone)
+                              }
+                            </SortableDesignerJob>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  )}
                 </SortableContext>
               </div>
             </DndContext>

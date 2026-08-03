@@ -387,8 +387,8 @@ export function partitionOpenDesignerQueue(
   const catchUpHint =
     catchUp.length > 0
       ? from
-        ? `You missed work on ${from}. Complete this before starting a new task.`
-        : "You missed work on an earlier day. Complete this before starting a new task."
+        ? `${catchUp.length} unfinished from ${from}. Finish these first, then today’s ${dailyTarget}.`
+        : `${catchUp.length} unfinished from earlier. Finish these first, then today’s ${dailyTarget}.`
       : "";
   return { catchUp, todayPack, upNext, catchUpHint, effectiveCatchUpSlots: slots };
 }

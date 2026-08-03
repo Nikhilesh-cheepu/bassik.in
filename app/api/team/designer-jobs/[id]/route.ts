@@ -10,6 +10,7 @@ import {
   loadDesignerJobLinksByIds,
   nextManualDesignerSortOrder,
   parseDesignerLinks,
+  ensureCatchUpExemptColumn,
   releaseDesignerJobFromCatchUp,
   setDesignerEditRequest,
   setDesignerJobLinks,
@@ -19,10 +20,15 @@ import {
 } from "@/lib/team-designer-jobs";
 import { addDaysYmd, getTodayKey } from "@/lib/team-checklists";
 import {
+  catchUpMetaFromStack,
+  DESIGNER_DAILY_TARGET,
   isBoilerplateDesignerDescription,
   parseDesignerPriorityMode,
+  partitionOpenDesignerQueue,
+  sortDesignerJobs,
   type DesignerPriorityMode,
 } from "@/lib/team-designer-jobs-shared";
+import { computeDesignerStack } from "@/lib/team-designer-performance";
 import { deleteTeamHandoffBlobUrl } from "@/lib/team-handoff-blobs";
 import {
   getAmitReadyNudge,
@@ -43,6 +49,61 @@ async function jobDtoWithLinks(job: Parameters<typeof toDesignerJobDto>[0]) {
     pauseRequestNote: edit?.pauseRequestNote ?? null,
     catchUpExempt: edit?.catchUpExempt ?? false,
   });
+}
+
+/** Catch up first — finish unfinished count from past days before starting Today’s pack. */
+async function ensureCatchUpGate(assigneeId: string, jobId: string): Promise<void> {
+  await ensureCatchUpExemptColumn();
+  const today = getTodayKey();
+  const [stack, released, rows] = await Promise.all([
+    computeDesignerStack(assigneeId, today),
+    prisma.teamDesignerJob.count({
+      where: {
+        assigneeId,
+        catchUpExempt: true,
+        status: { not: "DESIGN_DONE" },
+      },
+    }),
+    prisma.teamDesignerJob.findMany({
+      where: {
+        assigneeId,
+        status: { in: ["READY_TO_DESIGN", "IN_PROGRESS", "PAUSED"] },
+      },
+    }),
+  ]);
+  const meta = catchUpMetaFromStack(stack);
+  if (meta.catchUpSlots <= 0) return;
+  const ids = rows.map((r) => r.id);
+  const [linksMap, editMap] = await Promise.all([
+    loadDesignerJobLinksByIds(ids),
+    loadDesignerEditMetaByIds(ids),
+  ]);
+  const jobs = sortDesignerJobs(
+    rows.map((r) =>
+      toDesignerJobDto({
+        ...r,
+        links: linksMap.get(r.id) ?? [],
+        editRequestedAt: editMap.get(r.id)?.editRequestedAt ?? null,
+        editRequestNote: editMap.get(r.id)?.editRequestNote ?? null,
+        pauseRequestedAt: editMap.get(r.id)?.pauseRequestedAt ?? null,
+        pauseRequestNote: editMap.get(r.id)?.pauseRequestNote ?? null,
+        catchUpExempt: editMap.get(r.id)?.catchUpExempt ?? false,
+      })
+    )
+  );
+  const parts = partitionOpenDesignerQueue(jobs, DESIGNER_DAILY_TARGET, {
+    catchUpSlots: meta.catchUpSlots,
+    pendingFromLabel: meta.pendingFromLabel,
+    releasedSlots: released,
+  });
+  if (parts.effectiveCatchUpSlots <= 0) return;
+  if (parts.catchUp.some((j) => j.id === jobId)) return;
+  const from = meta.pendingFromLabel?.trim();
+  throw new Error(
+    from
+      ? `Finish Catch up first — ${parts.catchUp.length} unfinished from ${from}, then today’s tasks.`
+      : "Finish Catch up first — unfinished from earlier, then today’s tasks."
+  );
 }
 
 type Action =
@@ -299,7 +360,7 @@ export async function PATCH(
       });
     }
 
-    /** Legacy admin action — no Catch up band; keeps exempt flag for history. */
+    /** Admin: forgive one Catch up slot — job joins Today/Later by priority. */
     if (action === "release-catch-up") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       if (job.status === "DESIGN_DONE") {
@@ -310,7 +371,7 @@ export async function PATCH(
       if (!refreshed) return NextResponse.json({ error: "Not found" }, { status: 404 });
       return NextResponse.json({
         job: await jobDtoWithLinks({ ...refreshed, catchUpExempt: true }),
-        message: "Moved to Open — sorted by deadline with the normal list",
+        message: "Dropped from Catch up — count −1. Job is in Today/Later.",
       });
     }
 
@@ -352,6 +413,16 @@ export async function PATCH(
           { error: "Only Ready or Paused jobs can be started" },
           { status: 400 }
         );
+      }
+
+      try {
+        await ensureCatchUpGate(job.assigneeId, job.id);
+      } catch (gateErr) {
+        const msg =
+          gateErr instanceof Error
+            ? gateErr.message
+            : "Finish Catch up before starting today’s tasks.";
+        return NextResponse.json({ error: msg }, { status: 409 });
       }
 
       const active = await findActiveDesignerJob(job.assigneeId);
