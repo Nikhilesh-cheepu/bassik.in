@@ -4,7 +4,6 @@ import { findActiveDesignerJob } from "@/lib/team-designer-jobs";
 import {
   DESIGNER_DAILY_TARGET,
   DESIGNER_PERFORMANCE_IDS,
-  DESIGNER_STACK_START_DATE,
   designerDisplayName,
   type DesignerNudgeKind,
   type DesignerPriorityMode,
@@ -71,7 +70,7 @@ function shortMissLine(jobs: ReadyJobLine[]): string | null {
   const j = jobs[0]!;
   const time = (j.dueTime || "20:00").slice(0, 5);
   const day = j.isOverdue
-    ? `OVERDUE (was ${j.dueDate.slice(8)}/${j.dueDate.slice(5, 7)} ${time})`
+    ? `past due (${j.dueDate.slice(8)}/${j.dueDate.slice(5, 7)} ${time})`
     : j.isDueToday
       ? `due today by ${time}`
       : `due ${j.dueDate.slice(8)}/${j.dueDate.slice(5, 7)} ${time}`;
@@ -84,7 +83,7 @@ function missedDaysLine(
 ): string | null {
   if (!missedDays?.length) return null;
   const m = missedDays[0]!;
-  return `Missed on ${formatDayLabel(m.date)}: closed ${m.closed}/4 (short ${m.missed}). Do that catch-up now.`;
+  return `Small heads-up: ${formatDayLabel(m.date)} was ${m.closed}/4 — ${m.missed} still in Catch up at the top of Open when you’re free.`;
 }
 
 function isBeforeWorkStart(hour: number): boolean {
@@ -93,28 +92,26 @@ function isBeforeWorkStart(hour: number): boolean {
 
 function sundayNote(todayYmd: string): string | null {
   if (dayIdForYmd(todayYmd) !== "sun") return null;
-  return "Happy holiday — enjoy your day. If you work the next-day pack, it earns holiday points (after catch-up).";
+  return "Happy Sunday — rest well. If you feel like working the next-day pack, that’s optional and earns holiday points.";
 }
 
-function seriousCloser(): string {
-  return [
-    "This can lead to a serious issue if it continues.",
-    "Reply with the reason you haven’t done this.",
-  ].join("\n");
+/** Soft closer — reminder tone, not a warning. */
+function softCloser(): string {
+  return "No stress — just a gentle reminder. You’ve got this. Reply if anything’s blocking you and we’ll adjust.";
 }
 
 function nudgeLabel(kind: DesignerNudgeKind): string {
   switch (kind) {
     case "no_start":
-      return "Haven’t started today";
+      return "Friendly start nudge";
     case "slow_task":
-      return "Task over 3 hours";
+      return "Long task check-in";
     case "behind_pace":
-      return "Behind daily pace";
+      return "Pace reminder";
     case "deadline_soon":
-      return "Deadline soon";
+      return "Deadline reminder";
     case "missed_target":
-      return "Missed daily target";
+      return "End-of-day note";
     case "priority_pause_now":
       return "Priority — pause now";
     case "priority_after_current":
@@ -286,33 +283,32 @@ function buildNudgeBody(params: {
   const leave = params.leaveDaysEarned ?? 0;
   const stackBit =
     params.stackedBehind > 0
-      ? `From ${formatDayLabel(DESIGNER_STACK_START_DATE)} you’re ${params.stackedBehind} behind (Mon–Sat × 4 = 24/week). Clear it ASAP.`
+      ? `A little stack from earlier days (${params.stackedBehind}) — clear it whenever the day allows, no rush panic.`
       : leave > 0
-        ? `On track — leave banked: ${leave} day(s) (+4 over target = 1 leave).`
-        : "Target: 4/day Mon–Sat (24/week). Extra closes bank leave.";
+        ? `Nice — leave banked: ${leave} day(s). Extra closes still help.`
+        : "Aim for 4/day Mon–Sat when you can. Heavy days happen — we just keep the queue tidy.";
 
-  const focusLine = `On ${focusLabel} you only closed ${focusClosed}/${DESIGNER_DAILY_TARGET}.`;
-  const pendingBit = miss ? `Pending: ${miss}` : null;
+  const focusLine = `On ${focusLabel}: ${focusClosed}/${DESIGNER_DAILY_TARGET} closed so far.`;
+  const pendingBit = miss ? `Next up: ${miss}` : null;
 
   let head: string[];
   switch (params.kind) {
     case "no_start":
       head = [
         `${params.name} — ${greetingForHourIst(params.hour)}.`,
-        "You haven’t started yet. Please start soon and complete today’s tasks.",
+        "Friendly nudge: Open isn’t started yet today. Whenever you’re ready, hit Start Job on the top task.",
         dayMiss,
-        `Target today: ${DESIGNER_DAILY_TARGET}. Check the Design tab and press Start Job.`,
       ].filter(Boolean) as string[];
       break;
     case "slow_task":
       head = [
-        `${params.name} — you’ve been on “${params.activeTitle ?? "this job"}” for ~${formatDuration(params.activeAgeMs ?? SLOW_TASK_MS)}.`,
-        `Today so far: ${params.closedToday}/${DESIGNER_DAILY_TARGET}. Finish and move — don’t let this stack up.`,
+        `${params.name} — quick check-in on “${params.activeTitle ?? "this job"}” (~${formatDuration(params.activeAgeMs ?? SLOW_TASK_MS)}).`,
+        `Today: ${params.closedToday}/${DESIGNER_DAILY_TARGET}. Take a break if you need — or wrap and move when it feels right.`,
       ];
       break;
     case "behind_pace":
       head = [
-        `${params.name} — you’re behind.`,
+        `${params.name} — ${greetingForHourIst(params.hour)}. Soft reminder for pace.`,
         dayMiss ?? focusLine,
         pendingBit,
         stackBit,
@@ -320,23 +316,24 @@ function buildNudgeBody(params: {
       break;
     case "deadline_soon":
       head = [
-        `${params.name} — you missed / are late on this:`,
-        pendingBit ?? "Ready work past its 8 PM due time.",
+        `${params.name} — gentle deadline reminder:`,
+        pendingBit ?? "Some Ready work is past its usual 8 PM window.",
         dayMiss ?? (beforeWork ? focusLine : null),
         stackBit,
       ].filter(Boolean) as string[];
       break;
     case "missed_target":
       head = [
-        `${params.name} — missed target.`,
+        `${params.name} — end-of-day note (not a scolding).`,
         dayMiss ?? focusLine,
         pendingBit,
+        "If today was a heavy creative day, that’s okay — we’ll tidy Catch up when you can.",
         stackBit,
       ].filter(Boolean) as string[];
       break;
     default:
       head = [
-        `${params.name} — clear pending designer work ASAP.`,
+        `${params.name} — quick reminder from the Design queue.`,
         dayMiss ?? focusLine,
         stackBit,
       ].filter(Boolean) as string[];
@@ -346,9 +343,9 @@ function buildNudgeBody(params: {
     ...head,
     sun,
     "",
-    seriousCloser(),
+    softCloser(),
     "",
-    `Open & complete: ${link}`,
+    `Design tab: ${link}`,
   ]
     .filter((line): line is string => line != null && line !== undefined)
     .join("\n");
@@ -364,14 +361,14 @@ function templateParamsFor(
 ): [string, string, string] {
   const summary =
     kind === "no_start"
-      ? `Haven't started — ${readyToStart} waiting`
+      ? `Friendly start nudge — ${readyToStart} ready`
       : kind === "slow_task"
-        ? `Stuck ~3h+ on ${activeTitle ?? "task"}`
+        ? `Check-in ~3h+ on ${activeTitle ?? "task"}`
         : kind === "behind_pace"
-          ? `Behind ${closedFocus}/${DESIGNER_DAILY_TARGET}`
+          ? `Pace note ${closedFocus}/${DESIGNER_DAILY_TARGET}`
           : kind === "deadline_soon"
-            ? "Missed / late on due work"
-            : `Missed target ${closedFocus}/${DESIGNER_DAILY_TARGET}`;
+            ? "Deadline reminder"
+            : `End-of-day note ${closedFocus}/${DESIGNER_DAILY_TARGET}`;
   const miss = shortMissLine(readyJobs)?.slice(0, 200) || "-";
   return [name, summary, miss];
 }
@@ -692,24 +689,23 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
         const lines: string[] = [`${name} — ${greetingForHourIst(hour)}.`];
         if (catchUpN > 0) {
           lines.push(
-            `Catch-up: ${catchUpN} from a past day${
-              missLabel ? ` (${missLabel})` : ""
-            } — that day ended without 4 closes. Finish Catch up at the top of Open first.`
+            `There’s a small Catch up from ${
+              missLabel ?? "a past day"
+            } (${catchUpN}) at the top of Open — finish that when you can, then today’s pack.`
           );
           if (daily > 0) {
-            lines.push(`Then your ${daily} tasks for today.`);
+            lines.push(`After that, today’s aim is ${daily}.`);
           }
         } else if (daily > 0) {
           lines.push(
-            `You have ${daily} tasks for today. Start soon and complete them.`
+            `Today’s aim is ${daily} — start whenever you’re ready (Start Job on the top card).`
           );
         } else {
-          lines.push("Check the Design tab for today’s queue.");
+          lines.push("Queue is on the Design tab whenever you need it.");
         }
         lines.push(
           "",
-          "Open the Design tab and refresh before you start — order and priority can change anytime. Always follow the website flow.",
-          "Don’t start work before pressing Start Job on the task.",
+          "Quick tip: refresh Open before you start — order can update. You’ve got this.",
           "",
           designerQueueLink()
         );
@@ -889,33 +885,31 @@ export async function sendPriorityJobAlert(params: {
   let body: string;
   if (params.priorityMode === "PAUSE_NOW") {
     const activeBit = active
-      ? `“${active.title}” will be paused for this. Start this priority job now.`
-      : "Nothing in progress — Start this priority job now.";
+      ? `Please pause “${active.title}” and Start this priority job when you can.`
+      : "Nothing in progress — Start this priority job when you’re free.";
     body = [
-      `${name} — PRIORITY. Start this now:`,
+      `${name} — priority task for you:`,
       jobLine,
       activeBit,
       "",
-      "This can lead to a serious issue if delayed.",
-      "Reply if you can’t — with the reason.",
+      "Thanks for jumping on this when you can. Reply if timing is tough — we’ll work it out.",
       "",
-      `Open & complete: ${designerQueueLink()}`,
+      `Design tab: ${designerQueueLink()}`,
     ].join("\n");
   } else {
     const activeBit = active
       ? activeAgeMs != null && activeAgeMs >= FINISH_ASAP_MIN_MS
-        ? `Finish “${active.title}” ASAP (already ~${formatDuration(activeAgeMs)}), then Start this next.`
-        : `Complete your current job “${active.title}” first, then Start this priority task.`
-      : "No job in progress — you can Start this when ready.";
+        ? `After you wrap “${active.title}” (~${formatDuration(activeAgeMs)} so far), Start this next.`
+        : `Finish your current job “${active.title}”, then Start this next.`
+      : "No job in progress — Start this when you’re ready.";
     body = [
-      `${name} — PRIORITY (after your current job):`,
+      `${name} — priority after your current job:`,
       jobLine,
       activeBit,
       "",
-      "This can lead to a serious issue if delayed.",
-      "Reply if you can’t — with the reason.",
+      "Thanks — reply if you need a different order.",
       "",
-      `Open & complete: ${designerQueueLink()}`,
+      `Design tab: ${designerQueueLink()}`,
     ].join("\n");
   }
 
