@@ -36,7 +36,6 @@ import {
   DESIGNER_WINDOW_DAYS,
   designerFormatLabel,
   isBoilerplateDesignerDescription,
-  partitionOpenDesignerQueueByAssignee,
   sortDesignerJobs,
   suggestDesignerFreeDeadlineSlots,
   type DesignerJobDto,
@@ -783,15 +782,31 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const onQueueDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    // Only Next up + Later are sortable
-    const sortableList = [...openParts.todayPack, ...openParts.upNext];
-    const visibleIds = sortableList.map((j) => j.id);
-    const oldIndex = visibleIds.indexOf(String(active.id));
-    const newIndex = visibleIds.indexOf(String(over.id));
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    const activeJob = openQueueList.find((j) => j.id === activeId);
+    const overJob = openQueueList.find((j) => j.id === overId);
+    if (!activeJob || !overJob) return;
+    // Never mix Mahesh ↔ Jeslyn ranks in one drag
+    if (activeJob.assigneeId !== overJob.assigneeId) return;
+
+    // Reorder inside this designer’s full Open list (all outlets), so a
+    // filtered drag can’t shove a job to the bottom of their whole queue.
+    const fullAssignee = sortDesignerJobs(
+      openJobsForPartition.filter((j) => j.assigneeId === activeJob.assigneeId)
+    );
+    const visibleSet = new Set(openQueueList.map((j) => j.id));
+    const visibleInFull = fullAssignee.filter((j) => visibleSet.has(j.id));
+    const oldIndex = visibleInFull.findIndex((j) => j.id === activeId);
+    const newIndex = visibleInFull.findIndex((j) => j.id === overId);
     if (oldIndex < 0 || newIndex < 0) return;
 
-    const nextVisible = arrayMove(sortableList, oldIndex, newIndex);
-    void persistQueueOrder(nextVisible.map((j) => j.id));
+    const nextVisible = arrayMove(visibleInFull, oldIndex, newIndex);
+    let vi = 0;
+    const nextFull = fullAssignee.map((j) =>
+      visibleSet.has(j.id) ? nextVisible[vi++]! : j
+    );
+    void persistQueueOrder(nextFull.map((j) => j.id));
   };
 
   const sendSelected = async () => {
@@ -1057,33 +1072,11 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     );
   }, [scopedJobs]);
 
-  const openPartsRaw = useMemo(() => {
-    // No Catch up band — one priority queue (Today focus + Upcoming)
-    const metaMap = new Map(
-      perfDesigners.map((p) => [
-        p.assigneeId,
-        { catchUpSlots: 0, pendingFromLabel: null as string | null },
-      ] as const)
-    );
-    return partitionOpenDesignerQueueByAssignee(
-      openJobsForPartition,
-      metaMap,
-      DESIGNER_DAILY_TARGET
-    );
-  }, [openJobsForPartition, perfDesigners]);
-
-  const openParts = useMemo(() => {
-    if (outletFilter === "all") return openPartsRaw;
-    const filt = (list: DesignerJobDto[]) =>
-      list.filter((j) => j.outletId === outletFilter);
-    return {
-      catchUp: [] as DesignerJobDto[],
-      todayPack: filt(openPartsRaw.todayPack),
-      upNext: filt(openPartsRaw.upNext),
-      catchUpHint: "",
-      effectiveCatchUpSlots: 0,
-    };
-  }, [openPartsRaw, outletFilter]);
+  /** One priority Open list — unfinished work stays here until Done (no Catch up band). */
+  const openQueueList = useMemo(() => {
+    if (outletFilter === "all") return openJobsForPartition;
+    return openJobsForPartition.filter((j) => j.outletId === outletFilter);
+  }, [openJobsForPartition, outletFilter]);
 
   const startJob = (
     job: DesignerJobDto,
@@ -1096,9 +1089,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   };
 
   const canDragQueue =
-    isAdmin &&
-    queueView === "open" &&
-    openParts.todayPack.length + openParts.upNext.length > 1;
+    isAdmin && queueView === "open" && openQueueList.length > 1;
   const toSendCount = sendableJobs.length;
   const toSendVisible = useMemo(
     () =>
@@ -2542,16 +2533,13 @@ https://instagram.com/…"
             );
           }
 
-          const focusTitle = "Open";
-          const focusHint = "Priority order — Start → Upload → Done";
-
           if (!canDragQueue) {
             return (
               <div className="space-y-5">
                 {renderSection(
-                  focusTitle,
-                  focusHint,
-                  [...openParts.todayPack, ...openParts.upNext],
+                  "Open",
+                  "Priority order — Start → Upload → Done. Unfinished stay here.",
+                  openQueueList,
                   "today",
                   "text-white/70"
                 )}
@@ -2565,51 +2553,26 @@ https://instagram.com/…"
               collisionDetection={closestCenter}
               onDragEnd={onQueueDragEnd}
             >
-              <div className="space-y-5">
+              <div className="space-y-2">
+                <div>
+                  <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/70">
+                    Open ({openQueueList.length}) · drag ≡
+                  </h2>
+                  <p className="mt-0.5 text-[11px] text-white/45">
+                    Priority order — Start → Upload → Done. Unfinished stay here.
+                  </p>
+                </div>
                 <SortableContext
-                  items={[...openParts.todayPack, ...openParts.upNext].map((j) => j.id)}
+                  items={openQueueList.map((j) => j.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  {(
-                    [
-                      [
-                        "Next up",
-                        focusHint,
-                        openParts.todayPack,
-                        "today",
-                        "text-white/70",
-                      ],
-                      [
-                        "Later",
-                        "",
-                        openParts.upNext,
-                        "next",
-                        "text-white/45",
-                      ],
-                    ] as const
-                  ).map(([title, hint, list, tone, headingClass]) =>
-                    list.length === 0 ? null : (
-                      <div key={String(title)} className="space-y-2">
-                        <div>
-                          <h2
-                            className={`text-[12px] font-semibold uppercase tracking-wide ${headingClass}`}
-                          >
-                            {title} ({list.length}) · drag ≡
-                          </h2>
-                          {hint ? (
-                            <p className="mt-0.5 text-[11px] text-white/45">{hint}</p>
-                          ) : null}
-                        </div>
-                        <div className="space-y-2">
-                          {list.map((job) => (
-                            <SortableDesignerJob key={job.id} id={job.id}>
-                              {(dragHandleProps) => renderJob(job, dragHandleProps, tone)}
-                            </SortableDesignerJob>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  )}
+                  <div className="space-y-2">
+                    {openQueueList.map((job) => (
+                      <SortableDesignerJob key={job.id} id={job.id}>
+                        {(dragHandleProps) => renderJob(job, dragHandleProps, "today")}
+                      </SortableDesignerJob>
+                    ))}
+                  </div>
                 </SortableContext>
               </div>
             </DndContext>
@@ -2874,14 +2837,7 @@ function HolidayTabPanel({ designers }: { designers: DesignerPerformanceDto[] })
   );
 }
 
-const WEEKDAY_FULL = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-] as const;
+const WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 function addDaysYmdClient(ymd: string, delta: number): string {
   const [y, m, d] = ymd.split("-").map(Number);
@@ -2892,10 +2848,9 @@ function addDaysYmdClient(ymd: string, delta: number): string {
   return `${yy}-${mm}-${dd}`;
 }
 
-function dayDateLabel(ymd: string): string {
-  const day = Number(ymd.slice(8, 10));
-  const month = Number(ymd.slice(5, 7));
-  return `${day}/${month}`;
+/** Calendar day only — never looks like a score (avoid "3/8"). */
+function dayOfMonthLabel(ymd: string): string {
+  return String(Number(ymd.slice(8, 10)));
 }
 
 function DesignerPerformanceCard({
@@ -2916,7 +2871,7 @@ function DesignerPerformanceCard({
   const sunday = Boolean(perf.isSundayHoliday);
   const weekStart = perf.stack.weekKey;
   const byDate = new Map(perf.series.map((p) => [p.date, p]));
-  const weekDays = WEEKDAY_FULL.map((label, i) => {
+  const weekDays = WEEKDAY_SHORT.map((label, i) => {
     const date = addDaysYmdClient(weekStart, i);
     const pt = byDate.get(date);
     const closed =
@@ -2939,19 +2894,17 @@ function DesignerPerformanceCard({
           <p className="text-[14px] font-semibold text-white/90">
             {perf.name}
             <span className="ml-2 text-[12px] font-medium tabular-nums text-white/40">
-              {weekClosed}/{weekTarget} this week
+              {weekClosed} of {weekTarget} this week
             </span>
           </p>
           {sunday ? (
             <p className="mt-0.5 text-[11px] text-violet-200/70">Sunday off</p>
-          ) : perf.inProgress > 0 ? (
-            <p className="mt-0.5 text-[11px] text-cyan-200/70">
-              {perf.inProgress} in progress · today {perf.closedToday}/
-              {perf.dailyTarget || DESIGNER_DAILY_TARGET}
-            </p>
           ) : (
-            <p className="mt-0.5 text-[11px] text-white/35">
-              Today {perf.closedToday}/{perf.dailyTarget || DESIGNER_DAILY_TARGET} · aim 4/day
+            <p className="mt-0.5 text-[11px] text-white/40">
+              Aim {DESIGNER_DAILY_TARGET}/day
+              {perf.inProgress > 0
+                ? ` · ${perf.inProgress} in progress`
+                : ` · today ${perf.closedToday} done`}
             </p>
           )}
         </div>
@@ -2988,28 +2941,43 @@ function DesignerPerformanceCard({
         ) : null}
       </div>
 
-      <ul className="mt-2.5 divide-y divide-white/[0.06]">
+      <div className="mt-3 grid grid-cols-6 gap-1.5">
         {weekDays.map((d) => (
-          <li
+          <div
             key={d.date}
-            className={`flex items-center justify-between gap-3 py-1.5 text-[13px] ${
-              d.isToday ? "text-white" : d.isFuture ? "text-white/30" : "text-white/70"
+            className={`rounded-lg px-1 py-2 text-center ${
+              d.isToday
+                ? "bg-cyan-400/15 ring-1 ring-cyan-400/35"
+                : "bg-white/[0.03]"
             }`}
           >
-            <span className={d.isToday ? "font-semibold" : ""}>
+            <p
+              className={`text-[10px] font-semibold uppercase tracking-wide ${
+                d.isToday ? "text-cyan-100" : "text-white/40"
+              }`}
+            >
               {d.label}
-              <span className="ml-1.5 text-[11px] font-normal text-white/35">
-                {dayDateLabel(d.date)}
-                {d.isToday ? " · today" : ""}
-              </span>
-            </span>
-            <span className="tabular-nums">
-              {d.isFuture ? "—" : `${d.closed}`}
-              <span className="text-white/30">/{DESIGNER_DAILY_TARGET}</span>
-            </span>
-          </li>
+            </p>
+            <p className="text-[9px] text-white/30">{dayOfMonthLabel(d.date)}</p>
+            <p
+              className={`mt-1 text-[18px] font-semibold tabular-nums leading-none ${
+                d.isFuture
+                  ? "text-white/20"
+                  : d.closed >= DESIGNER_DAILY_TARGET
+                    ? "text-emerald-200"
+                    : d.isToday
+                      ? "text-white"
+                      : "text-white/75"
+              }`}
+            >
+              {d.isFuture ? "—" : d.closed}
+            </p>
+            <p className="mt-0.5 text-[10px] tabular-nums text-white/30">
+              of {DESIGNER_DAILY_TARGET}
+            </p>
+          </div>
         ))}
-      </ul>
+      </div>
     </div>
   );
 }
