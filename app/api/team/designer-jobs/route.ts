@@ -311,15 +311,19 @@ export async function POST(req: NextRequest) {
       if (ids.length === 0) {
         return NextResponse.json({ error: "orderedIds required" }, { status: 400 });
       }
-      // Negative pins — same band as interrupt drag (must stay < 0 or deadline sort wins)
+      // Negative pins — same band as interrupt drag (must stay < 0 or deadline sort wins).
+      // One SQL update — no $transaction (pool max 1 on Vercel/Railway can't start txs reliably).
       const ranks = manualSortOrdersFromDragRank(ids.length);
-      await prisma.$transaction(
-        ids.map((id, index) =>
-          prisma.teamDesignerJob.update({
-            where: { id },
-            data: { sortOrder: ranks[index]! },
-          })
-        )
+      const cases = ids
+        .map((_, i) => `WHEN $${i + 1} THEN ${ranks[i]}::int`)
+        .join(" ");
+      const inList = ids.map((_, i) => `$${i + 1}`).join(", ");
+      await prisma.$executeRawUnsafe(
+        `UPDATE "TeamDesignerJob"
+         SET "sortOrder" = CASE id ${cases} ELSE "sortOrder" END,
+             "updatedAt" = NOW()
+         WHERE id IN (${inList})`,
+        ...ids
       );
       return NextResponse.json({ ok: true, count: ids.length });
     }
