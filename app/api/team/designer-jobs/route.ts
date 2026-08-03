@@ -20,7 +20,6 @@ import {
 } from "@/lib/team-designer-jobs";
 import { addDaysYmd, getTodayKey } from "@/lib/team-checklists";
 import { parseDesignerPriorityMode } from "@/lib/team-designer-jobs-shared";
-import { sendPriorityJobAlert } from "@/lib/team-designer-nudges";
 import { isTeamOutletId } from "@/lib/team-outlets";
 
 const JOB_SELECT = {
@@ -396,20 +395,6 @@ export async function POST(req: NextRequest) {
       await setDesignerJobLinks(job.id, links);
     }
 
-    let priorityNudge = null;
-    try {
-      priorityNudge = await sendPriorityJobAlert({
-        jobId: job.id,
-        assigneeId: job.assigneeId,
-        title: job.title,
-        outletId: job.outletId,
-        postDate: job.postDate,
-        priorityMode,
-      });
-    } catch (e) {
-      console.error("[designer-jobs] queue-updated WA", e);
-    }
-
     if (priorityMode === "PAUSE_NOW") {
       await prisma.teamDesignerJob.updateMany({
         where: { assigneeId, status: "IN_PROGRESS" },
@@ -419,7 +404,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       job: toDesignerJobDto({ ...job, links }),
-      priorityNudge,
       message: `Sent to ${assigneeId === "jeslyn" ? "Jeslyn" : "Mahesh"}`,
     });
   } catch (err) {

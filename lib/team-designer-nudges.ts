@@ -29,6 +29,9 @@ export const SLOW_TASK_MS = 3 * 60 * 60 * 1000;
 /** Morning “haven’t started” window starts (IST). */
 export const NO_START_HOUR_IST = 11;
 export const NO_START_MINUTE_IST = 30;
+/** Admin “queue changed” Send-now looks back this far. */
+export const QUEUE_UPDATE_LOOKBACK_MS = 30 * 60 * 1000;
+const QUEUE_UPDATE_JOB_ID = "batch";
 
 function formatDuration(ms: number): string {
   const m = Math.max(1, Math.round(ms / 60000));
@@ -631,6 +634,9 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
 
     const sunday = dayIdForYmd(today) === "sun";
 
+    const queueNudge = await buildQueueUpdatedSuggestion(assigneeId, name, phone, hour);
+    if (queueNudge) out.push(queueNudge);
+
     // Before 11:30 IST: brief for the day (+ catch-up only if a prior full day missed 4/day)
     if (beforeWork) {
       const catchUpRaw = (stack.missedDays ?? []).reduce(
@@ -731,6 +737,74 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
   return [...amit, ...out];
 }
 
+async function buildQueueUpdatedSuggestion(
+  assigneeId: string,
+  name: string,
+  phone: string | null,
+  hour: number
+): Promise<DesignerSuggestedNudgeDto | null> {
+  const dateKey = getTodayKey();
+  const lookback = new Date(Date.now() - QUEUE_UPDATE_LOOKBACK_MS);
+  const lastOpened = await prisma.teamDesignerReminderLog.findFirst({
+    where: {
+      assigneeId,
+      kind: "queue_updated",
+      dateKey,
+      jobId: QUEUE_UPDATE_JOB_ID,
+    },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  const since =
+    lastOpened && lastOpened.createdAt > lookback ? lastOpened.createdAt : lookback;
+
+  const changed = await prisma.teamDesignerJob.findMany({
+    where: {
+      assigneeId,
+      status: "READY_TO_DESIGN",
+      updatedAt: { gt: since },
+    },
+    select: {
+      id: true,
+      title: true,
+      priorityMode: true,
+      urgent: true,
+      updatedAt: true,
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 20,
+  });
+  if (changed.length === 0) return null;
+
+  const priorityN = changed.filter(
+    (j) => j.priorityMode === "AFTER_CURRENT" || j.priorityMode === "PAUSE_NOW" || j.urgent
+  ).length;
+  const newN = changed.length;
+
+  const detail: string[] = [];
+  if (newN > 0) detail.push(`• New task added (${newN})`);
+  if (priorityN > 0) detail.push(`• Priority change (${priorityN})`);
+
+  const body = [
+    `${name} — ${greetingForHourIst(hour)}.`,
+    "Just want to let you know — the priority queue changed. Have a look when you can.",
+    "",
+    ...detail,
+    "",
+    designerQueueLink(),
+  ].join("\n");
+
+  return {
+    assigneeId,
+    name,
+    kind: "queue_updated",
+    label: "Queue updated",
+    body,
+    shareUrl: whatsAppShareUrl(phone, body),
+    jobId: QUEUE_UPDATE_JOB_ID,
+  };
+}
+
 /** Admin clicked Open WA — log it so we don’t spam the same suggestion blindly. */
 export async function markSuggestedNudgeOpened(params: {
   assigneeId: string;
@@ -745,7 +819,9 @@ export async function markSuggestedNudgeOpened(params: {
   const jobId =
     params.assigneeId === "amit" && params.kind === "amit_ready"
       ? AMIT_BATCH_JOB_ID
-      : (params.jobId ?? "");
+      : params.kind === "queue_updated"
+        ? QUEUE_UPDATE_JOB_ID
+        : (params.jobId ?? "");
   const phone = designerWaPhone(params.assigneeId);
   const shareUrl = whatsAppShareUrl(phone, params.body);
   const log = await prisma.teamDesignerReminderLog.upsert({
@@ -812,7 +888,8 @@ export async function listRecentReminderLogs(limit = 40): Promise<DesignerRemind
 }
 
 /**
- * When admin Sends a task (or pins priority) — soft WA that the Open queue changed.
+ * @deprecated Prefer Send-now `queue_updated` suggestion (30 min lookback).
+ * Kept for rare force-send paths — soft copy only.
  */
 export async function sendPriorityJobAlert(params: {
   jobId: string;
@@ -822,52 +899,30 @@ export async function sendPriorityJobAlert(params: {
   postDate: string;
   priorityMode: DesignerPriorityMode;
 }): Promise<NudgeRunResult | null> {
+  void params.outletId;
+  void params.postDate;
   const dateKey = getTodayKey();
   const name = designerDisplayName(params.assigneeId);
-  const outlet = teamOutletLabel(params.outletId);
-  const jobLine = `• ${params.title} (${outlet} · ${params.postDate})`;
-  const active = await findActiveDesignerJob(params.assigneeId);
-
   const kind: DesignerNudgeKind =
     params.priorityMode === "PAUSE_NOW"
       ? "priority_pause_now"
       : params.priorityMode === "AFTER_CURRENT"
         ? "priority_after_current"
         : "queue_updated";
-
-  const lines = [
+  const body = [
     `${name} — ${greetingForHourIst(istHourNow())}.`,
     "Just want to let you know — the priority queue changed. Have a look when you can.",
-  ];
-  if (params.priorityMode === "PAUSE_NOW") {
-    lines.push(jobLine);
-    lines.push(
-      active
-        ? `When free, pause “${active.title}” and start this one.`
-        : "Start this when you’re free."
-    );
-  } else if (params.priorityMode === "AFTER_CURRENT") {
-    lines.push(jobLine);
-    lines.push(
-      active
-        ? `After “${active.title}”, this is next.`
-        : "It’s on Open when you’re ready."
-    );
-  }
-  lines.push("", designerQueueLink());
-  const body = lines.join("\n");
+    "",
+    designerQueueLink(),
+  ].join("\n");
 
   return logAndMaybeSend({
     assigneeId: params.assigneeId,
     kind,
     dateKey,
-    jobId: params.jobId,
+    jobId: kind === "queue_updated" ? QUEUE_UPDATE_JOB_ID : params.jobId,
     body,
-    templateParams: [
-      name,
-      "Priority queue changed",
-      params.title.slice(0, 200),
-    ],
+    templateParams: [name, "Priority queue changed", params.title.slice(0, 200)],
     force: true,
   });
 }

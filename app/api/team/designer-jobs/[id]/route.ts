@@ -32,7 +32,6 @@ import { computeDesignerStack } from "@/lib/team-designer-performance";
 import { deleteTeamHandoffBlobUrl } from "@/lib/team-handoff-blobs";
 import {
   getAmitReadyNudge,
-  sendPriorityJobAlert,
 } from "@/lib/team-designer-nudges";
 
 async function jobDtoWithLinks(job: Parameters<typeof toDesignerJobDto>[0]) {
@@ -253,20 +252,8 @@ export async function PATCH(
         await setDesignerJobLinks(id, links);
       }
 
-      let priorityNudge: Awaited<ReturnType<typeof sendPriorityJobAlert>> = null;
       if (action === "brief-ready" && status === "READY_TO_DESIGN") {
-        try {
-          priorityNudge = await sendPriorityJobAlert({
-            jobId: updated.id,
-            assigneeId: updated.assigneeId,
-            title: updated.title,
-            outletId: updated.outletId,
-            postDate: updated.postDate,
-            priorityMode: priorityMode ?? "NONE",
-          });
-        } catch (e) {
-          console.error("[designer-jobs] queue-updated WA", e);
-        }
+        // Soft “queue changed” WA is a Send-now suggestion (last 30 min) — not auto-blast.
         if (priorityMode === "PAUSE_NOW") {
           await prisma.teamDesignerJob.updateMany({
             where: {
@@ -281,7 +268,6 @@ export async function PATCH(
 
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
-        priorityNudge,
       });
     }
 
