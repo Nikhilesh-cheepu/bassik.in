@@ -179,16 +179,19 @@ export function sortDesignerJobs(jobs: DesignerJobDto[]): DesignerJobDto[] {
     const pb = pinRank(b.status);
     if (pa !== pb) return pa - pb;
 
+    // Admin drag pins beat interrupt mode + deadline (otherwise reorder looks broken)
+    const aManual = isManualDesignerSortOrder(a.sortOrder);
+    const bManual = isManualDesignerSortOrder(b.sortOrder);
+    if (aManual || bManual) {
+      if (aManual && bManual && (a.sortOrder ?? 0) !== (b.sortOrder ?? 0)) {
+        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+      }
+      if (aManual !== bManual) return aManual ? -1 : 1;
+    }
+
     const pia = priorityInsertRank(a.priorityMode);
     const pib = priorityInsertRank(b.priorityMode);
     if (pia !== pib) return pia - pib;
-
-    const aManual = isManualDesignerSortOrder(a.sortOrder);
-    const bManual = isManualDesignerSortOrder(b.sortOrder);
-    if (aManual !== bManual) return aManual ? -1 : 1;
-    if (aManual && bManual && (a.sortOrder ?? 0) !== (b.sortOrder ?? 0)) {
-      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
-    }
 
     // Deadline queue — earliest design due first (Fri pack Mon, Sat Tue, …)
     // Released catch-up jobs sort with the normal pack, not the overdue band.
@@ -204,7 +207,7 @@ export function sortDesignerJobs(jobs: DesignerJobDto[]): DesignerJobDto[] {
     const fa = a.format === "calendar" ? 1 : a.format.startsWith("adhoc") ? 2 : 0;
     const fb = b.format === "calendar" ? 1 : b.format.startsWith("adhoc") ? 2 : 0;
     if (fa !== fb) return fa - fb;
-    if (!aManual && !bManual && (a.sortOrder ?? 0) !== (b.sortOrder ?? 0)) {
+    if ((a.sortOrder ?? 0) !== (b.sortOrder ?? 0)) {
       return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
     }
     if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;

@@ -743,10 +743,18 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     const orderMap = new Map(
       orderedIds.map((id, i) => [id, i - orderedIds.length] as const)
     );
+    setError(null);
     setAllJobs((prev) =>
       sortDesignerJobs(
         prev.map((j) =>
-          orderMap.has(j.id) ? { ...j, sortOrder: orderMap.get(j.id)! } : j
+          orderMap.has(j.id)
+            ? {
+                ...j,
+                sortOrder: orderMap.get(j.id)!,
+                priorityMode: "NONE",
+                urgent: false,
+              }
+            : j
         )
       )
     );
@@ -1125,7 +1133,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     });
   };
 
-  const canDragQueue = isAdmin && queueView === "open" && queue.length > 1;
+  const canDragQueue =
+    isAdmin &&
+    queueView === "open" &&
+    openParts.todayPack.length + openParts.upNext.length > 1;
   const toSendCount = sendableJobs.length;
   const toSendVisible = useMemo(
     () =>
