@@ -1120,6 +1120,16 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
 
   const catchUpDebt = openPartsRaw.effectiveCatchUpSlots;
 
+  /** Per-designer Q# 1…N in current priority order (Catch up → Today → Later). */
+  const queueNumberById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const assigneeId of ["mahesh", "jeslyn"] as const) {
+      const list = openJobsForPartition.filter((j) => j.assigneeId === assigneeId);
+      list.forEach((j, i) => map.set(j.id, i + 1));
+    }
+    return map;
+  }, [openJobsForPartition]);
+
   const startJob = (
     job: DesignerJobDto,
     _opts?: { tone?: "catchUp" | "today" | "next" | "done" }
@@ -1571,6 +1581,7 @@ https://instagram.com/…"
           const canSend = isAdmin && job.status === "WAITING_BRIEF";
           const selected = selectedIds.has(job.id);
           const brief = jobBriefText(job);
+          const queueNo = queueNumberById.get(job.id);
           const toneClass =
             tone === "catchUp"
               ? "border-amber-400/35 bg-amber-400/[0.07] ring-1 ring-amber-400/15"
@@ -1612,6 +1623,11 @@ https://instagram.com/…"
                 ) : null}
                 <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-300/75">
+                  {queueNo != null ? (
+                    <span className="mr-2 rounded bg-white/10 px-1.5 py-0.5 tabular-nums text-white/70">
+                      Q{queueNo}
+                    </span>
+                  ) : null}
                   {dayName}
                 </p>
                 <h3 className="mt-0.5 text-[20px] font-semibold leading-tight tracking-tight text-white">
