@@ -719,7 +719,9 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
     }
   }
 
-  // Amit handoffs stay on Daily checklist — not Monthly designer queue
+  // Also surface WA Ready for Amit when designer uploads land on Daily
+  const amitReady = await getAmitReadyNudge();
+  if (amitReady) out.push(amitReady);
   return out;
 }
 

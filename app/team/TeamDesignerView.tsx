@@ -472,7 +472,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     }
     if (Array.isArray(data.suggested)) {
       const suggested = (data.suggested as DesignerSuggestedNudgeDto[]).filter(
-        (s) => s.assigneeId === "mahesh" || s.assigneeId === "jeslyn"
+        (s) =>
+          s.assigneeId === "mahesh" ||
+          s.assigneeId === "jeslyn" ||
+          s.kind === "amit_ready"
       );
       setSuggestedNudges(suggested);
     }
@@ -637,7 +640,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       setReminders((data.reminders as DesignerReminderLogDto[]) ?? []);
       setSuggestedNudges(
         ((data.suggested as DesignerSuggestedNudgeDto[]) ?? []).filter(
-          (s) => s.assigneeId === "mahesh" || s.assigneeId === "jeslyn"
+          (s) =>
+            s.assigneeId === "mahesh" ||
+            s.assigneeId === "jeslyn" ||
+            s.kind === "amit_ready"
         )
       );
       const first = (
@@ -660,7 +666,6 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   };
 
   const openSuggestedWa = async (s: DesignerSuggestedNudgeDto) => {
-    if (s.assigneeId === "amit" || s.kind === "amit_ready") return;
     const key = `${s.assigneeId}:${s.kind}:${s.jobId}`;
     setNudgeBusy(key);
     try {
@@ -681,7 +686,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         setReminders((data.reminders as DesignerReminderLogDto[]) ?? []);
         const suggested = (
           (data.suggested as DesignerSuggestedNudgeDto[]) ?? []
-        ).filter((x) => x.assigneeId === "mahesh" || x.assigneeId === "jeslyn");
+        ).filter(
+          (x) =>
+            x.assigneeId === "mahesh" ||
+            x.assigneeId === "jeslyn" ||
+            x.kind === "amit_ready"
+        );
         setSuggestedNudges(suggested);
       }
     } catch (err) {
@@ -690,6 +700,11 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       setNudgeBusy(null);
     }
   };
+
+  const amitReadyNudge = useMemo(
+    () => suggestedNudges.find((s) => s.kind === "amit_ready") ?? null,
+    [suggestedNudges]
+  );
 
   /** Base filter by designer tab / member (before ready-only / outlet). */
   const scopedJobs = useMemo(() => {
@@ -1491,6 +1506,18 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           <p className="text-[11px] text-white/35">
             {windowMeta.fromDate} → {windowMeta.toDate}
           </p>
+        ) : null}
+        {isAdmin && amitReadyNudge ? (
+          <button
+            type="button"
+            disabled={nudgeBusy === `${amitReadyNudge.assigneeId}:${amitReadyNudge.kind}:${amitReadyNudge.jobId}`}
+            onClick={() => void openSuggestedWa(amitReadyNudge)}
+            title="WhatsApp Amit — new Ready handoffs"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#25D366]/45 bg-[#25D366]/15 px-3 text-[12px] font-bold text-[#25D366] disabled:opacity-40"
+          >
+            <IconWhatsApp className="h-4 w-4" />
+            WA Ready
+          </button>
         ) : null}
       </div>
 

@@ -20,6 +20,7 @@ import { uploadTeamFile } from "@/lib/team-client-upload";
 import { teamDownloadHref } from "@/lib/team-download";
 import { TEAM_AD_OUTLETS, outletKindTitle, teamOutletLabel } from "@/lib/team-outlets";
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
+import { designerWaPhone } from "@/lib/team-wa-cloud";
 import { whatsAppShareUrl } from "@/lib/team-whatsapp-report";
 import { TEAM_SHEET_OVERLAY, TEAM_SHEET_PANEL } from "./TeamNav";
 import {
@@ -272,28 +273,19 @@ function itemDateKey(item: TeamChecklistItemDto, focusDate: string): string {
   return item.targetDate ?? focusDate;
 }
 
-/** Ready WA: today’s Ready items only (no cryptic outlet codes). */
-function collectTodayReadyItems(
-  board: ChecklistBoardDto,
-  todayYmd: string
-): TeamChecklistItemDto[] {
-  const focus = board.day.focusDate;
-  return collectReadyItems(board).filter((i) => itemDateKey(i, focus) === todayYmd);
-}
-
-/** Generic Amit ping — check today’s Daily Checklist on the site. */
-function buildAllReadyWhatsAppMessage(todayCount: number): string {
+/** Generic Amit ping — any Ready creatives on Daily Checklist (overdue / upcoming included). */
+function buildAllReadyWhatsAppMessage(readyCount: number): string {
   const stamp = formatIstWaStamp();
   const countBit =
-    todayCount > 1
-      ? `Today’s tasks are ready (${todayCount}) on the Daily Checklist.`
-      : "Today’s tasks are ready on the Daily Checklist.";
+    readyCount > 1
+      ? `New tasks are Ready (${readyCount}) on the Daily Checklist.`
+      : "A new task is Ready on the Daily Checklist.";
   return [
     "Hey Amit —",
     "",
     `New update as of ${stamp}.`,
     "",
-    `${countBit} Please check today’s list on the website and complete them. Thank you.`,
+    `${countBit} Please check the website and complete them. Thank you.`,
     "",
     teamChecklistLink(),
   ].join("\n");
@@ -1324,9 +1316,14 @@ export default function TeamTasksView({
     await loadBoard();
   };
 
-  const openWhatsAppMessage = (message: string, count: number, title: string) => {
+  const openWhatsAppMessage = (
+    message: string,
+    count: number,
+    title: string,
+    phone?: string | null
+  ) => {
     setError(null);
-    const url = whatsAppShareUrl(message);
+    const url = whatsAppShareUrl(message, phone);
     setWaFallbackUrl(null);
     const result = openWhatsAppShareUrl(url);
     if (result === "popup-blocked" || result === false) {
@@ -1337,16 +1334,16 @@ export default function TeamTasksView({
 
   const sendAllReadyWhatsApp = () => {
     if (!isAdmin || !board) return;
-    const todayYmd = getTodayKey();
-    const readyItems = collectTodayReadyItems(board, todayYmd);
+    const readyItems = collectReadyItems(board);
     if (readyItems.length === 0) {
-      setError("Nothing Ready for today yet — only today’s greens go on WhatsApp.");
+      setError("Nothing Ready yet — upload a creative first, then WA Ready.");
       return;
     }
     openWhatsAppMessage(
       buildAllReadyWhatsAppMessage(readyItems.length),
       readyItems.length,
-      "Today ready — WhatsApp"
+      "WA Ready — Amit",
+      designerWaPhone("amit")
     );
   };
 
@@ -1564,7 +1561,6 @@ export default function TeamTasksView({
   const readyItemsAll = board ? collectReadyItems(board) : [];
   const readyCount = readyItemsAll.length;
   const todayYmd = getTodayKey();
-  const todayReadyCount = board ? collectTodayReadyItems(board, todayYmd).length : 0;
   const waitingItemsAll = board ? collectWaitItems(board) : [];
   const waitCount = waitingItemsAll.length;
   const todayWaitCount = board
@@ -1789,6 +1785,36 @@ export default function TeamTasksView({
                 );
               })}
             </div>
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={sendAllReadyWhatsApp}
+                disabled={readyCount === 0}
+                title={
+                  readyCount === 0
+                    ? "Nothing Ready yet"
+                    : `WhatsApp Amit — ${readyCount} Ready`
+                }
+                aria-label={
+                  readyCount > 0
+                    ? `WA Ready — ${readyCount} for Amit`
+                    : "WA Ready — nothing Ready yet"
+                }
+                className={`relative flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border px-2.5 transition ${
+                  readyCount > 0
+                    ? "border-[#25D366]/45 bg-[#25D366]/15 text-[#25D366]"
+                    : "border-white/12 bg-white/[0.04] text-white/30"
+                } disabled:cursor-not-allowed`}
+              >
+                <IconWhatsApp className="h-[18px] w-[18px]" />
+                <span className="text-[12px] font-bold">WA Ready</span>
+                {readyCount > 0 ? (
+                  <span className="min-w-[1.25rem] rounded-md bg-black/25 px-1.5 py-0.5 text-center text-[11px] font-bold tabular-nums text-[#25D366]">
+                    {readyCount}
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={openBoardNotes}
@@ -2162,16 +2188,16 @@ export default function TeamTasksView({
               <button
                 type="button"
                 onClick={sendAllReadyWhatsApp}
-                disabled={todayReadyCount === 0}
+                disabled={readyCount === 0}
                 title={
-                  todayReadyCount === 0
-                    ? "Nothing Ready for today yet"
-                    : "Send a generic WhatsApp — check today’s Ready on the site"
+                  readyCount === 0
+                    ? "Nothing Ready yet"
+                    : "WhatsApp Amit — Ready on Daily Checklist"
                 }
                 className="text-[13px] font-medium text-[#25D366]/80 underline decoration-[#25D366]/35 underline-offset-4 hover:text-[#25D366] disabled:cursor-not-allowed disabled:text-white/25 disabled:no-underline"
               >
-                WhatsApp today ready
-                {todayReadyCount > 0 ? ` (${todayReadyCount})` : ""}
+                WA Ready
+                {readyCount > 0 ? ` (${readyCount})` : ""}
               </button>
             ) : (
               <button
