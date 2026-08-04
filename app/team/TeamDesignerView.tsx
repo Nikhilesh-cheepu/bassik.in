@@ -33,7 +33,7 @@ import {
   DESIGNER_MONTH_OUTLET_IDS,
   DESIGNER_POINTS_PER_LEAVE,
   DESIGNER_WINDOW_DAYS,
-  catchUpMetaFromStack,
+  catchUpMetaAfterRelease,
   designerFormatLabel,
   isBoilerplateDesignerDescription,
   partitionOpenDesignerQueueByAssignee,
@@ -377,7 +377,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const [loading, setLoading] = useState(true);
   /** False until first performance/stack payload — needed for Catch up bands. */
   const [perfReady, setPerfReady] = useState(false);
+  const [perfLoading, setPerfLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadingRef = useRef(true);
+  const perfReadyRef = useRef(false);
+  loadingRef.current = loading;
+  perfReadyRef.current = perfReady;
   const [busyId, setBusyId] = useState<string | null>(null);
   const [uploadJobId, setUploadJobId] = useState<string | null>(null);
   /** Admin upload form mode: attach only vs attach+close. Designer always close. */
@@ -399,7 +404,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     postingNotes: "",
     scheduleNote: "",
     waApproved: false,
-    fileUrl: "",
+    fileUrls: [] as string[],
   });
   const [uploading, setUploading] = useState(false);
   const [adhocOpen, setAdhocOpen] = useState(false);
@@ -448,16 +453,28 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
 
   /** Fast path: stack + series only (Catch up / day strip). */
   const loadPerformanceLite = useCallback(async () => {
-    const res = await fetch("/api/team/designer-performance?lite=1", {
-      cache: "no-store",
-    });
-    const data = await readJson(res);
-    if (!res.ok) {
-      throw new Error(
-        typeof data.error === "string" ? data.error : "Performance failed"
-      );
+    const showSpinner = !perfReadyRef.current;
+    if (showSpinner) setPerfLoading(true);
+    try {
+      const res = await fetch("/api/team/designer-performance?lite=1", {
+        cache: "no-store",
+        // Hung DB must not leave the Open tab on a spinner forever
+        signal: AbortSignal.timeout(12_000),
+      });
+      const data = await readJson(res);
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "Performance failed"
+        );
+      }
+      applyPerformancePayload(data);
+    } catch {
+      /* timeout / network — still unblock Open */
+    } finally {
+      if (showSpinner) setPerfLoading(false);
+      setPerfReady(true);
+      perfReadyRef.current = true;
     }
-    applyPerformancePayload(data);
   }, [applyPerformancePayload]);
 
   /** WA suggestion icons — heavy; never block first paint. */
@@ -490,10 +507,15 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     view?: QueueView;
   }) => {
     const view = opts?.view ?? queueViewRef.current;
+    const soft = Boolean(opts?.soft || opts?.quiet);
+    // Soft polls must not cancel / starve the first blocking load
+    if (soft && (loadingRef.current || !perfReadyRef.current)) return;
+
     const gen = ++loadGen.current;
-    const blocking = !opts?.quiet && !opts?.soft;
+    const blocking = !soft;
     if (blocking) {
       setLoading(true);
+      loadingRef.current = true;
     }
     try {
       const kind = jobsFetchKind(view);
@@ -503,11 +525,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           : kind === "expired"
             ? "?view=expired"
             : "";
-      // Jobs + lite performance together — Catch up ready on first paint (no WA wait)
-      const [jobsRes] = await Promise.all([
-        fetch(`/api/team/designer-jobs${qs}`, { cache: "no-store" }),
-        loadPerformanceLite().catch(() => undefined),
-      ]);
+      // Jobs first (unblocks UI). Lite performance in parallel — never blocks jobs paint.
+      const jobsPromise = fetch(`/api/team/designer-jobs${qs}`, {
+        cache: "no-store",
+      });
+      const perfPromise = loadPerformanceLite().catch(() => undefined);
+      const jobsRes = await jobsPromise;
       const data = await readJson(jobsRes);
       if (gen !== loadGen.current) return;
       if (!jobsRes.ok) {
@@ -518,16 +541,18 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       setAllJobs((data.jobs as DesignerJobDto[]) ?? []);
       setWindowMeta((data.window as WindowMeta) ?? null);
       if (!opts?.quiet) setError(null);
-      // WA nudge icons in background — never block Catch up / day strip
-      void loadPerformanceExtras();
+      void perfPromise;
+      // WA nudge icons once after first paint — not on every soft poll
+      if (!soft) void loadPerformanceExtras();
     } catch (err) {
       if (gen !== loadGen.current) return;
       if (!opts?.quiet) {
         setError(err instanceof Error ? err.message : "Failed to load");
       }
     } finally {
-      if (gen === loadGen.current && blocking) {
+      if (blocking) {
         setLoading(false);
+        loadingRef.current = false;
       }
     }
   }, [loadPerformanceLite, loadPerformanceExtras]);
@@ -556,9 +581,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         return;
       }
       if (pauseLivePollRef.current) return;
+      if (loadingRef.current || !perfReadyRef.current) return;
       void load({ soft: true, quiet: true });
     };
-    const id = window.setInterval(softRefresh, 8_000);
+    const id = window.setInterval(softRefresh, 12_000);
     window.addEventListener("focus", softRefresh);
     document.addEventListener("visibilitychange", softRefresh);
     return () => {
@@ -1052,15 +1078,21 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     setUploadGate(null);
     setUploadMode(mode);
     setUploadJobId(job.id);
+    const existing =
+      Array.isArray(job.fileUrls) && job.fileUrls.length > 0
+        ? job.fileUrls
+        : job.fileUrl
+          ? [job.fileUrl]
+          : [];
     setUploadForm({
       postingNotes: job.postingNotes ?? "",
       scheduleNote: job.scheduleNote ?? "",
       waApproved: isAdmin,
-      fileUrl: job.fileUrl ?? "",
+      fileUrls: existing,
     });
   };
 
-  const onFile = async (file: File | null) => {
+  const onFile = async (file: File | null, inputEl?: HTMLInputElement | null) => {
     if (!file) return;
     setUploading(true);
     setError(null);
@@ -1070,11 +1102,14 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         kind: "handoff",
         outletId: job?.outletId,
       });
-      setUploadForm((f) => ({ ...f, fileUrl: url }));
+      setUploadForm((f) =>
+        f.fileUrls.includes(url) ? f : { ...f, fileUrls: [...f.fileUrls, url] }
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
+      if (inputEl) inputEl.value = "";
     }
   };
 
@@ -1084,6 +1119,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     const current = allJobs.find((j) => j.id === id);
     const replacing = current?.status === "DESIGN_DONE";
     const attachOnly = isAdmin && uploadMode === "attach" && !replacing;
+    if (uploadForm.fileUrls.length === 0) {
+      setError("Upload at least one file");
+      return;
+    }
     setBusyId(id);
     try {
       const res = await fetch(`/api/team/designer-jobs/${id}`, {
@@ -1091,7 +1130,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: replacing ? "replace-upload" : attachOnly ? "set-upload" : "upload-close",
-          fileUrl: uploadForm.fileUrl,
+          fileUrl: uploadForm.fileUrls[0],
+          fileUrls: uploadForm.fileUrls,
           postingNotes: uploadForm.postingNotes,
           scheduleNote: uploadForm.scheduleNote,
           waApproved: uploadForm.waApproved || isAdmin,
@@ -1111,7 +1151,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       }
       void loadPerformance();
       setUploadJobId(null);
-      setUploadForm({ postingNotes: "", scheduleNote: "", waApproved: false, fileUrl: "" });
+      setUploadForm({
+        postingNotes: "",
+        scheduleNote: "",
+        waApproved: false,
+        fileUrls: [],
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Close failed";
       const waitMatch = /wait (\d+)s/i.exec(msg);
@@ -1224,17 +1269,25 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
    * Top N of the priority queue → Catch up; next 4 → Today; rest → Later.
    * Debt is per designer — outlet chips only filter what you see.
    */
+  const releasedSlotsByAssignee = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const j of allJobs) {
+      if (!j.catchUpExempt || j.status === "DESIGN_DONE") continue;
+      m.set(j.assigneeId, (m.get(j.assigneeId) ?? 0) + 1);
+    }
+    return m;
+  }, [allJobs]);
+
   const openPartsRaw = useMemo(() => {
     const metaMap = new Map(
       perfDesigners.map((p) => {
-        const meta = catchUpMetaFromStack(p.stack);
-        const releasedSlots = allJobs.filter(
-          (j) =>
-            j.assigneeId === p.assigneeId &&
-            j.catchUpExempt &&
-            j.status !== "DESIGN_DONE"
-        ).length;
-        return [p.assigneeId, { ...meta, releasedSlots }] as const;
+        const releasedSlots = releasedSlotsByAssignee.get(p.assigneeId) ?? 0;
+        // catchUpSlots already net of Drops — don't subtract releasedSlots again in partition
+        const meta = catchUpMetaAfterRelease(p.stack, releasedSlots);
+        return [
+          p.assigneeId,
+          { ...meta, releasedSlots: 0 },
+        ] as const;
       })
     );
     return partitionOpenDesignerQueueByAssignee(
@@ -1242,7 +1295,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       metaMap,
       DESIGNER_DAILY_TARGET
     );
-  }, [openJobsForPartition, perfDesigners, allJobs]);
+  }, [openJobsForPartition, perfDesigners, releasedSlotsByAssignee]);
 
   const openParts = useMemo(() => {
     if (outletFilter === "all") return openPartsRaw;
@@ -1403,7 +1456,20 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         ) : null}
       </div>
 
-      {loading || ((queueView === "open" || queueView === "toSend") && !perfReady) ? (
+      {loading && allJobs.length === 0 ? (
+        <div
+          className="flex items-center gap-2.5 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.07] px-3.5 py-3"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-cyan-300/30 border-t-cyan-300" />
+          <p className="text-[13px] font-medium text-cyan-50/90">Loading queue…</p>
+        </div>
+      ) : null}
+      {!loading &&
+      (queueView === "open" || queueView === "toSend") &&
+      perfLoading &&
+      !perfReady ? (
         <div
           className="flex items-center gap-2.5 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.07] px-3.5 py-3"
           role="status"
@@ -1411,9 +1477,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         >
           <span className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-cyan-300/30 border-t-cyan-300" />
           <p className="text-[13px] font-medium text-cyan-50/90">
-            {loading && allJobs.length === 0
-              ? "Loading queue…"
-              : "Loading Catch up & daily progress…"}
+            Loading Catch up & daily progress…
           </p>
         </div>
       ) : null}
@@ -1423,6 +1487,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
             <DesignerPerformanceCard
               key={p.assigneeId}
               perf={p}
+              forgivenSlots={releasedSlotsByAssignee.get(p.assigneeId) ?? 0}
               isAdmin={isAdmin}
               nudges={suggestedNudges.filter((s) => s.assigneeId === p.assigneeId)}
               nudgeBusy={nudgeBusy}
@@ -1713,12 +1778,7 @@ https://instagram.com/…"
         </div>
       ) : null}
       <section className="space-y-3">
-        {queueView === "open" && !perfReady ? (
-          <p className="text-[12px] text-white/40">
-            Waiting for progress data so Catch up / Today stay accurate…
-          </p>
-        ) : null}
-        {queue.length === 0 && !loading && perfReady && queueView !== "toSend" ? (
+        {queue.length === 0 && !loading && queueView !== "toSend" ? (
           <p className="text-[13px] text-white/35">
             {queueView === "closed"
               ? "No done jobs for this view."
@@ -1865,13 +1925,27 @@ https://instagram.com/…"
               </div>
               <div className="relative z-[2] flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:max-w-[12rem]">
                 {/* Download only on Done — Open must not keep a leftover file after reopen */}
-                {job.status === "DESIGN_DONE" && job.fileUrl ? (
-                  <a
-                    href={teamDownloadHref(job.fileUrl, `${job.outletLabel}-${job.postDate}`)}
-                    className="inline-flex h-11 min-h-[44px] items-center justify-center rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
-                  >
-                    Download
-                  </a>
+                {job.status === "DESIGN_DONE" &&
+                (job.fileUrls?.length > 0 || job.fileUrl) ? (
+                  <div className="flex flex-col gap-1.5">
+                    {(job.fileUrls?.length
+                      ? job.fileUrls
+                      : job.fileUrl
+                        ? [job.fileUrl]
+                        : []
+                    ).map((url, i, arr) => (
+                      <a
+                        key={url}
+                        href={teamDownloadHref(
+                          url,
+                          `${job.outletLabel}-${job.postDate}${arr.length > 1 ? `-${i + 1}` : ""}`
+                        )}
+                        className="inline-flex h-11 min-h-[44px] items-center justify-center rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
+                      >
+                        {arr.length > 1 ? `Download ${i + 1}` : "Download"}
+                      </a>
+                    ))}
+                  </div>
                 ) : null}
                 {isAdmin ? (
                   <div className="flex gap-2">
@@ -2419,10 +2493,10 @@ https://instagram.com/…"
               <div className="mt-2 space-y-2 rounded-lg border border-emerald-400/25 bg-emerald-400/[0.06] p-2.5">
                 <p className="text-[11px] text-emerald-100/90">
                   {job.status === "DESIGN_DONE"
-                    ? "Replace the creative — Amit Ready updates with the new file."
+                    ? "Update creatives — Amit Ready uses the first file."
                     : uploadMode === "attach"
                       ? "Admin upload only — job stays Open until you Mark done."
-                      : "After WhatsApp OK — upload final, then close. Amit gets Ready on Daily."}
+                      : "After WhatsApp OK — upload at least one file (add more one by one), then close."}
                 </p>
                 <label className="flex items-center gap-2 text-[11px] text-white/70">
                   <input
@@ -2434,23 +2508,53 @@ https://instagram.com/…"
                   />
                   WhatsApp approved
                 </label>
-                <input
-                  type="file"
-                  accept="image/*,video/*,.pdf"
-                  disabled={uploading}
-                  onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
-                  className="block w-full text-[11px] text-white/60"
-                />
-                {uploadForm.fileUrl ? (
-                  <a
-                    href={uploadForm.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block truncate text-[11px] text-cyan-300"
-                  >
-                    File ready
-                  </a>
+                {uploadForm.fileUrls.length > 0 ? (
+                  <ul className="space-y-1">
+                    {uploadForm.fileUrls.map((url, i) => (
+                      <li
+                        key={url}
+                        className="flex items-center gap-2 text-[11px] text-cyan-200/90"
+                      >
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="min-w-0 flex-1 truncate text-cyan-300"
+                        >
+                          File {i + 1} ready
+                        </a>
+                        <button
+                          type="button"
+                          disabled={uploading || busyId === job.id}
+                          onClick={() =>
+                            setUploadForm((f) => ({
+                              ...f,
+                              fileUrls: f.fileUrls.filter((u) => u !== url),
+                            }))
+                          }
+                          className="shrink-0 text-white/40 hover:text-red-300 disabled:opacity-40"
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 ) : null}
+                <label className="block text-[11px] text-white/55">
+                  {uploadForm.fileUrls.length === 0
+                    ? "Choose file (required)"
+                    : "Add another file"}
+                  <input
+                    type="file"
+                    accept="image/*,video/*,.pdf"
+                    disabled={uploading}
+                    onChange={(e) => {
+                      const input = e.currentTarget;
+                      void onFile(input.files?.[0] ?? null, input);
+                    }}
+                    className="mt-1 block w-full text-[11px] text-white/60"
+                  />
+                </label>
                 <input
                   value={uploadForm.scheduleNote}
                   onChange={(e) =>
@@ -2474,7 +2578,7 @@ https://instagram.com/…"
                     disabled={
                       busyId === job.id ||
                       uploading ||
-                      !uploadForm.fileUrl ||
+                      uploadForm.fileUrls.length === 0 ||
                       (!uploadForm.waApproved && !isAdmin)
                     }
                     onClick={() => void closeUpload()}
@@ -2485,7 +2589,7 @@ https://instagram.com/…"
                       : busyId === job.id
                         ? "Saving…"
                         : job.status === "DESIGN_DONE"
-                          ? "Save new upload"
+                          ? "Save uploads"
                           : uploadMode === "attach"
                             ? "Save upload"
                             : "Save & close"}
@@ -2499,7 +2603,7 @@ https://instagram.com/…"
                         postingNotes: "",
                         scheduleNote: "",
                         waApproved: false,
-                        fileUrl: "",
+                        fileUrls: [],
                       });
                     }}
                     className="h-9 px-2 text-[12px] text-white/45 disabled:opacity-40"
@@ -2780,11 +2884,7 @@ https://instagram.com/…"
             );
           }
 
-          // Don't paint Open without stack — avoids flash of Today with no Catch up
-          if (queueView === "open" && !perfReady) {
-            return null;
-          }
-
+          // Until stack arrives, paint as Today/Later (slots=0) — never blank the list
           if (!canDragQueue) {
             return (
               <div className="space-y-5">
@@ -3161,6 +3261,7 @@ function dayOfMonthLabel(ymd: string): string {
 
 function DesignerPerformanceCard({
   perf,
+  forgivenSlots = 0,
   isAdmin,
   nudges,
   nudgeBusy,
@@ -3168,6 +3269,8 @@ function DesignerPerformanceCard({
   onOpenNudge,
 }: {
   perf: DesignerPerformanceDto;
+  /** Admin Drop catch-up — slots no longer owed */
+  forgivenSlots?: number;
   isAdmin: boolean;
   nudges: DesignerSuggestedNudgeDto[];
   nudgeBusy: string | null;
@@ -3175,7 +3278,7 @@ function DesignerPerformanceCard({
   onOpenNudge: (s: DesignerSuggestedNudgeDto) => void;
 }) {
   const sunday = Boolean(perf.isSundayHoliday);
-  const catchMeta = catchUpMetaFromStack(perf.stack);
+  const catchMeta = catchUpMetaAfterRelease(perf.stack, forgivenSlots);
   const catchUpN = catchMeta.catchUpSlots;
   const doneTotal = perf.stack.closedSoFar;
   const targetSoFar = perf.stack.targetSoFar;

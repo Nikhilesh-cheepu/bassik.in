@@ -26,6 +26,7 @@ import {
   DESIGNER_MANUAL_SORT_CEILING,
   isBoilerplateDesignerDescription,
   naturalDesignerSortOrder,
+  normalizeDesignerFileUrls,
   parseDesignerLinks,
   parseDesignerPriorityMode,
   sortDesignerJobs,
@@ -181,6 +182,7 @@ type DesignerJobRow = Omit<
   never
 > & {
   links?: unknown;
+  fileUrls?: unknown;
   editRequestedAt?: Date | string | null;
   editRequestNote?: string | null;
   pauseRequestedAt?: Date | string | null;
@@ -189,6 +191,7 @@ type DesignerJobRow = Omit<
 };
 
 let catchUpExemptColumnReady = false;
+let fileUrlsColumnReady = false;
 
 /** Prod-safe: add column if migration hasn’t run yet. */
 export async function ensureCatchUpExemptColumn(): Promise<void> {
@@ -197,6 +200,47 @@ export async function ensureCatchUpExemptColumn(): Promise<void> {
     `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "catchUpExempt" BOOLEAN NOT NULL DEFAULT false`
   );
   catchUpExemptColumnReady = true;
+}
+
+/** Prod-safe: multi-file creatives column. */
+export async function ensureDesignerFileUrlsColumn(): Promise<void> {
+  if (fileUrlsColumnReady) return;
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "fileUrls" JSONB`
+  );
+  fileUrlsColumnReady = true;
+}
+
+/** Persist creatives — fileUrl = first (Amit), fileUrls = full list. */
+export async function setDesignerJobFileUrls(
+  id: string,
+  urls: string[]
+): Promise<void> {
+  await ensureDesignerFileUrlsColumn();
+  const list = normalizeDesignerFileUrls(null, urls);
+  await prisma.$executeRawUnsafe(
+    `UPDATE "TeamDesignerJob" SET "fileUrl" = $1, "fileUrls" = $2::jsonb, "updatedAt" = NOW() WHERE id = $3`,
+    list[0] ?? null,
+    list.length > 0 ? JSON.stringify(list) : null,
+    id
+  );
+}
+
+export async function loadDesignerFileUrlsByIds(
+  ids: string[]
+): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (ids.length === 0) return map;
+  await ensureDesignerFileUrlsColumn();
+  const rows = await prisma.$queryRaw<
+    Array<{ id: string; fileUrl: string | null; fileUrls: unknown }>
+  >`
+    SELECT id, "fileUrl", "fileUrls" FROM "TeamDesignerJob" WHERE id IN (${Prisma.join(ids)})
+  `;
+  for (const row of rows) {
+    map.set(row.id, normalizeDesignerFileUrls(row.fileUrl, row.fileUrls));
+  }
+  return map;
 }
 
 /** Raw SQL — safe when a stale Prisma client hasn't learned the `links` column yet. */
@@ -373,7 +417,8 @@ export function toDesignerJobDto(job: DesignerJobRow, today = getTodayKey()): De
       job.closedByRole === "designer" || job.closedByRole === "admin"
         ? job.closedByRole
         : null,
-    fileUrl: job.fileUrl,
+    fileUrl: normalizeDesignerFileUrls(job.fileUrl, job.fileUrls)[0] ?? null,
+    fileUrls: normalizeDesignerFileUrls(job.fileUrl, job.fileUrls),
     postingNotes: job.postingNotes,
     scheduleNote: job.scheduleNote,
     waApproved: job.waApproved,
@@ -955,4 +1000,5 @@ export async function unreadyOutletGoLiveHandoff(params: {
       waApproved: false,
     },
   });
+  await setDesignerJobFileUrls(job.id, []);
 }

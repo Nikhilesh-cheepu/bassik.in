@@ -7,6 +7,7 @@ import {
   DESIGNER_WINDOW_DAYS,
   linksFromText,
   loadDesignerEditMetaByIds,
+  loadDesignerFileUrlsByIds,
   loadDesignerJobLinksByIds,
   monthKeyFromYmd,
   naturalDesignerSortOrder,
@@ -20,8 +21,40 @@ import {
   manualSortOrdersFromDragRank,
 } from "@/lib/team-designer-jobs";
 import { addDaysYmd, getTodayKey } from "@/lib/team-checklists";
-import { parseDesignerPriorityMode } from "@/lib/team-designer-jobs-shared";
+import {
+  normalizeDesignerFileUrls,
+  parseDesignerPriorityMode,
+} from "@/lib/team-designer-jobs-shared";
 import { isTeamOutletId } from "@/lib/team-outlets";
+
+async function jobsWithExtras(
+  rows: Array<Parameters<typeof toDesignerJobDto>[0] & { id: string; fileUrl?: string | null }>,
+  today: string
+) {
+  const ids = rows.map((r) => r.id);
+  const [linksMap, editMap, filesMap] = await Promise.all([
+    loadDesignerJobLinksByIds(ids),
+    loadDesignerEditMetaByIds(ids),
+    loadDesignerFileUrlsByIds(ids),
+  ]);
+  return rows.map((r) => {
+    const edit = editMap.get(r.id);
+    return toDesignerJobDto(
+      {
+        ...r,
+        links: linksMap.get(r.id) ?? [],
+        fileUrls:
+          filesMap.get(r.id) ?? normalizeDesignerFileUrls(r.fileUrl ?? null, null),
+        editRequestedAt: edit?.editRequestedAt ?? null,
+        editRequestNote: edit?.editRequestNote ?? null,
+        pauseRequestedAt: edit?.pauseRequestedAt ?? null,
+        pauseRequestNote: edit?.pauseRequestNote ?? null,
+        catchUpExempt: edit?.catchUpExempt ?? false,
+      },
+      today
+    );
+  });
+}
 
 const JOB_SELECT = {
   id: true,
@@ -101,26 +134,7 @@ export async function GET(req: NextRequest) {
         orderBy: [{ postDate: "desc" }, { uploadedAt: "desc" }],
         take: 150,
       });
-      const ids = rows.map((r) => r.id);
-      const [linksMap, editMap] = await Promise.all([
-        loadDesignerJobLinksByIds(ids),
-        loadDesignerEditMetaByIds(ids),
-      ]);
-      const jobs = rows.map((r) => {
-        const edit = editMap.get(r.id);
-        return toDesignerJobDto(
-          {
-            ...r,
-            links: linksMap.get(r.id) ?? [],
-            editRequestedAt: edit?.editRequestedAt ?? null,
-            editRequestNote: edit?.editRequestNote ?? null,
-            pauseRequestedAt: edit?.pauseRequestedAt ?? null,
-            pauseRequestNote: edit?.pauseRequestNote ?? null,
-            catchUpExempt: edit?.catchUpExempt ?? false,
-          },
-          today
-        );
-      });
+      const jobs = await jobsWithExtras(rows, today);
       return NextResponse.json({
         view: "expired",
         window: { fromDate, toDate, days },
@@ -161,26 +175,7 @@ export async function GET(req: NextRequest) {
         take: 200,
       });
 
-      const ids = rows.map((r) => r.id);
-      const [linksMap, editMap] = await Promise.all([
-        loadDesignerJobLinksByIds(ids),
-        loadDesignerEditMetaByIds(ids),
-      ]);
-      const jobs = rows.map((r) => {
-        const edit = editMap.get(r.id);
-        return toDesignerJobDto(
-          {
-            ...r,
-            links: linksMap.get(r.id) ?? [],
-            editRequestedAt: edit?.editRequestedAt ?? null,
-            editRequestNote: edit?.editRequestNote ?? null,
-            pauseRequestedAt: edit?.pauseRequestedAt ?? null,
-            pauseRequestNote: edit?.pauseRequestNote ?? null,
-            catchUpExempt: edit?.catchUpExempt ?? false,
-          },
-          today
-        );
-      });
+      const jobs = await jobsWithExtras(rows, today);
 
       return NextResponse.json({
         view: "closed",
@@ -223,28 +218,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const ids = rows.map((r) => r.id);
-    const [linksMap, editMap] = await Promise.all([
-      loadDesignerJobLinksByIds(ids),
-      loadDesignerEditMetaByIds(ids),
-    ]);
-    const jobs = sortDesignerJobs(
-      rows.map((r) => {
-        const edit = editMap.get(r.id);
-        return toDesignerJobDto(
-          {
-            ...r,
-            links: linksMap.get(r.id) ?? [],
-            editRequestedAt: edit?.editRequestedAt ?? null,
-            editRequestNote: edit?.editRequestNote ?? null,
-            pauseRequestedAt: edit?.pauseRequestedAt ?? null,
-            pauseRequestNote: edit?.pauseRequestNote ?? null,
-            catchUpExempt: edit?.catchUpExempt ?? false,
-          },
-          today
-        );
-      })
-    );
+    const jobs = sortDesignerJobs(await jobsWithExtras(rows, today));
 
     return NextResponse.json({
       view: "open",

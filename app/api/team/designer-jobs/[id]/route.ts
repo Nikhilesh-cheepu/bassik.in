@@ -7,12 +7,14 @@ import {
   findActiveDesignerJob,
   linksFromText,
   loadDesignerEditMetaByIds,
+  loadDesignerFileUrlsByIds,
   loadDesignerJobLinksByIds,
   nextManualDesignerSortOrder,
   parseDesignerLinks,
   ensureCatchUpExemptColumn,
   releaseDesignerJobFromCatchUp,
   setDesignerEditRequest,
+  setDesignerJobFileUrls,
   setDesignerJobLinks,
   setDesignerPauseRequest,
   syncDesignerJobToChecklistHandoff,
@@ -20,9 +22,10 @@ import {
 } from "@/lib/team-designer-jobs";
 import { addDaysYmd, getTodayKey } from "@/lib/team-checklists";
 import {
-  catchUpMetaFromStack,
+  catchUpMetaAfterRelease,
   DESIGNER_DAILY_TARGET,
   isBoilerplateDesignerDescription,
+  normalizeDesignerFileUrls,
   parseDesignerPriorityMode,
   partitionOpenDesignerQueue,
   sortDesignerJobs,
@@ -35,20 +38,39 @@ import {
 } from "@/lib/team-designer-nudges";
 
 async function jobDtoWithLinks(job: Parameters<typeof toDesignerJobDto>[0]) {
-  const [linksMap, editMap] = await Promise.all([
+  const [linksMap, editMap, filesMap] = await Promise.all([
     loadDesignerJobLinksByIds([job.id]),
     loadDesignerEditMetaByIds([job.id]),
+    loadDesignerFileUrlsByIds([job.id]),
   ]);
   const edit = editMap.get(job.id);
   return toDesignerJobDto({
     ...job,
     links: linksMap.get(job.id) ?? [],
+    fileUrls: filesMap.get(job.id) ?? normalizeDesignerFileUrls(job.fileUrl, null),
     editRequestedAt: edit?.editRequestedAt ?? null,
     editRequestNote: edit?.editRequestNote ?? null,
     pauseRequestedAt: edit?.pauseRequestedAt ?? null,
     pauseRequestNote: edit?.pauseRequestNote ?? null,
     catchUpExempt: edit?.catchUpExempt ?? false,
   });
+}
+
+function fileUrlsFromBody(body: {
+  fileUrl?: string;
+  fileUrls?: unknown;
+}): string[] {
+  const fromList = Array.isArray(body.fileUrls)
+    ? body.fileUrls.filter((u): u is string => typeof u === "string")
+    : [];
+  return normalizeDesignerFileUrls(
+    typeof body.fileUrl === "string" ? body.fileUrl : null,
+    fromList
+  );
+}
+
+async function deleteJobCreativeBlobs(urls: string[]): Promise<void> {
+  await Promise.all(urls.map((u) => deleteTeamHandoffBlobUrl(u)));
 }
 
 /** Catch up first — finish unfinished count from past days before starting Today’s pack. */
@@ -71,7 +93,7 @@ async function ensureCatchUpGate(assigneeId: string, jobId: string): Promise<voi
       },
     }),
   ]);
-  const meta = catchUpMetaFromStack(stack);
+  const meta = catchUpMetaAfterRelease(stack, released);
   if (meta.catchUpSlots <= 0) return;
   const ids = rows.map((r) => r.id);
   const [linksMap, editMap] = await Promise.all([
@@ -94,7 +116,7 @@ async function ensureCatchUpGate(assigneeId: string, jobId: string): Promise<voi
   const parts = partitionOpenDesignerQueue(jobs, DESIGNER_DAILY_TARGET, {
     catchUpSlots: meta.catchUpSlots,
     pendingFromLabel: meta.pendingFromLabel,
-    releasedSlots: released,
+    releasedSlots: 0,
   });
   if (parts.effectiveCatchUpSlots <= 0) return;
   if (parts.catchUp.some((j) => j.id === jobId)) return;
@@ -162,6 +184,7 @@ export async function PATCH(
       urgent?: boolean;
       priorityMode?: string;
       fileUrl?: string;
+      fileUrls?: string[];
       postingNotes?: string;
       scheduleNote?: string;
       waApproved?: boolean;
@@ -289,18 +312,21 @@ export async function PATCH(
 
     if (action === "force-clear") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      const existingFiles = (
+        await loadDesignerFileUrlsByIds([id])
+      ).get(id) ?? normalizeDesignerFileUrls(job.fileUrl, null);
       const canForceClear =
         job.status === "IN_PROGRESS" ||
         job.status === "PAUSED" ||
         job.status === "DESIGN_DONE" ||
-        (job.status === "READY_TO_DESIGN" && Boolean(job.fileUrl));
+        (job.status === "READY_TO_DESIGN" && existingFiles.length > 0);
       if (!canForceClear) {
         return NextResponse.json(
           { error: "Nothing to force-clear on this job" },
           { status: 400 }
         );
       }
-      await deleteTeamHandoffBlobUrl(job.fileUrl);
+      await deleteJobCreativeBlobs(existingFiles);
       try {
         await clearDesignerJobChecklistHandoff(job);
       } catch (e) {
@@ -320,6 +346,7 @@ export async function PATCH(
           waApproved: false,
         },
       });
+      await setDesignerJobFileUrls(id, []);
       await setDesignerEditRequest(id, { at: null, note: null });
       await setDesignerPauseRequest(id, { at: null, note: null });
       return NextResponse.json({
@@ -330,10 +357,13 @@ export async function PATCH(
 
     if (action === "clear-upload") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      if (!job.fileUrl) {
+      const existingFiles = (
+        await loadDesignerFileUrlsByIds([id])
+      ).get(id) ?? normalizeDesignerFileUrls(job.fileUrl, null);
+      if (existingFiles.length === 0) {
         return NextResponse.json({ error: "No upload to delete" }, { status: 400 });
       }
-      await deleteTeamHandoffBlobUrl(job.fileUrl);
+      await deleteJobCreativeBlobs(existingFiles);
       try {
         await clearDesignerJobChecklistHandoff(job);
       } catch (e) {
@@ -350,6 +380,7 @@ export async function PATCH(
             : { uploadedAt: null }),
         },
       });
+      await setDesignerJobFileUrls(id, []);
       await setDesignerEditRequest(id, { at: null, note: null });
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
@@ -380,10 +411,13 @@ export async function PATCH(
       if (!isAdmin && !canDesignerAct) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      if (job.status !== "DESIGN_DONE" || !job.fileUrl) {
+      const existingFiles = (
+        await loadDesignerFileUrlsByIds([id])
+      ).get(id) ?? normalizeDesignerFileUrls(job.fileUrl, null);
+      if (job.status !== "DESIGN_DONE" || existingFiles.length === 0) {
         return NextResponse.json({ error: "Nothing to purge" }, { status: 400 });
       }
-      await deleteTeamHandoffBlobUrl(job.fileUrl);
+      await deleteJobCreativeBlobs(existingFiles);
       try {
         await clearDesignerJobChecklistHandoff(job);
       } catch (e) {
@@ -397,6 +431,7 @@ export async function PATCH(
           // keep status DESIGN_DONE + uploadedAt so Done tab history stays
         },
       });
+      await setDesignerJobFileUrls(id, []);
       return NextResponse.json({
         ok: true,
         job: await jobDtoWithLinks(updated),
@@ -546,12 +581,12 @@ export async function PATCH(
           );
         }
       }
-      const fileUrl =
-        typeof body.fileUrl === "string" && body.fileUrl.trim()
-          ? body.fileUrl.trim()
-          : null;
-      if (!fileUrl) {
-        return NextResponse.json({ error: "File URL required" }, { status: 400 });
+      const fileUrls = fileUrlsFromBody(body);
+      if (fileUrls.length === 0) {
+        return NextResponse.json(
+          { error: "Upload at least one file" },
+          { status: 400 }
+        );
       }
       if (!body.waApproved && !isAdmin) {
         return NextResponse.json(
@@ -566,7 +601,7 @@ export async function PATCH(
         where: { id },
         data: {
           status: "DESIGN_DONE",
-          fileUrl,
+          fileUrl: fileUrls[0]!,
           postingNotes:
             typeof body.postingNotes === "string"
               ? body.postingNotes.trim() || null
@@ -584,10 +619,11 @@ export async function PATCH(
             : {}),
         },
       });
+      await setDesignerJobFileUrls(id, fileUrls);
       await setDesignerEditRequest(id, { at: null, note: null });
 
       try {
-        await syncDesignerJobToChecklistHandoff(updated);
+        await syncDesignerJobToChecklistHandoff({ ...updated, fileUrl: fileUrls[0]! });
       } catch (e) {
         console.error("[designer-jobs] checklist sync", e);
       }
@@ -601,18 +637,18 @@ export async function PATCH(
     // Admin: attach creative without closing the job
     if (action === "set-upload") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      const fileUrl =
-        typeof body.fileUrl === "string" && body.fileUrl.trim()
-          ? body.fileUrl.trim()
-          : null;
-      if (!fileUrl) {
-        return NextResponse.json({ error: "File URL required" }, { status: 400 });
+      const fileUrls = fileUrlsFromBody(body);
+      if (fileUrls.length === 0) {
+        return NextResponse.json(
+          { error: "Upload at least one file" },
+          { status: 400 }
+        );
       }
       const uploadedAt = new Date();
       const updated = await prisma.teamDesignerJob.update({
         where: { id },
         data: {
-          fileUrl,
+          fileUrl: fileUrls[0]!,
           postingNotes:
             typeof body.postingNotes === "string"
               ? body.postingNotes.trim() || null
@@ -631,8 +667,9 @@ export async function PATCH(
             : {}),
         },
       });
+      await setDesignerJobFileUrls(id, fileUrls);
       try {
-        await syncDesignerJobToChecklistHandoff(updated);
+        await syncDesignerJobToChecklistHandoff({ ...updated, fileUrl: fileUrls[0]! });
       } catch (e) {
         console.error("[designer-jobs] checklist sync on set-upload", e);
       }
@@ -653,11 +690,12 @@ export async function PATCH(
       ) {
         return NextResponse.json({ error: "Job is already done" }, { status: 400 });
       }
-      const fileUrl =
-        typeof body.fileUrl === "string" && body.fileUrl.trim()
-          ? body.fileUrl.trim()
-          : job.fileUrl;
-      if (!fileUrl) {
+      const fromBody = fileUrlsFromBody(body);
+      const existing =
+        (await loadDesignerFileUrlsByIds([id])).get(id) ??
+        normalizeDesignerFileUrls(job.fileUrl, null);
+      const fileUrls = fromBody.length > 0 ? fromBody : existing;
+      if (fileUrls.length === 0) {
         return NextResponse.json(
           {
             error:
@@ -671,7 +709,7 @@ export async function PATCH(
         where: { id },
         data: {
           status: "DESIGN_DONE",
-          fileUrl,
+          fileUrl: fileUrls[0]!,
           uploadedAt,
           waApproved: true,
           startedAt: job.startedAt ?? new Date(),
@@ -687,9 +725,10 @@ export async function PATCH(
               : job.scheduleNote,
         },
       });
+      await setDesignerJobFileUrls(id, fileUrls);
       await setDesignerEditRequest(id, { at: null, note: null });
       try {
-        await syncDesignerJobToChecklistHandoff(updated);
+        await syncDesignerJobToChecklistHandoff({ ...updated, fileUrl: fileUrls[0]! });
       } catch (e) {
         console.error("[designer-jobs] checklist sync on mark-done", e);
       }
@@ -711,12 +750,12 @@ export async function PATCH(
           { status: 400 }
         );
       }
-      const fileUrl =
-        typeof body.fileUrl === "string" && body.fileUrl.trim()
-          ? body.fileUrl.trim()
-          : null;
-      if (!fileUrl) {
-        return NextResponse.json({ error: "File URL required" }, { status: 400 });
+      const fileUrls = fileUrlsFromBody(body);
+      if (fileUrls.length === 0) {
+        return NextResponse.json(
+          { error: "Upload at least one file" },
+          { status: 400 }
+        );
       }
       if (!body.waApproved && !isAdmin) {
         return NextResponse.json(
@@ -729,7 +768,7 @@ export async function PATCH(
       const updated = await prisma.teamDesignerJob.update({
         where: { id },
         data: {
-          fileUrl,
+          fileUrl: fileUrls[0]!,
           postingNotes:
             typeof body.postingNotes === "string"
               ? body.postingNotes.trim() || null
@@ -745,10 +784,11 @@ export async function PATCH(
             : {}),
         },
       });
+      await setDesignerJobFileUrls(id, fileUrls);
       await setDesignerEditRequest(id, { at: null, note: null });
 
       try {
-        await syncDesignerJobToChecklistHandoff(updated);
+        await syncDesignerJobToChecklistHandoff({ ...updated, fileUrl: fileUrls[0]! });
       } catch (e) {
         console.error("[designer-jobs] checklist sync on replace", e);
       }
@@ -799,6 +839,10 @@ export async function PATCH(
       if (job.status !== "DESIGN_DONE") {
         return NextResponse.json({ error: "Only closed jobs can be reopened" }, { status: 400 });
       }
+      const existingFiles = (
+        await loadDesignerFileUrlsByIds([id])
+      ).get(id) ?? normalizeDesignerFileUrls(job.fileUrl, null);
+      await deleteJobCreativeBlobs(existingFiles);
       try {
         await clearDesignerJobChecklistHandoff(job);
       } catch (e) {
@@ -816,6 +860,7 @@ export async function PATCH(
           waApproved: false,
         },
       });
+      await setDesignerJobFileUrls(id, []);
       await setDesignerEditRequest(id, { at: null, note: null });
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
@@ -852,6 +897,7 @@ export async function PATCH(
           waApproved: false,
         },
       });
+      await setDesignerJobFileUrls(id, []);
       await setDesignerEditRequest(id, { at: null, note: null });
       await setDesignerPauseRequest(id, { at: null, note: null });
       return NextResponse.json({
@@ -863,7 +909,10 @@ export async function PATCH(
     /** Admin hard-delete job (and clear Amit Ready if synced). */
     if (action === "delete") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      await deleteTeamHandoffBlobUrl(job.fileUrl);
+      const existingFiles = (
+        await loadDesignerFileUrlsByIds([id])
+      ).get(id) ?? normalizeDesignerFileUrls(job.fileUrl, null);
+      await deleteJobCreativeBlobs(existingFiles);
       try {
         await clearDesignerJobChecklistHandoff(job);
       } catch (e) {

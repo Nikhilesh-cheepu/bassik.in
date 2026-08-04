@@ -590,6 +590,8 @@ model TeamDesignerJob {
   /// designer | admin — who closed the job (performance uses designer only)
   closedByRole  String?
   fileUrl       String?
+  /// Extra creatives (string[]) — fileUrl is primary for Amit Daily
+  fileUrls      Json?
   postingNotes  String?
   scheduleNote  String?
   waApproved       Boolean                @default(false)

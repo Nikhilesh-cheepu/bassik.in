@@ -72,7 +72,10 @@ export type DesignerJobDto = {
   uploadedAt: string | null;
   /** designer | admin | null — only designer counts for 4/day */
   closedByRole: "designer" | "admin" | null;
+  /** Primary creative — first of fileUrls (Amit Daily handoff). */
   fileUrl: string | null;
+  /** All creatives for this job (min 1 to close). Upload one at a time. */
+  fileUrls: string[];
   postingNotes: string | null;
   scheduleNote: string | null;
   waApproved: boolean;
@@ -229,6 +232,24 @@ export function parseDesignerLinks(raw: unknown): string[] {
   return out;
 }
 
+/** Merge primary fileUrl + fileUrls JSON into a de-duped list (primary first). */
+export function normalizeDesignerFileUrls(
+  fileUrl?: string | null,
+  fileUrls?: unknown
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: string) => {
+    const u = raw.trim();
+    if (!u || seen.has(u)) return;
+    seen.add(u);
+    out.push(u);
+  };
+  if (typeof fileUrl === "string") push(fileUrl);
+  for (const u of parseDesignerLinks(fileUrls)) push(u);
+  return out;
+}
+
 /** Parse links from a textarea (one URL per line). */
 export function linksFromText(raw: string): string[] {
   return parseDesignerLinks(
@@ -332,7 +353,8 @@ export function catchUpMetaFromStack(stack: {
 } | null | undefined): DesignerCatchUpMeta {
   const missed = stack?.missedDays ?? [];
   const catchUpSlots = missed.reduce((n, d) => n + (d.missed ?? 0), 0);
-  const miss = missed[0];
+  // missedDays is newest-first — "from" = oldest remaining shortfall
+  const miss = missed.length > 0 ? missed[missed.length - 1] : undefined;
   if (!miss?.date) return { catchUpSlots, pendingFromLabel: null };
   const [y, m, d] = miss.date.split("-").map(Number);
   if (!y || !m || !d) return { catchUpSlots, pendingFromLabel: miss.date };
@@ -344,6 +366,42 @@ export function catchUpMetaFromStack(stack: {
     timeZone: "UTC",
   });
   return { catchUpSlots, pendingFromLabel: `${dayName} · ${dateLabel}` };
+}
+
+/**
+ * Drop catch-up forgives oldest shortfall first — debt / "from …" label start after
+ * forgiven slots (no longer owed in Catch up).
+ */
+export function catchUpMetaAfterRelease(
+  stack: {
+    missedDays?: Array<{ date: string; missed: number }>;
+  } | null | undefined,
+  releasedSlots = 0
+): DesignerCatchUpMeta {
+  const raw = [...(stack?.missedDays ?? [])];
+  let left = Math.max(0, releasedSlots);
+  // missedDays is newest-first in perf — forgive oldest first
+  const oldestFirst = [...raw].reverse();
+  const keptAsc: Array<{ date: string; missed: number }> = [];
+  for (const day of oldestFirst) {
+    const missed = Math.max(0, day.missed ?? 0);
+    if (left <= 0) {
+      keptAsc.push({ date: day.date, missed });
+      continue;
+    }
+    if (left >= missed) {
+      left -= missed;
+      continue;
+    }
+    keptAsc.push({ date: day.date, missed: missed - left });
+    left = 0;
+  }
+  // Restore newest-first for catchUpMetaFromStack’s “from” = earliest remaining
+  const remaining = keptAsc.reverse();
+  return {
+    ...catchUpMetaFromStack({ missedDays: remaining }),
+    releasedSlots: Math.max(0, releasedSlots),
+  };
 }
 
 /**
@@ -381,8 +439,11 @@ export function partitionOpenDesignerQueue(
   const catchUp = fillable.slice(0, slots);
   const catchIds = new Set(catchUp.map((j) => j.id));
   const remaining = sorted.filter((j) => !catchIds.has(j.id));
-  const todayPack = remaining.slice(0, dailyTarget);
-  const upNext = remaining.slice(dailyTarget);
+  // Today = due today / overdue only — do not pull tomorrow’s jobs after closes
+  const dueTodayOrLate = remaining.filter((j) => j.isDueToday || j.isOverdue);
+  const laterJobs = remaining.filter((j) => !j.isDueToday && !j.isOverdue);
+  const todayPack = dueTodayOrLate.slice(0, dailyTarget);
+  const upNext = [...dueTodayOrLate.slice(dailyTarget), ...laterJobs];
   const from = opts?.pendingFromLabel?.trim();
   const catchUpHint =
     catchUp.length > 0
