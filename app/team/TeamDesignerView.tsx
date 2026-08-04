@@ -203,6 +203,28 @@ function designerUploadUnlockAt(startedAt: string | null | undefined): number | 
   return t + DESIGNER_UPLOAD_WAIT_MS;
 }
 
+function designerJobFileUrls(job: Pick<DesignerJobDto, "fileUrl" | "fileUrls">): string[] {
+  if (Array.isArray(job.fileUrls) && job.fileUrls.length > 0) return job.fileUrls;
+  return job.fileUrl ? [job.fileUrl] : [];
+}
+
+function openTeamDownloads(
+  urls: string[],
+  filenameBase: string
+): void {
+  urls.forEach((url, i) => {
+    const name =
+      urls.length > 1 ? `${filenameBase}-${i + 1}` : filenameBase;
+    const a = document.createElement("a");
+    a.href = teamDownloadHref(url, name);
+    a.target = "_blank";
+    a.rel = "noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
+}
+
 function todayYmdLocal(): string {
   const t = new Date();
   const y = t.getFullYear();
@@ -407,6 +429,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     fileUrls: [] as string[],
   });
   const [uploading, setUploading] = useState(false);
+  /** Remind downloader to grab every creative before posting. */
+  const [downloadNotice, setDownloadNotice] = useState<{
+    title: string;
+    urls: string[];
+    filenameBase: string;
+  } | null>(null);
   const [adhocOpen, setAdhocOpen] = useState(false);
   const [adhoc, setAdhoc] = useState({
     outletId: "c53",
@@ -1335,6 +1363,16 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     });
   };
 
+  const promptDownloadFiles = (job: DesignerJobDto) => {
+    const urls = designerJobFileUrls(job);
+    if (urls.length === 0) return;
+    setDownloadNotice({
+      title: `${job.outletLabel} · ${job.title}`,
+      urls,
+      filenameBase: `${job.outletLabel}-${job.postDate}`,
+    });
+  };
+
   const canDragQueue =
     isAdmin &&
     queueView === "open" &&
@@ -1777,6 +1815,80 @@ https://instagram.com/…"
           {error}
         </div>
       ) : null}
+
+      {downloadNotice ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/65 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="designer-download-notice-title"
+          onClick={() => setDownloadNotice(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-white/15 bg-[#141414] p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p
+              id="designer-download-notice-title"
+              className="text-[15px] font-semibold text-white"
+            >
+              {downloadNotice.urls.length === 1
+                ? "1 file to download & post"
+                : `${downloadNotice.urls.length} files to download & post`}
+            </p>
+            <p className="mt-1 text-[12px] text-white/45">{downloadNotice.title}</p>
+            <p className="mt-3 text-[13px] leading-snug text-white/75">
+              {downloadNotice.urls.length === 1
+                ? "Cross-check this file before you post."
+                : `There are ${downloadNotice.urls.length} files for this task. Cross-check and download all of them before posting — don’t miss any.`}
+            </p>
+            {downloadNotice.urls.length > 1 ? (
+              <ul className="mt-3 space-y-1.5">
+                {downloadNotice.urls.map((url, i) => (
+                  <li key={url}>
+                    <a
+                      href={teamDownloadHref(
+                        url,
+                        `${downloadNotice.filenameBase}-${i + 1}`
+                      )}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block truncate rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-cyan-300 hover:bg-white/[0.07]"
+                    >
+                      File {i + 1} of {downloadNotice.urls.length}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  openTeamDownloads(
+                    downloadNotice.urls,
+                    downloadNotice.filenameBase
+                  );
+                  setDownloadNotice(null);
+                }}
+                className="h-10 flex-1 rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black sm:flex-none"
+              >
+                {downloadNotice.urls.length > 1
+                  ? `Download all ${downloadNotice.urls.length}`
+                  : "Download"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDownloadNotice(null)}
+                className="h-10 px-3 text-[13px] text-white/50 hover:text-white/80"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <section className="space-y-3">
         {queue.length === 0 && !loading && queueView !== "toSend" ? (
           <p className="text-[13px] text-white/35">
@@ -1800,6 +1912,7 @@ https://instagram.com/…"
           const selected = selectedIds.has(job.id);
           const brief = jobBriefText(job);
           const queueNo = queueNumberById.get(job.id);
+          const files = designerJobFileUrls(job);
           const toneClass =
             tone === "catchUp"
               ? "border-amber-400/35 bg-amber-400/[0.07] ring-1 ring-amber-400/15"
@@ -1925,27 +2038,16 @@ https://instagram.com/…"
               </div>
               <div className="relative z-[2] flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:max-w-[12rem]">
                 {/* Download only on Done — Open must not keep a leftover file after reopen */}
-                {job.status === "DESIGN_DONE" &&
-                (job.fileUrls?.length > 0 || job.fileUrl) ? (
-                  <div className="flex flex-col gap-1.5">
-                    {(job.fileUrls?.length
-                      ? job.fileUrls
-                      : job.fileUrl
-                        ? [job.fileUrl]
-                        : []
-                    ).map((url, i, arr) => (
-                      <a
-                        key={url}
-                        href={teamDownloadHref(
-                          url,
-                          `${job.outletLabel}-${job.postDate}${arr.length > 1 ? `-${i + 1}` : ""}`
-                        )}
-                        className="inline-flex h-11 min-h-[44px] items-center justify-center rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
-                      >
-                        {arr.length > 1 ? `Download ${i + 1}` : "Download"}
-                      </a>
-                    ))}
-                  </div>
+                {job.status === "DESIGN_DONE" && files.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => promptDownloadFiles(job)}
+                    className="inline-flex h-11 min-h-[44px] items-center justify-center rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
+                  >
+                    {files.length > 1
+                      ? `Download · ${files.length} files`
+                      : "Download"}
+                  </button>
                 ) : null}
                 {isAdmin ? (
                   <div className="flex gap-2">
@@ -2225,15 +2327,16 @@ https://instagram.com/…"
 
             {queueView === "expired" && job.status === "DESIGN_DONE" ? (
               <div className="mt-3 flex flex-wrap gap-2 border-t border-white/[0.08] pt-3">
-                {job.fileUrl ? (
-                  <a
-                    href={teamDownloadHref(job.fileUrl)}
-                    target="_blank"
-                    rel="noreferrer"
+                {files.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => promptDownloadFiles(job)}
                     className="inline-flex h-9 items-center rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
                   >
-                    Download
-                  </a>
+                    {files.length > 1
+                      ? `Download · ${files.length} files`
+                      : "Download"}
+                  </button>
                 ) : null}
                 {(isAdmin || job.assigneeId === memberId) ? (
                   <button
@@ -2824,17 +2927,15 @@ https://instagram.com/…"
                             </p>
                           </div>
                           <div className="flex shrink-0 gap-2">
-                            <a
-                              href={teamDownloadHref(
-                                job.fileUrl!,
-                                `${job.outletLabel}-${job.postDate}`
-                              )}
-                              target="_blank"
-                              rel="noreferrer"
+                            <button
+                              type="button"
+                              onClick={() => promptDownloadFiles(job)}
                               className="inline-flex h-9 items-center rounded-lg bg-emerald-400 px-3 text-[12px] font-semibold text-black"
                             >
-                              Download
-                            </a>
+                              {designerJobFileUrls(job).length > 1
+                                ? `Download · ${designerJobFileUrls(job).length} files`
+                                : "Download"}
+                            </button>
                             <button
                               type="button"
                               disabled={busyId === job.id}
