@@ -13,6 +13,7 @@ import {
 } from "@/lib/team-checklist-templates";
 import { ensureOutletWeekendPosts } from "@/lib/team-ensure-outlet-posts";
 import { ensureOutletWeeklyAds } from "@/lib/team-ensure-outlet-ads";
+import { enrichBoardHandoffFileUrls } from "@/lib/team-designer-jobs";
 import { teamPersonalNoteOwnerId } from "@/lib/team-personal-notes";
 import { isTeamMemberId } from "@/lib/team-members";
 import { isTeamOutletId, teamOutletLabel } from "@/lib/team-outlets";
@@ -103,7 +104,9 @@ export async function GET(req: NextRequest) {
       raw = await loadOwnerChecklists(ownerId);
     }
 
-    const board = buildChecklistBoard(raw, focusDate);
+    const board = await enrichBoardHandoffFileUrls(
+      buildChecklistBoard(raw, focusDate)
+    );
     return NextResponse.json({ board, ownerId });
   } catch (err) {
     console.error("[team/checklists] GET error:", err);

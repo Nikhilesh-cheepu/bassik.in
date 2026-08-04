@@ -6,9 +6,13 @@ import {
   dayIdForYmd,
   getTodayKey,
   handoffByDateFromJson,
+  handoffCreativeUrls,
   isWeekendPostDayId,
   previousDayYmd,
+  serializeHandoffMap,
   WEEKEND_POST_LEAD_DAYS,
+  type ChecklistBoardDto,
+  type TeamChecklistItemDto,
 } from "@/lib/team-checklists";
 import { CHECKLIST_DAY_LABELS, type ChecklistDayId } from "@/lib/team-checklist-templates";
 import { teamOutletLabel } from "@/lib/team-outlets";
@@ -804,6 +808,7 @@ async function writeChecklistHandoffReady(params: {
   postDate: string;
   format: "story" | "post" | "ad";
   fileUrl: string;
+  fileUrls?: string[];
   postingNotes: string | null;
   scheduleNote: string | null;
   uploadedAt: string;
@@ -817,11 +822,13 @@ async function writeChecklistHandoffReady(params: {
   const item = checklist.items.find((i) => i.dayOfWeek === params.dayId);
   if (!item) return;
 
+  const fileUrls = normalizeDesignerFileUrls(params.fileUrl, params.fileUrls);
   const map = handoffByDateFromJson(item.handoff);
   map[params.postDate] = {
     status: "ready",
     format: params.format,
-    fileUrl: params.fileUrl,
+    fileUrl: fileUrls[0] ?? params.fileUrl,
+    fileUrls,
     postingNotes: params.postingNotes,
     scheduleNote: params.scheduleNote,
     uploadedAt: params.uploadedAt,
@@ -834,22 +841,10 @@ async function writeChecklistHandoffReady(params: {
     ? readyDates
     : [...readyDates, params.postDate];
 
-  const handoffJson: Record<string, Record<string, string>> = {};
-  for (const [date, entry] of Object.entries(map)) {
-    handoffJson[date] = {
-      status: entry.status,
-      ...(entry.format ? { format: entry.format } : {}),
-      ...(entry.fileUrl ? { fileUrl: entry.fileUrl } : {}),
-      ...(entry.postingNotes ? { postingNotes: entry.postingNotes } : {}),
-      ...(entry.scheduleNote ? { scheduleNote: entry.scheduleNote } : {}),
-      ...(entry.uploadedAt ? { uploadedAt: entry.uploadedAt } : {}),
-    };
-  }
-
   await prisma.teamChecklistItem.update({
     where: { id: item.id },
     data: {
-      handoff: handoffJson,
+      handoff: serializeHandoffMap(map),
       readyDates: nextReady,
     },
   });
@@ -866,11 +861,16 @@ export async function syncDesignerJobToChecklistHandoff(job: TeamDesignerJob): P
   if (job.format === "calendar") return;
   const dayId = dayIdForYmd(job.postDate);
   const uploadedAt = job.uploadedAt?.toISOString() ?? new Date().toISOString();
+  const fileUrls = (
+    await loadDesignerFileUrlsByIds([job.id])
+  ).get(job.id) ?? normalizeDesignerFileUrls(job.fileUrl, null);
+  if (fileUrls.length === 0) return;
   const base = {
     outletId: job.outletId,
     dayId,
     postDate: job.postDate,
-    fileUrl: job.fileUrl,
+    fileUrl: fileUrls[0]!,
+    fileUrls,
     postingNotes: job.postingNotes,
     scheduleNote: job.scheduleNote,
     uploadedAt,
@@ -890,6 +890,87 @@ export async function syncDesignerJobToChecklistHandoff(job: TeamDesignerJob): P
     kind: "stories",
     format: "story",
   });
+}
+
+/** Fill missing handoff.fileUrls from designer Done jobs (for jobs synced before multi-file). */
+export async function enrichBoardHandoffFileUrls(
+  board: ChecklistBoardDto
+): Promise<ChecklistBoardDto> {
+  const collect = (items: TeamChecklistItemDto[]) => items;
+  const allItems = [
+    ...collect(board.focusStories),
+    ...collect(board.overdueStories),
+    ...collect(board.openPosts),
+    ...collect(board.generalPosts),
+    ...collect(board.doneItems),
+    ...board.outlets.flatMap((o) => [
+      ...o.stories,
+      ...o.openPosts,
+      ...o.ads,
+    ]),
+  ];
+  const keys = new Set<string>();
+  for (const item of allItems) {
+    const outletId = item.outletId?.trim();
+    const postDate = item.targetDate?.trim();
+    if (!outletId || !postDate) continue;
+    if (handoffCreativeUrls(item.handoff).length > 1) continue;
+    keys.add(`${outletId}\0${postDate}`);
+  }
+  if (keys.size === 0) return board;
+
+  const pairs = [...keys].map((k) => {
+    const [outletId, postDate] = k.split("\0");
+    return { outletId: outletId!, postDate: postDate! };
+  });
+  const rows = await prisma.teamDesignerJob.findMany({
+    where: {
+      status: "DESIGN_DONE",
+      OR: pairs.map((p) => ({ outletId: p.outletId, postDate: p.postDate })),
+    },
+    select: { id: true, outletId: true, postDate: true, fileUrl: true },
+  });
+  if (rows.length === 0) return board;
+  const filesMap = await loadDesignerFileUrlsByIds(rows.map((r) => r.id));
+  const byKey = new Map<string, string[]>();
+  for (const r of rows) {
+    const urls = filesMap.get(r.id) ?? normalizeDesignerFileUrls(r.fileUrl, null);
+    if (urls.length === 0) continue;
+    byKey.set(`${r.outletId}\0${r.postDate}`, urls);
+  }
+
+  const patchItem = (item: TeamChecklistItemDto): TeamChecklistItemDto => {
+    const outletId = item.outletId?.trim();
+    const postDate = item.targetDate?.trim();
+    if (!outletId || !postDate || !item.handoff) return item;
+    const urls = byKey.get(`${outletId}\0${postDate}`);
+    if (!urls || urls.length === 0) return item;
+    const existing = handoffCreativeUrls(item.handoff);
+    if (existing.length >= urls.length) return item;
+    return {
+      ...item,
+      handoff: {
+        ...item.handoff,
+        fileUrl: urls[0] ?? item.handoff.fileUrl,
+        fileUrls: urls,
+      },
+    };
+  };
+
+  return {
+    ...board,
+    focusStories: board.focusStories.map(patchItem),
+    overdueStories: board.overdueStories.map(patchItem),
+    openPosts: board.openPosts.map(patchItem),
+    generalPosts: board.generalPosts.map(patchItem),
+    doneItems: board.doneItems.map(patchItem),
+    outlets: board.outlets.map((o) => ({
+      ...o,
+      stories: o.stories.map(patchItem),
+      openPosts: o.openPosts.map(patchItem),
+      ads: o.ads.map(patchItem),
+    })),
+  };
 }
 
 async function clearChecklistHandoffReady(params: {
@@ -915,22 +996,10 @@ async function clearChecklistHandoffReady(params: {
     : [];
   const nextReady = readyDates.filter((d) => d !== params.postDate);
 
-  const handoffJson: Record<string, Record<string, string>> = {};
-  for (const [date, entry] of Object.entries(map)) {
-    handoffJson[date] = {
-      status: entry.status,
-      ...(entry.format ? { format: entry.format } : {}),
-      ...(entry.fileUrl ? { fileUrl: entry.fileUrl } : {}),
-      ...(entry.postingNotes ? { postingNotes: entry.postingNotes } : {}),
-      ...(entry.scheduleNote ? { scheduleNote: entry.scheduleNote } : {}),
-      ...(entry.uploadedAt ? { uploadedAt: entry.uploadedAt } : {}),
-    };
-  }
-
   await prisma.teamChecklistItem.update({
     where: { id: item.id },
     data: {
-      handoff: handoffJson,
+      handoff: serializeHandoffMap(map),
       readyDates: nextReady,
     },
   });

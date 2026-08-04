@@ -64,11 +64,33 @@ export type ChecklistHandoffDto = {
   status: HandoffStatus;
   format?: HandoffFormat | null;
   fileUrl?: string | null;
+  /** Extra creatives (same job) — Amit must download all before posting. */
+  fileUrls?: string[];
   postingNotes?: string | null;
   scheduleNote?: string | null;
   /** ISO time when file was sent to Amit (for ~7 day blob cleanup). */
   uploadedAt?: string | null;
 };
+
+/** Primary + extras for download UI. */
+export function handoffCreativeUrls(
+  handoff: ChecklistHandoffDto | null | undefined
+): string[] {
+  if (!handoff) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: string | null | undefined) => {
+    const u = typeof raw === "string" ? raw.trim() : "";
+    if (!u || seen.has(u)) return;
+    seen.add(u);
+    out.push(u);
+  };
+  push(handoff.fileUrl);
+  if (Array.isArray(handoff.fileUrls)) {
+    for (const u of handoff.fileUrls) push(u);
+  }
+  return out;
+}
 
 export type TeamChecklistItemDto = {
   id: string;
@@ -113,19 +135,48 @@ export function parseHandoffFormat(raw: unknown): HandoffFormat | null {
   return HANDOFF_FORMATS.includes(v as HandoffFormat) ? (v as HandoffFormat) : null;
 }
 
+function parseHandoffFileUrls(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const u = item.trim();
+    if (!u || seen.has(u)) continue;
+    seen.add(u);
+    out.push(u);
+  }
+  return out;
+}
+
 function parseHandoffEntry(raw: unknown): ChecklistHandoffDto | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const statusRaw = typeof o.status === "string" ? o.status.trim().toLowerCase() : "";
   const status: HandoffStatus =
     statusRaw === "ready" || statusRaw === "approved" ? statusRaw : "wait";
-  if (status === "wait" && !o.fileUrl && !o.format && !o.postingNotes && !o.scheduleNote) {
+  const fileUrls = parseHandoffFileUrls(o.fileUrls);
+  if (
+    status === "wait" &&
+    !o.fileUrl &&
+    fileUrls.length === 0 &&
+    !o.format &&
+    !o.postingNotes &&
+    !o.scheduleNote
+  ) {
     return { status: "wait" };
   }
+  const fileUrl =
+    typeof o.fileUrl === "string" && o.fileUrl.trim() ? o.fileUrl.trim() : null;
   return {
     status,
     format: parseHandoffFormat(o.format),
-    fileUrl: typeof o.fileUrl === "string" && o.fileUrl.trim() ? o.fileUrl.trim() : null,
+    fileUrl: fileUrl ?? fileUrls[0] ?? null,
+    fileUrls: handoffCreativeUrls({
+      status,
+      fileUrl,
+      fileUrls,
+    }),
     postingNotes:
       typeof o.postingNotes === "string" && o.postingNotes.trim() ? o.postingNotes.trim() : null,
     scheduleNote:
@@ -156,19 +207,21 @@ export function handoffForDate(
 ): ChecklistHandoffDto {
   if (!dateKey) return { status: "wait" };
   const entry = handoffByDate?.[dateKey];
+  const fileUrls = handoffCreativeUrls(entry);
   const base = {
     format: entry?.format ?? null,
-    fileUrl: entry?.fileUrl ?? null,
+    fileUrl: fileUrls[0] ?? entry?.fileUrl ?? null,
+    fileUrls,
     postingNotes: entry?.postingNotes ?? null,
     scheduleNote: entry?.scheduleNote ?? null,
     uploadedAt: entry?.uploadedAt ?? null,
   };
-  const hasFile = Boolean(entry?.fileUrl?.trim());
+  const hasFile = fileUrls.length > 0;
 
   if (entry?.status === "ready") {
     // Never treat Ready-without-file as Ready (old bad data / admin bypass).
     if (!hasFile) {
-      return { status: "wait", ...base, fileUrl: null };
+      return { status: "wait", ...base, fileUrl: null, fileUrls: [] };
     }
     return { status: "ready", ...base };
   }
@@ -186,7 +239,35 @@ export function handoffForDate(
 export function isHandoffDownloadReady(
   handoff: ChecklistHandoffDto | null | undefined
 ): boolean {
-  return handoff?.status === "ready" && Boolean(handoff.fileUrl?.trim());
+  return handoff?.status === "ready" && handoffCreativeUrls(handoff).length > 0;
+}
+
+/** Persist per-date handoff map (supports multi-file creatives). */
+export function serializeHandoffMap(
+  map: Record<string, ChecklistHandoffDto>
+): Prisma.InputJsonValue {
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [date, entry] of Object.entries(map)) {
+    const urls = handoffCreativeUrls(entry);
+    if (
+      entry.status === "wait" &&
+      urls.length === 0 &&
+      !entry.postingNotes &&
+      !entry.scheduleNote &&
+      !entry.format
+    ) {
+      continue;
+    }
+    const row: Record<string, unknown> = { status: entry.status };
+    if (entry.format) row.format = entry.format;
+    if (urls[0]) row.fileUrl = urls[0];
+    if (urls.length > 0) row.fileUrls = urls;
+    if (entry.postingNotes) row.postingNotes = entry.postingNotes;
+    if (entry.scheduleNote) row.scheduleNote = entry.scheduleNote;
+    if (entry.uploadedAt) row.uploadedAt = entry.uploadedAt;
+    out[date] = row;
+  }
+  return out as Prisma.InputJsonValue;
 }
 
 export function applyHandoffToRow(

@@ -7,6 +7,7 @@ import {
   defaultHandoffFormat,
   getTodayKey,
   HANDOFF_FORMATS,
+  handoffCreativeUrls,
   type ChecklistBoardDto,
   type ChecklistPlatformId,
   type HandoffFormat,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/team-checklists";
 import { CHECKLIST_DEFAULT_OWNER_ID } from "@/lib/team-checklist-templates";
 import { uploadTeamFile } from "@/lib/team-client-upload";
+import { teamDownloadHref } from "@/lib/team-download";
 import { TEAM_AD_OUTLETS, outletKindTitle, teamOutletLabel } from "@/lib/team-outlets";
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { whatsAppShareUrl } from "@/lib/team-whatsapp-report";
@@ -364,6 +366,19 @@ function readDownloadAt(itemId: string, dateKey: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function openChecklistDownloads(urls: string[], filenameBase: string): void {
+  urls.forEach((url, i) => {
+    const name = urls.length > 1 ? `${filenameBase}-${i + 1}` : filenameBase;
+    const a = document.createElement("a");
+    a.href = teamDownloadHref(url, name);
+    a.target = "_blank";
+    a.rel = "noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
+}
+
 function markDownloaded(itemId: string, dateKey: string): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(downloadKey(itemId, dateKey), String(Date.now()));
@@ -373,28 +388,39 @@ function HandoffDetails({
   item,
   dateKey,
   onDownloaded,
+  onRequestDownload,
 }: {
   item: TeamChecklistItemDto;
   dateKey?: string;
   onDownloaded?: () => void;
+  onRequestDownload?: (item: TeamChecklistItemDto, dateKey: string) => void;
 }) {
   const h = item.handoff;
-  if (!h || h.status !== "ready" || !h.fileUrl) return null;
+  const urls = handoffCreativeUrls(h);
+  if (!h || h.status !== "ready" || urls.length === 0) return null;
   const dk = dateKey ?? item.targetDate ?? "";
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-white/55">
       {h.scheduleNote ? <span>Schedule: {h.scheduleNote}</span> : null}
       {h.postingNotes ? <span className="w-full text-white/45">{h.postingNotes}</span> : null}
-      <a
-        href={`/api/team/download?url=${encodeURIComponent(h.fileUrl)}`}
+      <button
+        type="button"
         onClick={() => {
+          if (onRequestDownload) {
+            onRequestDownload(item, dk);
+            return;
+          }
           if (dk) markDownloaded(item.id, dk);
+          openChecklistDownloads(
+            urls,
+            `${item.outletId ?? "file"}-${dk || "creative"}`
+          );
           onDownloaded?.();
         }}
         className="rounded-md bg-cyan-500 px-2.5 py-1 text-[12px] font-bold text-black"
       >
-        Download
-      </a>
+        {urls.length > 1 ? `Download · ${urls.length} files` : "Download"}
+      </button>
     </div>
   );
 }
@@ -624,6 +650,7 @@ function ItemRow({
   onCloseSkip,
   onUnready,
   onHandoffUpload,
+  onRequestDownload,
 }: {
   item: TeamChecklistItemDto;
   dateKey: string;
@@ -644,6 +671,7 @@ function ItemRow({
       scheduleNote: string;
     }
   ) => Promise<void>;
+  onRequestDownload: (item: TeamChecklistItemDto, dateKey: string) => void;
 }) {
   const [draftPlatforms, setDraftPlatforms] = useState<ChecklistPlatformId[]>([]);
   const [showUpload, setShowUpload] = useState(false);
@@ -682,7 +710,7 @@ function ItemRow({
     onComplete(item, platforms);
   };
 
-  const fileUrl = item.handoff?.fileUrl?.trim() || "";
+  const fileUrls = handoffCreativeUrls(item.handoff);
   const outletChip = outletKindChipLabel(item);
 
   return (
@@ -729,6 +757,7 @@ function ItemRow({
               item={item}
               dateKey={dateKey}
               onDownloaded={() => setTick((n) => n + 1)}
+              onRequestDownload={onRequestDownload}
             />
           ) : null}
           {ready && !dlAt ? (
@@ -750,17 +779,16 @@ function ItemRow({
         </div>
 
         <div className="flex shrink-0 flex-col items-stretch gap-1.5">
-          {ready && fileUrl ? (
-            <a
-              href={`/api/team/download?url=${encodeURIComponent(fileUrl)}`}
-              onClick={() => {
-                markDownloaded(item.id, dateKey);
-                setTick((n) => n + 1);
-              }}
+          {ready && fileUrls.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => onRequestDownload(item, dateKey)}
               className="inline-flex h-9 items-center justify-center rounded-lg bg-cyan-400 px-3 text-[12px] font-bold text-black"
             >
-              Download
-            </a>
+              {fileUrls.length > 1
+                ? `Download · ${fileUrls.length} files`
+                : "Download"}
+            </button>
           ) : null}
           {canUploadHandoff && !ready ? (
             <button
@@ -832,6 +860,7 @@ function AdItemRow({
   onUnready,
   onSaveDescription,
   onHandoffUpload,
+  onRequestDownload,
 }: {
   item: TeamChecklistItemDto;
   dateKey: string;
@@ -851,11 +880,12 @@ function AdItemRow({
       scheduleNote: string;
     }
   ) => Promise<void>;
+  onRequestDownload: (item: TeamChecklistItemDto, dateKey: string) => void;
 }) {
   const done = isItemDone(item, dateKey);
   const status = handoffStatusOf(item);
   const ready = status === "ready";
-  const fileUrl = item.handoff?.fileUrl?.trim() || "";
+  const fileUrls = handoffCreativeUrls(item.handoff);
   const [draftPlatforms, setDraftPlatforms] = useState<ChecklistPlatformId[]>([]);
   const [editing, setEditing] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
@@ -972,6 +1002,7 @@ function AdItemRow({
             item={item}
             dateKey={dateKey}
             onDownloaded={() => setTick((n) => n + 1)}
+            onRequestDownload={onRequestDownload}
           />
           {ready && !dlAt ? (
             <p className="mt-1 text-[10px] text-white/40">Download first — then Done unlocks in 1 min.</p>
@@ -988,17 +1019,16 @@ function AdItemRow({
           ) : null}
         </div>
         <div className="flex shrink-0 flex-col items-stretch gap-1 pt-0.5">
-          {ready && fileUrl ? (
-            <a
-              href={`/api/team/download?url=${encodeURIComponent(fileUrl)}`}
-              onClick={() => {
-                markDownloaded(item.id, dateKey);
-                setTick((n) => n + 1);
-              }}
+          {ready && fileUrls.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => onRequestDownload(item, dateKey)}
               className="inline-flex h-8 items-center justify-center rounded-lg bg-cyan-400 px-2 text-[11px] font-bold text-black"
             >
-              Download
-            </a>
+              {fileUrls.length > 1
+                ? `Download · ${fileUrls.length} files`
+                : "Download"}
+            </button>
           ) : null}
           {canUploadHandoff && !ready ? (
             <button
@@ -1074,6 +1104,7 @@ function AdsOutletSection({
   onUnready,
   onSaveDescription,
   onHandoffUpload,
+  onRequestDownload,
 }: {
   section: OutletBoardSection;
   focusDate: string;
@@ -1093,6 +1124,7 @@ function AdsOutletSection({
       scheduleNote: string;
     }
   ) => Promise<void>;
+  onRequestDownload: (item: TeamChecklistItemDto, dateKey: string) => void;
 }) {
   const ads = section.ads ?? [];
   const pending = ads.filter((a) => !isItemDone(a, a.targetDate ?? focusDate));
@@ -1137,6 +1169,7 @@ function AdsOutletSection({
             onUnready={onUnready}
             onSaveDescription={onSaveDescription}
             onHandoffUpload={onHandoffUpload}
+            onRequestDownload={onRequestDownload}
           />
         ))}
       </div>
@@ -1177,6 +1210,25 @@ export default function TeamTasksView({
     message: string;
   } | null>(null);
   const [waFallbackUrl, setWaFallbackUrl] = useState<string | null>(null);
+  const [downloadNotice, setDownloadNotice] = useState<{
+    itemId: string;
+    dateKey: string;
+    title: string;
+    urls: string[];
+    filenameBase: string;
+  } | null>(null);
+
+  const promptDownloadFiles = (item: TeamChecklistItemDto, dateKey: string) => {
+    const urls = handoffCreativeUrls(item.handoff);
+    if (urls.length === 0) return;
+    setDownloadNotice({
+      itemId: item.id,
+      dateKey,
+      title: item.outletTitle || item.title,
+      urls,
+      filenameBase: `${item.outletId ?? "file"}-${dateKey}`,
+    });
+  };
 
   const today = todayKey;
   const weekDays = board?.day.weekDays ?? [];
@@ -1583,6 +1635,86 @@ export default function TeamTasksView({
         </div>
       ) : null}
 
+      {downloadNotice ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/65 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="amit-download-notice-title"
+          onClick={() => setDownloadNotice(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-white/15 bg-[#141414] p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p
+              id="amit-download-notice-title"
+              className="text-[15px] font-semibold text-white"
+            >
+              {downloadNotice.urls.length === 1
+                ? "1 file to download & post"
+                : `${downloadNotice.urls.length} files to download & post`}
+            </p>
+            <p className="mt-1 text-[12px] text-white/45">{downloadNotice.title}</p>
+            <p className="mt-3 text-[13px] leading-snug text-white/75">
+              {downloadNotice.urls.length === 1
+                ? "Cross-check this file before you post."
+                : `There are ${downloadNotice.urls.length} files for this task. Cross-check and download all of them before posting — don’t miss any.`}
+            </p>
+            {downloadNotice.urls.length > 1 ? (
+              <ul className="mt-3 space-y-1.5">
+                {downloadNotice.urls.map((url, i) => (
+                  <li key={url}>
+                    <a
+                      href={teamDownloadHref(
+                        url,
+                        `${downloadNotice.filenameBase}-${i + 1}`
+                      )}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => {
+                        markDownloaded(
+                          downloadNotice.itemId,
+                          downloadNotice.dateKey
+                        );
+                      }}
+                      className="block truncate rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-cyan-300 hover:bg-white/[0.07]"
+                    >
+                      File {i + 1} of {downloadNotice.urls.length}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  markDownloaded(downloadNotice.itemId, downloadNotice.dateKey);
+                  openChecklistDownloads(
+                    downloadNotice.urls,
+                    downloadNotice.filenameBase
+                  );
+                  setDownloadNotice(null);
+                }}
+                className="h-10 flex-1 rounded-lg bg-cyan-400 px-3 text-[13px] font-semibold text-black sm:flex-none"
+              >
+                {downloadNotice.urls.length > 1
+                  ? `Download all ${downloadNotice.urls.length}`
+                  : "Download"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDownloadNotice(null)}
+                className="h-10 px-3 text-[13px] text-white/50 hover:text-white/80"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-24 xl:pb-10">
         <div className="mx-auto max-w-3xl py-4">
           <div className="mb-3 flex items-center gap-2">
@@ -1861,7 +1993,7 @@ export default function TeamTasksView({
               ) : (
                 <ul className="divide-y divide-white/[0.06]">
                   {doneItems.map((d) => {
-                    const fileUrl = d.handoff?.fileUrl?.trim() || null;
+                    const urls = handoffCreativeUrls(d.handoff);
                     const dateKey = d.targetDate ?? focusDate;
                     return (
                       <li key={`${d.id}-${d.targetDate}-${d.kind}`} className="px-3 py-3">
@@ -1878,13 +2010,16 @@ export default function TeamTasksView({
                             </div>
                           </div>
                           <div className="flex shrink-0 flex-col items-stretch gap-1.5">
-                            {fileUrl ? (
-                              <a
-                                href={`/api/team/download?url=${encodeURIComponent(fileUrl)}`}
+                            {urls.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => promptDownloadFiles(d, dateKey)}
                                 className="inline-flex h-9 items-center justify-center rounded-lg bg-cyan-400 px-3 text-[12px] font-bold text-black"
                               >
-                                Download
-                              </a>
+                                {urls.length > 1
+                                  ? `Download · ${urls.length} files`
+                                  : "Download"}
+                              </button>
                             ) : null}
                             <button
                               type="button"
@@ -1956,6 +2091,7 @@ export default function TeamTasksView({
                           onCloseSkip={isAdmin ? adminCloseSkip : undefined}
                           onUnready={isAdmin ? adminUnready : undefined}
                           onHandoffUpload={submitHandoffUpload}
+                          onRequestDownload={promptDownloadFiles}
                         />
                       ))}
                     </div>
@@ -1994,6 +2130,7 @@ export default function TeamTasksView({
                           onCloseSkip={isAdmin ? adminCloseSkip : undefined}
                           onUnready={isAdmin ? adminUnready : undefined}
                           onHandoffUpload={submitHandoffUpload}
+                          onRequestDownload={promptDownloadFiles}
                         />
                       ))}
                     </div>
@@ -2011,6 +2148,7 @@ export default function TeamTasksView({
                     onComplete={markComplete}
                     onCloseSkip={isAdmin ? adminCloseSkip : undefined}
                     onUnready={isAdmin ? adminUnready : undefined}
+                    onRequestDownload={promptDownloadFiles}
                     onSaveDescription={saveAdDescription}
                     onHandoffUpload={submitHandoffUpload}
                   />

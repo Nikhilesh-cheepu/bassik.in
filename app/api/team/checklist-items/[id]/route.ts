@@ -6,10 +6,12 @@ import { isTeamDesignerMember } from "@/lib/team-members";
 import {
   getTodayKey,
   handoffByDateFromJson,
+  handoffCreativeUrls,
   parseDayOfWeek,
   parseHandoffFormat,
   parsePlatforms,
   readyDatesFromJson,
+  serializeHandoffMap,
   toTeamChecklistItemDto,
   type ChecklistHandoffDto,
   type HandoffStatus,
@@ -17,31 +19,6 @@ import {
 import { unreadyOutletGoLiveHandoff } from "@/lib/team-designer-jobs";
 
 type HandoffAction = "approve" | "unapprove" | "set-ready" | "clear";
-
-function serializeHandoffMap(
-  map: Record<string, ChecklistHandoffDto>
-): Prisma.InputJsonValue {
-  const out: Record<string, Record<string, string>> = {};
-  for (const [date, entry] of Object.entries(map)) {
-    if (
-      entry.status === "wait" &&
-      !entry.fileUrl &&
-      !entry.postingNotes &&
-      !entry.scheduleNote &&
-      !entry.format
-    ) {
-      continue;
-    }
-    const row: Record<string, string> = { status: entry.status };
-    if (entry.format) row.format = entry.format;
-    if (entry.fileUrl) row.fileUrl = entry.fileUrl;
-    if (entry.postingNotes) row.postingNotes = entry.postingNotes;
-    if (entry.scheduleNote) row.scheduleNote = entry.scheduleNote;
-    if (entry.uploadedAt) row.uploadedAt = entry.uploadedAt;
-    out[date] = row;
-  }
-  return out;
-}
 
 function syncReadyDates(
   readyDates: string[],
@@ -86,6 +63,7 @@ export async function PATCH(
         action?: HandoffAction;
         format?: string;
         fileUrl?: string;
+        fileUrls?: string[];
         postingNotes?: string;
         scheduleNote?: string;
       };
@@ -226,10 +204,17 @@ export async function PATCH(
       } else if (action === "set-ready") {
         // Anyone (admin or designer): Ready requires an uploaded file.
         const format = parseHandoffFormat(body.handoff?.format) ?? prev.format ?? null;
-        const fileUrl =
-          typeof body.handoff?.fileUrl === "string" && body.handoff.fileUrl.trim()
-            ? body.handoff.fileUrl.trim()
-            : prev.fileUrl ?? null;
+        const fileUrls = handoffCreativeUrls({
+          status: "ready",
+          fileUrl:
+            typeof body.handoff?.fileUrl === "string" && body.handoff.fileUrl.trim()
+              ? body.handoff.fileUrl.trim()
+              : prev.fileUrl ?? null,
+          fileUrls: Array.isArray(body.handoff?.fileUrls)
+            ? body.handoff.fileUrls
+            : prev.fileUrls,
+        });
+        const fileUrl = fileUrls[0] ?? null;
         const postingNotes =
           typeof body.handoff?.postingNotes === "string"
             ? body.handoff.postingNotes.trim() || null
@@ -256,6 +241,7 @@ export async function PATCH(
           status: "ready",
           format,
           fileUrl,
+          fileUrls,
           postingNotes,
           scheduleNote,
           uploadedAt:

@@ -11,7 +11,7 @@ import {
   parsePlatforms,
   platformsFromJson,
   readyDatesFromJson,
-  type ChecklistHandoffDto,
+  serializeHandoffMap,
   type HandoffStatus,
 } from "@/lib/team-checklists";
 import { SOCIAL_BOARD_PLATFORMS } from "@/lib/team-checklist-templates";
@@ -52,31 +52,6 @@ function assertDownloadReadyOrClose(params: {
     );
   }
   return null;
-}
-
-function serializeHandoffMap(
-  map: Record<string, ChecklistHandoffDto>
-): Prisma.InputJsonValue {
-  const out: Record<string, Record<string, string>> = {};
-  for (const [date, entry] of Object.entries(map)) {
-    if (
-      entry.status === "wait" &&
-      !entry.fileUrl &&
-      !entry.postingNotes &&
-      !entry.scheduleNote &&
-      !entry.format
-    ) {
-      continue;
-    }
-    const row: Record<string, string> = { status: entry.status };
-    if (entry.format) row.format = entry.format;
-    if (entry.fileUrl) row.fileUrl = entry.fileUrl;
-    if (entry.postingNotes) row.postingNotes = entry.postingNotes;
-    if (entry.scheduleNote) row.scheduleNote = entry.scheduleNote;
-    if (entry.uploadedAt) row.uploadedAt = entry.uploadedAt;
-    out[date] = row;
-  }
-  return out;
 }
 
 function syncReadyDates(
