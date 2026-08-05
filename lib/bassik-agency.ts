@@ -9,13 +9,10 @@ export const BASSIK_HQ_PHONE =
   "7013884485";
 
 export const BASSIK_AGENCY_WA_MESSAGE =
-  "Hi Bassik — I'd like to discuss a marketing package for my brand.";
+  "Hi Bassik — I want to talk about a Growth partnership.";
 
 export const BASSIK_INVEST_WA_MESSAGE =
   "Hi Bassik — I'd like to explore a hospitality partnership with Bassik.";
-
-export const BASSIK_AUDIT_WA_MESSAGE =
-  "Hi Bassik — I'd like a free hospitality marketing audit.";
 
 export function bassikAgencyWhatsAppUrl(message = BASSIK_AGENCY_WA_MESSAGE): string {
   return whatsAppShareUrl(message, getFullPhoneNumber(BASSIK_HQ_PHONE));
@@ -25,13 +22,9 @@ export function bassikInvestWhatsAppUrl(): string {
   return bassikAgencyWhatsAppUrl(BASSIK_INVEST_WA_MESSAGE);
 }
 
-export function bassikAuditWhatsAppUrl(): string {
-  return bassikAgencyWhatsAppUrl(BASSIK_AUDIT_WA_MESSAGE);
-}
-
 export function bassikPackageWhatsAppUrl(packageName: string): string {
   return bassikAgencyWhatsAppUrl(
-    `Hi Bassik — I'm interested in the ${packageName} package.`
+    `Hi Bassik — I'm interested in the ${packageName} path. Let's talk.`
   );
 }
 
@@ -53,186 +46,53 @@ export function getAgencyPortfolioBrands(): Brand[] {
   return out;
 }
 
-/** Hero supporting line under the Bassik name */
-export const AGENCY_TAGLINE = "Marketing that fills seats — not just feeds.";
-
-export const AGENCY_HERO_SUPPORT =
-  "Posters, reels, shoots, social, and ads for clubs, cafés, and local brands. Start light. Scale when you're ready.";
-
 export const AGENCY_SEO = {
-  title: "Bassik | Marketing Packages for Clubs, Cafés & Local Brands",
+  title: "Bassik | We care about your growth",
   description:
-    "Bassik marketing packages for hospitality and local brands — social posting, content shoots, reels, Meta & Google ads. Starter plans from ₹15,000/month in Hyderabad.",
+    "Bassik is a growth partner for clubs, restaurants, hotels, education and healthcare — attention, trust, enquiries and footfall. Talk to us on WhatsApp. Hyderabad.",
   keywords: [
-    "digital marketing agency Hyderabad",
-    "club marketing packages",
-    "restaurant social media agency",
-    "content shoot reels package",
-    "Meta Google ads hospitality",
-    "F&B marketing agency",
-    "nightlife marketing Hyderabad",
+    "growth marketing Hyderabad",
+    "hospitality marketing partner",
+    "education admission leads",
+    "restaurant local ads",
+    "club marketing Hyderabad",
     "Bassik",
   ],
 } as const;
 
-export type AgencyServiceId = "content" | "social" | "ads" | "discovery";
+/** Soft Siri palette — no gold */
+export const AGENCY_COLORS = {
+  canvas: "#F7F5F8",
+  pure: "#FFFFFF",
+  ink: "#12131A",
+  muted: "#6B6570",
+  line: "#E6E1E8",
+  night: "#0E0D12",
+  peach: "#FFB4A2",
+  rose: "#F5A3C7",
+  lilac: "#C4B5FD",
+  sky: "#A5C8FF",
+  mist: "#EDE9FE",
+  contentWash: "#F3EEFF",
+} as const;
 
-export const AGENCY_SERVICES_HEADING = "360° cover";
-export const AGENCY_SERVICES_TITLE = "Everything your brand needs to show up and convert.";
+export const AGENCY_TAGLINE = "We care about your growth";
 
-export const AGENCY_SERVICES: ReadonlyArray<{
-  id: AgencyServiceId;
-  title: string;
-  body: string;
-}> = [
-  {
-    id: "content",
-    title: "Shoot & reels",
-    body: "On-ground shoots, edits, and short-form video built for Instagram and ads.",
-  },
-  {
-    id: "social",
-    title: "Social handling",
-    body: "Posters, flyers, stories, and a posting calendar your team does not have to chase.",
-  },
-  {
-    id: "ads",
-    title: "Paid growth",
-    body: "Meta, Google, and event pushes — BookMyShow collabs and offer campaigns when you need volume.",
-  },
-  {
-    id: "discovery",
-    title: "Find & book",
-    body: "Maps, SEO, landing pages, and reservation funnels so discovery turns into footfall.",
-  },
-];
+export const AGENCY_HERO_SUPPORT =
+  "Bassik helps clubs, restaurants, hotels, education and healthcare grow — we stay with you. Pick Care, Growth, or Revenue and talk to us on WhatsApp.";
 
-export type AgencyPackageId = "starter" | "content" | "growth" | "revenue";
+export const AGENCY_PROOF_LINE =
+  "Trusted by Club Rogue, Firefly, C53, Boiler Room, and more in Hyderabad.";
 
-export const AGENCY_PACKAGES_HEADING = "Packages";
-export const AGENCY_PACKAGES_TITLE = "Start cheap. Upgrade when content and ads start paying back.";
-export const AGENCY_PACKAGES_SUPPORT =
-  "Most brands begin with Starter. When the feed needs heat, Content is the move everyone asks for.";
+export const AGENCY_STORY = {
+  brand: "From the floor",
+  quote:
+    "Once Bassik owned the stack, we stopped juggling freelancers and started running the floor. Story, shoots, posts, ads — one thread.",
+  attribution: "Hospitality partners · Hyderabad",
+} as const;
 
-export const AGENCY_PACKAGES: ReadonlyArray<{
-  id: AgencyPackageId;
-  name: string;
-  priceLabel: string;
-  priceNote: string;
-  outcome: string;
-  badge: string | null;
-  highlighted: boolean;
-  includes: readonly string[];
-  cta: string;
-}> = [
-  {
-    id: "starter",
-    name: "Starter",
-    priceLabel: "₹15,000",
-    priceNote: "/ month",
-    outcome: "Stay visible every week — posters, flyers, and clean social posting.",
-    badge: "Best to begin",
-    highlighted: false,
-    includes: [
-      "12 posters / flyers",
-      "8 social posts",
-      "Daily stories support",
-      "Monthly content calendar",
-      "Basic community replies",
-    ],
-    cta: "Get Starter",
-  },
-  {
-    id: "content",
-    name: "Content",
-    priceLabel: "₹35,000",
-    priceNote: "/ month",
-    outcome: "The package brands actually want — shoots, reels, and edits that stop the scroll.",
-    badge: "Most demanded",
-    highlighted: true,
-    includes: [
-      "2 content shoot days",
-      "16 reels (shot + edited)",
-      "Video edits for ads & organic",
-      "Story + highlight packs",
-      "Poster set from shoot stills",
-      "Usage-ready vertical cuts",
-    ],
-    cta: "Get Content",
-  },
-  {
-    id: "growth",
-    name: "Growth",
-    priceLabel: "₹60,000",
-    priceNote: "/ month",
-    outcome: "Content plus Meta ads and event rollout — built for weekend footfall.",
-    badge: null,
-    highlighted: false,
-    includes: [
-      "Everything in Content",
-      "Full social handling",
-      "Meta ads management",
-      "Event creative rollout",
-      "Influencer coordination",
-      "WhatsApp broadcast creatives",
-      "Monthly performance review",
-    ],
-    cta: "Get Growth",
-  },
-  {
-    id: "revenue",
-    name: "Revenue",
-    priceLabel: "₹1,20,000",
-    priceNote: "/ month",
-    outcome: "Full-funnel partner — ads, SEO, pages, and strategy that aim at reservations.",
-    badge: null,
-    highlighted: false,
-    includes: [
-      "Everything in Growth",
-      "Google Ads management",
-      "Local SEO + GMB",
-      "Landing / booking pages",
-      "BookMyShow & listing creatives",
-      "Weekly strategy check-ins",
-      "Lead & reservation funnel",
-    ],
-    cta: "Get Revenue",
-  },
-];
+export const AGENCY_WORK_HEADING = "Already with us";
 
-export type AgencyVerticalId = "gym" | "fnb" | "nightlife" | "local";
-
-export const AGENCY_VERTICALS_HEADING = "Built for";
-export const AGENCY_VERTICALS_TITLE = "Clubs, cafés, gyms, and local brands.";
-
-export const AGENCY_VERTICALS: ReadonlyArray<{
-  id: AgencyVerticalId;
-  title: string;
-  body: string;
-}> = [
-  { id: "nightlife", title: "Nightlife", body: "Nights, covers, event heat." },
-  { id: "fnb", title: "F&B & cafés", body: "Footfall and weekday demand." },
-  { id: "gym", title: "Fitness", body: "Trials and memberships." },
-  { id: "local", title: "Local brands", body: "City-first category plays." },
-];
-
-export const AGENCY_STEPS_HEADING = "How it works";
-export const AGENCY_STEPS_TITLE = "Simple. Fast. On WhatsApp.";
-
-export const AGENCY_STEPS = [
-  { step: "01", title: "Pick a package", body: "Starter, Content, Growth, or Revenue." },
-  { step: "02", title: "Quick brief", body: "Brand, dates, and what “win” looks like." },
-  { step: "03", title: "We ship", body: "Calendar, creatives, shoots, ads — handled." },
-] as const;
-
-export const AGENCY_WORK_HEADING = "Trusted by";
-export const AGENCY_WORK_TITLE = "Brands that already run with Bassik.";
-
-export const AGENCY_HOSPITALITY_HEADING = "Beyond the agency";
-export const AGENCY_HOSPITALITY_TITLE = "Hospitality ventures with Bassik.";
-export const AGENCY_HOSPITALITY_BODY =
-  "Alongside client work, we build hospitality concepts of our own. Partners who want skin in the game — talk to us.";
-
-export const AGENCY_CONTACT_TITLE = "Tell us what you need.";
+export const AGENCY_CONTACT_TITLE = "Tell us your world.";
 export const AGENCY_CONTACT_BODY =
-  "Starter for posting. Content for reels & shoots. Growth when you want ads. Reply in minutes on WhatsApp.";
+  "Most people WhatsApp us. We’ll map the right path — Care, Growth, or Revenue — after a short conversation.";

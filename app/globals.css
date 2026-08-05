@@ -7,6 +7,28 @@
   50% { background-position: 100% 50%; }
 }
 
+@keyframes path-swipe-hint {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateX(5px);
+    opacity: 1;
+  }
+}
+
+.path-swipe-hint {
+  animation: path-swipe-hint 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .path-swipe-hint {
+    animation: none;
+  }
+}
+
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;
