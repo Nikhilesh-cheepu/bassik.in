@@ -10,6 +10,7 @@ import {
   handoffCreativeUrls,
   type ChecklistBoardDto,
   type ChecklistPlatformId,
+  type DriveFolderEntry,
   type HandoffFormat,
   type HandoffStatus,
   type OutletBoardSection,
@@ -1197,7 +1198,8 @@ export default function TeamTasksView({
   const [notesDraft, setNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [driveUrlDraft, setDriveUrlDraft] = useState("");
-  const [driveEditOpen, setDriveEditOpen] = useState(false);
+  const [driveDescDraft, setDriveDescDraft] = useState("");
+  const [driveOutletIds, setDriveOutletIds] = useState<string[]>([]);
   const [savingDrive, setSavingDrive] = useState(false);
   const [waShare, setWaShare] = useState<{
     title: string;
@@ -1455,7 +1457,12 @@ export default function TeamTasksView({
   };
 
   const openBoardNotes = () => {
-    const notes = board?.boardNotes ?? { postings: "", ads: "", driveFolderUrl: "" };
+    const notes = board?.boardNotes ?? {
+      postings: "",
+      ads: "",
+      driveFolderUrl: "",
+      driveFolders: [],
+    };
     setNotesDraft(mode === "ads" ? notes.ads : notes.postings);
     setNotesOpen(true);
   };
@@ -1488,31 +1495,74 @@ export default function TeamTasksView({
     }
   };
 
-  const saveDriveFolderUrl = async () => {
+  const persistDriveFolders = async (driveFolders: DriveFolderEntry[]) => {
+    const res = await fetch("/api/team/checklists/board-notes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        driveFolders,
+        ownerId: manageMemberId || CHECKLIST_DEFAULT_OWNER_ID,
+      }),
+    });
+    const data = await readTeamApiJson(res);
+    const next = data.boardNotes as ChecklistBoardDto["boardNotes"] | undefined;
+    if (next && board) {
+      setBoard({ ...board, boardNotes: next });
+    } else {
+      await loadBoard();
+    }
+  };
+
+  const addDriveFolder = async () => {
     if (!isAdmin) return;
+    const url = driveUrlDraft.trim();
+    if (!url) {
+      setError("Paste a Google Drive folder link first.");
+      return;
+    }
+    if (driveOutletIds.length === 0) {
+      setError("Select at least one outlet for this Drive link.");
+      return;
+    }
     setSavingDrive(true);
+    setError(null);
     try {
-      const res = await fetch("/api/team/checklists/board-notes", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          driveFolderUrl: driveUrlDraft.trim(),
-          ownerId: manageMemberId || CHECKLIST_DEFAULT_OWNER_ID,
-        }),
-      });
-      const data = await readTeamApiJson(res);
-      const next = data.boardNotes as ChecklistBoardDto["boardNotes"] | undefined;
-      if (next && board) {
-        setBoard({ ...board, boardNotes: next });
-      } else {
-        await loadBoard();
-      }
-      setDriveEditOpen(false);
+      const current = board?.boardNotes?.driveFolders ?? [];
+      const entry: DriveFolderEntry = {
+        id: `drv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+        url,
+        outletIds: [...driveOutletIds],
+        description: driveDescDraft.trim(),
+      };
+      await persistDriveFolders([...current, entry]);
+      setDriveUrlDraft("");
+      setDriveDescDraft("");
+      setDriveOutletIds([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save Drive link");
     } finally {
       setSavingDrive(false);
     }
+  };
+
+  const removeDriveFolder = async (id: string) => {
+    if (!isAdmin) return;
+    setSavingDrive(true);
+    setError(null);
+    try {
+      const current = board?.boardNotes?.driveFolders ?? [];
+      await persistDriveFolders(current.filter((f) => f.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove Drive link");
+    } finally {
+      setSavingDrive(false);
+    }
+  };
+
+  const toggleDriveOutlet = (outletId: string) => {
+    setDriveOutletIds((prev) =>
+      prev.includes(outletId) ? prev.filter((id) => id !== outletId) : [...prev, outletId]
+    );
   };
 
   const completeDriveHabit = async (outcome: "done" | "nothing_new") => {
@@ -1816,66 +1866,113 @@ export default function TeamTasksView({
                 )}
               </div>
 
-              {board.boardNotes?.driveFolderUrl ? (
-                <a
-                  href={board.boardNotes.driveFolderUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-3 flex min-h-10 items-center justify-center rounded-xl border border-violet-300/30 bg-black/25 px-3 text-[13px] font-semibold text-violet-100 hover:bg-black/40"
-                >
-                  Open Google Drive folder
-                </a>
+              {(board.boardNotes?.driveFolders?.length ?? 0) > 0 ? (
+                <ul className="mt-3 space-y-2">
+                  {board.boardNotes!.driveFolders.map((folder) => {
+                    const outletLabel =
+                      folder.outletIds.length > 0
+                        ? folder.outletIds.map((id) => teamOutletLabel(id)).join(" · ")
+                        : "All outlets";
+                    return (
+                      <li
+                        key={folder.id}
+                        className="rounded-xl border border-violet-300/25 bg-black/30 px-3 py-2.5"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-[12px] font-semibold text-violet-100">
+                              {outletLabel}
+                            </p>
+                            {folder.description ? (
+                              <p className="mt-0.5 text-[11px] leading-snug text-white/55">
+                                {folder.description}
+                              </p>
+                            ) : null}
+                          </div>
+                          {isAdmin ? (
+                            <button
+                              type="button"
+                              disabled={savingDrive}
+                              onClick={() => void removeDriveFolder(folder.id)}
+                              className="shrink-0 text-[11px] font-semibold text-rose-200/80 hover:text-rose-100 disabled:opacity-40"
+                            >
+                              Remove
+                            </button>
+                          ) : null}
+                        </div>
+                        <a
+                          href={folder.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 flex min-h-9 items-center justify-center rounded-lg border border-violet-300/30 bg-violet-500/15 px-3 text-[12px] font-semibold text-violet-100 hover:bg-violet-500/25"
+                        >
+                          Open Drive folder
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
               ) : (
                 <p className="mt-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[12px] text-white/45">
                   {isAdmin
-                    ? "Add the Google Drive folder link below (admin only)."
-                    : "Drive link not set yet — ask admin to add it."}
+                    ? "Add Drive folder links below (outlet + link). Amit sees them here."
+                    : "Drive links not set yet — ask admin to add them."}
                 </p>
               )}
 
               {isAdmin ? (
-                <div className="mt-2">
-                  {driveEditOpen ? (
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <input
-                        type="url"
-                        value={driveUrlDraft}
-                        onChange={(e) => setDriveUrlDraft(e.target.value)}
-                        placeholder="https://drive.google.com/…"
-                        className="min-h-10 flex-1 rounded-lg border border-white/15 bg-black/40 px-3 text-[13px] text-white placeholder:text-white/30"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          disabled={savingDrive}
-                          onClick={() => void saveDriveFolderUrl()}
-                          className="min-h-10 rounded-lg bg-violet-400 px-3 text-[12px] font-bold text-black disabled:opacity-50"
-                        >
-                          {savingDrive ? "…" : "Save link"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDriveEditOpen(false)}
-                          className="min-h-10 px-2 text-[12px] text-white/50"
-                        >
-                          Cancel
-                        </button>
-                      </div>
+                <div className="mt-3 space-y-2 rounded-xl border border-white/12 bg-black/25 p-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/45">
+                    Admin · add Drive folder
+                  </p>
+                  <input
+                    type="url"
+                    value={driveUrlDraft}
+                    onChange={(e) => setDriveUrlDraft(e.target.value)}
+                    placeholder="https://drive.google.com/drive/folders/…"
+                    autoComplete="off"
+                    className="min-h-10 w-full rounded-lg border border-white/20 bg-[#0b0b12] px-3 text-[13px] text-white placeholder:text-white/35 outline-none ring-0 focus:border-violet-300/50"
+                  />
+                  <input
+                    type="text"
+                    value={driveDescDraft}
+                    onChange={(e) => setDriveDescDraft(e.target.value)}
+                    placeholder="Description (optional) — e.g. weekend shoot dump"
+                    autoComplete="off"
+                    className="min-h-10 w-full rounded-lg border border-white/20 bg-[#0b0b12] px-3 text-[13px] text-white placeholder:text-white/35 outline-none focus:border-violet-300/50"
+                  />
+                  <div>
+                    <p className="mb-1.5 text-[11px] font-semibold text-white/50">
+                      Outlets (one or more)
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {TEAM_AD_OUTLETS.map((o) => {
+                        const on = driveOutletIds.includes(o.id);
+                        return (
+                          <button
+                            key={o.id}
+                            type="button"
+                            onClick={() => toggleDriveOutlet(o.id)}
+                            className={`min-h-8 rounded-full px-2.5 text-[11px] font-semibold transition ${
+                              on
+                                ? "bg-violet-400 text-black"
+                                : "border border-white/15 bg-white/5 text-white/70 hover:border-white/25"
+                            }`}
+                          >
+                            {o.label}
+                          </button>
+                        );
+                      })}
                     </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDriveUrlDraft(board.boardNotes?.driveFolderUrl || "");
-                        setDriveEditOpen(true);
-                      }}
-                      className="text-[11px] font-semibold text-violet-200/80 underline-offset-2 hover:underline"
-                    >
-                      {board.boardNotes?.driveFolderUrl
-                        ? "Edit Drive link (admin)"
-                        : "Set Drive link (admin)"}
-                    </button>
-                  )}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={savingDrive}
+                    onClick={() => void addDriveFolder()}
+                    className="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-violet-400 px-3 text-[13px] font-bold text-black disabled:opacity-50"
+                  >
+                    {savingDrive ? "Saving…" : "Add Drive link"}
+                  </button>
                 </div>
               ) : null}
 

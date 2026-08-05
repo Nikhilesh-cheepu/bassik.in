@@ -5,17 +5,18 @@ import {
   BOARD_NOTES_CHECKLIST_TITLE,
   parseBoardNotesDescription,
   serializeBoardNotes,
+  type DriveFolderEntry,
 } from "@/lib/team-checklists";
 import { teamPersonalNoteOwnerId } from "@/lib/team-personal-notes";
 import { isTeamMemberId } from "@/lib/team-members";
 import { CHECKLIST_DEFAULT_OWNER_ID } from "@/lib/team-checklist-templates";
+import { isTeamOutletId } from "@/lib/team-outlets";
 
 async function getOrCreateNotesChecklist(ownerId: string, createdBy: string) {
   let row = await prisma.teamDailyChecklist.findFirst({
     where: {
       ownerId,
       kind: "habits",
-      title: BOARD_NOTES_CHECKLIST_TITLE,
       outletId: null,
     },
   });
@@ -25,16 +26,59 @@ async function getOrCreateNotesChecklist(ownerId: string, createdBy: string) {
         ownerId,
         kind: "habits",
         title: BOARD_NOTES_CHECKLIST_TITLE,
-        description: serializeBoardNotes({ postings: "", ads: "", driveFolderUrl: "" }),
+        description: serializeBoardNotes({
+          postings: "",
+          ads: "",
+          driveFolders: [],
+        }),
         outletId: null,
         createdBy,
+      },
+    });
+  }
+  if (row.title !== BOARD_NOTES_CHECKLIST_TITLE) {
+    const looksLikeJson = Boolean(row.description?.trim().startsWith("{"));
+    row = await prisma.teamDailyChecklist.update({
+      where: { id: row.id },
+      data: {
+        title: BOARD_NOTES_CHECKLIST_TITLE,
+        description: looksLikeJson
+          ? row.description
+          : serializeBoardNotes({ postings: "", ads: "", driveFolders: [] }),
       },
     });
   }
   return row;
 }
 
-/** Admin: update sticky board notes or Drive folder URL. */
+function normalizeDriveFolders(raw: unknown): DriveFolderEntry[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: DriveFolderEntry[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    const url = typeof r.url === "string" ? r.url.trim() : "";
+    if (!url) continue;
+    const outletIds = Array.isArray(r.outletIds)
+      ? r.outletIds
+          .filter((id): id is string => typeof id === "string")
+          .map((id) => id.trim())
+          .filter((id) => isTeamOutletId(id))
+      : [];
+    out.push({
+      id:
+        typeof r.id === "string" && r.id.trim()
+          ? r.id.trim()
+          : `drv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      url,
+      outletIds,
+      description: typeof r.description === "string" ? r.description.trim() : "",
+    });
+  }
+  return out;
+}
+
+/** Admin: update sticky board notes or Drive folders. */
 export async function PATCH(req: NextRequest) {
   const session = await getTeamFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -47,6 +91,7 @@ export async function PATCH(req: NextRequest) {
       tab?: string;
       notes?: string;
       driveFolderUrl?: string;
+      driveFolders?: unknown;
       ownerId?: string;
     };
 
@@ -57,9 +102,30 @@ export async function PATCH(req: NextRequest) {
     const current = parseBoardNotesDescription(row.description);
 
     let next = { ...current };
+    let touched = false;
 
-    if (typeof body.driveFolderUrl === "string") {
-      next.driveFolderUrl = body.driveFolderUrl.trim();
+    if (body.driveFolders !== undefined) {
+      const folders = normalizeDriveFolders(body.driveFolders);
+      if (!folders) {
+        return NextResponse.json({ error: "driveFolders must be an array" }, { status: 400 });
+      }
+      next.driveFolders = folders;
+      next.driveFolderUrl = folders[0]?.url ?? "";
+      touched = true;
+    } else if (typeof body.driveFolderUrl === "string") {
+      const url = body.driveFolderUrl.trim();
+      next.driveFolderUrl = url;
+      next.driveFolders = url
+        ? [
+            {
+              id: current.driveFolders[0]?.id ?? `drv_${Date.now().toString(36)}`,
+              url,
+              outletIds: current.driveFolders[0]?.outletIds ?? [],
+              description: current.driveFolders[0]?.description ?? "",
+            },
+          ]
+        : [];
+      touched = true;
     }
 
     const tab = body.tab === "ads" ? "ads" : body.tab === "postings" ? "postings" : null;
@@ -72,9 +138,12 @@ export async function PATCH(req: NextRequest) {
         postings: tab === "postings" ? body.notes : current.postings,
         ads: tab === "ads" ? body.notes : current.ads,
       };
-    } else if (typeof body.driveFolderUrl !== "string") {
+      touched = true;
+    }
+
+    if (!touched) {
       return NextResponse.json(
-        { error: "tab (postings|ads) or driveFolderUrl required" },
+        { error: "tab (postings|ads) or driveFolders required" },
         { status: 400 }
       );
     }

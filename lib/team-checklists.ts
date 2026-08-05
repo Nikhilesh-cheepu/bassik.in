@@ -336,8 +336,13 @@ export type ChecklistBoardDto = {
   outlets: OutletBoardSection[];
   /** Posts not tied to an enabled outlet */
   generalPosts: TeamChecklistItemDto[];
-  /** Sticky instructions for Postings / Ads tabs + admin Drive folder URL */
-  boardNotes: { postings: string; ads: string; driveFolderUrl: string };
+  /** Sticky instructions for Postings / Ads tabs + admin Drive folders */
+  boardNotes: {
+    postings: string;
+    ads: string;
+    driveFolderUrl: string;
+    driveFolders: DriveFolderEntry[];
+  };
   /** Recently completed items (summary popup). */
   doneItems: TeamChecklistItemDto[];
   overdueStories: TeamChecklistItemDto[];
@@ -352,27 +357,80 @@ export type ChecklistBoardDto = {
 
 export const BOARD_NOTES_CHECKLIST_TITLE = "Daily Checklist Notes";
 
+/** Admin-configured Drive folders for Amit’s daily photo check. */
+export type DriveFolderEntry = {
+  id: string;
+  url: string;
+  outletIds: string[];
+  description: string;
+};
+
+function newDriveFolderId(): string {
+  return `drv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function parseDriveFolders(
+  raw: unknown,
+  legacyUrl: string
+): DriveFolderEntry[] {
+  const out: DriveFolderEntry[] = [];
+  if (Array.isArray(raw)) {
+    for (const row of raw) {
+      if (!row || typeof row !== "object") continue;
+      const r = row as Record<string, unknown>;
+      const url = typeof r.url === "string" ? r.url.trim() : "";
+      if (!url) continue;
+      const outletIds = Array.isArray(r.outletIds)
+        ? r.outletIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+            .map((id) => id.trim())
+        : [];
+      out.push({
+        id: typeof r.id === "string" && r.id.trim() ? r.id.trim() : newDriveFolderId(),
+        url,
+        outletIds,
+        description: typeof r.description === "string" ? r.description.trim() : "",
+      });
+    }
+  }
+  if (out.length === 0 && legacyUrl) {
+    out.push({
+      id: newDriveFolderId(),
+      url: legacyUrl,
+      outletIds: [],
+      description: "",
+    });
+  }
+  return out;
+}
+
 export function parseBoardNotesDescription(raw: string | null | undefined): {
   postings: string;
   ads: string;
   driveFolderUrl: string;
+  driveFolders: DriveFolderEntry[];
 } {
-  if (!raw?.trim()) return { postings: "", ads: "", driveFolderUrl: "" };
+  if (!raw?.trim()) {
+    return { postings: "", ads: "", driveFolderUrl: "", driveFolders: [] };
+  }
   try {
     const parsed = JSON.parse(raw) as {
       postings?: unknown;
       ads?: unknown;
       driveFolderUrl?: unknown;
+      driveFolders?: unknown;
     };
+    const driveFolderUrl =
+      typeof parsed.driveFolderUrl === "string" ? parsed.driveFolderUrl.trim() : "";
+    const driveFolders = parseDriveFolders(parsed.driveFolders, driveFolderUrl);
     return {
       postings: typeof parsed.postings === "string" ? parsed.postings : "",
       ads: typeof parsed.ads === "string" ? parsed.ads : "",
-      driveFolderUrl:
-        typeof parsed.driveFolderUrl === "string" ? parsed.driveFolderUrl.trim() : "",
+      // Keep first URL for older clients
+      driveFolderUrl: driveFolders[0]?.url ?? driveFolderUrl,
+      driveFolders,
     };
   } catch {
-    // Legacy plain text → postings
-    return { postings: raw, ads: "", driveFolderUrl: "" };
+    return { postings: raw, ads: "", driveFolderUrl: "", driveFolders: [] };
   }
 }
 
@@ -380,11 +438,33 @@ export function serializeBoardNotes(notes: {
   postings: string;
   ads: string;
   driveFolderUrl?: string;
+  driveFolders?: DriveFolderEntry[];
 }): string {
+  const folders =
+    notes.driveFolders ??
+    (notes.driveFolderUrl?.trim()
+      ? [
+          {
+            id: newDriveFolderId(),
+            url: notes.driveFolderUrl.trim(),
+            outletIds: [] as string[],
+            description: "",
+          },
+        ]
+      : []);
+  const cleaned = folders
+    .map((f) => ({
+      id: f.id?.trim() || newDriveFolderId(),
+      url: f.url.trim(),
+      outletIds: [...new Set(f.outletIds.map((id) => id.trim()).filter(Boolean))],
+      description: (f.description ?? "").trim(),
+    }))
+    .filter((f) => f.url.length > 0);
   return JSON.stringify({
     postings: notes.postings.trim(),
     ads: notes.ads.trim(),
-    driveFolderUrl: (notes.driveFolderUrl ?? "").trim(),
+    driveFolderUrl: cleaned[0]?.url ?? "",
+    driveFolders: cleaned,
   });
 }
 
@@ -1105,7 +1185,7 @@ export function buildChecklistBoard(
   );
   const boardNotes = notesList
     ? parseBoardNotesDescription(notesList.description)
-    : { postings: "", ads: "", driveFolderUrl: "" };
+    : { postings: "", ads: "", driveFolderUrl: "", driveFolders: [] };
 
   // Ready counts for today → +7 strip (go-live date), so Amit can jump ahead.
   const readyCountByDate: Record<string, number> = {};
