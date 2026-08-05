@@ -1,13 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
 import {
   CHECKLIST_DEFAULT_OWNER_ID,
+  DRIVE_CHECKLIST_KIND,
+  DRIVE_HABIT_CHECKLIST_TITLE,
   DRIVE_HABIT_INSTRUCTIONS,
   DRIVE_HABIT_ITEM_TITLE,
 } from "@/lib/team-checklist-templates";
-import {
-  BOARD_NOTES_CHECKLIST_TITLE,
-  serializeBoardNotes,
-} from "@/lib/team-checklists";
 
 const TZ = "Asia/Kolkata";
 
@@ -16,36 +14,50 @@ function todayKeyIst(now = new Date()): string {
 }
 
 /**
- * Ensure Amit’s board-notes habits checklist has the compulsory Drive item.
- * (DB allows only one null-outlet habits list per owner — share that row.)
+ * Ensure a dedicated `drive` checklist for Amit (separate from habits / board-notes).
+ * Also strips a Drive item accidentally attached to the habits notes row.
  */
 export async function ensureDailyDriveHabit(
   prisma: PrismaClient,
   params: { ownerId?: string; createdBy: string }
 ): Promise<boolean> {
   const ownerId = params.ownerId ?? CHECKLIST_DEFAULT_OWNER_ID;
+  let touched = false;
+
+  // Clean up mistaken merge onto habits/board-notes row
+  const habitsRow = await prisma.teamDailyChecklist.findFirst({
+    where: { ownerId, kind: "habits", outletId: null },
+    include: { items: true },
+  });
+  if (habitsRow) {
+    const stray = habitsRow.items.filter((i) => i.title === DRIVE_HABIT_ITEM_TITLE);
+    if (stray.length > 0) {
+      await prisma.teamChecklistItem.deleteMany({
+        where: { id: { in: stray.map((i) => i.id) } },
+      });
+      touched = true;
+    }
+  }
 
   let list = await prisma.teamDailyChecklist.findFirst({
     where: {
       ownerId,
-      kind: "habits",
+      kind: DRIVE_CHECKLIST_KIND,
       outletId: null,
     },
     include: { items: { orderBy: { sortOrder: "asc" } } },
   });
 
-  let touched = false;
-
   if (!list) {
-    list = await prisma.teamDailyChecklist.create({
+    await prisma.teamDailyChecklist.create({
       data: {
         ownerId,
-        kind: "habits",
-        title: BOARD_NOTES_CHECKLIST_TITLE,
-        description: serializeBoardNotes({ postings: "", ads: "", driveFolderUrl: "" }),
+        kind: DRIVE_CHECKLIST_KIND,
+        title: DRIVE_HABIT_CHECKLIST_TITLE,
+        description: "Compulsory daily Drive photo check for posting.",
         outletId: null,
         createdBy: params.createdBy,
-        sortOrder: 0,
+        sortOrder: -10,
         items: {
           create: {
             title: DRIVE_HABIT_ITEM_TITLE,
@@ -55,28 +67,19 @@ export async function ensureDailyDriveHabit(
           },
         },
       },
-      include: { items: { orderBy: { sortOrder: "asc" } } },
     });
     return true;
   }
 
-  // Prefer canonical notes title so board-notes + Drive share one row
-  if (list.title !== BOARD_NOTES_CHECKLIST_TITLE) {
-    const looksLikeJson = Boolean(list.description?.trim().startsWith("{"));
-    list = await prisma.teamDailyChecklist.update({
+  if (list.title !== DRIVE_HABIT_CHECKLIST_TITLE) {
+    await prisma.teamDailyChecklist.update({
       where: { id: list.id },
-      data: {
-        title: BOARD_NOTES_CHECKLIST_TITLE,
-        description: looksLikeJson
-          ? list.description
-          : serializeBoardNotes({ postings: "", ads: "", driveFolderUrl: "" }),
-      },
-      include: { items: { orderBy: { sortOrder: "asc" } } },
+      data: { title: DRIVE_HABIT_CHECKLIST_TITLE },
     });
     touched = true;
   }
 
-  const existing = list.items.find((i) => i.title === DRIVE_HABIT_ITEM_TITLE);
+  const existing = list.items.find((i) => i.title === DRIVE_HABIT_ITEM_TITLE) ?? list.items[0];
   if (!existing) {
     await prisma.teamChecklistItem.create({
       data: {
@@ -90,10 +93,15 @@ export async function ensureDailyDriveHabit(
     return true;
   }
 
-  if (existing.instructions !== DRIVE_HABIT_INSTRUCTIONS || existing.dayOfWeek !== null) {
+  if (
+    existing.title !== DRIVE_HABIT_ITEM_TITLE ||
+    existing.instructions !== DRIVE_HABIT_INSTRUCTIONS ||
+    existing.dayOfWeek !== null
+  ) {
     await prisma.teamChecklistItem.update({
       where: { id: existing.id },
       data: {
+        title: DRIVE_HABIT_ITEM_TITLE,
         instructions: DRIVE_HABIT_INSTRUCTIONS,
         dayOfWeek: null,
       },
@@ -111,13 +119,13 @@ export async function isAmitDriveHabitOpenToday(
   const list = await prisma.teamDailyChecklist.findFirst({
     where: {
       ownerId: CHECKLIST_DEFAULT_OWNER_ID,
-      kind: "habits",
+      kind: DRIVE_CHECKLIST_KIND,
       outletId: null,
     },
     include: {
       items: {
-        where: { title: DRIVE_HABIT_ITEM_TITLE },
         take: 1,
+        orderBy: { sortOrder: "asc" },
         include: {
           completions: { where: { date: dateKey }, take: 1 },
         },

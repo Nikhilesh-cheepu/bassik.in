@@ -15,6 +15,7 @@ import {
   type HandoffStatus,
 } from "@/lib/team-checklists";
 import {
+  DRIVE_CHECKLIST_KIND,
   DRIVE_HABIT_ITEM_TITLE,
   parseDriveOutcome,
   platformsForDriveOutcome,
@@ -132,7 +133,9 @@ export async function POST(
     const isAdmin = session.role === "admin";
     const closeWithoutCreative = Boolean(body.closeWithoutCreative);
     const kind = item.checklist.kind;
-    const isDriveHabit = kind === "habits" && item.title === DRIVE_HABIT_ITEM_TITLE;
+    const isDriveHabit =
+      kind === DRIVE_CHECKLIST_KIND ||
+      (kind === "habits" && item.title === DRIVE_HABIT_ITEM_TITLE);
     const isPost = kind === "posts";
     const isRecurringPost = isPost && Boolean(item.dayOfWeek);
     const bodyDateRaw = typeof body.date === "string" ? body.date.trim() : "";

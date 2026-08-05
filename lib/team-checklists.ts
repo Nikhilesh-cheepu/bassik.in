@@ -8,6 +8,7 @@ import {
   CHECKLIST_DAY_IDS,
   CHECKLIST_DAY_LABELS,
   CHECKLIST_DEFAULT_OWNER_ID,
+  DRIVE_CHECKLIST_KIND,
   DRIVE_HABIT_ITEM_TITLE,
   parseDriveOutcome,
   SOCIAL_BOARD_PLATFORMS,
@@ -649,7 +650,9 @@ export function isChecklistPlatformId(v: string): v is ChecklistPlatformId {
 }
 
 export function isChecklistKind(v: string): v is ChecklistKind {
-  return v === "stories" || v === "posts" || v === "habits" || v === "ads";
+  return (
+    v === "stories" || v === "posts" || v === "habits" || v === "ads" || v === "drive"
+  );
 }
 
 export function parsePlatforms(raw: unknown): string[] {
@@ -912,16 +915,18 @@ export function buildChecklistBoard(
     return a.sortOrder - b.sortOrder;
   });
 
-  // Drive item lives on the board-notes habits checklist (one habits row per owner).
-  const habitsList = dtos.find((c) => c.kind === "habits" && !c.outletId);
+  // Own checklist kind so board-notes / habits flow stays untouched.
+  const driveList = dtos.find((c) => c.kind === DRIVE_CHECKLIST_KIND && !c.outletId);
   const habitItem =
-    habitsList?.items.find((i) => i.title === DRIVE_HABIT_ITEM_TITLE) ?? null;
+    driveList?.items.find((i) => i.title === DRIVE_HABIT_ITEM_TITLE) ??
+    driveList?.items[0] ??
+    null;
   const habitPlatformsToday = habitItem?.completionsByDate[focus]?.completedPlatforms ?? [];
   const habit: TeamChecklistItemDto | null = habitItem
     ? {
         ...habitItem,
         targetDate: focus,
-        kind: "habits",
+        kind: "drive",
         completedToday: Boolean(habitItem.completionsByDate[focus]),
         completedPlatformsToday: habitPlatformsToday,
         driveOutcome: parseDriveOutcome(habitPlatformsToday),
