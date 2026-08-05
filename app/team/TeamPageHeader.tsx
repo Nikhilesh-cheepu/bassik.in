@@ -147,7 +147,13 @@ export default function TeamPageHeader({
       <div className={`${TEAM_PAGE} pointer-events-none`}>
         <div className="pointer-events-auto flex items-center justify-between gap-2 pt-2 pb-1 xl:items-start xl:pt-5 xl:pb-2">
           <div className="min-w-0 flex-1">
-            <h1 className={`truncate font-semibold tracking-tight ${tab === "reminders" || tab === "calendar" || tab === "vault" || tab === "tasks" ? "text-[28px] font-bold xl:text-2xl xl:font-semibold" : "text-base xl:text-2xl"}`}>
+            <h1
+              className={`truncate font-semibold tracking-tight ${
+                tab === "reminders" || tab === "calendar" || tab === "vault" || tab === "tasks"
+                  ? "text-lg xl:text-2xl"
+                  : "text-base xl:text-2xl"
+              }`}
+            >
               <span className="xl:hidden">{mobileTitle}</span>
               <span className="hidden xl:inline">{desktopTitle}</span>
             </h1>

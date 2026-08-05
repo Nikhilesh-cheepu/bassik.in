@@ -597,12 +597,12 @@ function ReadyHeadline({
 }) {
   const { datePart, weekday, kind, outlet } = readyGoLiveParts(item, dateKey);
   return (
-    <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[15px] font-semibold leading-tight">
+    <span className="inline-flex min-w-0 flex-wrap items-center gap-x-1 gap-y-0.5 text-[13px] font-semibold leading-snug sm:text-[15px] sm:leading-tight">
       <span className="text-white">{datePart}</span>
       {weekday ? (
         <>
-          <span className="text-white/35">·</span>
-          <span className="text-white">{weekday}</span>
+          <span className="hidden text-white/35 sm:inline">·</span>
+          <span className="hidden text-white sm:inline">{weekday}</span>
         </>
       ) : null}
       {kind ? (
@@ -614,7 +614,7 @@ function ReadyHeadline({
       {outlet ? (
         <>
           <span className="text-white/35">·</span>
-          <span className="rounded-md bg-cyan-400/20 px-1.5 py-0.5 text-[13px] font-bold text-cyan-100 ring-1 ring-cyan-400/30">
+          <span className="rounded-md bg-cyan-400/20 px-1.5 py-0.5 text-[11px] font-bold text-cyan-100 ring-1 ring-cyan-400/30 sm:text-[13px]">
             {outlet}
           </span>
         </>
@@ -736,12 +736,12 @@ function ItemRow({
             </p>
           ) : null}
           {item.dueLabel ? (
-            <p className="mt-1 text-[12px] font-semibold leading-snug text-amber-100/90">
+            <p className="mt-0.5 line-clamp-2 text-[10px] font-medium leading-snug text-amber-100/75 sm:mt-1 sm:line-clamp-none sm:text-[12px] sm:font-semibold sm:text-amber-100/90">
               {item.dueLabel}
             </p>
           ) : null}
           {item.kind === "stories" && ready ? (
-            <p className="mt-0.5 text-[10px] text-cyan-200/55">
+            <p className="mt-0.5 hidden text-[10px] text-cyan-200/55 sm:block">
               Post ~10 PM (before 11 PM). Avoid before 8 PM — story only lasts 24h.
             </p>
           ) : null}
@@ -754,19 +754,19 @@ function ItemRow({
             />
           ) : null}
           {ready && !dlAt ? (
-            <p className="mt-1 text-[10px] text-white/40">
-              Download first — then Done unlocks in 1 min. No Done without download.
+            <p className="mt-0.5 text-[10px] text-white/40 sm:mt-1">
+              Download first — Done in 1 min.
             </p>
           ) : null}
           {remainingSec != null && remainingSec > 0 ? (
-            <p className="mt-1 text-[10px] text-amber-200/70">
-              Done unlocks in {remainingSec}s…
+            <p className="mt-0.5 text-[10px] text-amber-200/70 sm:mt-1">
+              Done in {remainingSec}s…
             </p>
           ) : null}
           {!ready ? (
-            <p className="mt-1 text-[10px] text-white/35">
-              Waiting on upload — not sent to Amit until a file is Ready.
-              {isAdmin ? " Admin can Close to skip, or Unready if wrongly marked." : ""}
+            <p className="mt-0.5 text-[10px] text-white/35 sm:mt-1">
+              Waiting on upload.
+              {isAdmin ? " Close to skip, or Unready." : ""}
             </p>
           ) : null}
         </div>
@@ -1201,6 +1201,7 @@ export default function TeamTasksView({
   const [driveDescDraft, setDriveDescDraft] = useState("");
   const [driveOutletIds, setDriveOutletIds] = useState<string[]>([]);
   const [savingDrive, setSavingDrive] = useState(false);
+  const [driveAdminOpen, setDriveAdminOpen] = useState(false);
   const [waShare, setWaShare] = useState<{
     title: string;
     count: number;
@@ -1833,41 +1834,37 @@ export default function TeamTasksView({
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-24 xl:pb-10">
         <div className="mx-auto max-w-3xl py-4">
-          {/* Compulsory daily Drive photo check — always on top */}
+          {/* Slim Drive check — compact on mobile so Ready list stays usable */}
           {board?.habit ? (
             <section
-              className={`mb-4 rounded-2xl border p-3.5 ${
+              className={`mb-3 rounded-xl border p-2.5 sm:mb-4 sm:p-3 ${
                 board.habit.completedToday
                   ? "border-emerald-400/25 bg-emerald-400/10"
-                  : "border-violet-400/35 bg-violet-500/10 shadow-[0_0_24px_rgba(167,139,250,0.12)]"
+                  : "border-violet-400/30 bg-violet-500/[0.08]"
               }`}
             >
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-200/80">
-                    Fixed daily · compulsory
-                  </p>
-                  <h3 className="mt-1 text-[15px] font-semibold leading-snug text-white">
-                    {board.habit.title}
+                  <h3 className="text-[13px] font-semibold text-white sm:text-[14px]">
+                    Drive check
                   </h3>
-                  <p className="mt-1 text-[12px] leading-snug text-white/55">
-                    Check the Drive folder for new photos. If anything is new, make a post. If not,
-                    mark Nothing new. Reminders keep going until you clear this.
+                  <p className="text-[10px] text-white/45 sm:text-[11px]">
+                    New photos? Post → Done. Else Nothing new.
                   </p>
                 </div>
                 {board.habit.completedToday ? (
-                  <span className="shrink-0 rounded-full bg-emerald-400/20 px-2.5 py-1 text-[11px] font-bold text-emerald-200">
+                  <span className="shrink-0 rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold text-emerald-200">
                     {board.habit.driveOutcome === "nothing_new" ? "Nothing new" : "Done"}
                   </span>
                 ) : (
-                  <span className="shrink-0 rounded-full bg-amber-400/20 px-2.5 py-1 text-[11px] font-bold text-amber-100">
+                  <span className="shrink-0 rounded-full bg-amber-400/20 px-2 py-0.5 text-[10px] font-bold text-amber-100">
                     Open
                   </span>
                 )}
               </div>
 
               {(board.boardNotes?.driveFolders?.length ?? 0) > 0 ? (
-                <ul className="mt-3 space-y-2">
+                <ul className="mt-2 space-y-1.5">
                   {board.boardNotes!.driveFolders.map((folder) => {
                     const outletLabel =
                       folder.outletIds.length > 0
@@ -1876,115 +1873,125 @@ export default function TeamTasksView({
                     return (
                       <li
                         key={folder.id}
-                        className="rounded-xl border border-violet-300/25 bg-black/30 px-3 py-2.5"
+                        className="flex items-center gap-2 rounded-lg border border-violet-300/20 bg-black/25 px-2.5 py-2"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-[12px] font-semibold text-violet-100">
-                              {outletLabel}
-                            </p>
-                            {folder.description ? (
-                              <p className="mt-0.5 text-[11px] leading-snug text-white/55">
-                                {folder.description}
-                              </p>
-                            ) : null}
-                          </div>
-                          {isAdmin ? (
-                            <button
-                              type="button"
-                              disabled={savingDrive}
-                              onClick={() => void removeDriveFolder(folder.id)}
-                              className="shrink-0 text-[11px] font-semibold text-rose-200/80 hover:text-rose-100 disabled:opacity-40"
-                            >
-                              Remove
-                            </button>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[11px] font-semibold text-violet-100">
+                            {outletLabel}
+                          </p>
+                          {folder.description ? (
+                            <p className="truncate text-[10px] text-white/45">{folder.description}</p>
                           ) : null}
                         </div>
                         <a
                           href={folder.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="mt-2 flex min-h-9 items-center justify-center rounded-lg border border-violet-300/30 bg-violet-500/15 px-3 text-[12px] font-semibold text-violet-100 hover:bg-violet-500/25"
+                          className="inline-flex h-8 shrink-0 items-center rounded-md bg-violet-400/90 px-2.5 text-[11px] font-bold text-black"
                         >
-                          Open Drive folder
+                          Open
                         </a>
+                        {isAdmin ? (
+                          <button
+                            type="button"
+                            disabled={savingDrive}
+                            onClick={() => void removeDriveFolder(folder.id)}
+                            className="shrink-0 text-[10px] font-semibold text-rose-200/70 disabled:opacity-40"
+                          >
+                            ✕
+                          </button>
+                        ) : null}
                       </li>
                     );
                   })}
                 </ul>
               ) : (
-                <p className="mt-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[12px] text-white/45">
-                  {isAdmin
-                    ? "Add Drive folder links below (outlet + link). Amit sees them here."
-                    : "Drive links not set yet — ask admin to add them."}
+                <p className="mt-2 text-[11px] text-white/40">
+                  {isAdmin ? "No folders yet — add one below." : "No Drive folders yet."}
                 </p>
               )}
 
               {isAdmin ? (
-                <div className="mt-3 space-y-2 rounded-xl border border-white/12 bg-black/25 p-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/45">
-                    Admin · add Drive folder
-                  </p>
-                  <input
-                    type="url"
-                    value={driveUrlDraft}
-                    onChange={(e) => setDriveUrlDraft(e.target.value)}
-                    placeholder="https://drive.google.com/drive/folders/…"
-                    autoComplete="off"
-                    className="min-h-10 w-full rounded-lg border border-white/20 bg-[#0b0b12] px-3 text-[13px] text-white placeholder:text-white/35 outline-none ring-0 focus:border-violet-300/50"
-                  />
-                  <input
-                    type="text"
-                    value={driveDescDraft}
-                    onChange={(e) => setDriveDescDraft(e.target.value)}
-                    placeholder="Description (optional) — e.g. weekend shoot dump"
-                    autoComplete="off"
-                    className="min-h-10 w-full rounded-lg border border-white/20 bg-[#0b0b12] px-3 text-[13px] text-white placeholder:text-white/35 outline-none focus:border-violet-300/50"
-                  />
-                  <div>
-                    <p className="mb-1.5 text-[11px] font-semibold text-white/50">
-                      Outlets (one or more)
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {TEAM_AD_OUTLETS.map((o) => {
-                        const on = driveOutletIds.includes(o.id);
-                        return (
-                          <button
-                            key={o.id}
-                            type="button"
-                            onClick={() => toggleDriveOutlet(o.id)}
-                            className={`min-h-8 rounded-full px-2.5 text-[11px] font-semibold transition ${
-                              on
-                                ? "bg-violet-400 text-black"
-                                : "border border-white/15 bg-white/5 text-white/70 hover:border-white/25"
-                            }`}
-                          >
-                            {o.label}
-                          </button>
-                        );
-                      })}
+                <div className="mt-2">
+                  {!driveAdminOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => setDriveAdminOpen(true)}
+                      className="inline-flex h-9 w-full items-center justify-center rounded-lg border border-dashed border-violet-300/35 bg-black/20 text-[12px] font-semibold text-violet-100"
+                    >
+                      + Add Drive folder
+                    </button>
+                  ) : (
+                    <div className="space-y-2 rounded-lg border border-white/12 bg-black/30 p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/40">
+                          Add folder
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setDriveAdminOpen(false)}
+                          className="text-[11px] text-white/45"
+                        >
+                          Close
+                        </button>
+                      </div>
+                      <input
+                        type="url"
+                        value={driveUrlDraft}
+                        onChange={(e) => setDriveUrlDraft(e.target.value)}
+                        placeholder="Drive folder URL"
+                        autoComplete="off"
+                        className="min-h-9 w-full rounded-md border border-white/20 bg-[#0b0b12] px-2.5 text-[12px] text-white placeholder:text-white/35 outline-none focus:border-violet-300/50"
+                      />
+                      <input
+                        type="text"
+                        value={driveDescDraft}
+                        onChange={(e) => setDriveDescDraft(e.target.value)}
+                        placeholder="Note (optional)"
+                        autoComplete="off"
+                        className="min-h-9 w-full rounded-md border border-white/20 bg-[#0b0b12] px-2.5 text-[12px] text-white placeholder:text-white/35 outline-none focus:border-violet-300/50"
+                      />
+                      <div className="flex flex-wrap gap-1">
+                        {TEAM_AD_OUTLETS.map((o) => {
+                          const on = driveOutletIds.includes(o.id);
+                          return (
+                            <button
+                              key={o.id}
+                              type="button"
+                              onClick={() => toggleDriveOutlet(o.id)}
+                              className={`min-h-7 rounded-full px-2 text-[10px] font-semibold ${
+                                on
+                                  ? "bg-violet-400 text-black"
+                                  : "border border-white/15 bg-white/5 text-white/65"
+                              }`}
+                            >
+                              {o.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={savingDrive}
+                        onClick={() => void addDriveFolder()}
+                        className="inline-flex min-h-9 w-full items-center justify-center rounded-lg bg-violet-400 text-[12px] font-bold text-black disabled:opacity-50"
+                      >
+                        {savingDrive ? "…" : "Save link"}
+                      </button>
                     </div>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={savingDrive}
-                    onClick={() => void addDriveFolder()}
-                    className="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-violet-400 px-3 text-[13px] font-bold text-black disabled:opacity-50"
-                  >
-                    {savingDrive ? "Saving…" : "Add Drive link"}
-                  </button>
+                  )}
                 </div>
               ) : null}
 
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-2 flex gap-1.5">
                 {board.habit.completedToday ? (
                   <button
                     type="button"
                     disabled={busyItemId === board.habit.id}
                     onClick={() => void reopenDriveHabit()}
-                    className="inline-flex min-h-10 flex-1 items-center justify-center rounded-xl border border-amber-300/35 bg-amber-400/10 px-3 text-[13px] font-semibold text-amber-100 disabled:opacity-40 sm:flex-none"
+                    className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-amber-300/35 bg-amber-400/10 text-[12px] font-semibold text-amber-100 disabled:opacity-40"
                   >
-                    {busyItemId === board.habit.id ? "…" : "Reopen"}
+                    Reopen
                   </button>
                 ) : (
                   <>
@@ -1992,15 +1999,15 @@ export default function TeamTasksView({
                       type="button"
                       disabled={busyItemId === board.habit.id}
                       onClick={() => void completeDriveHabit("done")}
-                      className="inline-flex min-h-10 flex-1 items-center justify-center rounded-xl bg-emerald-400 px-3 text-[13px] font-bold text-black disabled:opacity-40"
+                      className="inline-flex h-9 flex-1 items-center justify-center rounded-lg bg-emerald-400 text-[12px] font-bold text-black disabled:opacity-40"
                     >
-                      {busyItemId === board.habit.id ? "…" : "Done — posted"}
+                      Done
                     </button>
                     <button
                       type="button"
                       disabled={busyItemId === board.habit.id}
                       onClick={() => void completeDriveHabit("nothing_new")}
-                      className="inline-flex min-h-10 flex-1 items-center justify-center rounded-xl border border-white/20 bg-white/10 px-3 text-[13px] font-semibold text-white disabled:opacity-40"
+                      className="inline-flex h-9 flex-1 items-center justify-center rounded-lg border border-white/20 bg-white/10 text-[12px] font-semibold text-white disabled:opacity-40"
                     >
                       Nothing new
                     </button>
@@ -2138,15 +2145,17 @@ export default function TeamTasksView({
 
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-[18px] font-semibold tracking-tight text-white">Daily Checklist</h2>
-              <p className="text-[12px] text-white/40">
+              <h2 className="text-[15px] font-semibold tracking-tight text-white sm:text-[18px]">
+                Daily Checklist
+              </h2>
+              <p className="hidden text-[12px] text-white/40 sm:block">
                 {mode === "ready"
-                  ? "Stories & posts with uploaded file only · Download → wait 1 min → Done. Ads stay in Ads."
+                  ? "Download → wait 1 min → Done. Ads stay in Ads."
                   : mode === "waiting"
-                    ? "Stories & posts still waiting on designer upload. Nothing here goes to Amit yet."
+                    ? "Waiting on designer upload."
                     : mode === "ads"
-                      ? "Ads only · start 4 days before go-live · never mixed with Ready posts/stories"
-                      : "Posted / closed · reopen if something went wrong. Download still available."}
+                      ? "Ads only · start 4 days before go-live."
+                      : "Posted / closed · reopen if needed."}
               </p>
             </div>
             {isAdmin ? (
@@ -2391,16 +2400,13 @@ export default function TeamTasksView({
                   </p>
                 ) : (
                   <section className="overflow-hidden rounded-xl border border-emerald-400/25 bg-emerald-400/[0.04]">
-                    <div className="border-b border-emerald-400/20 px-3 py-2.5">
-                      <h3 className="text-[14px] font-semibold text-emerald-100">
-                        Ready for Amit ({readyItems.length}
+                    <div className="border-b border-emerald-400/20 px-3 py-2">
+                      <h3 className="text-[13px] font-semibold text-emerald-100">
+                        Ready ({readyItems.length}
                         {outletFilter !== "all" ? ` · ${outletFilterLabel(outletFilter)}` : ""})
                       </h3>
-                      <p className="text-[11px] text-white/40">
-                        Uploaded stories & posts only (no ads). Download → wait 1 min → Done. Admin: Unready or Close to skip.
-                      </p>
                     </div>
-                    <div className="divide-y divide-white/[0.06] px-2.5 py-1">
+                    <div className="divide-y divide-white/[0.06] px-2 py-0.5 sm:px-2.5 sm:py-1">
                       {readyItems.map((item) => (
                         <ItemRow
                           key={`${item.id}-${item.targetDate}-${item.kind}`}
@@ -2431,16 +2437,13 @@ export default function TeamTasksView({
                   </p>
                 ) : (
                   <section className="overflow-hidden rounded-xl border border-cyan-400/25 bg-cyan-400/[0.04]">
-                    <div className="border-b border-cyan-400/20 px-3 py-2.5">
-                      <h3 className="text-[14px] font-semibold text-cyan-100">
-                        Waiting on design ({waitingItems.length}
+                    <div className="border-b border-cyan-400/20 px-3 py-2">
+                      <h3 className="text-[13px] font-semibold text-cyan-100">
+                        Waiting ({waitingItems.length}
                         {outletFilter !== "all" ? ` · ${outletFilterLabel(outletFilter)}` : ""})
                       </h3>
-                      <p className="text-[11px] text-white/40">
-                        Stories & posts without a Ready upload yet. Ads are only under the Ads tab.
-                      </p>
                     </div>
-                    <div className="divide-y divide-white/[0.06] px-2.5 py-1">
+                    <div className="divide-y divide-white/[0.06] px-2 py-0.5 sm:px-2.5 sm:py-1">
                       {waitingItems.map((item) => (
                         <ItemRow
                           key={`${item.id}-${item.targetDate}-${item.kind}`}
