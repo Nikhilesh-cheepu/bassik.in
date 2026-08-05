@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { evaluateAndSendDesignerNudges } from "@/lib/team-designer-nudges";
+import {
+  evaluateAndSendAmitDriveCheckNudge,
+  evaluateAndSendDesignerNudges,
+} from "@/lib/team-designer-nudges";
 
 export const runtime = "nodejs";
 
@@ -31,7 +34,12 @@ export async function GET(req: NextRequest) {
 
   try {
     const result = await evaluateAndSendDesignerNudges();
-    return NextResponse.json(result);
+    const drive = await evaluateAndSendAmitDriveCheckNudge();
+    return NextResponse.json({
+      ...result,
+      results: [...result.results, drive.result],
+      amitDrive: drive,
+    });
   } catch (err) {
     console.error("[cron/designer-nudges]", err);
     return NextResponse.json(

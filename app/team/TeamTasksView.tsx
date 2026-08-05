@@ -1196,6 +1196,9 @@ export default function TeamTasksView({
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+  const [driveUrlDraft, setDriveUrlDraft] = useState("");
+  const [driveEditOpen, setDriveEditOpen] = useState(false);
+  const [savingDrive, setSavingDrive] = useState(false);
   const [waShare, setWaShare] = useState<{
     title: string;
     count: number;
@@ -1465,13 +1468,13 @@ export default function TeamTasksView({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tab: mode,
+          tab: mode === "ads" ? "ads" : "postings",
           notes: notesDraft,
           ownerId: manageMemberId || CHECKLIST_DEFAULT_OWNER_ID,
         }),
       });
       const data = await readTeamApiJson(res);
-      const next = data.boardNotes as { postings: string; ads: string } | undefined;
+      const next = data.boardNotes as ChecklistBoardDto["boardNotes"] | undefined;
       if (next && board) {
         setBoard({ ...board, boardNotes: next });
       } else {
@@ -1482,6 +1485,73 @@ export default function TeamTasksView({
       setError(err instanceof Error ? err.message : "Failed to save notes");
     } finally {
       setSavingNotes(false);
+    }
+  };
+
+  const saveDriveFolderUrl = async () => {
+    if (!isAdmin) return;
+    setSavingDrive(true);
+    try {
+      const res = await fetch("/api/team/checklists/board-notes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          driveFolderUrl: driveUrlDraft.trim(),
+          ownerId: manageMemberId || CHECKLIST_DEFAULT_OWNER_ID,
+        }),
+      });
+      const data = await readTeamApiJson(res);
+      const next = data.boardNotes as ChecklistBoardDto["boardNotes"] | undefined;
+      if (next && board) {
+        setBoard({ ...board, boardNotes: next });
+      } else {
+        await loadBoard();
+      }
+      setDriveEditOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save Drive link");
+    } finally {
+      setSavingDrive(false);
+    }
+  };
+
+  const completeDriveHabit = async (outcome: "done" | "nothing_new") => {
+    const habit = board?.habit;
+    if (!habit) return;
+    const date = habit.targetDate ?? focusDate;
+    setBusyItemId(habit.id);
+    try {
+      const res = await fetch(`/api/team/checklist-items/${habit.id}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, markComplete: true, driveOutcome: outcome }),
+      });
+      await readTeamApiJson(res);
+      await loadBoard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update Drive check");
+    } finally {
+      setBusyItemId(null);
+    }
+  };
+
+  const reopenDriveHabit = async () => {
+    const habit = board?.habit;
+    if (!habit) return;
+    const date = habit.targetDate ?? focusDate;
+    setBusyItemId(habit.id);
+    try {
+      const res = await fetch(`/api/team/checklist-items/${habit.id}/complete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, markComplete: false }),
+      });
+      await readTeamApiJson(res);
+      await loadBoard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reopen Drive check");
+    } finally {
+      setBusyItemId(null);
     }
   };
 
@@ -1713,6 +1783,134 @@ export default function TeamTasksView({
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-24 xl:pb-10">
         <div className="mx-auto max-w-3xl py-4">
+          {/* Compulsory daily Drive photo check — always on top */}
+          {board?.habit ? (
+            <section
+              className={`mb-4 rounded-2xl border p-3.5 ${
+                board.habit.completedToday
+                  ? "border-emerald-400/25 bg-emerald-400/10"
+                  : "border-violet-400/35 bg-violet-500/10 shadow-[0_0_24px_rgba(167,139,250,0.12)]"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-200/80">
+                    Fixed daily · compulsory
+                  </p>
+                  <h3 className="mt-1 text-[15px] font-semibold leading-snug text-white">
+                    {board.habit.title}
+                  </h3>
+                  <p className="mt-1 text-[12px] leading-snug text-white/55">
+                    Check the Drive folder for new photos. If anything is new, make a post. If not,
+                    mark Nothing new. Reminders keep going until you clear this.
+                  </p>
+                </div>
+                {board.habit.completedToday ? (
+                  <span className="shrink-0 rounded-full bg-emerald-400/20 px-2.5 py-1 text-[11px] font-bold text-emerald-200">
+                    {board.habit.driveOutcome === "nothing_new" ? "Nothing new" : "Done"}
+                  </span>
+                ) : (
+                  <span className="shrink-0 rounded-full bg-amber-400/20 px-2.5 py-1 text-[11px] font-bold text-amber-100">
+                    Open
+                  </span>
+                )}
+              </div>
+
+              {board.boardNotes.driveFolderUrl ? (
+                <a
+                  href={board.boardNotes.driveFolderUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 flex min-h-10 items-center justify-center rounded-xl border border-violet-300/30 bg-black/25 px-3 text-[13px] font-semibold text-violet-100 hover:bg-black/40"
+                >
+                  Open Google Drive folder
+                </a>
+              ) : (
+                <p className="mt-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[12px] text-white/45">
+                  {isAdmin
+                    ? "Add the Google Drive folder link below (admin only)."
+                    : "Drive link not set yet — ask admin to add it."}
+                </p>
+              )}
+
+              {isAdmin ? (
+                <div className="mt-2">
+                  {driveEditOpen ? (
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="url"
+                        value={driveUrlDraft}
+                        onChange={(e) => setDriveUrlDraft(e.target.value)}
+                        placeholder="https://drive.google.com/…"
+                        className="min-h-10 flex-1 rounded-lg border border-white/15 bg-black/40 px-3 text-[13px] text-white placeholder:text-white/30"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={savingDrive}
+                          onClick={() => void saveDriveFolderUrl()}
+                          className="min-h-10 rounded-lg bg-violet-400 px-3 text-[12px] font-bold text-black disabled:opacity-50"
+                        >
+                          {savingDrive ? "…" : "Save link"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDriveEditOpen(false)}
+                          className="min-h-10 px-2 text-[12px] text-white/50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDriveUrlDraft(board.boardNotes.driveFolderUrl || "");
+                        setDriveEditOpen(true);
+                      }}
+                      className="text-[11px] font-semibold text-violet-200/80 underline-offset-2 hover:underline"
+                    >
+                      {board.boardNotes.driveFolderUrl ? "Edit Drive link (admin)" : "Set Drive link (admin)"}
+                    </button>
+                  )}
+                </div>
+              ) : null}
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {board.habit.completedToday ? (
+                  <button
+                    type="button"
+                    disabled={busyItemId === board.habit.id}
+                    onClick={() => void reopenDriveHabit()}
+                    className="inline-flex min-h-10 flex-1 items-center justify-center rounded-xl border border-amber-300/35 bg-amber-400/10 px-3 text-[13px] font-semibold text-amber-100 disabled:opacity-40 sm:flex-none"
+                  >
+                    {busyItemId === board.habit.id ? "…" : "Reopen"}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busyItemId === board.habit.id}
+                      onClick={() => void completeDriveHabit("done")}
+                      className="inline-flex min-h-10 flex-1 items-center justify-center rounded-xl bg-emerald-400 px-3 text-[13px] font-bold text-black disabled:opacity-40"
+                    >
+                      {busyItemId === board.habit.id ? "…" : "Done — posted"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyItemId === board.habit.id}
+                      onClick={() => void completeDriveHabit("nothing_new")}
+                      className="inline-flex min-h-10 flex-1 items-center justify-center rounded-xl border border-white/20 bg-white/10 px-3 text-[13px] font-semibold text-white disabled:opacity-40"
+                    >
+                      Nothing new
+                    </button>
+                  </>
+                )}
+              </div>
+            </section>
+          ) : null}
+
           <div className="mb-3 flex items-center gap-2">
             <div className="flex min-w-0 flex-1 overflow-x-auto rounded-xl bg-white/[0.06] p-1 ring-1 ring-white/10">
               {(

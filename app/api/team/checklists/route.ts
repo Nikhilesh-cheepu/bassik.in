@@ -13,6 +13,7 @@ import {
 } from "@/lib/team-checklist-templates";
 import { ensureOutletWeekendPosts } from "@/lib/team-ensure-outlet-posts";
 import { ensureOutletWeeklyAds } from "@/lib/team-ensure-outlet-ads";
+import { ensureDailyDriveHabit } from "@/lib/team-drive-habit";
 import { enrichBoardHandoffFileUrls } from "@/lib/team-designer-jobs";
 import { teamPersonalNoteOwnerId } from "@/lib/team-personal-notes";
 import { isTeamMemberId } from "@/lib/team-members";
@@ -94,13 +95,11 @@ export async function GET(req: NextRequest) {
 
   try {
     let raw = await loadOwnerChecklists(ownerId);
+    const createdBy = teamPersonalNoteOwnerId(session);
 
-    const didBackfill = await backfillMissingOutletExtras(
-      raw,
-      ownerId,
-      teamPersonalNoteOwnerId(session)
-    );
-    if (didBackfill) {
+    const didDrive = await ensureDailyDriveHabit(prisma, { ownerId, createdBy });
+    const didBackfill = await backfillMissingOutletExtras(raw, ownerId, createdBy);
+    if (didDrive || didBackfill) {
       raw = await loadOwnerChecklists(ownerId);
     }
 

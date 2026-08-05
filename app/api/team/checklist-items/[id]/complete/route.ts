@@ -14,7 +14,12 @@ import {
   serializeHandoffMap,
   type HandoffStatus,
 } from "@/lib/team-checklists";
-import { SOCIAL_BOARD_PLATFORMS } from "@/lib/team-checklist-templates";
+import {
+  DRIVE_HABIT_CHECKLIST_TITLE,
+  parseDriveOutcome,
+  platformsForDriveOutcome,
+  SOCIAL_BOARD_PLATFORMS,
+} from "@/lib/team-checklist-templates";
 import { teamPersonalNoteOwnerId } from "@/lib/team-personal-notes";
 
 function creativeKindsNeedingFile(kind: string): boolean {
@@ -107,6 +112,8 @@ export async function POST(
       markComplete?: boolean;
       /** Admin skip — close without Ready/download */
       closeWithoutCreative?: boolean;
+      /** Drive habit: done (posted) | nothing_new */
+      driveOutcome?: string;
     };
 
     const item = await prisma.teamChecklistItem.findUnique({
@@ -125,10 +132,58 @@ export async function POST(
     const isAdmin = session.role === "admin";
     const closeWithoutCreative = Boolean(body.closeWithoutCreative);
     const kind = item.checklist.kind;
+    const isDriveHabit =
+      kind === "habits" && item.checklist.title === DRIVE_HABIT_CHECKLIST_TITLE;
     const isPost = kind === "posts";
     const isRecurringPost = isPost && Boolean(item.dayOfWeek);
     const bodyDateRaw = typeof body.date === "string" ? body.date.trim() : "";
     const bodyDate = /^\d{4}-\d{2}-\d{2}$/.test(bodyDateRaw) ? bodyDateRaw : null;
+
+    // Compulsory Drive photo check — Done or Nothing new (no Ready creative).
+    if (isDriveHabit) {
+      const date = bodyDate ?? today;
+      const existing = await prisma.teamChecklistCompletion.findUnique({
+        where: { itemId_date: { itemId: id, date } },
+      });
+
+      if (body.markComplete === false) {
+        if (existing) {
+          await prisma.teamChecklistCompletion.delete({ where: { id: existing.id } });
+        }
+        return NextResponse.json({
+          completed: false,
+          date,
+          completedPlatforms: [],
+          driveOutcome: null,
+        });
+      }
+
+      const outcomeRaw =
+        body.driveOutcome === "nothing_new"
+          ? "nothing_new"
+          : body.driveOutcome === "done"
+            ? "done"
+            : null;
+      if (!outcomeRaw && body.markComplete !== true) {
+        return NextResponse.json(
+          { error: "driveOutcome must be done or nothing_new" },
+          { status: 400 }
+        );
+      }
+      const outcome = outcomeRaw ?? "done";
+      const platforms = platformsForDriveOutcome(outcome);
+      const row = await prisma.teamChecklistCompletion.upsert({
+        where: { itemId_date: { itemId: id, date } },
+        create: { itemId: id, completedBy, date, completedPlatforms: platforms },
+        update: { completedBy, completedPlatforms: platforms },
+      });
+      return NextResponse.json({
+        completed: true,
+        date,
+        completedPlatforms: platformsFromJson(row.completedPlatforms),
+        driveOutcome: parseDriveOutcome(platformsFromJson(row.completedPlatforms)),
+      });
+    }
 
     // One-shot posts (no dayOfWeek): single completion
     if (isPost && !isRecurringPost) {

@@ -19,6 +19,7 @@ import {
   listReadyToStartJobs,
   type ReadyJobLine,
 } from "@/lib/team-designer-performance";
+import { isAmitDriveHabitOpenToday } from "@/lib/team-drive-habit";
 import { sendDesignerWhatsApp, whatsAppShareUrl, designerWaPhone } from "@/lib/team-wa-cloud";
 import { teamOutletLabel } from "@/lib/team-outlets";
 
@@ -118,6 +119,8 @@ function nudgeLabel(kind: DesignerNudgeKind): string {
       return "Queue updated";
     case "amit_ready":
       return "New tasks · Amit";
+    case "amit_drive_check":
+      return "Drive photos · Amit";
     default:
       return kind;
   }
@@ -215,6 +218,89 @@ export async function getAmitReadyNudge(): Promise<DesignerSuggestedNudgeDto | n
 export async function listAmitHandoffNudges(): Promise<DesignerSuggestedNudgeDto[]> {
   const nudge = await getAmitReadyNudge();
   return nudge ? [nudge] : [];
+}
+
+const AMIT_DRIVE_JOB_PREFIX = "drive-h";
+
+/** Slot id so cron can remind again each window until Amit clears the habit. */
+function amitDriveSlotJobId(hour: number, minute: number): string {
+  return `${AMIT_DRIVE_JOB_PREFIX}-${hour}-${minute}`;
+}
+
+export function buildAmitDriveCheckNudge(params: {
+  asOf?: Date;
+  jobId?: string;
+}): DesignerSuggestedNudgeDto {
+  const asOf = params.asOf ?? new Date();
+  const hour = istHourNow(asOf);
+  const body = [
+    `Hey Amit — ${greetingForHourIst(hour)}.`,
+    "",
+    "Daily Drive check is still open.",
+    "Open the Drive folder on Daily Checklist — if new photos are there, make a post. If nothing new, tap Nothing new.",
+    "",
+    "Please clear it today. Thank you.",
+    "",
+    checklistLink(),
+  ].join("\n");
+  const phone = designerWaPhone("amit");
+  const jobId = params.jobId ?? amitDriveSlotJobId(hour, istMinuteNow(asOf));
+  return {
+    assigneeId: "amit",
+    name: "Amit",
+    kind: "amit_drive_check",
+    label: "Drive photos · Amit",
+    body,
+    shareUrl: whatsAppShareUrl(phone, body),
+    jobId,
+  };
+}
+
+export async function getAmitDriveCheckNudge(): Promise<DesignerSuggestedNudgeDto | null> {
+  const { open } = await isAmitDriveHabitOpenToday(prisma);
+  if (!open) return null;
+  return buildAmitDriveCheckNudge({});
+}
+
+/** Cron: remind Amit each window until Drive habit is Done or Nothing new. */
+export async function evaluateAndSendAmitDriveCheckNudge(opts?: {
+  force?: boolean;
+  hour?: number;
+  minute?: number;
+}): Promise<{ ok: true; result: NudgeRunResult; dateKey: string }> {
+  const dateKey = getTodayKey();
+  const hour = opts?.hour ?? istHourNow();
+  const minute = opts?.minute ?? istMinuteNow();
+  const { open } = await isAmitDriveHabitOpenToday(prisma, dateKey);
+  if (!open) {
+    return {
+      ok: true,
+      dateKey,
+      result: {
+        assigneeId: "amit",
+        kind: "amit_drive_check",
+        skipped: true,
+        reason: "drive habit already cleared today",
+      },
+    };
+  }
+  const nudge = buildAmitDriveCheckNudge({
+    jobId: amitDriveSlotJobId(hour, minute),
+  });
+  const result = await logAndMaybeSend({
+    assigneeId: "amit",
+    kind: "amit_drive_check",
+    dateKey,
+    jobId: nudge.jobId,
+    body: nudge.body,
+    templateParams: [
+      "Amit",
+      "Daily Drive photo check still open",
+      "Mark Done or Nothing new on Daily Checklist",
+    ],
+    force: opts?.force,
+  });
+  return { ok: true, result, dateKey };
 }
 
 /** After admin opens Amit WA — clear all currently pending handoffs from Send now. */
@@ -722,6 +808,8 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
   // Also surface WA Ready for Amit when designer uploads land on Daily
   const amitReady = await getAmitReadyNudge();
   if (amitReady) out.push(amitReady);
+  const amitDrive = await getAmitDriveCheckNudge();
+  if (amitDrive) out.push(amitDrive);
   return out;
 }
 

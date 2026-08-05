@@ -8,6 +8,8 @@ import {
   CHECKLIST_DAY_IDS,
   CHECKLIST_DAY_LABELS,
   CHECKLIST_DEFAULT_OWNER_ID,
+  DRIVE_HABIT_CHECKLIST_TITLE,
+  parseDriveOutcome,
   SOCIAL_BOARD_PLATFORMS,
   WEEKEND_POST_DAY_IDS,
   WEEKEND_POST_LEAD_DAYS,
@@ -119,6 +121,8 @@ export type TeamChecklistItemDto = {
   outletId?: string | null;
   outletTitle?: string;
   kind?: ChecklistKind;
+  /** Drive habit only: posted vs nothing new. */
+  driveOutcome?: "done" | "nothing_new" | null;
 };
 
 export const HANDOFF_FORMATS: HandoffFormat[] = ["story", "post", "reel", "ad"];
@@ -331,12 +335,13 @@ export type ChecklistBoardDto = {
   outlets: OutletBoardSection[];
   /** Posts not tied to an enabled outlet */
   generalPosts: TeamChecklistItemDto[];
-  /** Sticky instructions for Postings / Ads tabs */
-  boardNotes: { postings: string; ads: string };
+  /** Sticky instructions for Postings / Ads tabs + admin Drive folder URL */
+  boardNotes: { postings: string; ads: string; driveFolderUrl: string };
   /** Recently completed items (summary popup). */
   doneItems: TeamChecklistItemDto[];
   overdueStories: TeamChecklistItemDto[];
   focusStories: TeamChecklistItemDto[];
+  /** Compulsory daily Drive photo check (Amit). */
   habit: TeamChecklistItemDto | null;
   openPosts: TeamChecklistItemDto[];
   checklists: TeamDailyChecklistDto[];
@@ -349,24 +354,36 @@ export const BOARD_NOTES_CHECKLIST_TITLE = "Daily Checklist Notes";
 export function parseBoardNotesDescription(raw: string | null | undefined): {
   postings: string;
   ads: string;
+  driveFolderUrl: string;
 } {
-  if (!raw?.trim()) return { postings: "", ads: "" };
+  if (!raw?.trim()) return { postings: "", ads: "", driveFolderUrl: "" };
   try {
-    const parsed = JSON.parse(raw) as { postings?: unknown; ads?: unknown };
+    const parsed = JSON.parse(raw) as {
+      postings?: unknown;
+      ads?: unknown;
+      driveFolderUrl?: unknown;
+    };
     return {
       postings: typeof parsed.postings === "string" ? parsed.postings : "",
       ads: typeof parsed.ads === "string" ? parsed.ads : "",
+      driveFolderUrl:
+        typeof parsed.driveFolderUrl === "string" ? parsed.driveFolderUrl.trim() : "",
     };
   } catch {
     // Legacy plain text → postings
-    return { postings: raw, ads: "" };
+    return { postings: raw, ads: "", driveFolderUrl: "" };
   }
 }
 
-export function serializeBoardNotes(notes: { postings: string; ads: string }): string {
+export function serializeBoardNotes(notes: {
+  postings: string;
+  ads: string;
+  driveFolderUrl?: string;
+}): string {
   return JSON.stringify({
     postings: notes.postings.trim(),
     ads: notes.ads.trim(),
+    driveFolderUrl: (notes.driveFolderUrl ?? "").trim(),
   });
 }
 
@@ -895,15 +912,22 @@ export function buildChecklistBoard(
     return a.sortOrder - b.sortOrder;
   });
 
-  const habits = dtos.find((c) => c.kind === "habits" && c.title !== BOARD_NOTES_CHECKLIST_TITLE);
+  const habits = dtos.find(
+    (c) =>
+      c.kind === "habits" &&
+      c.title === DRIVE_HABIT_CHECKLIST_TITLE &&
+      !c.outletId
+  );
   const habitItem = habits?.items[0] ?? null;
+  const habitPlatformsToday = habitItem?.completionsByDate[focus]?.completedPlatforms ?? [];
   const habit: TeamChecklistItemDto | null = habitItem
     ? {
         ...habitItem,
         targetDate: focus,
         kind: "habits",
         completedToday: Boolean(habitItem.completionsByDate[focus]),
-        completedPlatformsToday: habitItem.completionsByDate[focus]?.completedPlatforms ?? [],
+        completedPlatformsToday: habitPlatformsToday,
+        driveOutcome: parseDriveOutcome(habitPlatformsToday),
       }
     : null;
 
@@ -1074,14 +1098,12 @@ export function buildChecklistBoard(
     (p) => !p.outletId || !enabledOutletIds.includes(p.outletId)
   );
 
-  const notesList = dtos.find((c) => c.kind === "habits" && !c.outletId);
-  const notesReady =
-    notesList &&
-    (notesList.title === BOARD_NOTES_CHECKLIST_TITLE ||
-      Boolean(notesList.description?.trim().startsWith("{")));
-  const boardNotes = notesReady
+  const notesList = dtos.find(
+    (c) => c.kind === "habits" && !c.outletId && c.title === BOARD_NOTES_CHECKLIST_TITLE
+  );
+  const boardNotes = notesList
     ? parseBoardNotesDescription(notesList.description)
-    : { postings: "", ads: "" };
+    : { postings: "", ads: "", driveFolderUrl: "" };
 
   // Ready counts for today → +7 strip (go-live date), so Amit can jump ahead.
   const readyCountByDate: Record<string, number> = {};

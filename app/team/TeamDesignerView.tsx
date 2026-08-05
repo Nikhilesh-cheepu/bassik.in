@@ -705,6 +705,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     () => suggestedNudges.find((s) => s.kind === "amit_ready") ?? null,
     [suggestedNudges]
   );
+  const amitDriveNudge = useMemo(
+    () => suggestedNudges.find((s) => s.kind === "amit_drive_check") ?? null,
+    [suggestedNudges]
+  );
 
   /** Base filter by designer tab / member (before ready-only / outlet). */
   const scopedJobs = useMemo(() => {
@@ -1517,6 +1521,21 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           >
             <IconWhatsApp className="h-4 w-4" />
             WA Ready
+          </button>
+        ) : null}
+        {isAdmin && amitDriveNudge ? (
+          <button
+            type="button"
+            disabled={
+              nudgeBusy ===
+              `${amitDriveNudge.assigneeId}:${amitDriveNudge.kind}:${amitDriveNudge.jobId}`
+            }
+            onClick={() => void openSuggestedWa(amitDriveNudge)}
+            title="WhatsApp Amit — Drive photo check still open"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-400/45 bg-violet-500/15 px-3 text-[12px] font-bold text-violet-200 disabled:opacity-40"
+          >
+            <IconWhatsApp className="h-4 w-4" />
+            WA Drive
           </button>
         ) : null}
       </div>

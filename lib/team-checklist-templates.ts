@@ -37,6 +37,30 @@ export type WeekendPostDayId = (typeof WEEKEND_POST_DAY_IDS)[number];
 
 export const HABIT_GROUPS_TITLE = "Check official groups — post if anything is ready";
 
+/** Fixed daily Drive photo check for Amit (separate from board-notes habits row). */
+export const DRIVE_HABIT_CHECKLIST_TITLE = "Daily Drive Photos";
+export const DRIVE_HABIT_ITEM_TITLE =
+  "Check Drive folder for new photos — make a post if anything is new";
+export const DRIVE_HABIT_INSTRUCTIONS =
+  "Open the Drive folder. If new photos are there, make a post. If nothing new, mark Nothing new. Compulsory every day.";
+
+/** Encoded in TeamChecklistCompletion.completedPlatforms for Drive habit outcomes. */
+export const DRIVE_OUTCOME_DONE = "__drive_done__";
+export const DRIVE_OUTCOME_NOTHING_NEW = "__drive_nothing_new__";
+
+export type DriveHabitOutcome = "done" | "nothing_new";
+
+export function parseDriveOutcome(platforms: string[] | null | undefined): DriveHabitOutcome | null {
+  if (!platforms?.length) return null;
+  if (platforms.includes(DRIVE_OUTCOME_NOTHING_NEW)) return "nothing_new";
+  if (platforms.includes(DRIVE_OUTCOME_DONE)) return "done";
+  return "done";
+}
+
+export function platformsForDriveOutcome(outcome: DriveHabitOutcome): string[] {
+  return outcome === "nothing_new" ? [DRIVE_OUTCOME_NOTHING_NEW] : [DRIVE_OUTCOME_DONE];
+}
+
 export type ChecklistKind = "stories" | "posts" | "habits" | "ads";
 
 export type StoryTemplateItem = {

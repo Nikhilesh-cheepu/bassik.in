@@ -658,7 +658,8 @@ export type DesignerNudgeKind =
   | "priority_pause_now"
   | "priority_after_current"
   | "queue_updated"
-  | "amit_ready";
+  | "amit_ready"
+  | "amit_drive_check";
 
 export type DesignerReminderLogDto = {
   id: string;
