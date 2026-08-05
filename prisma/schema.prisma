@@ -938,7 +938,7 @@ model TeamDailyChecklist {
   ownerId     String   // member id this checklist is for
   title       String   // e.g. "Komma Stories", "Posts ready to publish"
   description String?
-  /// stories | posts | habits
+  /// stories | posts | habits | ads | drive
   kind        String   @default("stories")
   /// TEAM_AD_OUTLETS id when kind = stories
   outletId    String?
