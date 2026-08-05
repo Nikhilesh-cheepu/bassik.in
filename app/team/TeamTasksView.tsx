@@ -1455,7 +1455,7 @@ export default function TeamTasksView({
   };
 
   const openBoardNotes = () => {
-    const notes = board?.boardNotes ?? { postings: "", ads: "" };
+    const notes = board?.boardNotes ?? { postings: "", ads: "", driveFolderUrl: "" };
     setNotesDraft(mode === "ads" ? notes.ads : notes.postings);
     setNotesOpen(true);
   };
