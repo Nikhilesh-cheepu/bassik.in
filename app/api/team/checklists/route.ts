@@ -97,7 +97,12 @@ export async function GET(req: NextRequest) {
     let raw = await loadOwnerChecklists(ownerId);
     const createdBy = teamPersonalNoteOwnerId(session);
 
-    const didDrive = await ensureDailyDriveHabit(prisma, { ownerId, createdBy });
+    let didDrive = false;
+    try {
+      didDrive = await ensureDailyDriveHabit(prisma, { ownerId, createdBy });
+    } catch (driveErr) {
+      console.error("[team/checklists] ensureDailyDriveHabit:", driveErr);
+    }
     const didBackfill = await backfillMissingOutletExtras(raw, ownerId, createdBy);
     if (didDrive || didBackfill) {
       raw = await loadOwnerChecklists(ownerId);

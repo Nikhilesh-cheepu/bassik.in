@@ -1816,7 +1816,7 @@ export default function TeamTasksView({
                 )}
               </div>
 
-              {board.boardNotes.driveFolderUrl ? (
+              {board.boardNotes?.driveFolderUrl ? (
                 <a
                   href={board.boardNotes.driveFolderUrl}
                   target="_blank"
@@ -1866,12 +1866,14 @@ export default function TeamTasksView({
                     <button
                       type="button"
                       onClick={() => {
-                        setDriveUrlDraft(board.boardNotes.driveFolderUrl || "");
+                        setDriveUrlDraft(board.boardNotes?.driveFolderUrl || "");
                         setDriveEditOpen(true);
                       }}
                       className="text-[11px] font-semibold text-violet-200/80 underline-offset-2 hover:underline"
                     >
-                      {board.boardNotes.driveFolderUrl ? "Edit Drive link (admin)" : "Set Drive link (admin)"}
+                      {board.boardNotes?.driveFolderUrl
+                        ? "Edit Drive link (admin)"
+                        : "Set Drive link (admin)"}
                     </button>
                   )}
                 </div>

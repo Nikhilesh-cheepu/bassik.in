@@ -8,7 +8,7 @@ import {
   CHECKLIST_DAY_IDS,
   CHECKLIST_DAY_LABELS,
   CHECKLIST_DEFAULT_OWNER_ID,
-  DRIVE_HABIT_CHECKLIST_TITLE,
+  DRIVE_HABIT_ITEM_TITLE,
   parseDriveOutcome,
   SOCIAL_BOARD_PLATFORMS,
   WEEKEND_POST_DAY_IDS,
@@ -912,13 +912,10 @@ export function buildChecklistBoard(
     return a.sortOrder - b.sortOrder;
   });
 
-  const habits = dtos.find(
-    (c) =>
-      c.kind === "habits" &&
-      c.title === DRIVE_HABIT_CHECKLIST_TITLE &&
-      !c.outletId
-  );
-  const habitItem = habits?.items[0] ?? null;
+  // Drive item lives on the board-notes habits checklist (one habits row per owner).
+  const habitsList = dtos.find((c) => c.kind === "habits" && !c.outletId);
+  const habitItem =
+    habitsList?.items.find((i) => i.title === DRIVE_HABIT_ITEM_TITLE) ?? null;
   const habitPlatformsToday = habitItem?.completionsByDate[focus]?.completedPlatforms ?? [];
   const habit: TeamChecklistItemDto | null = habitItem
     ? {

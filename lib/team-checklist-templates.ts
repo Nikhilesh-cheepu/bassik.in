@@ -37,8 +37,7 @@ export type WeekendPostDayId = (typeof WEEKEND_POST_DAY_IDS)[number];
 
 export const HABIT_GROUPS_TITLE = "Check official groups — post if anything is ready";
 
-/** Fixed daily Drive photo check for Amit (separate from board-notes habits row). */
-export const DRIVE_HABIT_CHECKLIST_TITLE = "Daily Drive Photos";
+/** Fixed daily Drive photo check item (on the board-notes habits checklist). */
 export const DRIVE_HABIT_ITEM_TITLE =
   "Check Drive folder for new photos — make a post if anything is new";
 export const DRIVE_HABIT_INSTRUCTIONS =
