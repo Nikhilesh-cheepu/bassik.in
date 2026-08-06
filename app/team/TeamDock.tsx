@@ -267,7 +267,6 @@ export function TeamMoreSheet({
   open,
   onClose,
   onReminders,
-  onShoots,
   onRawFiles,
   onEditFiles,
   onVault,
@@ -282,7 +281,6 @@ export function TeamMoreSheet({
   open: boolean;
   onClose: () => void;
   onReminders?: () => void;
-  onShoots?: () => void;
   onRawFiles?: () => void;
   onEditFiles?: () => void;
   onVault?: () => void;
@@ -296,7 +294,6 @@ export function TeamMoreSheet({
 }) {
   if (!open) return null;
   const items = [
-    ...(onShoots ? [{ label: "Shoot calendar", icon: IconCalendar, onClick: onShoots }] : []),
     ...(onRawFiles ? [{ label: "Raw files", icon: IconFilm, onClick: onRawFiles }] : []),
     ...(onEditFiles ? [{ label: "Editing files", icon: IconScissors, onClick: onEditFiles }] : []),
     ...(onCalendar ? [{ label: "Calendar", icon: IconCalendar, onClick: onCalendar }] : []),

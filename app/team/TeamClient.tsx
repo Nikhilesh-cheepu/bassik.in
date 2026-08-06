@@ -507,6 +507,10 @@ export default function TeamClient() {
     if (isContent && (tab === "ads" || tab === "calendar" || tab === "ai")) {
       setTab("shoots");
     }
+    // Admin/members: one calendar only (Team Calendar). Shoots tab is content-role.
+    if (!isContent && !isViewer && tab === "shoots") {
+      setTab("calendar");
+    }
     if (
       isViewer &&
       (tab === "calendar" ||
@@ -1243,7 +1247,7 @@ export default function TeamClient() {
         hideVault={isViewer}
         hideAi={isViewer || isMemberLike || isContent}
         hideCalendar={isViewer || isContent}
-        hideShoots={isViewer}
+        hideShoots={!isContent}
         hideRawFiles={!isContent}
         hideEditFiles={!isContent}
         hideAds={isContent}
@@ -1368,7 +1372,7 @@ export default function TeamClient() {
           />
         ) : tab === "brain" && !isViewer ? (
           <TeamBrainView />
-        ) : tab === "shoots" && !isViewer ? (
+        ) : tab === "shoots" && isContent ? (
           <TeamShootsView
             members={members}
             viewerId={notesViewerId}
@@ -1531,7 +1535,6 @@ export default function TeamClient() {
         open={showMoreSheet}
         onClose={() => setShowMoreSheet(false)}
         onReminders={!isContent ? () => setTab("reminders") : undefined}
-        onShoots={!isViewer && !isContent ? () => setTab("shoots") : undefined}
         onRawFiles={isContent ? () => setTab("raw-files") : undefined}
         onEditFiles={isContent ? () => setTab("edit-files") : undefined}
         onVault={!isViewer && !isContent ? () => setTab("vault") : undefined}

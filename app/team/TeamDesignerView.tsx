@@ -364,6 +364,15 @@ function designerDisplayName(assigneeId: string): string {
   return assigneeId;
 }
 
+class DesignerApiError extends Error {
+  activeJobId?: string;
+  constructor(message: string, activeJobId?: string) {
+    super(message);
+    this.name = "DesignerApiError";
+    this.activeJobId = activeJobId;
+  }
+}
+
 async function readJson(res: Response) {
   const text = await res.text();
   let data: Record<string, unknown> = {};
@@ -381,8 +390,9 @@ async function readJson(res: Response) {
     }
   }
   if (!res.ok) {
-    throw new Error(
-      typeof data.error === "string" ? data.error : `Request failed (${res.status})`
+    throw new DesignerApiError(
+      typeof data.error === "string" ? data.error : `Request failed (${res.status})`,
+      typeof data.activeJobId === "string" ? data.activeJobId : undefined
     );
   }
   return data;
@@ -400,7 +410,18 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   /** False until first performance/stack payload — needed for Catch up bands. */
   const [perfReady, setPerfReady] = useState(false);
   const [perfLoading, setPerfLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{
+    message: string;
+    activeJobId?: string;
+  } | null>(null);
+  const setError = useCallback((message: string | null, activeJobId?: string) => {
+    if (!message) {
+      setNotice(null);
+      return;
+    }
+    setNotice({ message, activeJobId });
+  }, []);
+  const jobCardRefs = useRef(new Map<string, HTMLElement>());
   const loadingRef = useRef(true);
   const perfReadyRef = useRef(false);
   loadingRef.current = loading;
@@ -841,7 +862,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       }
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Update failed");
+      const activeJobId =
+        err instanceof DesignerApiError ? err.activeJobId : undefined;
+      setError(err instanceof Error ? err.message : "Update failed", activeJobId);
       return false;
     } finally {
       if (!opts?.quiet) setBusyId(null);
@@ -1346,8 +1369,15 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
 
   const openParts = useMemo(() => {
     if (outletFilter === "all") return openPartsRaw;
+    // Keep in-progress / paused visible even when another outlet chip is selected —
+    // those jobs block Start for the whole designer.
     const filt = (list: DesignerJobDto[]) =>
-      list.filter((j) => j.outletId === outletFilter);
+      list.filter(
+        (j) =>
+          j.outletId === outletFilter ||
+          j.status === "IN_PROGRESS" ||
+          j.status === "PAUSED"
+      );
     return {
       catchUp: filt(openPartsRaw.catchUp),
       todayPack: filt(openPartsRaw.todayPack),
@@ -1356,6 +1386,19 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       effectiveCatchUpSlots: openPartsRaw.effectiveCatchUpSlots,
     };
   }, [openPartsRaw, outletFilter]);
+
+  const focusJobCard = useCallback((jobId: string) => {
+    setOutletFilter("all");
+    setQueueView("open");
+    requestAnimationFrame(() => {
+      const el = jobCardRefs.current.get(jobId);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.classList.add("ring-2", "ring-amber-300");
+      window.setTimeout(() => {
+        el?.classList.remove("ring-2", "ring-amber-300");
+      }, 2200);
+    });
+  }, []);
 
   const catchUpDebt = openPartsRaw.effectiveCatchUpSlots;
 
@@ -1853,12 +1896,94 @@ https://instagram.com/…"
         </div>
       ) : null}
 
-      {error ? (
+      {notice ? (
         <div
-          className="rounded-lg border border-amber-400/25 bg-amber-400/[0.08] px-3 py-2 text-[12px] text-amber-100"
-          role="alert"
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="designer-notice-title"
+          onClick={() => setNotice(null)}
         >
-          {error}
+          <div
+            className="w-full max-w-md rounded-2xl border border-amber-400/30 bg-[#141414] p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p
+              id="designer-notice-title"
+              className="text-[15px] font-semibold text-white"
+            >
+              {notice.activeJobId ? "Finish current job first" : "Notice"}
+            </p>
+            <p className="mt-2 text-[13px] leading-snug text-amber-50/95">
+              {notice.message}
+            </p>
+            {notice.activeJobId ? (
+              <p className="mt-2 text-[12px] text-white/45">
+                That job may be outside today&apos;s list or another outlet — open it
+                below, then Pause or Finish.
+              </p>
+            ) : null}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {notice.activeJobId ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const id = notice.activeJobId!;
+                      setNotice(null);
+                      focusJobCard(id);
+                    }}
+                    className="h-10 flex-1 rounded-lg bg-amber-400 px-3 text-[13px] font-semibold text-black sm:flex-none"
+                  >
+                    Show job
+                  </button>
+                  {isAdmin ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busyId === notice.activeJobId}
+                        onClick={() => {
+                          const id = notice.activeJobId!;
+                          void patchJob(id, { action: "pause" }).then((ok) => {
+                            if (ok) setError("Paused — Start again when ready.");
+                          });
+                        }}
+                        className="h-10 rounded-lg border border-violet-400/40 bg-violet-400/15 px-3 text-[13px] font-semibold text-violet-100 disabled:opacity-40"
+                      >
+                        Pause it
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyId === notice.activeJobId}
+                        onClick={() => {
+                          const id = notice.activeJobId!;
+                          void patchJob(id, { action: "force-clear" }).then((ok) => {
+                            if (ok) {
+                              setError("Force cleared — back to Ready.");
+                            }
+                          });
+                        }}
+                        className="h-10 rounded-lg border border-white/15 bg-white/[0.06] px-3 text-[13px] font-semibold text-white/80 disabled:opacity-40"
+                      >
+                        Force clear
+                      </button>
+                    </>
+                  ) : null}
+                </>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setNotice(null)}
+                className={`h-10 px-3 text-[13px] font-semibold ${
+                  notice.activeJobId
+                    ? "text-white/50 hover:text-white/80"
+                    : "flex-1 rounded-lg bg-amber-400 text-black sm:flex-none sm:px-5"
+                }`}
+              >
+                OK
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -1974,7 +2099,11 @@ https://instagram.com/…"
           return (
           <article
             key={job.id}
-            className={`rounded-xl border px-3.5 py-3 ${toneClass}`}
+            ref={(el) => {
+              if (el) jobCardRefs.current.set(job.id, el);
+              else jobCardRefs.current.delete(job.id);
+            }}
+            className={`rounded-xl border px-3.5 py-3 transition ring-offset-2 ring-offset-[#06060a] ${toneClass}`}
           >
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
               <div className="flex min-w-0 flex-1 gap-2.5">

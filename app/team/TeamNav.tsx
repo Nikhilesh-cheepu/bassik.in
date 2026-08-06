@@ -5,7 +5,7 @@ export const TEAM_TABS = [
   { id: "designer", label: "Design", short: "Monthly designer queue" },
   { id: "tasks", label: "Daily", short: "Daily Checklist" },
   { id: "brain", label: "HQ", short: "My Brain" },
-  { id: "shoots", label: "Shoots", short: "Shoot calendar" },
+  { id: "shoots", label: "Shoots", short: "Shoots" },
   { id: "raw-files", label: "Raw", short: "Raw files" },
   { id: "edit-files", label: "Edit", short: "Editing files" },
   { id: "calendar", label: "Calendar", short: "Calendar" },

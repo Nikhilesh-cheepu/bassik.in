@@ -430,13 +430,19 @@ export function partitionOpenDesignerQueue(
   effectiveCatchUpSlots: number;
 } {
   const sorted = sortDesignerJobs(jobs.filter((j) => j.status !== "DESIGN_DONE"));
+  // Pin active work at the top of Catch up so it never “vanishes” into Later
+  // (e.g. catch-up Drop / outlet filter / old window dates).
+  const active = sorted.filter(
+    (j) => j.status === "IN_PROGRESS" || j.status === "PAUSED"
+  );
+  const activeIds = new Set(active.map((j) => j.id));
   const releasedFromJobs = sorted.filter((j) => j.catchUpExempt).length;
   const released = Math.max(0, opts?.releasedSlots ?? releasedFromJobs);
   const owed = Math.max(0, opts?.catchUpSlots ?? 0);
   // Each Drop forgives one slot — no backfill when the job is Unsent
   const slots = Math.max(0, owed - released);
-  const fillable = sorted.filter((j) => !j.catchUpExempt);
-  const catchUp = fillable.slice(0, slots);
+  const fillable = sorted.filter((j) => !j.catchUpExempt && !activeIds.has(j.id));
+  const catchUp = [...active, ...fillable.slice(0, slots)];
   const catchIds = new Set(catchUp.map((j) => j.id));
   const remaining = sorted.filter((j) => !catchIds.has(j.id));
   // Today = due today / overdue only — do not pull tomorrow’s jobs after closes

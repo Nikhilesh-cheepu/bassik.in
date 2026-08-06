@@ -218,6 +218,29 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Always surface stuck IN_PROGRESS / PAUSED even if outside the rolling window —
+    // otherwise Start is blocked on a job the UI never lists.
+    const activeWhere = {
+      status: { in: ["IN_PROGRESS", "PAUSED"] as Array<"IN_PROGRESS" | "PAUSED"> },
+      ...(isAdmin ? {} : { assigneeId: memberId }),
+    };
+    let activeRows: typeof rows = [];
+    try {
+      activeRows = await prisma.teamDesignerJob.findMany({
+        where: activeWhere,
+        select: JOB_SELECT,
+      });
+    } catch (activeErr) {
+      console.error("[team/designer-jobs] active jobs query failed", activeErr);
+    }
+    const seen = new Set(rows.map((r) => r.id));
+    for (const r of activeRows) {
+      if (!seen.has(r.id)) {
+        rows.push(r);
+        seen.add(r.id);
+      }
+    }
+
     const jobs = sortDesignerJobs(await jobsWithExtras(rows, today));
 
     return NextResponse.json({
