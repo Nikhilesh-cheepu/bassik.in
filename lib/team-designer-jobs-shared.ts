@@ -646,8 +646,12 @@ export type DesignerPerformanceDto = {
   assigneeId: string;
   name: string;
   today: string;
-  /** Closes credited to today (start-day). Always 0 on Sunday. */
+  /** Closes credited to today (start-day). Always 0 on Sunday for 4/day target. */
   closedToday: number;
+  /** All finishes uploaded today (IST) — includes Sunday; matches home strip. */
+  uploadedToday: number;
+  /** All finishes in the home strip window (upload day) — what “X done” shows. */
+  uploadedTotal: number;
   /** 0 on Sunday — no daily target on holiday */
   dailyTarget: number;
   /** True when today is Sunday (fixed holiday) */

@@ -3281,7 +3281,7 @@ https://instagram.com/…"
                       Done · {queue.length} uploaded
                     </h2>
                     <p className="mt-0.5 text-[11px] text-white/35">
-                      Same closes as the home day strip · Mahesh listed first
+                      Every finish (Sun included) · same as home strip · Mahesh first
                     </p>
                   </div>
                 </div>
@@ -3744,16 +3744,19 @@ function DesignerPerformanceCard({
   const sunday = Boolean(perf.isSundayHoliday);
   const catchMeta = catchUpMetaAfterRelease(perf.stack, forgivenSlots);
   const catchUpN = catchMeta.catchUpSlots;
-  const doneTotal = perf.stack.closedSoFar;
+  // Home “X done” = every finish in the strip (Sun included), not only 4/day stack credits
+  const doneTotal = perf.uploadedTotal ?? perf.series.reduce((n, p) => n + p.closed, 0);
   const targetSoFar = perf.stack.targetSoFar;
   const pendingNudges = nudges.slice(0, 3);
 
-  // Rolling window day-by-day (same span as queue seed), Sundays shown but blocked
+  // Rolling window day-by-day — every upload that day (Sunday too)
   const dayStrip = perf.series.map((pt) => {
     const isSunday = dayShortLabel(pt.date) === "Sun";
     const isOff = pt.target <= 0;
     const closed =
-      pt.date === perf.today && !sunday ? Math.max(pt.closed, perf.closedToday) : pt.closed;
+      pt.date === perf.today
+        ? Math.max(pt.closed, perf.uploadedToday ?? 0, sunday ? 0 : perf.closedToday)
+        : pt.closed;
     return {
       ...pt,
       closed,
@@ -3789,17 +3792,23 @@ function DesignerPerformanceCard({
               <span>Catch up clear</span>
             )}
             {sunday ? (
-              <span className="text-violet-200/70"> · Sunday off</span>
+              <span className="text-violet-200/70">
+                {" "}
+                · Sunday · {(perf.uploadedToday ?? 0) > 0
+                  ? `${perf.uploadedToday} finished today`
+                  : "off target"}
+              </span>
             ) : perf.inProgress > 0 ? (
               <span>
                 {" "}
-                · {perf.inProgress} in progress · today {perf.closedToday}/
-                {DESIGNER_DAILY_TARGET}
+                · {perf.inProgress} in progress · today{" "}
+                {perf.uploadedToday ?? perf.closedToday}/{DESIGNER_DAILY_TARGET}
               </span>
             ) : (
               <span>
                 {" "}
-                · today {perf.closedToday}/{DESIGNER_DAILY_TARGET}
+                · today {perf.uploadedToday ?? perf.closedToday}/
+                {DESIGNER_DAILY_TARGET}
               </span>
             )}
           </p>

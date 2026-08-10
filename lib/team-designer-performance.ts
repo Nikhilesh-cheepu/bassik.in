@@ -671,12 +671,12 @@ async function buildSeries(assigneeId: string, today: string): Promise<DesignerD
   const { start } = istDayBounds(from);
   const { end } = istDayBounds(today);
 
-  const [closedByDay, starts, uploads] = await Promise.all([
-    loadClosesByCreditDay(assigneeId, from, today),
+  // Home strip = everything finished (upload day IST) — Sunday, admin mark-done, old/new.
+  // Catch-up / 4-per-day stack still uses the credit ledger separately.
+  const [starts, uploads] = await Promise.all([
     prisma.teamDesignerJob.findMany({
       where: {
         assigneeId,
-        startedByRole: "designer",
         startedAt: { gte: start, lte: end },
       },
       select: { startedAt: true },
@@ -685,21 +685,31 @@ async function buildSeries(assigneeId: string, today: string): Promise<DesignerD
       where: {
         assigneeId,
         status: "DESIGN_DONE",
-        closedByRole: "designer",
-        uploadedAt: { gte: start, lte: end },
+        OR: [
+          { uploadedAt: { gte: start, lte: end } },
+          {
+            uploadedAt: null,
+            fileUrl: { not: null },
+            updatedAt: { gte: start, lte: end },
+          },
+        ],
       },
-      select: { uploadedAt: true },
+      select: { uploadedAt: true, updatedAt: true },
     }),
   ]);
 
   const firstStartByDay = new Map<string, Date>();
   const lastEndByDay = new Map<string, Date>();
+  const closedByUploadDay = new Map<string, number>();
 
   for (const u of uploads) {
-    if (!u.uploadedAt) continue;
-    const key = istYmd(u.uploadedAt);
+    const when = u.uploadedAt ?? u.updatedAt;
+    if (!when) continue;
+    const key = istYmd(when);
+    if (key < from || key > today) continue;
+    closedByUploadDay.set(key, (closedByUploadDay.get(key) ?? 0) + 1);
     const prev = lastEndByDay.get(key);
-    if (!prev || u.uploadedAt > prev) lastEndByDay.set(key, u.uploadedAt);
+    if (!prev || when > prev) lastEndByDay.set(key, when);
   }
   for (const s of starts) {
     if (!s.startedAt) continue;
@@ -712,10 +722,10 @@ async function buildSeries(assigneeId: string, today: string): Promise<DesignerD
   let cur = from;
   for (let i = 0; i < DESIGNER_WINDOW_DAYS + 7 && cur <= today; i++) {
     const workday = isStackWorkday(assigneeId, cur);
-    // Always show real closes (incl. Sunday extras); target 0 = blocked / off day
+    // Real finishes on that calendar day (incl. Sunday)
     series.push({
       date: cur,
-      closed: closedByDay.get(cur) ?? 0,
+      closed: closedByUploadDay.get(cur) ?? 0,
       target: workday ? DESIGNER_DAILY_TARGET : 0,
       firstStart: firstStartByDay.get(cur)?.toISOString() ?? null,
       lastEnd: lastEndByDay.get(cur)?.toISOString() ?? null,
@@ -754,6 +764,8 @@ export async function computeDesignerPerformance(
   const isSunday = dayIdForYmd(today) === "sun";
   // Today’s 4/day — catch-up / past-due closes are excluded in the ledger
   const closedToday = isSunday ? 0 : activity.closed;
+  const uploadedToday = series.find((p) => p.date === today)?.closed ?? 0;
+  const uploadedTotal = series.reduce((n, p) => n + p.closed, 0);
   // Catch-up uploads today (Sunday starts, or design due before start day)
   const catchUpClosedToday = activity.sundaySameDayCloses;
   const dailyTarget = isSunday ? 0 : DESIGNER_DAILY_TARGET;
@@ -785,6 +797,8 @@ export async function computeDesignerPerformance(
     name: designerDisplayName(assigneeId),
     today,
     closedToday,
+    uploadedToday,
+    uploadedTotal,
     dailyTarget,
     isSundayHoliday: isSunday,
     catchUpClosedToday,

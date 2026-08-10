@@ -149,30 +149,39 @@ export async function GET(req: NextRequest) {
     }
 
     if (view === "closed") {
-      // Look back 30 days — match home day-strip: real uploads only (not seed auto-closed).
+      // Everything he actually finished — Sun/weekday, designer or admin close, old or new.
+      // Exclude seed auto-closed rows with no file.
       const closedFrom = addDaysYmd(today, -(DESIGNER_WINDOW_DAYS - 1));
+      const fromTs = new Date(`${closedFrom}T00:00:00+05:30`);
       const whereClosed: {
         status: "DESIGN_DONE";
         assigneeId?: string;
-        uploadedAt: { gte: Date };
+        OR: Array<
+          | { uploadedAt: { gte: Date } }
+          | { uploadedAt: null; fileUrl: { not: null }; updatedAt: { gte: Date } }
+        >;
       } = {
         status: "DESIGN_DONE",
-        // Home "X done" only counts designer closes with an upload time
-        uploadedAt: { gte: new Date(`${closedFrom}T00:00:00+05:30`) },
+        OR: [
+          { uploadedAt: { gte: fromTs } },
+          {
+            uploadedAt: null,
+            fileUrl: { not: null },
+            updatedAt: { gte: fromTs },
+          },
+        ],
       };
       if (!isAdmin) whereClosed.assigneeId = memberId;
 
       const rows = await prisma.teamDesignerJob.findMany({
         where: whereClosed,
         select: JOB_SELECT,
-        // Mahesh first, then newest upload
         orderBy: [
-          { assigneeId: "asc" },
           { uploadedAt: "desc" },
           { updatedAt: "desc" },
           { postDate: "desc" },
         ],
-        take: 200,
+        take: 300,
       });
 
       // assigneeId asc puts jeslyn before mahesh — reorder in memory
