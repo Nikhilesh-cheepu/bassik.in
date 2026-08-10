@@ -492,6 +492,16 @@ async function readJson(res: Response) {
   return data;
 }
 
+/** AbortSignal.timeout isn't on older WebViews — fall back so load still aborts. */
+function fetchTimeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(ms);
+  }
+  const c = new AbortController();
+  setTimeout(() => c.abort(), ms);
+  return c.signal;
+}
+
 export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   /** Who's queue you're looking at — filters instantly (no refetch). */
   const [designerTab, setDesignerTab] = useState<"all" | "mahesh" | "jeslyn">("all");
@@ -610,14 +620,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       const res = await fetch("/api/team/designer-performance?lite=1", {
         cache: "no-store",
         // Hung DB must not leave the Open tab on a spinner forever
-        signal: AbortSignal.timeout(12_000),
+        signal: fetchTimeoutSignal(10_000),
       });
       const data = await readJson(res);
-      if (!res.ok) {
-        throw new Error(
-          typeof data.error === "string" ? data.error : "Performance failed"
-        );
-      }
       applyPerformancePayload(data);
     } catch {
       /* timeout / network — still unblock Open */
@@ -637,7 +642,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     const view = opts?.view ?? queueViewRef.current;
     const soft = Boolean(opts?.soft || opts?.quiet);
     // Soft polls must not cancel / starve the first blocking load
-    if (soft && (loadingRef.current || !perfReadyRef.current)) return;
+    if (soft && loadingRef.current) return;
 
     const gen = ++loadGen.current;
     const blocking = !soft;
@@ -653,31 +658,24 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       if (kind === "closed") params.set("view", "closed");
       if (kind === "expired") params.set("view", "expired");
       const qs = `?${params.toString()}`;
-      // Jobs alone first — parallel home/WA was starving the DB pool (10–20s spinner).
+      // Jobs first so the task list paints; catch-up cards follow (lite).
       const jobsRes = await fetch(`/api/team/designer-jobs${qs}`, {
         cache: "no-store",
-        signal: AbortSignal.timeout(20_000),
+        signal: fetchTimeoutSignal(15_000),
       });
       const data = await readJson(jobsRes);
       if (gen !== loadGen.current) return;
-      if (!jobsRes.ok) {
-        throw new Error(
-          typeof data.error === "string" ? data.error : "Failed to load"
-        );
-      }
       setAllJobs((data.jobs as DesignerJobDto[]) ?? []);
       setWindowMeta((data.window as WindowMeta) ?? null);
       if (!opts?.quiet) setError(null);
-      // Quiet polls only refresh jobs — performance every 12s starved the DB pool.
-      if (!opts?.quiet) {
-        void loadPerformanceLite().catch(() => undefined);
-      }
     } catch (err) {
       if (gen !== loadGen.current) return;
       if (!opts?.quiet) {
         const timedOut =
           err instanceof Error &&
-          (err.name === "TimeoutError" || /aborted|timeout/i.test(err.message));
+          (err.name === "TimeoutError" ||
+            err.name === "AbortError" ||
+            /aborted|timeout/i.test(err.message));
         setError(
           timedOut
             ? "Queue is slow (database). Try again in a moment."
@@ -690,6 +688,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       if (blocking) {
         setLoading(false);
         loadingRef.current = false;
+      }
+      // Always refresh / unblock catch-up — even when jobs fail (was leaving designers stuck).
+      if (!opts?.quiet) {
+        void loadPerformanceLite().catch(() => undefined);
       }
     }
   }, [loadPerformanceLite]);
@@ -718,7 +720,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         return;
       }
       if (pauseLivePollRef.current) return;
-      if (loadingRef.current || !perfReadyRef.current) return;
+      if (loadingRef.current) return;
       void load({ soft: true, quiet: true });
     };
     const id = window.setInterval(softRefresh, 12_000);

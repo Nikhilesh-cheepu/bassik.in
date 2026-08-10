@@ -9,6 +9,7 @@ import {
   computeAllDesignerPerformance,
   computeAllDesignerPerformanceLite,
   computeDesignerPerformance,
+  computeDesignerPerformanceLite,
 } from "@/lib/team-designer-performance";
 import {
   buildDesignerQueueSummaryNudge,
@@ -66,7 +67,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const me = await computeDesignerPerformance(memberId);
+    // Designers hit ?lite=1 too — full recompute was hanging their Open tab (20–40s).
+    const lite = req.nextUrl.searchParams.get("lite") === "1";
+    const me = lite
+      ? await computeDesignerPerformanceLite(memberId)
+      : await computeDesignerPerformance(memberId);
     return NextResponse.json({ ok: true, designers: [me], reminders: [], suggested: [] });
   } catch (err) {
     console.error("[team/designer-performance] GET", err);
