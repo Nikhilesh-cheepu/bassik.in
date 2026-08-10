@@ -598,6 +598,8 @@ model TeamDesignerJob {
   fileUrls      Json?
   /// If true: upload/done only — never push creative to Amit Daily
   noPost           Boolean                @default(false)
+  /// How many daily slots this job counts as when done (1–4)
+  taskWeight       Int                    @default(1)
   postingNotes  String?
   scheduleNote  String?
   waApproved       Boolean                @default(false)

@@ -6,62 +6,30 @@ import {
   DESIGNER_UPLOAD_DUE_TIME,
   DESIGNER_WINDOW_DAYS,
   linksFromText,
-  loadDesignerEditMetaByIds,
-  loadDesignerFileUrlsByIds,
-  loadDesignerJobLinksByIds,
   monthKeyFromYmd,
   naturalDesignerSortOrder,
   nextManualDesignerSortOrder,
   parseDesignerLinks,
   rollingWindowBounds,
   seedDesignerRollingWindow,
-  ensureDesignerJobExtraColumns,
   ensureDesignerNoPostColumn,
   pauseDesignerJobNow,
   setDesignerJobLinks,
+  setDesignerJobTaskWeight,
   sortDesignerJobs,
   toDesignerJobDto,
   manualSortOrdersFromDragRank,
 } from "@/lib/team-designer-jobs";
 import { addDaysYmd, getTodayKey } from "@/lib/team-checklists";
 import {
-  normalizeDesignerFileUrls,
+  clampDesignerTaskWeight,
+  clampDesignerWindowDays,
   parseDesignerPriorityMode,
 } from "@/lib/team-designer-jobs-shared";
 import { normalizeDesignerOutletId, teamOutletLabel } from "@/lib/team-outlets";
+import { invalidateDesignerPerformanceLiteCache } from "@/lib/team-designer-performance";
 
-async function jobsWithExtras(
-  rows: Array<Parameters<typeof toDesignerJobDto>[0] & { id: string; fileUrl?: string | null }>,
-  today: string
-) {
-  const ids = rows.map((r) => r.id);
-  const [linksMap, editMap, filesMap] = await Promise.all([
-    loadDesignerJobLinksByIds(ids),
-    loadDesignerEditMetaByIds(ids),
-    loadDesignerFileUrlsByIds(ids),
-  ]);
-  return rows.map((r) => {
-    const edit = editMap.get(r.id);
-    return toDesignerJobDto(
-      {
-        ...r,
-        links: linksMap.get(r.id) ?? [],
-        fileUrls:
-          filesMap.get(r.id) ?? normalizeDesignerFileUrls(r.fileUrl ?? null, null),
-        editRequestedAt: edit?.editRequestedAt ?? null,
-        editRequestNote: edit?.editRequestNote ?? null,
-        pauseRequestedAt: edit?.pauseRequestedAt ?? null,
-        pauseRequestNote: edit?.pauseRequestNote ?? null,
-        catchUpExempt: edit?.catchUpExempt ?? false,
-        activeWorkMs: edit?.activeWorkMs ?? 0,
-        pausedAt: edit?.pausedAt ?? null,
-        noPost: edit?.noPost ?? false,
-      },
-      today
-    );
-  });
-}
-
+/** One Prisma select — columns are in schema (no follow-up raw queries). */
 const JOB_SELECT = {
   id: true,
   monthKey: true,
@@ -73,6 +41,48 @@ const JOB_SELECT = {
   format: true,
   title: true,
   description: true,
+  links: true,
+  assigneeId: true,
+  status: true,
+  urgent: true,
+  priorityMode: true,
+  catchUpExempt: true,
+  sortOrder: true,
+  startedAt: true,
+  activeWorkMs: true,
+  pausedAt: true,
+  startedByRole: true,
+  uploadedAt: true,
+  closedByRole: true,
+  fileUrl: true,
+  fileUrls: true,
+  noPost: true,
+  taskWeight: true,
+  postingNotes: true,
+  scheduleNote: true,
+  waApproved: true,
+  editRequestedAt: true,
+  editRequestNote: true,
+  pauseRequestedAt: true,
+  pauseRequestNote: true,
+  createdBy: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+/** Stale Prisma clients (pre–taskWeight) — still load the queue. */
+const JOB_SELECT_COMPAT = {
+  id: true,
+  monthKey: true,
+  postDate: true,
+  dueDate: true,
+  dueTime: true,
+  outletId: true,
+  lane: true,
+  format: true,
+  title: true,
+  description: true,
+  links: true,
   assigneeId: true,
   status: true,
   urgent: true,
@@ -86,10 +96,50 @@ const JOB_SELECT = {
   postingNotes: true,
   scheduleNote: true,
   waApproved: true,
+  editRequestedAt: true,
+  editRequestNote: true,
+  pauseRequestedAt: true,
+  pauseRequestNote: true,
   createdBy: true,
   createdAt: true,
   updatedAt: true,
 } as const;
+
+function isUnknownPrismaFieldError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /Unknown field|Unknown arg/i.test(msg);
+}
+
+async function findJobs(
+  args: {
+    where: Record<string, unknown>;
+    orderBy?: unknown;
+    take?: number;
+  }
+) {
+  try {
+    return await prisma.teamDesignerJob.findMany({
+      ...args,
+      select: JOB_SELECT,
+    } as Parameters<typeof prisma.teamDesignerJob.findMany>[0]);
+  } catch (err) {
+    if (!isUnknownPrismaFieldError(err)) throw err;
+    console.warn(
+      "[team/designer-jobs] stale Prisma client — using compat select"
+    );
+    return prisma.teamDesignerJob.findMany({
+      ...args,
+      select: JOB_SELECT_COMPAT,
+    } as Parameters<typeof prisma.teamDesignerJob.findMany>[0]);
+  }
+}
+
+function jobsToDto(
+  rows: Array<Parameters<typeof toDesignerJobDto>[0]>,
+  today: string
+) {
+  return rows.map((r) => toDesignerJobDto(r, today));
+}
 
 export async function GET(req: NextRequest) {
   const session = await getTeamFromRequest(req);
@@ -99,7 +149,10 @@ export async function GET(req: NextRequest) {
   }
 
   const today = getTodayKey();
-  const { fromDate, toDate, days } = rollingWindowBounds(today, DESIGNER_WINDOW_DAYS);
+  const days = clampDesignerWindowDays(
+    req.nextUrl.searchParams.get("days") ?? DESIGNER_WINDOW_DAYS
+  );
+  const { fromDate, toDate } = rollingWindowBounds(today, days);
   const memberId = session.memberId ?? session.username;
   const isAdmin = session.role === "admin";
   const viewParam = req.nextUrl.searchParams.get("view");
@@ -107,9 +160,6 @@ export async function GET(req: NextRequest) {
     viewParam === "closed" || viewParam === "expired" ? viewParam : "open";
 
   try {
-    // Warm column probe once — cheap SELECT, not ALTER, after first success
-    await ensureDesignerJobExtraColumns();
-
     if (view === "expired") {
       // Event date passed, or adhoc upload older than 3 days — clear blob storage
       const adhocCutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
@@ -137,17 +187,15 @@ export async function GET(req: NextRequest) {
       };
       if (!isAdmin) whereExpired.assigneeId = memberId;
 
-      const rows = await prisma.teamDesignerJob.findMany({
+      const rows = await findJobs({
         where: whereExpired,
-        select: JOB_SELECT,
         orderBy: [{ postDate: "desc" }, { uploadedAt: "desc" }],
         take: 150,
       });
-      const jobs = await jobsWithExtras(rows, today);
       return NextResponse.json({
         view: "expired",
         window: { fromDate, toDate, days },
-        jobs,
+        jobs: jobsToDto(rows, today),
         today,
       });
     }
@@ -155,7 +203,7 @@ export async function GET(req: NextRequest) {
     if (view === "closed") {
       // Everything he actually finished — Sun/weekday, designer or admin close, old or new.
       // Exclude seed auto-closed rows with no file.
-      const closedFrom = addDaysYmd(today, -(DESIGNER_WINDOW_DAYS - 1));
+      const closedFrom = addDaysYmd(today, -(days - 1));
       const fromTs = new Date(`${closedFrom}T00:00:00+05:30`);
       const whereClosed: {
         status: "DESIGN_DONE";
@@ -177,9 +225,8 @@ export async function GET(req: NextRequest) {
       };
       if (!isAdmin) whereClosed.assigneeId = memberId;
 
-      const rows = await prisma.teamDesignerJob.findMany({
+      const rows = await findJobs({
         where: whereClosed,
-        select: JOB_SELECT,
         orderBy: [
           { uploadedAt: "desc" },
           { updatedAt: "desc" },
@@ -189,7 +236,7 @@ export async function GET(req: NextRequest) {
       });
 
       // assigneeId asc puts jeslyn before mahesh — reorder in memory
-      const jobs = (await jobsWithExtras(rows, today)).sort((a, b) => {
+      const jobs = jobsToDto(rows, today).sort((a, b) => {
         const rank = (id: string) =>
           id === "mahesh" ? 0 : id === "jeslyn" ? 1 : 2;
         const ar = rank(a.assigneeId);
@@ -210,61 +257,59 @@ export async function GET(req: NextRequest) {
 
     // Open queue: still-open jobs in the window. Include go-live today/future even if
     // creative dueDate already passed (e.g. Sat/Sun posts due Tue–Wed still needed Fri).
-    const baseWhere = {
+    // Also always include stuck IN_PROGRESS / PAUSED outside the window (one query).
+    const assigneeFilter = isAdmin ? {} : { assigneeId: memberId };
+    const windowOpen = {
       postDate: { gte: fromDate, lte: toDate },
       OR: [{ dueDate: { gte: today } }, { postDate: { gte: today } }] as Array<
         { dueDate: { gte: string } } | { postDate: { gte: string } }
       >,
-      ...(isAdmin ? {} : { assigneeId: memberId }),
+      status: { not: "DESIGN_DONE" as const },
+      ...assigneeFilter,
     };
-
-    // sortOrder repair runs on Seed only — not every tab switch (was slow).
+    const activeStuck = {
+      status: { in: ["IN_PROGRESS", "PAUSED"] as Array<"IN_PROGRESS" | "PAUSED"> },
+      ...assigneeFilter,
+    };
 
     let rows;
     try {
-      // Prefer not DESIGN_DONE so PAUSED is included without listing it in `in: [...]`
-      // (avoids 500s when a deploy's Prisma client is briefly out of sync with the enum).
-      rows = await prisma.teamDesignerJob.findMany({
-        where: { ...baseWhere, status: { not: "DESIGN_DONE" } },
-        select: JOB_SELECT,
+      rows = await findJobs({
+        where: { OR: [windowOpen, activeStuck] },
         orderBy: [{ dueDate: "asc" }, { postDate: "asc" }, { outletId: "asc" }],
       });
     } catch (primaryErr) {
       console.error("[team/designer-jobs] open query primary failed, fallback", primaryErr);
-      rows = await prisma.teamDesignerJob.findMany({
+      rows = await findJobs({
         where: {
-          ...baseWhere,
-          status: { in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS"] },
+          OR: [
+            {
+              postDate: { gte: fromDate, lte: toDate },
+              OR: [{ dueDate: { gte: today } }, { postDate: { gte: today } }],
+              status: {
+                in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS"],
+              },
+              ...assigneeFilter,
+            },
+            {
+              status: { in: ["IN_PROGRESS", "PAUSED"] },
+              ...assigneeFilter,
+            },
+          ],
         },
-        select: JOB_SELECT,
         orderBy: [{ dueDate: "asc" }, { postDate: "asc" }, { outletId: "asc" }],
       });
     }
 
-    // Always surface stuck IN_PROGRESS / PAUSED even if outside the rolling window —
-    // otherwise Start is blocked on a job the UI never lists.
-    const activeWhere = {
-      status: { in: ["IN_PROGRESS", "PAUSED"] as Array<"IN_PROGRESS" | "PAUSED"> },
-      ...(isAdmin ? {} : { assigneeId: memberId }),
-    };
-    let activeRows: typeof rows = [];
-    try {
-      activeRows = await prisma.teamDesignerJob.findMany({
-        where: activeWhere,
-        select: JOB_SELECT,
-      });
-    } catch (activeErr) {
-      console.error("[team/designer-jobs] active jobs query failed", activeErr);
-    }
-    const seen = new Set(rows.map((r) => r.id));
-    for (const r of activeRows) {
-      if (!seen.has(r.id)) {
-        rows.push(r);
-        seen.add(r.id);
-      }
-    }
+    // OR can theoretically return duplicates — keep first
+    const seen = new Set<string>();
+    const deduped = rows.filter((r) => {
+      if (seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
 
-    const jobs = sortDesignerJobs(await jobsWithExtras(rows, today));
+    const jobs = sortDesignerJobs(jobsToDto(deduped, today));
 
     return NextResponse.json({
       view: "open",
@@ -296,8 +341,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    invalidateDesignerPerformanceLiteCache();
     const body = (await req.json()) as {
       action?: string;
+      days?: number;
       lanes?: Array<"WEEKEND" | "WEEKDAY">;
       outletId?: string;
       description?: string;
@@ -314,6 +361,8 @@ export async function POST(req: NextRequest) {
       dueDate?: string;
       /** Upload/done only — do not send creative to Amit Daily */
       noPost?: boolean;
+      /** How many daily slots this job counts as when done (1–4) */
+      taskWeight?: number;
       /** Multi-outlet assign (one job per outlet) */
       outletIds?: string[];
       /** Typed custom footlights / outlet names */
@@ -321,10 +370,11 @@ export async function POST(req: NextRequest) {
     };
 
     if (body.action === "seed" || body.action === "seed-month") {
+      const seedDays = clampDesignerWindowDays(body.days ?? DESIGNER_WINDOW_DAYS);
       const result = await seedDesignerRollingWindow({
         createdBy: session.username,
         fromDate: getTodayKey(),
-        days: DESIGNER_WINDOW_DAYS,
+        days: seedDays,
         lanes: body.lanes,
       });
       return NextResponse.json({ ok: true, ...result });
@@ -422,6 +472,7 @@ export async function POST(req: NextRequest) {
     const urgent =
       typeof body.urgent === "boolean" ? body.urgent : priorityMode !== "NONE";
     const noPost = body.noPost === true;
+    const taskWeight = clampDesignerTaskWeight(body.taskWeight);
     const stamp = Date.now().toString(36);
 
     const createdJobs = [];
@@ -460,12 +511,15 @@ export async function POST(req: NextRequest) {
           job.id
         );
       }
+      if (taskWeight !== 1) {
+        await setDesignerJobTaskWeight(job.id, taskWeight);
+      }
 
       if (links.length > 0) {
         await setDesignerJobLinks(job.id, links);
       }
 
-      createdJobs.push(toDesignerJobDto({ ...job, links, noPost }));
+      createdJobs.push(toDesignerJobDto({ ...job, links, noPost, taskWeight }));
     }
 
     if (priorityMode === "PAUSE_NOW") {

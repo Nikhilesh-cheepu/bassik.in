@@ -619,11 +619,14 @@ export function weekendPostDueLabel(targetDateYmd: string, today = getTodayKey()
 export function weekendAdDueLabel(targetDateYmd: string, today = getTodayKey()): string {
   const startBy = weekendPostDueYmd(targetDateYmd);
   const targetDayId = dayIdForYmd(targetDateYmd);
+  const startDayId = dayIdForYmd(startBy);
+  const goLive = `${CHECKLIST_DAY_LABELS[targetDayId]} ${formatBoardDateLabel(targetDateYmd)}`;
+  const startLabel = `${CHECKLIST_DAY_LABELS[startDayId]} ${formatBoardDateLabel(startBy)}`;
   const when =
     startBy === today
       ? "START ADS TODAY by 8 PM"
-      : `start ads by ${formatBoardDateLabel(startBy)} 8 PM`;
-  return `${CHECKLIST_DAY_LABELS[targetDayId]} ad · ${when} (same −4d as Mahesh)`;
+      : `Start ads by ${startLabel} · 8 PM`;
+  return `Go-live ${goLive} · ${when}`;
 }
 
 /** Red if Mahesh delivery OR Amit post window is past. */

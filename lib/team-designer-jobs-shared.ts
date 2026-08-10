@@ -1,14 +1,11 @@
 /** Client-safe designer job types & constants (no DB / Node imports). */
 
+/** Auto-seeded designer queue outlets only — footlights stay in TEAM_AD_OUTLETS for manual tasks. */
 export const DESIGNER_MONTH_OUTLET_IDS = [
   "c53",
   "boiler-room",
   "firefly",
   "komma",
-  "anandavidi",
-  "asilmandi",
-  "antervedi",
-  "c53-boiler-firefly",
 ] as const;
 /**
  * C53 + Boiler + Firefly share one Fri–Sat–Sun TV calendar video per weekend
@@ -30,6 +27,13 @@ export const DESIGNER_UPLOAD_DUE_TIME = "20:00";
 export const DESIGNER_WEEKDAY_DUE_TIME = "20:00";
 export const DESIGNER_WEEKEND_DUE_TIME = "20:00";
 export const DESIGNER_CALENDAR_DUE_TIME = "20:00";
+
+/** Clamp task weight to 1–4 (default 1). */
+export function clampDesignerTaskWeight(n: unknown): number {
+  const v = typeof n === "number" ? n : Number(n);
+  if (!Number.isFinite(v)) return 1;
+  return Math.min(4, Math.max(1, Math.round(v)));
+}
 export const DESIGNER_LAST_WA_TIME = "19:00";
 export const DESIGNER_DAILY_TARGET = 4;
 /** Mon–Sat workdays (Sunday off target). 6 × 4 = 24. */
@@ -38,8 +42,22 @@ export const DESIGNER_WEEKLY_TARGET = DESIGNER_DAILY_TARGET * 6;
 export const DESIGNER_OPTIONAL_LEAVES_PER_MONTH = 0;
 /** Holiday points needed to unlock one permission leave. */
 export const DESIGNER_POINTS_PER_LEAVE = 7;
-/** Always schedule this many days forward from today (not calendar months). */
+/** Default schedule window (days forward / Done lookback). */
 export const DESIGNER_WINDOW_DAYS = 30;
+/** Admin can pick how many days for queue / Done / Seed. */
+export const DESIGNER_WINDOW_DAY_OPTIONS = [7, 14, 21, 30, 45, 60] as const;
+
+export function clampDesignerWindowDays(n: unknown): number {
+  const v = typeof n === "number" ? n : Number(n);
+  if (!Number.isFinite(v)) return DESIGNER_WINDOW_DAYS;
+  const rounded = Math.round(v);
+  if (
+    (DESIGNER_WINDOW_DAY_OPTIONS as readonly number[]).includes(rounded)
+  ) {
+    return rounded;
+  }
+  return Math.min(90, Math.max(7, rounded));
+}
 /** Cumulative 4/day stack starts here (IST). Misses carry forward. Sunday = break. */
 export const DESIGNER_STACK_START_DATE = "2026-08-01";
 /**
@@ -95,6 +113,8 @@ export type DesignerJobDto = {
   fileUrls: string[];
   /** Upload/done only — skip Amit Daily checklist handoff */
   noPost: boolean;
+  /** How many daily slots this job counts as when done (1–4) */
+  taskWeight: number;
   postingNotes: string | null;
   scheduleNote: string | null;
   waApproved: boolean;
@@ -449,15 +469,23 @@ export function partitionOpenDesignerQueue(
   effectiveCatchUpSlots: number;
 } {
   const sorted = sortDesignerJobs(jobs.filter((j) => j.status !== "DESIGN_DONE"));
-  const releasedFromJobs = sorted.filter((j) => j.catchUpExempt).length;
+  const releasedFromJobs = sorted
+    .filter((j) => j.catchUpExempt)
+    .reduce((n, j) => n + clampDesignerTaskWeight(j.taskWeight), 0);
   const released = Math.max(0, opts?.releasedSlots ?? releasedFromJobs);
   const owed = Math.max(0, opts?.catchUpSlots ?? 0);
-  // Each Drop forgives one slot — no backfill when the job is Unsent
+  // Drop forgives that job’s weight in slots — no backfill when Unsent
   const slots = Math.max(0, owed - released);
-  // Keep strict Q order: first N fillable jobs = Catch up, rest = Normal.
+  // Keep strict Q order: fill Catch up by task weight until slots covered.
   // In-progress / paused stay in their queue position (not pinned out of order).
   const fillable = sorted.filter((j) => !j.catchUpExempt);
-  const catchUp = fillable.slice(0, slots);
+  const catchUp: DesignerJobDto[] = [];
+  let catchUsed = 0;
+  for (const j of fillable) {
+    if (catchUsed >= slots) break;
+    catchUp.push(j);
+    catchUsed += clampDesignerTaskWeight(j.taskWeight);
+  }
   const catchIds = new Set(catchUp.map((j) => j.id));
   // Normal = everything else still open (exempt + after catch-up band)
   const todayPack = sorted.filter((j) => !catchIds.has(j.id));
@@ -693,6 +721,7 @@ export type DesignerNudgeKind =
   | "priority_pause_now"
   | "priority_after_current"
   | "queue_updated"
+  | "queue_summary"
   | "amit_ready"
   | "amit_drive_check";
 

@@ -5,9 +5,8 @@ export const TEAM_AD_OUTLETS = [
   { id: "firefly", label: "Firefly" },
   { id: "komma", label: "Komma" },
   { id: "kiik69", label: "KIIK 69" },
-  { id: "anandavidi", label: "Anandavidi" },
   { id: "asilmandi", label: "Asilmandi" },
-  { id: "antervedi", label: "Antrvadi" },
+  { id: "antervedi", label: "Antervedi" },
   /** Shared weekend TV calendar (C53 + Boiler Room + Firefly). */
   { id: "c53-boiler-firefly", label: "C53 · Boiler Room · Firefly" },
   { id: "clubrogue-jubilee-hills", label: "Jubilee Hills Clubrogue" },

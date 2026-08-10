@@ -117,6 +117,8 @@ function nudgeLabel(kind: DesignerNudgeKind): string {
       return "Priority — after current";
     case "queue_updated":
       return "Queue updated";
+    case "queue_summary":
+      return "Queue summary";
     case "amit_ready":
       return "New tasks · Amit";
     case "amit_drive_check":
@@ -811,6 +813,34 @@ export async function listSuggestedDesignerNudges(): Promise<DesignerSuggestedNu
   const amitDrive = await getAmitDriveCheckNudge();
   if (amitDrive) out.push(amitDrive);
   return out;
+}
+
+/**
+ * One WA per designer — no counts / no DB. Just a soft “check the page” note.
+ */
+export function buildDesignerQueueSummaryNudge(
+  assigneeId: string
+): DesignerSuggestedNudgeDto {
+  const hour = istHourNow();
+  const name = designerDisplayName(assigneeId);
+  const phone = designerWaPhone(assigneeId);
+  const body = [
+    `${name} — ${greetingForHourIst(hour)}.`,
+    "",
+    "There might be an update on your queue.",
+    "Please open the page and do accordingly. Thank you.",
+    "",
+    designerQueueLink(),
+  ].join("\n");
+  return {
+    assigneeId,
+    name,
+    kind: "queue_summary",
+    label: "Queue ping",
+    body,
+    shareUrl: whatsAppShareUrl(phone, body),
+    jobId: "",
+  };
 }
 
 async function buildQueueUpdatedSuggestion(

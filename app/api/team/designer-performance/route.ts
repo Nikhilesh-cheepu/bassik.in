@@ -7,9 +7,11 @@ import {
 } from "@/lib/team-designer-jobs-shared";
 import {
   computeAllDesignerPerformance,
+  computeAllDesignerPerformanceLite,
   computeDesignerPerformance,
 } from "@/lib/team-designer-performance";
 import {
+  buildDesignerQueueSummaryNudge,
   evaluateAndSendDesignerNudges,
   listRecentReminderLogs,
   listSuggestedDesignerNudges,
@@ -38,7 +40,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ ok: true, reminders, suggested });
       }
       if (lite) {
-        const designers = await computeAllDesignerPerformance();
+        const designers = await computeAllDesignerPerformanceLite();
         return NextResponse.json({
           ok: true,
           designers,
@@ -90,6 +92,23 @@ export async function POST(req: NextRequest) {
       nudgeBody?: string;
       jobId?: string;
     };
+
+    if (body.action === "summary") {
+      const assigneeId =
+        typeof body.assigneeId === "string" ? body.assigneeId.trim() : "";
+      if (
+        !DESIGNER_PERFORMANCE_IDS.includes(
+          assigneeId as (typeof DESIGNER_PERFORMANCE_IDS)[number]
+        )
+      ) {
+        return NextResponse.json(
+          { error: "assigneeId required (mahesh|jeslyn)" },
+          { status: 400 }
+        );
+      }
+      const nudge = buildDesignerQueueSummaryNudge(assigneeId);
+      return NextResponse.json({ ok: true, nudge });
+    }
 
     if (body.action === "open-share") {
       const assigneeId =

@@ -18,12 +18,14 @@ import {
   setDesignerEditRequest,
   setDesignerJobFileUrls,
   setDesignerJobLinks,
+  setDesignerJobTaskWeight,
   setDesignerPauseRequest,
   syncDesignerJobToChecklistHandoff,
   toDesignerJobDto,
 } from "@/lib/team-designer-jobs";
 import { addDaysYmd, getTodayKey } from "@/lib/team-checklists";
 import {
+  clampDesignerTaskWeight,
   isBoilerplateDesignerDescription,
   normalizeDesignerFileUrls,
   parseDesignerPriorityMode,
@@ -33,6 +35,7 @@ import { deleteTeamHandoffBlobUrl } from "@/lib/team-handoff-blobs";
 import {
   getAmitReadyNudge,
 } from "@/lib/team-designer-nudges";
+import { invalidateDesignerPerformanceLiteCache } from "@/lib/team-designer-performance";
 
 async function jobDtoWithLinks(job: Parameters<typeof toDesignerJobDto>[0]) {
   const [linksMap, editMap, filesMap] = await Promise.all([
@@ -53,6 +56,7 @@ async function jobDtoWithLinks(job: Parameters<typeof toDesignerJobDto>[0]) {
     activeWorkMs: edit?.activeWorkMs ?? 0,
     pausedAt: edit?.pausedAt ?? null,
     noPost: edit?.noPost ?? false,
+    taskWeight: edit?.taskWeight ?? 1,
   });
 }
 
@@ -117,6 +121,7 @@ export async function PATCH(
   const isAdmin = session.role === "admin";
 
   try {
+    invalidateDesignerPerformanceLiteCache();
     const job = await prisma.teamDesignerJob.findUnique({ where: { id } });
     if (!job) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -126,6 +131,7 @@ export async function PATCH(
       description?: string;
       note?: string;
       links?: string | string[];
+      taskWeight?: number;
       urgent?: boolean;
       priorityMode?: string;
       fileUrl?: string;
@@ -220,6 +226,9 @@ export async function PATCH(
       });
       if (links) {
         await setDesignerJobLinks(id, links);
+      }
+      if (body.taskWeight !== undefined) {
+        await setDesignerJobTaskWeight(id, clampDesignerTaskWeight(body.taskWeight));
       }
 
       if (action === "brief-ready" && status === "READY_TO_DESIGN") {
@@ -355,9 +364,14 @@ export async function PATCH(
       await releaseDesignerJobFromCatchUp(id);
       const refreshed = await prisma.teamDesignerJob.findUnique({ where: { id } });
       if (!refreshed) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      const dto = await jobDtoWithLinks({ ...refreshed, catchUpExempt: true });
+      const w = clampDesignerTaskWeight(dto.taskWeight);
       return NextResponse.json({
-        job: await jobDtoWithLinks({ ...refreshed, catchUpExempt: true }),
-        message: "Dropped from Catch up — count −1. Job is in Today/Later.",
+        job: dto,
+        message:
+          w > 1
+            ? `Dropped from Catch up — count −${w}. Job is in Today/Later.`
+            : "Dropped from Catch up — count −1. Job is in Today/Later.",
       });
     }
 
@@ -617,7 +631,7 @@ export async function PATCH(
       });
     }
 
-    // Admin: mark done only with an uploaded file (syncs weekend story+post+ad).
+    // Admin: mark done. With a file → Amit Ready; without → Done only (no post).
     if (action === "mark-done") {
       if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       if (
@@ -633,24 +647,16 @@ export async function PATCH(
         (await loadDesignerFileUrlsByIds([id])).get(id) ??
         normalizeDesignerFileUrls(job.fileUrl, null);
       const fileUrls = fromBody.length > 0 ? fromBody : existing;
-      if (fileUrls.length === 0) {
-        return NextResponse.json(
-          {
-            error:
-              "Upload a creative before Mark done — Done without a file is not allowed. Use Force clear / reopen if you need to reset.",
-          },
-          { status: 400 }
-        );
-      }
+      const hasFile = fileUrls.length > 0;
       const uploadedAt = job.uploadedAt ?? new Date();
       await bankDesignerActiveSegment(id);
       const updated = await prisma.teamDesignerJob.update({
         where: { id },
         data: {
           status: "DESIGN_DONE",
-          fileUrl: fileUrls[0]!,
+          fileUrl: hasFile ? fileUrls[0]! : null,
           uploadedAt,
-          waApproved: true,
+          waApproved: hasFile,
           startedAt: job.startedAt ?? new Date(),
           // Admin Mark done never counts toward designer 4/day
           closedByRole: "admin",
@@ -665,17 +671,23 @@ export async function PATCH(
               : job.scheduleNote,
         },
       });
-      await setDesignerJobFileUrls(id, fileUrls);
+      if (hasFile) {
+        await setDesignerJobFileUrls(id, fileUrls);
+      }
       await setDesignerEditRequest(id, { at: null, note: null });
-      try {
-        await syncDesignerJobToChecklistHandoff({ ...updated, fileUrl: fileUrls[0]! });
-      } catch (e) {
-        console.error("[designer-jobs] checklist sync on mark-done", e);
+      if (hasFile) {
+        try {
+          await syncDesignerJobToChecklistHandoff({ ...updated, fileUrl: fileUrls[0]! });
+        } catch (e) {
+          console.error("[designer-jobs] checklist sync on mark-done", e);
+        }
       }
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
-        message: "Marked done (admin) — does not count toward designer daily target",
-        amitNudge: await getAmitReadyNudge(),
+        message: hasFile
+          ? "Marked done (admin) — does not count toward designer daily target"
+          : "Marked done — no upload, not sent to Amit",
+        amitNudge: hasFile ? await getAmitReadyNudge() : null,
       });
     }
 

@@ -239,6 +239,44 @@ export function IconNotes({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+/** Drop / forgive catch-up slot */
+export function IconDrop({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden>
+      <path d="M12 3v12M8 11l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 19h14" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Start / play */
+export function IconStart({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M8 5.5v13l11-6.5-11-6.5z" />
+    </svg>
+  );
+}
+
+/** Done / check */
+export function IconDone({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
+      <path d="M5 12.5l4.5 4.5L19 7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** Wait / pause */
+export function IconWait({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
+    </svg>
+  );
+}
+
 /** Compact pill for filter rows in the team header */
 export function teamFilterChip(active: boolean, tone: "default" | "violet" = "default"): string {
   const on =

@@ -32,6 +32,7 @@ import {
   naturalDesignerSortOrder,
   normalizeDesignerFileUrls,
   parseDesignerLinks,
+  clampDesignerTaskWeight,
   parseDesignerPriorityMode,
   sortDesignerJobs,
   type DesignerJobDto,
@@ -195,6 +196,7 @@ type DesignerJobRow = Omit<
   activeWorkMs?: number | null;
   pausedAt?: Date | string | null;
   noPost?: boolean | null;
+  taskWeight?: number | null;
 };
 
 let designerExtraColumnsReady = false;
@@ -207,7 +209,7 @@ export async function ensureDesignerJobExtraColumns(): Promise<void> {
   if (designerExtraColumnsReady) return;
   try {
     await prisma.$queryRaw`
-      SELECT "catchUpExempt", "fileUrls", "activeWorkMs", "pausedAt", "noPost"
+      SELECT "catchUpExempt", "fileUrls", "activeWorkMs", "pausedAt", "noPost", "taskWeight"
       FROM "TeamDesignerJob" LIMIT 0
     `;
     designerExtraColumnsReady = true;
@@ -229,6 +231,9 @@ export async function ensureDesignerJobExtraColumns(): Promise<void> {
   );
   await prisma.$executeRawUnsafe(
     `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "noPost" BOOLEAN NOT NULL DEFAULT false`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "taskWeight" INTEGER NOT NULL DEFAULT 1`
   );
   designerExtraColumnsReady = true;
 }
@@ -317,7 +322,21 @@ export type DesignerRequestMeta = {
   activeWorkMs: number;
   pausedAt: string | null;
   noPost: boolean;
+  taskWeight: number;
 };
+
+export async function setDesignerJobTaskWeight(
+  id: string,
+  weight: number
+): Promise<void> {
+  await ensureDesignerJobExtraColumns();
+  const w = clampDesignerTaskWeight(weight);
+  await prisma.$executeRawUnsafe(
+    `UPDATE "TeamDesignerJob" SET "taskWeight" = $1, "updatedAt" = NOW() WHERE id = $2`,
+    w,
+    id
+  );
+}
 
 export async function loadDesignerEditMetaByIds(
   ids: string[]
@@ -337,10 +356,11 @@ export async function loadDesignerEditMetaByIds(
         activeWorkMs: number | null;
         pausedAt: Date | null;
         noPost: boolean | null;
+        taskWeight: number | null;
       }>
     >`
       SELECT id, "editRequestedAt", "editRequestNote", "pauseRequestedAt", "pauseRequestNote",
-             "catchUpExempt", "activeWorkMs", "pausedAt", "noPost"
+             "catchUpExempt", "activeWorkMs", "pausedAt", "noPost", "taskWeight"
       FROM "TeamDesignerJob"
       WHERE id IN (${Prisma.join(ids)})
     `;
@@ -354,6 +374,7 @@ export async function loadDesignerEditMetaByIds(
         activeWorkMs: Math.max(0, Number(row.activeWorkMs) || 0),
         pausedAt: row.pausedAt ? row.pausedAt.toISOString() : null,
         noPost: Boolean(row.noPost),
+        taskWeight: clampDesignerTaskWeight(row.taskWeight),
       });
     }
     return map;
@@ -381,6 +402,7 @@ export async function loadDesignerEditMetaByIds(
         activeWorkMs: 0,
         pausedAt: null,
         noPost: false,
+        taskWeight: 1,
       });
     }
     return map;
@@ -520,6 +542,7 @@ export function toDesignerJobDto(job: DesignerJobRow, today = getTodayKey()): De
     fileUrl: normalizeDesignerFileUrls(job.fileUrl, job.fileUrls)[0] ?? null,
     fileUrls: normalizeDesignerFileUrls(job.fileUrl, job.fileUrls),
     noPost: Boolean(job.noPost),
+    taskWeight: clampDesignerTaskWeight(job.taskWeight),
     postingNotes: job.postingNotes,
     scheduleNote: job.scheduleNote,
     waApproved: job.waApproved,
@@ -557,6 +580,8 @@ type SeedResult = {
   closedPast: number;
   /** Open NONE jobs re-keyed to event-date order */
   repaired: number;
+  /** Bad combo post/story rows removed (calendar-only outlet) */
+  purgedCombo?: number;
   fromDate: string;
   toDate: string;
 };
@@ -616,39 +641,20 @@ export async function nextManualDesignerSortOrder(assigneeId: string): Promise<n
   return (minRow?.sortOrder ?? 0) - 1;
 }
 
-/** Mark open jobs past their design due datetime (date + 8 PM IST), not midnight. */
-export async function closePastDueDesignerJobs(today = getTodayKey()): Promise<number> {
-  const open = await prisma.teamDesignerJob.findMany({
-    where: {
-      // Only consider due calendar day ≤ today; then filter by 20:00 IST
-      dueDate: { lte: today },
-      status: { in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS"] },
-    },
-    select: { id: true, dueDate: true, dueTime: true },
-  });
-  const pastIds = open
-    .filter((j) =>
-      isDesignerJobPastDue({
-        dueDate: j.dueDate,
-        dueTime: j.dueTime || DESIGNER_UPLOAD_DUE_TIME,
-      })
-    )
-    .map((j) => j.id);
-  if (pastIds.length === 0) return 0;
-  const result = await prisma.teamDesignerJob.updateMany({
-    where: { id: { in: pastIds } },
-    data: {
-      status: "DESIGN_DONE",
-      uploadedAt: null,
-      waApproved: false,
-    },
-  });
-  return result.count;
+/**
+ * Previously auto-marked past-due open jobs as DESIGN_DONE (no file).
+ * That hid unfinished Catch up work (e.g. Jeslyn Monday stories).
+ * Kept as a no-op so Seed never deletes/closes real queue work.
+ */
+export async function closePastDueDesignerJobs(_today = getTodayKey()): Promise<number> {
+  return 0;
 }
 
 /**
  * Seed Mahesh (weekend) + Jeslyn (weekday) for the next DESIGNER_WINDOW_DAYS
- * from `fromDate` (default today). Slots with dueDate before today are created as DESIGN_DONE.
+ * from `fromDate` (default today).
+ * Never auto-closes existing open jobs — overdue work stays in Open / Catch up.
+ * Always inserts new slots as WAITING_BRIEF — never invents fake Done / never closes open work.
  */
 export async function seedDesignerRollingWindow(params: {
   createdBy: string;
@@ -663,7 +669,7 @@ export async function seedDesignerRollingWindow(params: {
   const { toDate } = rollingWindowBounds(fromDate, days);
   const lanes = params.lanes?.length ? params.lanes : (["WEEKEND", "WEEKDAY"] as const);
 
-  const closedPast = await closePastDueDesignerJobs(today);
+  const closedPast = 0;
 
   let created = 0;
   let skipped = 0;
@@ -674,7 +680,6 @@ export async function seedDesignerRollingWindow(params: {
       const dayId = dayIdForYmd(postDate);
       const dueDate = weekendDueDate(postDate);
       const dueTime = DESIGNER_WEEKEND_DUE_TIME;
-      const past = isDesignerJobPastDue({ dueDate, dueTime });
       for (let oi = 0; oi < DESIGNER_MONTH_OUTLET_IDS.length; oi++) {
         const outletId = DESIGNER_MONTH_OUTLET_IDS[oi]!;
         rows.push({
@@ -689,7 +694,7 @@ export async function seedDesignerRollingWindow(params: {
           description: null,
           sortOrder: naturalDesignerSortOrder(dueDate, outletId, "post"),
           assigneeId: DESIGNER_ASSIGNEE_WEEKEND,
-          status: past ? "DESIGN_DONE" : "WAITING_BRIEF",
+          status: "WAITING_BRIEF",
           createdBy: params.createdBy,
         });
       }
@@ -702,7 +707,6 @@ export async function seedDesignerRollingWindow(params: {
       // Jeslyn: Mon flyer due Sun 8 PM (always go-live − 1 day @ 20:00).
       const dueDate = weekdayStoryDueDate(postDate);
       const dueTime = DESIGNER_WEEKDAY_DUE_TIME;
-      const past = isDesignerJobPastDue({ dueDate, dueTime });
       for (let oi = 0; oi < DESIGNER_MONTH_OUTLET_IDS.length; oi++) {
         const outletId = DESIGNER_MONTH_OUTLET_IDS[oi]!;
         rows.push({
@@ -717,7 +721,7 @@ export async function seedDesignerRollingWindow(params: {
           description: null,
           sortOrder: naturalDesignerSortOrder(dueDate, outletId, "story"),
           assigneeId: DESIGNER_ASSIGNEE_WEEKDAY,
-          status: past ? "DESIGN_DONE" : "WAITING_BRIEF",
+          status: "WAITING_BRIEF",
           createdBy: params.createdBy,
         });
       }
@@ -731,7 +735,6 @@ export async function seedDesignerRollingWindow(params: {
     for (const friday of fridays) {
       const dueDate = weekendCalendarDueDate(friday);
       const dueTime = DESIGNER_CALENDAR_DUE_TIME;
-      const past = isDesignerJobPastDue({ dueDate, dueTime });
       rows.push({
         monthKey: monthKeyFromYmd(friday),
         postDate: friday,
@@ -745,15 +748,32 @@ export async function seedDesignerRollingWindow(params: {
           "One TV-size calendar for C53, Boiler Room and Firefly together — covers Friday + Saturday + Sunday. Due Wednesday.",
         sortOrder: naturalDesignerSortOrder(dueDate, outletId, "calendar"),
         assigneeId: DESIGNER_ASSIGNEE_WEEKEND,
-        status: past ? "DESIGN_DONE" : "WAITING_BRIEF",
+        status: "WAITING_BRIEF",
         createdBy: params.createdBy,
       });
     }
   }
 
+  // Combo outlet is TV-calendar only — never post/story (old seeds created duplicates).
+  const purgedCombo = await prisma.teamDesignerJob.deleteMany({
+    where: {
+      outletId: DESIGNER_CALENDAR_COMBO_OUTLET_ID,
+      format: { not: "calendar" },
+      status: { in: ["WAITING_BRIEF", "READY_TO_DESIGN"] },
+    },
+  });
+
   if (rows.length === 0) {
     const repairedEmpty = await repairNaturalDesignerSortOrders();
-    return { created: 0, skipped: 0, closedPast, repaired: repairedEmpty, fromDate, toDate };
+    return {
+      created: 0,
+      skipped: 0,
+      closedPast,
+      repaired: repairedEmpty,
+      purgedCombo: purgedCombo.count,
+      fromDate,
+      toDate,
+    };
   }
 
   // One range lookup, then insert only missing slots (no unique-constraint spam).
@@ -775,7 +795,12 @@ export async function seedDesignerRollingWindow(params: {
     existing.map((e) => `${e.monthKey}|${e.postDate}|${e.outletId}|${e.lane}|${e.format}`)
   );
   const toInsert = rows.filter(
-    (r) => !existingKeys.has(`${r.monthKey}|${r.postDate}|${r.outletId}|${r.lane}|${r.format}`)
+    (r) =>
+      !(
+        r.outletId === DESIGNER_CALENDAR_COMBO_OUTLET_ID &&
+        r.format !== "calendar"
+      ) &&
+      !existingKeys.has(`${r.monthKey}|${r.postDate}|${r.outletId}|${r.lane}|${r.format}`)
   );
   skipped = rows.length - toInsert.length;
 
@@ -789,7 +814,15 @@ export async function seedDesignerRollingWindow(params: {
   }
 
   const repaired = await repairNaturalDesignerSortOrders();
-  return { created, skipped, closedPast, repaired, fromDate, toDate };
+  return {
+    created,
+    skipped,
+    closedPast,
+    repaired,
+    purgedCombo: purgedCombo.count,
+    fromDate,
+    toDate,
+  };
 }
 
 /** @deprecated use seedDesignerRollingWindow — kept for compatibility */

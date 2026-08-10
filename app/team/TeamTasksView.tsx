@@ -931,20 +931,28 @@ function AdItemRow({
     }
   };
 
+  const { datePart, weekday } = readyGoLiveParts(item, dateKey);
+
   return (
     <div className="border-b border-white/[0.04] py-2 last:border-0">
       <div className="flex items-start gap-2">
         <HandoffStatusToggle status={status === "approved" ? "wait" : status} />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-x-2">
-            <span className="text-[13px] font-medium text-white/90">{item.title}</span>
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span className="text-[14px] font-semibold leading-tight text-white sm:text-[15px]">
+              {datePart}
+              {weekday ? (
+                <span className="text-white/90">
+                  {" "}
+                  · {weekday}
+                </span>
+              ) : null}
+              <span className="text-white/90"> · Ad</span>
+            </span>
             {outletKindChipLabel(item) ? (
               <span className="rounded bg-cyan-400/15 px-1.5 py-0.5 text-[11px] font-bold text-cyan-100">
                 {outletKindChipLabel(item)}
               </span>
-            ) : null}
-            {item.dueLabel ? (
-              <span className="text-[11px] font-semibold text-amber-100/80">{item.dueLabel}</span>
             ) : null}
             {isAdmin ? (
               <button
@@ -956,6 +964,11 @@ function AdItemRow({
               </button>
             ) : null}
           </div>
+          {item.dueLabel ? (
+            <p className="mt-0.5 text-[11px] font-semibold leading-snug text-amber-100/85 sm:text-[12px]">
+              {item.dueLabel}
+            </p>
+          ) : null}
           {editing ? (
             <div className="mt-1.5 space-y-1.5">
               <textarea

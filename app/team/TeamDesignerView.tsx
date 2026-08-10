@@ -29,11 +29,16 @@ import {
   type ReactNode,
 } from "react";
 import {
+  DESIGNER_CALENDAR_COMBO_OUTLET_ID,
+  DESIGNER_CALENDAR_OUTLET_IDS,
   DESIGNER_DAILY_TARGET,
   DESIGNER_MONTH_OUTLET_IDS,
   DESIGNER_POINTS_PER_LEAVE,
+  DESIGNER_WINDOW_DAY_OPTIONS,
   DESIGNER_WINDOW_DAYS,
   catchUpMetaAfterRelease,
+  clampDesignerTaskWeight,
+  clampDesignerWindowDays,
   designerActiveWorkMs,
   designerFormatLabel,
   isBoilerplateDesignerDescription,
@@ -43,14 +48,79 @@ import {
   type DesignerJobDto,
   type DesignerPerformanceDto,
   type DesignerPriorityMode,
-  type DesignerReminderLogDto,
   type DesignerSuggestedNudgeDto,
 } from "@/lib/team-designer-jobs-shared";
+
+/** Per-outlet posts match exactly; weekend TV calendar counts for C53 / Boiler / Firefly. */
+function jobMatchesOutletFilter(job: DesignerJobDto, filter: string): boolean {
+  if (filter === "all") return true;
+  if (job.outletId === filter) return true;
+  return (
+    job.format === "calendar" &&
+    job.outletId === DESIGNER_CALENDAR_COMBO_OUTLET_ID &&
+    (DESIGNER_CALENDAR_OUTLET_IDS as readonly string[]).includes(filter)
+  );
+}
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { uploadTeamFile } from "@/lib/team-client-upload";
 import { teamDownloadHref } from "@/lib/team-download";
 import { TEAM_AD_OUTLETS, teamOutletLabel } from "@/lib/team-outlets";
-import { IconTrash, IconUnsend, IconWhatsApp } from "./TeamIcons";
+import {
+  IconDone,
+  IconDrop,
+  IconStart,
+  IconTrash,
+  IconUnsend,
+  IconWait,
+  IconWhatsApp,
+} from "./TeamIcons";
+
+const iconActionBtn =
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg touch-manipulation disabled:opacity-40 sm:h-8 sm:w-8";
+
+function TaskWeightPicker({
+  value,
+  onChange,
+  compact = false,
+}: {
+  value: number;
+  onChange: (w: number) => void;
+  compact?: boolean;
+}) {
+  const w = clampDesignerTaskWeight(value);
+  return (
+    <div className={compact ? "space-y-1" : "space-y-1.5"}>
+      <p
+        className={
+          compact
+            ? "text-[10px] font-medium uppercase tracking-wide text-white/40"
+            : "text-[11px] text-white/50"
+        }
+      >
+        Task weight{" "}
+        <span className="normal-case tracking-normal text-white/35">
+          (done counts as {w})
+        </span>
+      </p>
+      <div className="flex gap-1">
+        {([1, 2, 3, 4] as const).map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(n)}
+            className={`h-8 min-w-[2rem] rounded-md px-2 text-[12px] font-semibold ${
+              w === n
+                ? "bg-cyan-400 text-black"
+                : "bg-white/[0.06] text-white/65 ring-1 ring-white/10"
+            }`}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 type QueueView = "open" | "toSend" | "closed" | "holiday" | "expired";
 
@@ -430,6 +500,18 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [allJobs, setAllJobs] = useState<DesignerJobDto[]>([]);
   const [windowMeta, setWindowMeta] = useState<WindowMeta | null>(null);
+  const [windowDays, setWindowDays] = useState(() => {
+    if (typeof window === "undefined") return DESIGNER_WINDOW_DAYS;
+    try {
+      return clampDesignerWindowDays(
+        localStorage.getItem("team-designer-window-days")
+      );
+    } catch {
+      return DESIGNER_WINDOW_DAYS;
+    }
+  });
+  const windowDaysRef = useRef(windowDays);
+  windowDaysRef.current = windowDays;
   const [loading, setLoading] = useState(true);
   /** False until first performance/stack payload — needed for Catch up bands. */
   const [perfReady, setPerfReady] = useState(false);
@@ -498,20 +580,18 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     urgent: false,
     priorityMode: "NONE" as DesignerPriorityMode,
     noPost: false,
+    taskWeight: 1,
   });
   const [priorityDrafts, setPriorityDrafts] = useState<Record<string, DesignerPriorityMode>>(
     {}
   );
+  const [weightDrafts, setWeightDrafts] = useState<Record<string, number>>({});
   const [expiredOpen, setExpiredOpen] = useState(false);
   const [expiredBlobs, setExpiredBlobs] = useState<
     Array<{ url: string; pathname: string; uploadedAt: string; size: number }>
   >([]);
   const [expiredBusy, setExpiredBusy] = useState(false);
   const [perfDesigners, setPerfDesigners] = useState<DesignerPerformanceDto[]>([]);
-  const [reminders, setReminders] = useState<DesignerReminderLogDto[]>([]);
-  const [suggestedNudges, setSuggestedNudges] = useState<DesignerSuggestedNudgeDto[]>(
-    []
-  );
   const [nudgeBusy, setNudgeBusy] = useState<string | null>(null);
   const loadGen = useRef(0);
   const queueViewRef = useRef(queueView);
@@ -519,18 +599,6 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
 
   const applyPerformancePayload = useCallback((data: Record<string, unknown>) => {
     setPerfDesigners((data.designers as DesignerPerformanceDto[]) ?? []);
-    if (Array.isArray(data.reminders)) {
-      setReminders(data.reminders as DesignerReminderLogDto[]);
-    }
-    if (Array.isArray(data.suggested)) {
-      const suggested = (data.suggested as DesignerSuggestedNudgeDto[]).filter(
-        (s) =>
-          s.assigneeId === "mahesh" ||
-          s.assigneeId === "jeslyn" ||
-          s.kind === "amit_ready"
-      );
-      setSuggestedNudges(suggested);
-    }
     setPerfReady(true);
   }, []);
 
@@ -560,36 +628,6 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     }
   }, [applyPerformancePayload]);
 
-  const extrasLoadedRef = useRef(false);
-
-  /** WA icons only — does not recompute home cards (that was 30–50s). */
-  const loadPerformanceExtras = useCallback(async () => {
-    if (extrasLoadedRef.current) return;
-    extrasLoadedRef.current = true;
-    try {
-      const res = await fetch("/api/team/designer-performance?extras=1", {
-        cache: "no-store",
-        signal: AbortSignal.timeout(20_000),
-      });
-      const data = await readJson(res);
-      if (!res.ok) return;
-      if (Array.isArray(data.reminders)) {
-        setReminders(data.reminders as DesignerReminderLogDto[]);
-      }
-      if (Array.isArray(data.suggested)) {
-        const suggested = (data.suggested as DesignerSuggestedNudgeDto[]).filter(
-          (s) =>
-            s.assigneeId === "mahesh" ||
-            s.assigneeId === "jeslyn" ||
-            s.kind === "amit_ready"
-        );
-        setSuggestedNudges(suggested);
-      }
-    } catch {
-      extrasLoadedRef.current = false;
-    }
-  }, []);
-
   const load = useCallback(async (opts?: {
     soft?: boolean;
     /** Poll / focus refresh — no loading spinner flicker */
@@ -609,12 +647,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     }
     try {
       const kind = jobsFetchKind(view);
-      const qs =
-        kind === "closed"
-          ? "?view=closed"
-          : kind === "expired"
-            ? "?view=expired"
-            : "";
+      const days = windowDaysRef.current;
+      const params = new URLSearchParams();
+      params.set("days", String(days));
+      if (kind === "closed") params.set("view", "closed");
+      if (kind === "expired") params.set("view", "expired");
+      const qs = `?${params.toString()}`;
       // Jobs alone first — parallel home/WA was starving the DB pool (10–20s spinner).
       const jobsRes = await fetch(`/api/team/designer-jobs${qs}`, {
         cache: "no-store",
@@ -630,11 +668,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       setAllJobs((data.jobs as DesignerJobDto[]) ?? []);
       setWindowMeta((data.window as WindowMeta) ?? null);
       if (!opts?.quiet) setError(null);
-      void loadPerformanceLite()
-        .catch(() => undefined)
-        .then(() => {
-          if (!soft) void loadPerformanceExtras();
-        });
+      // Quiet polls only refresh jobs — performance every 12s starved the DB pool.
+      if (!opts?.quiet) {
+        void loadPerformanceLite().catch(() => undefined);
+      }
     } catch (err) {
       if (gen !== loadGen.current) return;
       if (!opts?.quiet) {
@@ -655,7 +692,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         loadingRef.current = false;
       }
     }
-  }, [loadPerformanceLite, loadPerformanceExtras]);
+  }, [loadPerformanceLite]);
 
   const jobsFetchKindRef = useRef<"open" | "closed" | "expired" | null>(null);
   useEffect(() => {
@@ -694,52 +731,23 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     };
   }, [load]);
 
-  const sendManualNudge = async (assigneeId: string, kind?: DesignerSuggestedNudgeDto["kind"]) => {
+  /** One WA per designer — opens a short “tasks waiting / pending / new” summary. */
+  const sendDesignerSummaryWa = async (assigneeId: string) => {
     setNudgeBusy(assigneeId);
     try {
       const res = await fetch("/api/team/designer-performance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "nudge", assigneeId, kind }),
+        body: JSON.stringify({ action: "summary", assigneeId }),
       });
       const data = await readJson(res);
       if (!res.ok) {
-        throw new Error(typeof data.error === "string" ? data.error : "Nudge failed");
+        throw new Error(typeof data.error === "string" ? data.error : "WhatsApp failed");
       }
-      setReminders((data.reminders as DesignerReminderLogDto[]) ?? []);
-      setSuggestedNudges(
-        ((data.suggested as DesignerSuggestedNudgeDto[]) ?? []).filter(
-          (s) =>
-            s.assigneeId === "mahesh" ||
-            s.assigneeId === "jeslyn" ||
-            s.kind === "amit_ready"
-        )
-      );
-      const first = (
-        data.results as Array<{ delivery?: string; reason?: string; shareUrl?: string }>
-      )?.[0];
-      const share =
-        first?.shareUrl ||
-        (data.reminders as DesignerReminderLogDto[])?.[0]?.shareUrl;
-      if (first?.delivery === "skipped_no_config" && share) {
-        openWhatsAppShareUrl(share);
-      } else if (first?.delivery !== "sent" && first?.reason) {
-        setError(first.reason);
-      }
-      void loadPerformanceLite();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nudge failed");
-    } finally {
-      setNudgeBusy(null);
-    }
-  };
-
-  const openSuggestedWa = async (s: DesignerSuggestedNudgeDto) => {
-    const key = `${s.assigneeId}:${s.kind}:${s.jobId}`;
-    setNudgeBusy(key);
-    try {
+      const s = data.nudge as DesignerSuggestedNudgeDto | undefined;
+      if (!s?.shareUrl) throw new Error("No WhatsApp link");
       openWhatsAppShareUrl(s.shareUrl);
-      const res = await fetch("/api/team/designer-performance", {
+      void fetch("/api/team/designer-performance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -750,34 +758,13 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           jobId: s.jobId,
         }),
       });
-      const data = await readJson(res);
-      if (res.ok) {
-        setReminders((data.reminders as DesignerReminderLogDto[]) ?? []);
-        const suggested = (
-          (data.suggested as DesignerSuggestedNudgeDto[]) ?? []
-        ).filter(
-          (x) =>
-            x.assigneeId === "mahesh" ||
-            x.assigneeId === "jeslyn" ||
-            x.kind === "amit_ready"
-        );
-        setSuggestedNudges(suggested);
-      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open WA");
+      setError(err instanceof Error ? err.message : "WhatsApp failed");
     } finally {
       setNudgeBusy(null);
     }
   };
 
-  const amitReadyNudge = useMemo(
-    () => suggestedNudges.find((s) => s.kind === "amit_ready") ?? null,
-    [suggestedNudges]
-  );
-  const amitDriveNudge = useMemo(
-    () => suggestedNudges.find((s) => s.kind === "amit_drive_check") ?? null,
-    [suggestedNudges]
-  );
 
   /** Base filter by designer tab / member (before ready-only / outlet). */
   const scopedJobs = useMemo(() => {
@@ -808,7 +795,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const jobs = useMemo(() => {
     let list = designerVisibleJobs;
     if (outletFilter !== "all") {
-      list = list.filter((j) => j.outletId === outletFilter);
+      list = list.filter((j) => jobMatchesOutletFilter(j, outletFilter));
     }
     if (queueView === "closed" || queueView === "expired") {
       // Mahesh first (home card order), then real uploads, then newest
@@ -847,6 +834,15 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     for (const id of DESIGNER_MONTH_OUTLET_IDS) map.set(id, 0);
     const source = queueView === "toSend" ? sendableJobs : designerVisibleJobs;
     for (const j of source) {
+      if (
+        j.format === "calendar" &&
+        j.outletId === DESIGNER_CALENDAR_COMBO_OUTLET_ID
+      ) {
+        for (const id of DESIGNER_CALENDAR_OUTLET_IDS) {
+          map.set(id, (map.get(id) ?? 0) + 1);
+        }
+        continue;
+      }
       map.set(j.outletId, (map.get(j.outletId) ?? 0) + 1);
     }
     return map;
@@ -974,6 +970,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         linkDrafts[job.id] ?? (job.links?.length ? job.links.join("\n") : ""),
       priorityMode,
       urgent: priorityMode !== "NONE" ? true : job.urgent,
+      taskWeight: clampDesignerTaskWeight(
+        weightDrafts[job.id] ?? job.taskWeight ?? 1
+      ),
     });
     if (ok) {
       setBriefJobId((cur) => (cur === job.id ? null : cur));
@@ -1156,18 +1155,18 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const seedWindow = async (lanes?: Array<"WEEKEND" | "WEEKDAY">) => {
     setBusyId("seed");
     try {
+      const days = windowDaysRef.current;
       const res = await fetch("/api/team/designer-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "seed", lanes }),
+        body: JSON.stringify({ action: "seed", lanes, days }),
       });
       const data = await readJson(res);
       setError(null);
       await load({ soft: true });
       if (typeof data.created === "number") {
-        const closed = typeof data.closedPast === "number" ? data.closedPast : 0;
         setError(
-          `Seeded next ${DESIGNER_WINDOW_DAYS} days: ${data.created} new, ${data.skipped ?? 0} existed, ${closed} past-due closed.`
+          `Seeded next ${days} days: ${data.created} new, ${data.skipped ?? 0} already existed. Open work is never auto-closed.`
         );
       }
     } catch (err) {
@@ -1176,6 +1175,22 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       setBusyId(null);
     }
   };
+
+  const skipDaysReload = useRef(true);
+  useEffect(() => {
+    try {
+      localStorage.setItem("team-designer-window-days", String(windowDays));
+    } catch {
+      /* ignore */
+    }
+    if (skipDaysReload.current) {
+      skipDaysReload.current = false;
+      return;
+    }
+    void load({ soft: true });
+    // load uses windowDaysRef — only re-fetch when the select changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowDays]);
 
   useEffect(() => {
     if (!uploadGate) return;
@@ -1342,6 +1357,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           urgent: adhoc.urgent || adhoc.priorityMode !== "NONE",
           priorityMode: adhoc.priorityMode,
           noPost: adhoc.noPost,
+          taskWeight: clampDesignerTaskWeight(adhoc.taskWeight),
         }),
       });
       const data = await readJson(res);
@@ -1358,6 +1374,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         urgent: false,
         priorityMode: "NONE",
         noPost: false,
+        taskWeight: 1,
       });
       const createdList = (
         Array.isArray(data.jobs) ? data.jobs : data.job ? [data.job] : []
@@ -1428,7 +1445,10 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     const m = new Map<string, number>();
     for (const j of allJobs) {
       if (!j.catchUpExempt || j.status === "DESIGN_DONE") continue;
-      m.set(j.assigneeId, (m.get(j.assigneeId) ?? 0) + 1);
+      m.set(
+        j.assigneeId,
+        (m.get(j.assigneeId) ?? 0) + clampDesignerTaskWeight(j.taskWeight)
+      );
     }
     return m;
   }, [allJobs]);
@@ -1459,7 +1479,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     const filt = (list: DesignerJobDto[]) =>
       list.filter(
         (j) =>
-          j.outletId === outletFilter ||
+          jobMatchesOutletFilter(j, outletFilter) ||
           j.status === "IN_PROGRESS" ||
           j.status === "PAUSED"
       );
@@ -1537,11 +1557,15 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const toSendVisible = useMemo(
     () =>
       sendableJobs
-        .filter((j) => outletFilter === "all" || j.outletId === outletFilter)
+        .filter((j) => jobMatchesOutletFilter(j, outletFilter))
         .slice()
         .sort((a, b) => {
-          if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+          // Daily posts by go-live; weekend TV calendar after that Friday’s posts
           if (a.postDate !== b.postDate) return a.postDate.localeCompare(b.postDate);
+          const fa = a.format === "calendar" ? 1 : 0;
+          const fb = b.format === "calendar" ? 1 : 0;
+          if (fa !== fb) return fa - fb;
+          if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate);
           return (a.title || "").localeCompare(b.title || "");
         }),
     [sendableJobs, outletFilter]
@@ -1568,7 +1592,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
             [
               [
                 "open",
-                catchUpDebt > 0 ? `Open · ${catchUpDebt} catch-up` : "Open",
+                catchUpDebt > 0 ? `Open · catch-up ${catchUpDebt}` : "Open",
               ],
               ...(isAdmin
                 ? ([
@@ -1645,38 +1669,28 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
             ))}
           </div>
         ) : null}
-        {isAdmin && windowMeta ? (
-          <p className="text-[11px] text-white/35">
-            {windowMeta.fromDate} → {windowMeta.toDate}
-          </p>
-        ) : null}
-        {isAdmin && amitReadyNudge ? (
-          <button
-            type="button"
-            disabled={nudgeBusy === `${amitReadyNudge.assigneeId}:${amitReadyNudge.kind}:${amitReadyNudge.jobId}`}
-            onClick={() => void openSuggestedWa(amitReadyNudge)}
-            title="WhatsApp Amit — new Ready handoffs"
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#25D366]/45 bg-[#25D366]/15 px-3 text-[12px] font-bold text-[#25D366] disabled:opacity-40"
-          >
-            <IconWhatsApp className="h-4 w-4" />
-            WA Ready
-          </button>
-        ) : null}
-        {isAdmin && amitDriveNudge ? (
-          <button
-            type="button"
-            disabled={
-              nudgeBusy ===
-              `${amitDriveNudge.assigneeId}:${amitDriveNudge.kind}:${amitDriveNudge.jobId}`
+        <label className="flex shrink-0 flex-col gap-0.5 text-[10px] text-white/40">
+          <span className="font-medium uppercase tracking-wide">Queue window</span>
+          <select
+            value={windowDays}
+            onChange={(e) =>
+              setWindowDays(clampDesignerWindowDays(Number(e.target.value)))
             }
-            onClick={() => void openSuggestedWa(amitDriveNudge)}
-            title="WhatsApp Amit — Drive photo check still open"
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-violet-400/45 bg-violet-500/15 px-3 text-[12px] font-bold text-violet-200 disabled:opacity-40"
+            className="h-8 rounded-md border border-white/15 bg-black/40 px-2 text-[12px] font-semibold text-white/85 outline-none focus:border-cyan-400/40"
+            title={
+              windowMeta
+                ? `Open/Seed forward + Done lookback · ${windowMeta.fromDate} → ${windowMeta.toDate}`
+                : "How far Open/Seed look ahead, and Done looks back"
+            }
+            aria-label="Queue window days"
           >
-            <IconWhatsApp className="h-4 w-4" />
-            WA Drive
-          </button>
-        ) : null}
+            {DESIGNER_WINDOW_DAY_OPTIONS.map((d) => (
+              <option key={d} value={d}>
+                {d} days
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {loading && allJobs.length === 0 ? (
@@ -1712,10 +1726,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
               perf={p}
               forgivenSlots={releasedSlotsByAssignee.get(p.assigneeId) ?? 0}
               isAdmin={isAdmin}
-              nudges={suggestedNudges.filter((s) => s.assigneeId === p.assigneeId)}
               nudgeBusy={nudgeBusy}
-              onNudge={() => void sendManualNudge(p.assigneeId)}
-              onOpenNudge={(s) => void openSuggestedWa(s)}
+              onNudge={() => void sendDesignerSummaryWa(p.assigneeId)}
             />
           ))
         : null}
@@ -1726,7 +1738,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
 
       {queueView === "toSend" ? (
         <p className="text-[12px] text-white/45">
-          Holding briefs until ready — send to join Open by deadline.
+          One task per outlet per day (C53, Boiler, Firefly, Komma). Plus one
+          weekend TV calendar for C53+Boiler+Firefly together — not three separate
+          calendars.
         </p>
       ) : null}
 
@@ -1751,7 +1765,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
             onClick={() => void seedWindow()}
             className="h-8 px-2 text-[11px] font-medium text-white/40 hover:text-white/70 disabled:opacity-40"
           >
-            Seed {DESIGNER_WINDOW_DAYS}d
+            Seed {windowDays}d
           </button>
           <button
             type="button"
@@ -1883,7 +1897,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <label className="block text-[11px] text-white/50">
-              Design deadline
+              Design deadline (designer finish by)
               <input
                 type="date"
                 value={adhoc.dueDate}
@@ -1931,13 +1945,16 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
               </div>
             ) : null}
             <label className="block text-[11px] text-white/50">
-              Event / go-live (optional)
+              Post by / go-live date
               <input
                 type="date"
                 value={adhoc.postDate}
                 onChange={(e) => setAdhoc((a) => ({ ...a, postDate: e.target.value }))}
                 className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2 text-[13px] text-white"
               />
+              <span className="mt-0.5 block text-[10px] text-white/35">
+                When it should go live / post (Amit date). Optional — defaults to design deadline.
+              </span>
             </label>
             <label className="block text-[11px] text-white/50">
               Send to
@@ -1974,12 +1991,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
             />
           </label>
           <label className="block text-[11px] text-white/50">
-            Description
+            Description / brief
             <textarea
               value={adhoc.description}
               onChange={(e) => setAdhoc((a) => ({ ...a, description: e.target.value }))}
               rows={3}
-              placeholder="What to design, artist, notes…"
+              placeholder="What to design, artist, copy, notes for the designer…"
               className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-[13px] text-white"
             />
           </label>
@@ -2007,6 +2024,10 @@ https://instagram.com/…"
                     : a.dueDate,
               }))
             }
+          />
+          <TaskWeightPicker
+            value={adhoc.taskWeight}
+            onChange={(taskWeight) => setAdhoc((a) => ({ ...a, taskWeight }))}
           />
           <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-white/10 bg-black/25 px-3 py-2.5">
             <input
@@ -2225,7 +2246,9 @@ https://instagram.com/…"
               ? "No done jobs for this view."
               : queueView === "expired"
                 ? "No expired files — nothing to clear."
-                : "Nothing ready — only Ready / In progress / Paused show here. Unsent briefs are in To send."}
+                : toSendCount > 0
+                  ? `Open is empty — ${toSendCount} brief${toSendCount === 1 ? "" : "s"} still in To send. Open them there with Send.`
+                  : "Nothing ready — only Ready / In progress / Paused show here."}
           </p>
         ) : null}
         {(() => {
@@ -2312,6 +2335,14 @@ https://instagram.com/…"
                     → {designer}
                   </span>
                   <span className={statusColor(job.status)}>{statusLabel(job.status)}</span>
+                  {clampDesignerTaskWeight(job.taskWeight) > 1 ? (
+                    <span
+                      className="rounded-md bg-cyan-400/15 px-1.5 py-0.5 font-semibold tabular-nums text-cyan-100"
+                      title={`Counts as ${clampDesignerTaskWeight(job.taskWeight)} toward daily done`}
+                    >
+                      ×{clampDesignerTaskWeight(job.taskWeight)}
+                    </span>
+                  ) : null}
                   {job.noPost ? (
                     <span className="font-semibold uppercase text-white/45">No post</span>
                   ) : null}
@@ -2372,21 +2403,21 @@ https://instagram.com/…"
                 ) : null}
                 </div>
               </div>
-              <div className="relative z-[2] flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:max-w-[12rem]">
+              <div className="relative z-[2] flex w-full shrink-0 flex-row flex-wrap items-center gap-1.5 sm:w-auto sm:max-w-[11rem] sm:justify-end">
                 {/* Download only on Done — Open must not keep a leftover file after reopen */}
                 {job.status === "DESIGN_DONE" && files.length > 0 ? (
                   <button
                     type="button"
                     onClick={() => promptDownloadFiles(job)}
-                    className="inline-flex h-11 min-h-[44px] items-center justify-center rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
+                    className="inline-flex h-9 items-center justify-center rounded-lg bg-emerald-400 px-2.5 text-[11px] font-semibold text-black touch-manipulation"
                   >
                     {files.length > 1
-                      ? `Download · ${files.length} files`
-                      : "Download"}
+                      ? `↓ ${files.length}`
+                      : "↓"}
                   </button>
                 ) : null}
                 {isAdmin ? (
-                  <div className="flex gap-2">
+                  <>
                     {job.status !== "WAITING_BRIEF" ? (
                       <button
                         type="button"
@@ -2394,10 +2425,9 @@ https://instagram.com/…"
                         title="Unsend — off designer queue, clear Amit Ready"
                         aria-label="Unsend"
                         onClick={() => unsendJob(job)}
-                        className="inline-flex h-11 min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-300/40 bg-amber-400/15 text-[12px] font-semibold text-amber-100 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0"
+                        className={`${iconActionBtn} border border-amber-300/40 bg-amber-400/15 text-amber-100`}
                       >
-                        <IconUnsend className="h-4 w-4" />
-                        Unsend
+                        <IconUnsend className="h-3.5 w-3.5" />
                       </button>
                     ) : null}
                     <button
@@ -2406,60 +2436,69 @@ https://instagram.com/…"
                       title="Delete job permanently"
                       aria-label="Delete"
                       onClick={() => deleteJob(job)}
-                      className={`inline-flex h-11 min-h-[44px] items-center justify-center gap-1.5 rounded-lg border border-red-400/40 bg-red-500/15 text-[12px] font-semibold text-red-200 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 ${
-                        job.status === "WAITING_BRIEF" ? "flex-1" : "px-3"
-                      }`}
+                      className={`${iconActionBtn} border border-red-400/40 bg-red-500/15 text-red-200`}
                     >
-                      <IconTrash className="h-4 w-4" />
-                      {job.status === "WAITING_BRIEF" ? "Delete" : null}
+                      <IconTrash className="h-3.5 w-3.5" />
                     </button>
-                  </div>
+                  </>
                 ) : null}
                 {canSend ? (
                   <button
                     type="button"
                     disabled={busyId === job.id || busyId === "bulk-send"}
+                    title={`Send to ${designer}`}
+                    aria-label={`Send to ${designer}`}
                     onClick={() => void sendToDesigner(job)}
-                    className="h-11 min-h-[44px] rounded-lg bg-cyan-500 px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                    className="inline-flex h-9 items-center rounded-lg bg-cyan-500 px-2.5 text-[11px] font-semibold text-black touch-manipulation disabled:opacity-40"
                   >
-                    Send to {designer}
+                    Send
                   </button>
                 ) : null}
                 {job.status === "READY_TO_DESIGN" ? (
                   <button
                     type="button"
                     disabled={busyId === job.id}
+                    title="Start"
+                    aria-label="Start"
                     onClick={() => startJob(job, { tone })}
-                    className="h-11 min-h-[44px] rounded-lg bg-cyan-500 px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                    className={`${iconActionBtn} bg-cyan-500 text-black`}
                   >
-                    Start Job
+                    <IconStart className="h-3.5 w-3.5" />
                   </button>
                 ) : null}
                 {isAdmin && tone === "catchUp" && job.status !== "DESIGN_DONE" ? (
                   <button
                     type="button"
                     disabled={busyId === job.id}
-                    title="Drop from Catch up — forgives 1 unfinished slot"
+                    title={`Drop from Catch up — forgives ${clampDesignerTaskWeight(job.taskWeight)} slot(s)`}
+                    aria-label="Drop catch-up"
                     onClick={() =>
                       void patchJob(job.id, { action: "release-catch-up" }).then((ok) => {
                         if (ok) {
-                          setError("Dropped from Catch up — count −1. Job is in Normal.");
+                          const w = clampDesignerTaskWeight(job.taskWeight);
+                          setError(
+                            w > 1
+                              ? `Dropped from Catch up — count −${w}. Job is in Normal.`
+                              : "Dropped from Catch up — count −1. Job is in Normal."
+                          );
                         }
                       })
                     }
-                    className="h-11 min-h-[44px] rounded-lg border border-white/20 bg-white/10 px-3 text-[13px] font-semibold text-white/90 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                    className={`${iconActionBtn} border border-white/20 bg-white/10 text-white/90`}
                   >
-                    Drop catch-up
+                    <IconDrop className="h-3.5 w-3.5" />
                   </button>
                 ) : null}
                 {job.status === "PAUSED" && (isAdmin || job.assigneeId === memberId) ? (
                   <button
                     type="button"
                     disabled={busyId === job.id}
+                    title="Start again"
+                    aria-label="Start again"
                     onClick={() => startJob(job, { tone })}
-                    className="h-11 min-h-[44px] rounded-lg bg-cyan-500 px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                    className={`${iconActionBtn} bg-cyan-500 text-black`}
                   >
-                    Start again
+                    <IconStart className="h-3.5 w-3.5" />
                   </button>
                 ) : null}
                 {/* Started: pause (+ designer upload & close). No force-clear while in progress. */}
@@ -2468,23 +2507,27 @@ https://instagram.com/…"
                     {uploadJobId !== job.id ? (
                       <button
                         type="button"
+                        title="Upload & close"
+                        aria-label="Upload & close"
                         onClick={() => tryOpenUpload(job, "close")}
-                        className="h-11 min-h-[44px] rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
+                        className={`${iconActionBtn} bg-emerald-400 text-black`}
                       >
-                        Upload & close
+                        <IconDone className="h-3.5 w-3.5" />
                       </button>
                     ) : null}
                     <button
                       type="button"
                       disabled={busyId === job.id}
+                      title="Pause / wait"
+                      aria-label="Pause"
                       onClick={() =>
                         void patchJob(job.id, { action: "pause" }).then((ok) => {
                           if (ok) setError("Paused — Start again when ready.");
                         })
                       }
-                      className="h-11 min-h-[44px] rounded-lg border border-violet-400/40 bg-violet-400/15 px-3 text-[13px] font-semibold text-violet-100 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                      className={`${iconActionBtn} border border-violet-400/40 bg-violet-400/15 text-violet-100`}
                     >
-                      Pause
+                      <IconWait className="h-3.5 w-3.5" />
                     </button>
                   </>
                 ) : null}
@@ -2493,36 +2536,51 @@ https://instagram.com/…"
                     {uploadJobId !== job.id ? (
                       <button
                         type="button"
+                        title={job.fileUrl ? "Edit upload" : "Upload"}
+                        aria-label={job.fileUrl ? "Edit upload" : "Upload"}
                         onClick={() => tryOpenUpload(job, "attach")}
-                        className="h-11 min-h-[44px] rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
+                        className="inline-flex h-9 items-center rounded-lg bg-emerald-400 px-2.5 text-[11px] font-semibold text-black touch-manipulation"
                       >
-                        {job.fileUrl ? "Edit upload" : "Upload"}
+                        {job.fileUrl ? "Edit" : "↑"}
                       </button>
                     ) : null}
                     <button
                       type="button"
-                      disabled={busyId === job.id || !job.fileUrl}
-                      title={!job.fileUrl ? "Upload a creative first" : undefined}
+                      disabled={busyId === job.id}
+                      title={
+                        job.fileUrl
+                          ? "Mark done (sends to Amit if not No post)"
+                          : "Mark done without upload — will not go to Amit"
+                      }
+                      aria-label="Mark done"
                       onClick={() =>
                         void patchJob(job.id, { action: "mark-done" }).then((ok) => {
-                          if (ok) setError("Done.");
+                          if (ok) {
+                            setError(
+                              job.fileUrl
+                                ? "Done."
+                                : "Done — no upload, not sent to Amit."
+                            );
+                          }
                         })
                       }
-                      className="h-11 min-h-[44px] rounded-lg bg-white px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                      className={`${iconActionBtn} bg-white text-black`}
                     >
-                      Mark done
+                      <IconDone className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
                       disabled={busyId === job.id}
+                      title="Pause / wait"
+                      aria-label="Pause"
                       onClick={() =>
                         void patchJob(job.id, { action: "pause" }).then((ok) => {
                           if (ok) setError("Paused — Start again when ready.");
                         })
                       }
-                      className="h-11 min-h-[44px] rounded-lg border border-violet-400/40 bg-violet-400/15 px-3 text-[13px] font-semibold text-violet-100 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                      className={`${iconActionBtn} border border-violet-400/40 bg-violet-400/15 text-violet-100`}
                     >
-                      Pause
+                      <IconWait className="h-3.5 w-3.5" />
                     </button>
                     {job.pauseRequestedAt ? (
                       <>
@@ -2556,24 +2614,37 @@ https://instagram.com/…"
                     {uploadJobId !== job.id ? (
                       <button
                         type="button"
+                        title={job.fileUrl ? "Edit upload" : "Upload"}
+                        aria-label={job.fileUrl ? "Edit upload" : "Upload"}
                         onClick={() => tryOpenUpload(job, "attach")}
-                        className="h-11 min-h-[44px] rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black touch-manipulation sm:h-9 sm:min-h-0 sm:text-[12px]"
+                        className="inline-flex h-9 items-center rounded-lg bg-emerald-400 px-2.5 text-[11px] font-semibold text-black touch-manipulation"
                       >
-                        {job.fileUrl ? "Edit upload" : "Upload"}
+                        {job.fileUrl ? "Edit" : "↑"}
                       </button>
                     ) : null}
                     <button
                       type="button"
-                      disabled={busyId === job.id || !job.fileUrl}
-                      title={!job.fileUrl ? "Upload a creative first" : undefined}
+                      disabled={busyId === job.id}
+                      title={
+                        job.fileUrl
+                          ? "Mark done (sends to Amit if not No post)"
+                          : "Mark done without upload — will not go to Amit"
+                      }
+                      aria-label="Mark done"
                       onClick={() =>
                         void patchJob(job.id, { action: "mark-done" }).then((ok) => {
-                          if (ok) setError("Done.");
+                          if (ok) {
+                            setError(
+                              job.fileUrl
+                                ? "Done."
+                                : "Done — no upload, not sent to Amit."
+                            );
+                          }
                         })
                       }
-                      className="h-11 min-h-[44px] rounded-lg bg-white px-3 text-[13px] font-semibold text-black touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                      className={`${iconActionBtn} bg-white text-black`}
                     >
-                      Mark done
+                      <IconDone className="h-3.5 w-3.5" />
                     </button>
                   </>
                 ) : null}
@@ -2581,20 +2652,33 @@ https://instagram.com/…"
                   <>
                     <button
                       type="button"
-                      disabled={busyId === job.id || !job.fileUrl}
-                      title={!job.fileUrl ? "Upload a creative first" : undefined}
+                      disabled={busyId === job.id}
+                      title={
+                        job.fileUrl
+                          ? "Mark done (sends to Amit if not No post)"
+                          : "Mark done without upload — will not go to Amit"
+                      }
+                      aria-label="Mark done"
                       onClick={() =>
                         void patchJob(job.id, { action: "mark-done" }).then((ok) => {
-                          if (ok) setError("Done.");
+                          if (ok) {
+                            setError(
+                              job.fileUrl
+                                ? "Done."
+                                : "Done — no upload, not sent to Amit."
+                            );
+                          }
                         })
                       }
-                      className="h-9 rounded-lg bg-white px-3 text-[12px] font-semibold text-black disabled:opacity-40"
+                      className={`${iconActionBtn} bg-white text-black`}
                     >
-                      Mark done
+                      <IconDone className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
                       disabled={busyId === job.id}
+                      title="Force clear"
+                      aria-label="Force clear"
                       onClick={() =>
                         void patchJob(job.id, { action: "force-clear" }).then((ok) => {
                           if (ok) setError("Force cleared — back to Ready.");
@@ -2602,7 +2686,7 @@ https://instagram.com/…"
                       }
                       className="h-8 rounded px-2 text-[11px] text-white/45"
                     >
-                      Force clear
+                      Clear
                     </button>
                   </>
                 ) : null}
@@ -2790,6 +2874,13 @@ https://instagram.com/…"
                         setPriorityDrafts((d) => ({ ...d, [job.id]: priorityMode }))
                       }
                     />
+                    <TaskWeightPicker
+                      compact
+                      value={weightDrafts[job.id] ?? job.taskWeight ?? 1}
+                      onChange={(taskWeight) =>
+                        setWeightDrafts((d) => ({ ...d, [job.id]: taskWeight }))
+                      }
+                    />
                     <div className="flex flex-wrap items-center gap-2">
                       {canSend ? (
                         <button
@@ -2814,6 +2905,9 @@ https://instagram.com/…"
                             links:
                               linkDrafts[job.id] ??
                               (job.links?.length ? job.links.join("\n") : ""),
+                            taskWeight: clampDesignerTaskWeight(
+                              weightDrafts[job.id] ?? job.taskWeight ?? 1
+                            ),
                           }).then((ok) => {
                             if (ok) setBriefJobId(null);
                           })
@@ -2925,7 +3019,7 @@ https://instagram.com/…"
                   {job.status === "DESIGN_DONE"
                     ? "Update creatives — Amit Ready uses the first file."
                     : uploadMode === "attach"
-                      ? "Admin upload only — job stays Open until you Mark done."
+                      ? "Admin: upload optional — Mark done without a file skips Amit."
                       : "After WhatsApp OK — upload at least one file (add more one by one), then close."}
                 </p>
                 <label className="flex items-center gap-2 text-[11px] text-white/70">
@@ -3156,9 +3250,11 @@ https://instagram.com/…"
                                 {dayName} · {dateLabel}
                               </p>
                               <p className="mt-0.5 text-[15px] font-semibold text-white/85">
-                                {job.outletLabel}{" "}
+                                {job.format === "calendar"
+                                  ? "Weekend TV calendar"
+                                  : job.outletLabel}{" "}
                                 <span className="text-[12px] font-medium text-white/40">
-                                  {job.format === "story" ? "Story" : "Post"}
+                                  {designerFormatLabel(job.format)}
                                 </span>
                               </p>
                               <p className="text-[13px] text-white/70">{job.title}</p>
@@ -3292,16 +3388,9 @@ https://instagram.com/…"
             const groups = groupDoneJobsByDay(queue);
             return (
               <div className="space-y-5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/50">
-                      Done · {queue.length} uploaded
-                    </h2>
-                    <p className="mt-0.5 text-[11px] text-white/35">
-                      Every finish (Sun included) · same as home strip · Mahesh first
-                    </p>
-                  </div>
-                </div>
+                <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/50">
+                  Done · {queue.length}
+                </h2>
                 {groups.map((g) => (
                   <div key={g.key} className="space-y-2">
                     <h3 className="text-[13px] font-semibold text-white/80">
@@ -3310,7 +3399,46 @@ https://instagram.com/…"
                         ({g.jobs.length})
                       </span>
                     </h3>
-                    {g.jobs.map((job) => renderJob(job, undefined, "done"))}
+                    {g.jobs.map((job) => {
+                      const { dayName, dateLabel } = formatPostDateParts(job.postDate);
+                      return (
+                        <article
+                          key={job.id}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/40">
+                              {dayName} · {dateLabel}
+                            </p>
+                            <p className="mt-0.5 truncate text-[15px] font-semibold text-white">
+                              <span className="text-cyan-200/90">{job.outletLabel}</span>
+                              <span className="text-white/35"> · </span>
+                              {job.title}
+                            </p>
+                          </div>
+                          {isAdmin ? (
+                            <button
+                              type="button"
+                              disabled={busyId === job.id}
+                              title="Reopen"
+                              aria-label="Reopen"
+                              onClick={() =>
+                                void patchJob(job.id, { action: "reopen" }).then((ok) => {
+                                  if (ok) {
+                                    setError(
+                                      "Reopened — designer can Start + upload again."
+                                    );
+                                  }
+                                })
+                              }
+                              className={`${iconActionBtn} border border-cyan-400/35 bg-cyan-400/10 text-cyan-100`}
+                            >
+                              <IconUnsend className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                        </article>
+                      );
+                    })}
                   </div>
                 ))}
               </div>
@@ -3744,30 +3872,24 @@ function DesignerPerformanceCard({
   perf,
   forgivenSlots = 0,
   isAdmin,
-  nudges,
   nudgeBusy,
   onNudge,
-  onOpenNudge,
 }: {
   perf: DesignerPerformanceDto;
   /** Admin Drop catch-up — slots no longer owed */
   forgivenSlots?: number;
   isAdmin: boolean;
-  nudges: DesignerSuggestedNudgeDto[];
   nudgeBusy: string | null;
   onNudge: () => void;
-  onOpenNudge: (s: DesignerSuggestedNudgeDto) => void;
 }) {
   const sunday = Boolean(perf.isSundayHoliday);
   const catchMeta = catchUpMetaAfterRelease(perf.stack, forgivenSlots);
   const catchUpN = catchMeta.catchUpSlots;
-  // Home “X done” = every finish in the strip (Sun included), not only 4/day stack credits
-  const doneTotal = perf.uploadedTotal ?? perf.series.reduce((n, p) => n + p.closed, 0);
-  const targetSoFar = perf.stack.targetSoFar;
-  const pendingNudges = nudges.slice(0, 3);
+  /** Once catch-up is clear, only keep a short recent strip (not the whole history). */
+  const CLEAR_STRIP_DAYS = 20;
 
-  // Rolling window day-by-day — every upload that day (Sunday too)
-  const dayStrip = perf.series.map((pt) => {
+  // Day-by-day finishes (Sun included)
+  const dayStripAll = perf.series.map((pt) => {
     const isSunday = dayShortLabel(pt.date) === "Sun";
     const isOff = pt.target <= 0;
     const closed =
@@ -3784,86 +3906,83 @@ function DesignerPerformanceCard({
     };
   });
 
+  // Catch-up open → show from first short day so debt is visible.
+  // Catch-up clear → last ~20 days only (stops endless old zeros).
+  const dayStrip = (() => {
+    if (catchUpN > 0) {
+      const firstShort = dayStripAll.find(
+        (d) =>
+          !d.isOff &&
+          !d.isSunday &&
+          d.date < perf.today &&
+          d.closed < DESIGNER_DAILY_TARGET
+      );
+      if (firstShort) {
+        return dayStripAll.filter((d) => d.date >= firstShort.date);
+      }
+      return dayStripAll;
+    }
+    return dayStripAll.slice(-CLEAR_STRIP_DAYS);
+  })();
+
+  const todayDone = sunday
+    ? perf.uploadedToday ?? 0
+    : Math.max(perf.uploadedToday ?? 0, perf.closedToday);
+
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[14px] font-semibold text-white/90">
             {perf.name}
-            <span className="ml-2 text-[12px] font-medium tabular-nums text-white/40">
-              {doneTotal} done
-              {targetSoFar > 0 ? (
-                <span className="text-white/30"> · aim {targetSoFar}</span>
-              ) : null}
-            </span>
+            {!sunday ? (
+              <span className="ml-2 text-[12px] font-medium tabular-nums text-white/45">
+                today {todayDone}/{DESIGNER_DAILY_TARGET}
+              </span>
+            ) : (
+              <span className="ml-2 text-[12px] font-medium text-violet-200/70">
+                Sunday
+                {todayDone > 0 ? ` · ${todayDone} finished` : " · off"}
+              </span>
+            )}
           </p>
           <p className="mt-0.5 text-[11px] text-white/40">
             {catchUpN > 0 ? (
               <span className="text-amber-200/85">
-                Catch up {catchUpN}
+                Catch up left: {catchUpN}
                 {catchMeta.pendingFromLabel
-                  ? ` · from ${catchMeta.pendingFromLabel}`
+                  ? ` · oldest from ${catchMeta.pendingFromLabel}`
                   : ""}
+                {" · finish these first"}
               </span>
             ) : (
-              <span>Catch up clear</span>
+              <span className="text-emerald-200/75">Catch up clear</span>
             )}
-            {sunday ? (
-              <span className="text-violet-200/70">
-                {" "}
-                · Sunday · {(perf.uploadedToday ?? 0) > 0
-                  ? `${perf.uploadedToday} finished today`
-                  : "off target"}
-              </span>
-            ) : perf.inProgress > 0 ? (
-              <span>
-                {" "}
-                · {perf.inProgress} in progress · today{" "}
-                {perf.uploadedToday ?? perf.closedToday}/{DESIGNER_DAILY_TARGET}
-              </span>
-            ) : (
-              <span>
-                {" "}
-                · today {perf.uploadedToday ?? perf.closedToday}/
-                {DESIGNER_DAILY_TARGET}
-              </span>
-            )}
+            {perf.inProgress > 0 ? (
+              <span> · {perf.inProgress} in progress</span>
+            ) : null}
           </p>
         </div>
         {isAdmin ? (
-          <div className="flex shrink-0 items-center gap-1">
-            {pendingNudges.length > 0
-              ? pendingNudges.map((s) => {
-                  const key = `${s.assigneeId}:${s.kind}:${s.jobId}`;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      title={s.label}
-                      disabled={nudgeBusy === key}
-                      onClick={() => onOpenNudge(s)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/30 disabled:opacity-40"
-                    >
-                      <IconWhatsApp className="h-4 w-4" />
-                    </button>
-                  );
-                })
-              : (
-                <button
-                  type="button"
-                  title="WhatsApp nudge"
-                  disabled={nudgeBusy === perf.assigneeId}
-                  onClick={onNudge}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.06] text-white/55 ring-1 ring-white/10 hover:text-emerald-300 disabled:opacity-40"
-                >
-                  <IconWhatsApp className="h-4 w-4" />
-                </button>
-              )}
-          </div>
+          <button
+            type="button"
+            title={`WhatsApp ${perf.name} — quick ping`}
+            aria-label={`WhatsApp ${perf.name}`}
+            disabled={nudgeBusy === perf.assigneeId}
+            onClick={onNudge}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/30 disabled:opacity-40"
+          >
+            <IconWhatsApp className="h-4 w-4" />
+          </button>
         ) : null}
       </div>
 
-      <div className="-mx-0.5 mt-3 flex gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]">
+      <p className="mt-2 text-[10px] text-white/35">
+        {catchUpN > 0
+          ? "Day strip stays open from the first short day until catch-up is clear."
+          : "Catch-up clear — showing last 20 days only."}
+      </p>
+      <div className="-mx-0.5 mt-1.5 flex gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]">
         {dayStrip.map((d) => (
           <div
             key={d.date}
@@ -3881,7 +4000,7 @@ function DesignerPerformanceCard({
                 ? `${d.date} · Sunday off${d.closed > 0 ? ` · ${d.closed} extra` : ""}`
                 : d.isOff
                   ? `${d.date} · off`
-                  : `${d.date} · ${d.closed} of ${DESIGNER_DAILY_TARGET}`
+                  : `${d.date} · finished ${d.closed} of ${DESIGNER_DAILY_TARGET}`
             }
           >
             <p
