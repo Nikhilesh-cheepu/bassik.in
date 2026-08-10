@@ -560,28 +560,35 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     }
   }, [applyPerformancePayload]);
 
-  /** WA suggestion icons — heavy; never block first paint. */
+  const extrasLoadedRef = useRef(false);
+
+  /** WA icons only — does not recompute home cards (that was 30–50s). */
   const loadPerformanceExtras = useCallback(async () => {
+    if (extrasLoadedRef.current) return;
+    extrasLoadedRef.current = true;
     try {
-      const res = await fetch("/api/team/designer-performance", {
+      const res = await fetch("/api/team/designer-performance?extras=1", {
         cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
       });
       const data = await readJson(res);
       if (!res.ok) return;
-      applyPerformancePayload(data);
+      if (Array.isArray(data.reminders)) {
+        setReminders(data.reminders as DesignerReminderLogDto[]);
+      }
+      if (Array.isArray(data.suggested)) {
+        const suggested = (data.suggested as DesignerSuggestedNudgeDto[]).filter(
+          (s) =>
+            s.assigneeId === "mahesh" ||
+            s.assigneeId === "jeslyn" ||
+            s.kind === "amit_ready"
+        );
+        setSuggestedNudges(suggested);
+      }
     } catch {
-      /* non-blocking */
+      extrasLoadedRef.current = false;
     }
-  }, [applyPerformancePayload]);
-
-  const loadPerformance = useCallback(async () => {
-    try {
-      await loadPerformanceLite();
-      void loadPerformanceExtras();
-    } catch {
-      /* non-blocking on soft refresh */
-    }
-  }, [loadPerformanceLite, loadPerformanceExtras]);
+  }, []);
 
   const load = useCallback(async (opts?: {
     soft?: boolean;
@@ -608,12 +615,11 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           : kind === "expired"
             ? "?view=expired"
             : "";
-      // Jobs first (unblocks UI). Lite performance in parallel — never blocks jobs paint.
-      const jobsPromise = fetch(`/api/team/designer-jobs${qs}`, {
+      // Jobs alone first — parallel home/WA was starving the DB pool (10–20s spinner).
+      const jobsRes = await fetch(`/api/team/designer-jobs${qs}`, {
         cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
       });
-      const perfPromise = loadPerformanceLite().catch(() => undefined);
-      const jobsRes = await jobsPromise;
       const data = await readJson(jobsRes);
       if (gen !== loadGen.current) return;
       if (!jobsRes.ok) {
@@ -624,13 +630,24 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       setAllJobs((data.jobs as DesignerJobDto[]) ?? []);
       setWindowMeta((data.window as WindowMeta) ?? null);
       if (!opts?.quiet) setError(null);
-      void perfPromise;
-      // WA nudge icons once after first paint — not on every soft poll
-      if (!soft) void loadPerformanceExtras();
+      void loadPerformanceLite()
+        .catch(() => undefined)
+        .then(() => {
+          if (!soft) void loadPerformanceExtras();
+        });
     } catch (err) {
       if (gen !== loadGen.current) return;
       if (!opts?.quiet) {
-        setError(err instanceof Error ? err.message : "Failed to load");
+        const timedOut =
+          err instanceof Error &&
+          (err.name === "TimeoutError" || /aborted|timeout/i.test(err.message));
+        setError(
+          timedOut
+            ? "Queue is slow (database). Try again in a moment."
+            : err instanceof Error
+              ? err.message
+              : "Failed to load"
+        );
       }
     } finally {
       if (blocking) {
@@ -645,12 +662,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     const next = jobsFetchKind(queueView);
     // Open ↔ Holiday share the same open payload — no refetch
     if (next === jobsFetchKindRef.current) {
-      void loadPerformance();
+      void loadPerformanceLite();
       return;
     }
     jobsFetchKindRef.current = next;
     void load({ view: queueView });
-  }, [load, queueView, loadPerformance]);
+  }, [load, queueView, loadPerformanceLite]);
 
   const pauseLivePollRef = useRef(false);
   pauseLivePollRef.current = Boolean(
@@ -709,7 +726,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       } else if (first?.delivery !== "sent" && first?.reason) {
         setError(first.reason);
       }
-      void loadPerformance();
+      void loadPerformanceLite();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Nudge failed");
     } finally {
@@ -1270,7 +1287,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       if (typeof data.message === "string") {
         setError(data.message);
       }
-      void loadPerformance();
+      void loadPerformanceLite();
       setUploadJobId(null);
       setUploadForm({
         postingNotes: "",

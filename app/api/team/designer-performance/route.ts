@@ -27,8 +27,16 @@ export async function GET(req: NextRequest) {
 
   try {
     if (isAdmin) {
-      // lite=1 → stack/series only (fast first paint). Full GET also loads WA suggestions.
+      // lite=1 → stack/series (home cards). extras=1 → WA only (no second full recompute).
       const lite = req.nextUrl.searchParams.get("lite") === "1";
+      const extrasOnly = req.nextUrl.searchParams.get("extras") === "1";
+      if (extrasOnly) {
+        const [reminders, suggested] = await Promise.all([
+          listRecentReminderLogs(50),
+          listSuggestedDesignerNudges(),
+        ]);
+        return NextResponse.json({ ok: true, reminders, suggested });
+      }
       if (lite) {
         const designers = await computeAllDesignerPerformance();
         return NextResponse.json({
@@ -38,6 +46,7 @@ export async function GET(req: NextRequest) {
           suggested: [],
         });
       }
+      // Full: designers + WA — prefer clients use lite then extras to avoid 40s double work
       const [designers, reminders, suggested] = await Promise.all([
         computeAllDesignerPerformance(),
         listRecentReminderLogs(50),

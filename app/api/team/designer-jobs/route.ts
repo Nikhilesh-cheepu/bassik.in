@@ -15,6 +15,7 @@ import {
   parseDesignerLinks,
   rollingWindowBounds,
   seedDesignerRollingWindow,
+  ensureDesignerJobExtraColumns,
   ensureDesignerNoPostColumn,
   pauseDesignerJobNow,
   setDesignerJobLinks,
@@ -106,6 +107,9 @@ export async function GET(req: NextRequest) {
     viewParam === "closed" || viewParam === "expired" ? viewParam : "open";
 
   try {
+    // Warm column probe once — cheap SELECT, not ALTER, after first success
+    await ensureDesignerJobExtraColumns();
+
     if (view === "expired") {
       // Event date passed, or adhoc upload older than 3 days — clear blob storage
       const adhocCutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);

@@ -197,48 +197,60 @@ type DesignerJobRow = Omit<
   noPost?: boolean | null;
 };
 
-let catchUpExemptColumnReady = false;
-let fileUrlsColumnReady = false;
-let workTimingColumnsReady = false;
-let noPostColumnReady = false;
+let designerExtraColumnsReady = false;
 
-/** Prod-safe: add column if migration hasn’t run yet. */
-export async function ensureCatchUpExemptColumn(): Promise<void> {
-  if (catchUpExemptColumnReady) return;
+/**
+ * One cheap probe (or one ALTER batch). Avoids re-running DDL on every HMR /
+ * request — that was stacking 5–20s onto every queue load against Railway.
+ */
+export async function ensureDesignerJobExtraColumns(): Promise<void> {
+  if (designerExtraColumnsReady) return;
+  try {
+    await prisma.$queryRaw`
+      SELECT "catchUpExempt", "fileUrls", "activeWorkMs", "pausedAt", "noPost"
+      FROM "TeamDesignerJob" LIMIT 0
+    `;
+    designerExtraColumnsReady = true;
+    return;
+  } catch {
+    /* columns missing — add below */
+  }
   await prisma.$executeRawUnsafe(
     `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "catchUpExempt" BOOLEAN NOT NULL DEFAULT false`
   );
-  catchUpExemptColumnReady = true;
-}
-
-/** Prod-safe: multi-file creatives column. */
-export async function ensureDesignerFileUrlsColumn(): Promise<void> {
-  if (fileUrlsColumnReady) return;
   await prisma.$executeRawUnsafe(
     `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "fileUrls" JSONB`
   );
-  fileUrlsColumnReady = true;
-}
-
-/** Prod-safe: pause/resume work-time columns. */
-export async function ensureDesignerWorkTimingColumns(): Promise<void> {
-  if (workTimingColumnsReady) return;
   await prisma.$executeRawUnsafe(
     `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "activeWorkMs" INTEGER NOT NULL DEFAULT 0`
   );
   await prisma.$executeRawUnsafe(
     `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "pausedAt" TIMESTAMP(3)`
   );
-  workTimingColumnsReady = true;
-}
-
-/** Prod-safe: skip Amit Daily handoff flag. */
-export async function ensureDesignerNoPostColumn(): Promise<void> {
-  if (noPostColumnReady) return;
   await prisma.$executeRawUnsafe(
     `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "noPost" BOOLEAN NOT NULL DEFAULT false`
   );
-  noPostColumnReady = true;
+  designerExtraColumnsReady = true;
+}
+
+/** @deprecated use ensureDesignerJobExtraColumns */
+export async function ensureCatchUpExemptColumn(): Promise<void> {
+  await ensureDesignerJobExtraColumns();
+}
+
+/** @deprecated use ensureDesignerJobExtraColumns */
+export async function ensureDesignerFileUrlsColumn(): Promise<void> {
+  await ensureDesignerJobExtraColumns();
+}
+
+/** @deprecated use ensureDesignerJobExtraColumns */
+export async function ensureDesignerWorkTimingColumns(): Promise<void> {
+  await ensureDesignerJobExtraColumns();
+}
+
+/** @deprecated use ensureDesignerJobExtraColumns */
+export async function ensureDesignerNoPostColumn(): Promise<void> {
+  await ensureDesignerJobExtraColumns();
 }
 
 /** Persist creatives — fileUrl = first (Amit), fileUrls = full list. */
@@ -313,9 +325,7 @@ export async function loadDesignerEditMetaByIds(
   const map = new Map<string, DesignerRequestMeta>();
   if (ids.length === 0) return map;
   try {
-    await ensureCatchUpExemptColumn();
-    await ensureDesignerWorkTimingColumns();
-    await ensureDesignerNoPostColumn();
+    await ensureDesignerJobExtraColumns();
     const rows = await prisma.$queryRaw<
       Array<{
         id: string;
