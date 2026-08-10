@@ -584,6 +584,10 @@ model TeamDesignerJob {
   /// Admin drag priority — lower = higher on Open queue
   sortOrder     Int                    @default(0)
   startedAt     DateTime?
+  /// Accumulated active work ms across pause/resume segments
+  activeWorkMs  Int                    @default(0)
+  /// When the job last entered PAUSED (null while Ready / In progress / Done)
+  pausedAt      DateTime?
   /// designer | admin — who clicked Start (performance uses designer only)
   startedByRole String?
   uploadedAt    DateTime?
@@ -592,6 +596,8 @@ model TeamDesignerJob {
   fileUrl       String?
   /// Extra creatives (string[]) — fileUrl is primary for Amit Daily
   fileUrls      Json?
+  /// If true: upload/done only — never push creative to Amit Daily
+  noPost           Boolean                @default(false)
   postingNotes  String?
   scheduleNote  String?
   waApproved       Boolean                @default(false)

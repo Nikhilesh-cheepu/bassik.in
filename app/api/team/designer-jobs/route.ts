@@ -15,6 +15,8 @@ import {
   parseDesignerLinks,
   rollingWindowBounds,
   seedDesignerRollingWindow,
+  ensureDesignerNoPostColumn,
+  pauseDesignerJobNow,
   setDesignerJobLinks,
   sortDesignerJobs,
   toDesignerJobDto,
@@ -50,6 +52,9 @@ async function jobsWithExtras(
         pauseRequestedAt: edit?.pauseRequestedAt ?? null,
         pauseRequestNote: edit?.pauseRequestNote ?? null,
         catchUpExempt: edit?.catchUpExempt ?? false,
+        activeWorkMs: edit?.activeWorkMs ?? 0,
+        pausedAt: edit?.pausedAt ?? null,
+        noPost: edit?.noPost ?? false,
       },
       today
     );
@@ -289,6 +294,8 @@ export async function POST(req: NextRequest) {
       postDate?: string;
       /** Design due date (YYYY-MM-DD); defaults to postDate */
       dueDate?: string;
+      /** Upload/done only — do not send creative to Amit Daily */
+      noPost?: boolean;
     };
 
     if (body.action === "seed" || body.action === "seed-month") {
@@ -374,6 +381,7 @@ export async function POST(req: NextRequest) {
         ? await nextManualDesignerSortOrder(assigneeId)
         : naturalDesignerSortOrder(dueYmd, outletId, format);
 
+    const noPost = body.noPost === true;
     const job = await prisma.teamDesignerJob.create({
       data: {
         monthKey: monthKeyFromYmd(postYmd),
@@ -394,19 +402,34 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    if (noPost) {
+      await ensureDesignerNoPostColumn();
+      await prisma.$executeRawUnsafe(
+        `UPDATE "TeamDesignerJob" SET "noPost" = true, "updatedAt" = NOW() WHERE id = $1`,
+        job.id
+      );
+    }
+
     if (links.length > 0) {
       await setDesignerJobLinks(job.id, links);
     }
 
     if (priorityMode === "PAUSE_NOW") {
-      await prisma.teamDesignerJob.updateMany({
+      const actives = await prisma.teamDesignerJob.findMany({
         where: { assigneeId, status: "IN_PROGRESS" },
-        data: { status: "PAUSED" },
+        select: { id: true },
       });
+      for (const a of actives) {
+        await pauseDesignerJobNow(a.id);
+      }
     }
 
     return NextResponse.json({
-      job: toDesignerJobDto({ ...job, links }),
+      job: toDesignerJobDto({
+        ...job,
+        links,
+        noPost,
+      }),
       message: `Sent to ${assigneeId === "jeslyn" ? "Jeslyn" : "Mahesh"}`,
     });
   } catch (err) {

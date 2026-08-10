@@ -34,6 +34,7 @@ import {
   DESIGNER_POINTS_PER_LEAVE,
   DESIGNER_WINDOW_DAYS,
   catchUpMetaAfterRelease,
+  designerActiveWorkMs,
   designerFormatLabel,
   isBoilerplateDesignerDescription,
   partitionOpenDesignerQueueByAssignee,
@@ -90,18 +91,10 @@ function formatIstDateTime(iso: string | null | undefined): string {
   });
 }
 
-function formatDurationBetween(
-  startIso: string | null | undefined,
-  endIso: string | null | undefined,
-  nowMs = Date.now()
-): string | null {
-  if (!startIso) return null;
-  const start = Date.parse(startIso);
-  if (!Number.isFinite(start)) return null;
-  const end = endIso ? Date.parse(endIso) : nowMs;
-  if (!Number.isFinite(end) || end < start) return null;
-  const totalMin = Math.max(0, Math.round((end - start) / 60000));
-  if (totalMin < 1) return "<1m";
+function formatMsDuration(totalMs: number): string | null {
+  const totalMin = Math.max(0, Math.round(totalMs / 60000));
+  if (totalMs > 0 && totalMin < 1) return "<1m";
+  if (totalMin < 1) return null;
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
   if (h === 0) return `${m}m`;
@@ -110,44 +103,53 @@ function formatDurationBetween(
 }
 
 function JobTimingRow({ job }: { job: DesignerJobDto }) {
-  if (!job.startedAt && job.status !== "DESIGN_DONE") return null;
-  const ended =
-    job.status === "DESIGN_DONE" ? job.uploadedAt : null;
-  const duration = formatDurationBetween(
-    job.startedAt,
-    ended,
-    job.status === "IN_PROGRESS" || job.status === "PAUSED" ? Date.now() : undefined
-  );
-  if (!job.startedAt && !ended) return null;
+  if (
+    !job.startedAt &&
+    !job.pausedAt &&
+    !(job.activeWorkMs > 0) &&
+    job.status !== "DESIGN_DONE"
+  ) {
+    return null;
+  }
+  const workMs =
+    job.status === "DESIGN_DONE"
+      ? Math.max(0, job.activeWorkMs || 0)
+      : designerActiveWorkMs(job);
+  const duration = formatMsDuration(workMs);
   return (
     <p className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[12px] text-white/55">
       <span>
-        Start{" "}
-        <span className="font-medium text-white/80">
-          {job.startedAt ? formatIstDateTime(job.startedAt) : "—"}
-        </span>
-      </span>
-      <span className="text-white/25">·</span>
-      <span>
-        End{" "}
-        <span className="font-medium text-white/80">
-          {job.status === "IN_PROGRESS"
-            ? "ongoing"
-            : job.status === "PAUSED"
-              ? "paused"
-              : ended
-                ? formatIstDateTime(ended)
-                : "—"}
-        </span>
+        {job.status === "IN_PROGRESS" ? (
+          <>
+            Working{" "}
+            <span className="font-semibold text-cyan-200">now</span>
+          </>
+        ) : job.status === "PAUSED" ? (
+          <>
+            Paused{" "}
+            <span className="font-medium text-violet-200">
+              {job.pausedAt ? formatIstDateTime(job.pausedAt) : "—"}
+            </span>
+          </>
+        ) : (
+          <>
+            Closed{" "}
+            <span className="font-medium text-white/80">
+              {job.uploadedAt ? formatIstDateTime(job.uploadedAt) : "—"}
+            </span>
+          </>
+        )}
       </span>
       {duration ? (
         <>
           <span className="text-white/25">·</span>
           <span>
-            Duration{" "}
+            Worked{" "}
             <span className="font-semibold text-cyan-200/90">{duration}</span>
             {job.status === "IN_PROGRESS" ? (
               <span className="text-white/40"> so far</span>
+            ) : job.status === "PAUSED" ? (
+              <span className="text-white/40"> before pause</span>
             ) : null}
           </span>
         </>
@@ -366,10 +368,17 @@ function designerDisplayName(assigneeId: string): string {
 
 class DesignerApiError extends Error {
   activeJobId?: string;
-  constructor(message: string, activeJobId?: string) {
+  activeTitle?: string;
+  needsConfirm?: boolean;
+  constructor(
+    message: string,
+    opts?: { activeJobId?: string; activeTitle?: string; needsConfirm?: boolean }
+  ) {
     super(message);
     this.name = "DesignerApiError";
-    this.activeJobId = activeJobId;
+    this.activeJobId = opts?.activeJobId;
+    this.activeTitle = opts?.activeTitle;
+    this.needsConfirm = opts?.needsConfirm;
   }
 }
 
@@ -392,7 +401,13 @@ async function readJson(res: Response) {
   if (!res.ok) {
     throw new DesignerApiError(
       typeof data.error === "string" ? data.error : `Request failed (${res.status})`,
-      typeof data.activeJobId === "string" ? data.activeJobId : undefined
+      {
+        activeJobId:
+          typeof data.activeJobId === "string" ? data.activeJobId : undefined,
+        activeTitle:
+          typeof data.activeTitle === "string" ? data.activeTitle : undefined,
+        needsConfirm: data.needsConfirm === true,
+      }
     );
   }
   return data;
@@ -413,6 +428,11 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const [notice, setNotice] = useState<{
     message: string;
     activeJobId?: string;
+  } | null>(null);
+  const [startConfirm, setStartConfirm] = useState<{
+    job: DesignerJobDto;
+    activeJobId: string;
+    activeTitle: string;
   } | null>(null);
   const setError = useCallback((message: string | null, activeJobId?: string) => {
     if (!message) {
@@ -467,6 +487,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     postDate: "",
     urgent: false,
     priorityMode: "NONE" as DesignerPriorityMode,
+    noPost: false,
   });
   const [priorityDrafts, setPriorityDrafts] = useState<Record<string, DesignerPriorityMode>>(
     {}
@@ -862,6 +883,17 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       }
       return true;
     } catch (err) {
+      if (err instanceof DesignerApiError && err.needsConfirm && err.activeJobId) {
+        const pending = allJobs.find((j) => j.id === id);
+        if (pending) {
+          setStartConfirm({
+            job: pending,
+            activeJobId: err.activeJobId,
+            activeTitle: err.activeTitle || "current job",
+          });
+          return false;
+        }
+      }
       const activeJobId =
         err instanceof DesignerApiError ? err.activeJobId : undefined;
       setError(err instanceof Error ? err.message : "Update failed", activeJobId);
@@ -1261,6 +1293,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           postDate: adhoc.postDate.trim() || adhoc.dueDate.trim() || undefined,
           urgent: adhoc.urgent || adhoc.priorityMode !== "NONE",
           priorityMode: adhoc.priorityMode,
+          noPost: adhoc.noPost,
         }),
       });
       const data = await readJson(res);
@@ -1275,6 +1308,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         postDate: "",
         urgent: false,
         priorityMode: "NONE",
+        noPost: false,
       });
       const created = data.job as DesignerJobDto | undefined;
       if (created) {
@@ -1417,13 +1451,22 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
 
   const startJob = (
     job: DesignerJobDto,
-    _opts?: { tone?: "catchUp" | "today" | "next" | "done" }
+    opts?: { tone?: "catchUp" | "today" | "next" | "done"; confirmAutoPause?: boolean }
   ) => {
-    void _opts;
+    void opts?.tone;
     void patchJob(job.id, {
       action: job.status === "PAUSED" ? "resume" : "start",
+      ...(opts?.confirmAutoPause ? { confirmAutoPause: true } : {}),
     });
   };
+
+  const workingNow = useMemo(
+    () =>
+      openJobsForPartition.filter(
+        (j) => j.status === "IN_PROGRESS" || j.status === "PAUSED"
+      ),
+    [openJobsForPartition]
+  );
 
   const promptDownloadFiles = (job: DesignerJobDto) => {
     const urls = designerJobFileUrls(job);
@@ -1477,11 +1520,13 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
                 catchUpDebt > 0 ? `Open · ${catchUpDebt} catch-up` : "Open",
               ],
               ...(isAdmin
-                ? ([["toSend", toSendCount > 0 ? `To send (${toSendCount})` : "To send"]] as const)
-                : []),
-              ["closed", "Done"],
-              ["holiday", "Holiday"],
-              ["expired", "Expired"],
+                ? ([
+                    ["toSend", toSendCount > 0 ? `To send (${toSendCount})` : "To send"],
+                    ["closed", "Done"],
+                    ["holiday", "Holiday"],
+                    ["expired", "Expired"],
+                  ] as const)
+                : ([["closed", "Done"]] as const)),
             ] as const
           ).map(([id, label]) => (
             <button
@@ -1881,6 +1926,22 @@ https://instagram.com/…"
               }))
             }
           />
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-white/10 bg-black/25 px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={adhoc.noPost}
+              onChange={(e) => setAdhoc((a) => ({ ...a, noPost: e.target.checked }))}
+              className="mt-0.5 h-4 w-4 rounded border-white/30 bg-black/40"
+            />
+            <span>
+              <span className="block text-[12px] font-semibold text-white/90">
+                No post
+              </span>
+              <span className="block text-[11px] text-white/45">
+                Upload & done only — does not go to Amit Daily.
+              </span>
+            </span>
+          </label>
           <button
             type="button"
             disabled={
@@ -1896,9 +1957,63 @@ https://instagram.com/…"
         </div>
       ) : null}
 
+      {startConfirm ? (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-black/75 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="designer-start-confirm-title"
+          onClick={() => setStartConfirm(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-cyan-400/35 bg-[#141414] p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p
+              id="designer-start-confirm-title"
+              className="text-[16px] font-semibold text-white"
+            >
+              Start this task?
+            </p>
+            <p className="mt-2 text-[13px] leading-snug text-white/80">
+              Starting{" "}
+              <span className="font-semibold text-cyan-200">
+                {startConfirm.job.title}
+              </span>{" "}
+              will pause{" "}
+              <span className="font-semibold text-violet-200">
+                {startConfirm.activeTitle}
+              </span>
+              . Only one task at a time — you can resume the old one anytime.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busyId === startConfirm.job.id}
+                onClick={() => {
+                  const job = startConfirm.job;
+                  setStartConfirm(null);
+                  startJob(job, { confirmAutoPause: true });
+                }}
+                className="h-11 flex-1 rounded-lg bg-cyan-400 px-3 text-[13px] font-semibold text-black disabled:opacity-40"
+              >
+                Pause old & start
+              </button>
+              <button
+                type="button"
+                onClick={() => setStartConfirm(null)}
+                className="h-11 px-3 text-[13px] font-semibold text-white/55 hover:text-white/85"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {notice ? (
         <div
-          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 p-4 sm:items-center"
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="designer-notice-title"
@@ -1912,64 +2027,24 @@ https://instagram.com/…"
               id="designer-notice-title"
               className="text-[15px] font-semibold text-white"
             >
-              {notice.activeJobId ? "Finish current job first" : "Notice"}
+              Notice
             </p>
             <p className="mt-2 text-[13px] leading-snug text-amber-50/95">
               {notice.message}
             </p>
-            {notice.activeJobId ? (
-              <p className="mt-2 text-[12px] text-white/45">
-                That job may be outside today&apos;s list or another outlet — open it
-                below, then Pause or Finish.
-              </p>
-            ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               {notice.activeJobId ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const id = notice.activeJobId!;
-                      setNotice(null);
-                      focusJobCard(id);
-                    }}
-                    className="h-10 flex-1 rounded-lg bg-amber-400 px-3 text-[13px] font-semibold text-black sm:flex-none"
-                  >
-                    Show job
-                  </button>
-                  {isAdmin ? (
-                    <>
-                      <button
-                        type="button"
-                        disabled={busyId === notice.activeJobId}
-                        onClick={() => {
-                          const id = notice.activeJobId!;
-                          void patchJob(id, { action: "pause" }).then((ok) => {
-                            if (ok) setError("Paused — Start again when ready.");
-                          });
-                        }}
-                        className="h-10 rounded-lg border border-violet-400/40 bg-violet-400/15 px-3 text-[13px] font-semibold text-violet-100 disabled:opacity-40"
-                      >
-                        Pause it
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busyId === notice.activeJobId}
-                        onClick={() => {
-                          const id = notice.activeJobId!;
-                          void patchJob(id, { action: "force-clear" }).then((ok) => {
-                            if (ok) {
-                              setError("Force cleared — back to Ready.");
-                            }
-                          });
-                        }}
-                        className="h-10 rounded-lg border border-white/15 bg-white/[0.06] px-3 text-[13px] font-semibold text-white/80 disabled:opacity-40"
-                      >
-                        Force clear
-                      </button>
-                    </>
-                  ) : null}
-                </>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = notice.activeJobId!;
+                    setNotice(null);
+                    focusJobCard(id);
+                  }}
+                  className="h-10 flex-1 rounded-lg bg-amber-400 px-3 text-[13px] font-semibold text-black sm:flex-none"
+                >
+                  Show job
+                </button>
               ) : null}
               <button
                 type="button"
@@ -1989,7 +2064,7 @@ https://instagram.com/…"
 
       {downloadNotice ? (
         <div
-          className="fixed inset-0 z-[80] flex items-end justify-center bg-black/65 p-4 sm:items-center"
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="designer-download-notice-title"
@@ -2154,6 +2229,9 @@ https://instagram.com/…"
                     → {designer}
                   </span>
                   <span className={statusColor(job.status)}>{statusLabel(job.status)}</span>
+                  {job.noPost ? (
+                    <span className="font-semibold uppercase text-white/45">No post</span>
+                  ) : null}
                   {job.urgent ? (
                     <span className="font-semibold uppercase text-amber-300">Urgent</span>
                   ) : null}
@@ -2282,7 +2360,7 @@ https://instagram.com/…"
                     onClick={() =>
                       void patchJob(job.id, { action: "release-catch-up" }).then((ok) => {
                         if (ok) {
-                          setError("Dropped from Catch up — count −1. Job is in Today/Later.");
+                          setError("Dropped from Catch up — count −1. Job is in Normal.");
                         }
                       })
                     }
@@ -2313,27 +2391,18 @@ https://instagram.com/…"
                         Upload & close
                       </button>
                     ) : null}
-                    {!job.pauseRequestedAt ? (
-                      <button
-                        type="button"
-                        disabled={busyId === job.id}
-                        onClick={() =>
-                          void patchJob(job.id, {
-                            action: "request-pause",
-                            note: pauseNoteDrafts[job.id] ?? "",
-                          }).then((ok) => {
-                            if (ok) setError("Pause requested — waiting on admin.");
-                          })
-                        }
-                        className="h-11 min-h-[44px] rounded-lg border border-violet-400/40 bg-violet-400/15 px-3 text-[13px] font-semibold text-violet-100 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
-                      >
-                        Request pause
-                      </button>
-                    ) : (
-                      <span className="text-[11px] font-semibold text-violet-200/90">
-                        Pause pending admin
-                      </span>
-                    )}
+                    <button
+                      type="button"
+                      disabled={busyId === job.id}
+                      onClick={() =>
+                        void patchJob(job.id, { action: "pause" }).then((ok) => {
+                          if (ok) setError("Paused — Start again when ready.");
+                        })
+                      }
+                      className="h-11 min-h-[44px] rounded-lg border border-violet-400/40 bg-violet-400/15 px-3 text-[13px] font-semibold text-violet-100 touch-manipulation disabled:opacity-40 sm:h-9 sm:min-h-0 sm:text-[12px]"
+                    >
+                      Pause
+                    </button>
                   </>
                 ) : null}
                 {isAdmin && job.status === "IN_PROGRESS" ? (
@@ -3160,10 +3229,41 @@ https://instagram.com/…"
             );
           }
 
-          // Until stack arrives, paint as Today/Later (slots=0) — never blank the list
+          // Until stack arrives, paint Catch up / Normal (slots=0 → all Normal)
           if (!canDragQueue) {
             return (
               <div className="space-y-5">
+                {workingNow.length > 0 ? (
+                  <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/[0.08] px-3 py-2.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-200/90">
+                      Right now
+                    </p>
+                    <ul className="mt-1.5 space-y-1">
+                      {workingNow.map((j) => (
+                        <li key={j.id}>
+                          <button
+                            type="button"
+                            onClick={() => focusJobCard(j.id)}
+                            className="w-full text-left text-[13px] text-white/90"
+                          >
+                            <span
+                              className={
+                                j.status === "IN_PROGRESS"
+                                  ? "font-semibold text-cyan-200"
+                                  : "font-semibold text-violet-200"
+                              }
+                            >
+                              {j.status === "IN_PROGRESS" ? "In progress" : "Paused"}
+                            </span>
+                            <span className="text-white/35"> · </span>
+                            Q{queueNumberById.get(j.id) ?? "—"} · {j.outletLabel} ·{" "}
+                            {j.title}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 {catchUpDebt > openParts.catchUp.length &&
                 catchUpDebt > 0 &&
                 isAdmin ? (
@@ -3175,24 +3275,17 @@ https://instagram.com/…"
                 {renderSection(
                   "Catch up",
                   openParts.catchUpHint ||
-                    "Unfinished from earlier days — finish these first.",
+                    "Pending from earlier — same Q order as Normal.",
                   openParts.catchUp,
                   "catchUp",
                   "text-amber-200/90"
                 )}
                 {renderSection(
-                  "Today",
-                  "Next 4 in priority order — Start → Upload → Done",
-                  openParts.todayPack,
+                  "Normal",
+                  "Rest of the queue in order — Start → Upload → Done",
+                  [...openParts.todayPack, ...openParts.upNext],
                   "today",
                   "text-white/70"
-                )}
-                {renderSection(
-                  "Later",
-                  "",
-                  openParts.upNext,
-                  "next",
-                  "text-white/45"
                 )}
               </div>
             );
@@ -3205,10 +3298,41 @@ https://instagram.com/…"
               onDragEnd={onQueueDragEnd}
             >
               <div className="space-y-5">
+                {workingNow.length > 0 ? (
+                  <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/[0.08] px-3 py-2.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-cyan-200/90">
+                      Right now
+                    </p>
+                    <ul className="mt-1.5 space-y-1">
+                      {workingNow.map((j) => (
+                        <li key={j.id}>
+                          <button
+                            type="button"
+                            onClick={() => focusJobCard(j.id)}
+                            className="w-full text-left text-[13px] text-white/90"
+                          >
+                            <span
+                              className={
+                                j.status === "IN_PROGRESS"
+                                  ? "font-semibold text-cyan-200"
+                                  : "font-semibold text-violet-200"
+                              }
+                            >
+                              {j.status === "IN_PROGRESS" ? "In progress" : "Paused"}
+                            </span>
+                            <span className="text-white/35"> · </span>
+                            Q{queueNumberById.get(j.id) ?? "—"} · {j.outletLabel} ·{" "}
+                            {j.title}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 {renderSection(
                   "Catch up",
                   openParts.catchUpHint ||
-                    "Unfinished from earlier days — finish these first.",
+                    "Pending from earlier — same Q order as Normal.",
                   openParts.catchUp,
                   "catchUp",
                   "text-amber-200/90"
@@ -3220,18 +3344,11 @@ https://instagram.com/…"
                   {(
                     [
                       [
-                        "Today",
-                        "Next 4 in priority order — Start → Upload → Done · drag ≡",
-                        openParts.todayPack,
+                        "Normal",
+                        "Rest of the queue in order — drag ≡ to reorder",
+                        [...openParts.todayPack, ...openParts.upNext],
                         "today",
                         "text-white/70",
-                      ],
-                      [
-                        "Later",
-                        "drag ≡",
-                        openParts.upNext,
-                        "next",
-                        "text-white/45",
                       ],
                     ] as const
                   ).map(([title, hint, list, tone, headingClass]) =>

@@ -192,10 +192,15 @@ type DesignerJobRow = Omit<
   pauseRequestedAt?: Date | string | null;
   pauseRequestNote?: string | null;
   catchUpExempt?: boolean | null;
+  activeWorkMs?: number | null;
+  pausedAt?: Date | string | null;
+  noPost?: boolean | null;
 };
 
 let catchUpExemptColumnReady = false;
 let fileUrlsColumnReady = false;
+let workTimingColumnsReady = false;
+let noPostColumnReady = false;
 
 /** Prod-safe: add column if migration hasn’t run yet. */
 export async function ensureCatchUpExemptColumn(): Promise<void> {
@@ -213,6 +218,27 @@ export async function ensureDesignerFileUrlsColumn(): Promise<void> {
     `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "fileUrls" JSONB`
   );
   fileUrlsColumnReady = true;
+}
+
+/** Prod-safe: pause/resume work-time columns. */
+export async function ensureDesignerWorkTimingColumns(): Promise<void> {
+  if (workTimingColumnsReady) return;
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "activeWorkMs" INTEGER NOT NULL DEFAULT 0`
+  );
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "pausedAt" TIMESTAMP(3)`
+  );
+  workTimingColumnsReady = true;
+}
+
+/** Prod-safe: skip Amit Daily handoff flag. */
+export async function ensureDesignerNoPostColumn(): Promise<void> {
+  if (noPostColumnReady) return;
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "TeamDesignerJob" ADD COLUMN IF NOT EXISTS "noPost" BOOLEAN NOT NULL DEFAULT false`
+  );
+  noPostColumnReady = true;
 }
 
 /** Persist creatives — fileUrl = first (Amit), fileUrls = full list. */
@@ -276,6 +302,9 @@ export type DesignerRequestMeta = {
   pauseRequestedAt: string | null;
   pauseRequestNote: string | null;
   catchUpExempt: boolean;
+  activeWorkMs: number;
+  pausedAt: string | null;
+  noPost: boolean;
 };
 
 export async function loadDesignerEditMetaByIds(
@@ -285,6 +314,8 @@ export async function loadDesignerEditMetaByIds(
   if (ids.length === 0) return map;
   try {
     await ensureCatchUpExemptColumn();
+    await ensureDesignerWorkTimingColumns();
+    await ensureDesignerNoPostColumn();
     const rows = await prisma.$queryRaw<
       Array<{
         id: string;
@@ -293,10 +324,13 @@ export async function loadDesignerEditMetaByIds(
         pauseRequestedAt: Date | null;
         pauseRequestNote: string | null;
         catchUpExempt: boolean | null;
+        activeWorkMs: number | null;
+        pausedAt: Date | null;
+        noPost: boolean | null;
       }>
     >`
       SELECT id, "editRequestedAt", "editRequestNote", "pauseRequestedAt", "pauseRequestNote",
-             "catchUpExempt"
+             "catchUpExempt", "activeWorkMs", "pausedAt", "noPost"
       FROM "TeamDesignerJob"
       WHERE id IN (${Prisma.join(ids)})
     `;
@@ -307,6 +341,9 @@ export async function loadDesignerEditMetaByIds(
         pauseRequestedAt: row.pauseRequestedAt ? row.pauseRequestedAt.toISOString() : null,
         pauseRequestNote: row.pauseRequestNote ?? null,
         catchUpExempt: Boolean(row.catchUpExempt),
+        activeWorkMs: Math.max(0, Number(row.activeWorkMs) || 0),
+        pausedAt: row.pausedAt ? row.pausedAt.toISOString() : null,
+        noPost: Boolean(row.noPost),
       });
     }
     return map;
@@ -331,10 +368,53 @@ export async function loadDesignerEditMetaByIds(
         pauseRequestedAt: null,
         pauseRequestNote: null,
         catchUpExempt: false,
+        activeWorkMs: 0,
+        pausedAt: null,
+        noPost: false,
       });
     }
     return map;
   }
+}
+
+/** Bank the live IN_PROGRESS segment into activeWorkMs (does not change status). */
+export async function bankDesignerActiveSegment(jobId: string): Promise<void> {
+  await ensureDesignerWorkTimingColumns();
+  await prisma.$executeRawUnsafe(
+    `UPDATE "TeamDesignerJob"
+     SET
+       "activeWorkMs" = "activeWorkMs" + CASE
+         WHEN status = 'IN_PROGRESS' AND "startedAt" IS NOT NULL
+         THEN GREATEST(0, (EXTRACT(EPOCH FROM (NOW() - "startedAt")) * 1000)::int)
+         ELSE 0
+       END,
+       "updatedAt" = NOW()
+     WHERE id = $1 AND status = 'IN_PROGRESS'`,
+    jobId
+  );
+}
+
+/**
+ * Pause an in-progress job and bank the current work segment into activeWorkMs.
+ */
+export async function pauseDesignerJobNow(jobId: string): Promise<void> {
+  await ensureDesignerWorkTimingColumns();
+  await prisma.$executeRawUnsafe(
+    `UPDATE "TeamDesignerJob"
+     SET
+       "activeWorkMs" = "activeWorkMs" + CASE
+         WHEN status = 'IN_PROGRESS' AND "startedAt" IS NOT NULL
+         THEN GREATEST(0, (EXTRACT(EPOCH FROM (NOW() - "startedAt")) * 1000)::int)
+         ELSE 0
+       END,
+       status = 'PAUSED',
+       "pausedAt" = NOW(),
+       "pauseRequestedAt" = NULL,
+       "pauseRequestNote" = NULL,
+       "updatedAt" = NOW()
+     WHERE id = $1 AND status = 'IN_PROGRESS'`,
+    jobId
+  );
 }
 
 /** Admin only: leave Catch up → Open, sorted by normal deadline priority (no auto-drop). */
@@ -412,6 +492,12 @@ export function toDesignerJobDto(job: DesignerJobRow, today = getTodayKey()): De
     priorityMode: parseDesignerPriorityMode(job.priorityMode),
     sortOrder: typeof job.sortOrder === "number" ? job.sortOrder : 0,
     startedAt: job.startedAt?.toISOString() ?? null,
+    activeWorkMs: Math.max(0, Number(job.activeWorkMs) || 0),
+    pausedAt: job.pausedAt
+      ? typeof job.pausedAt === "string"
+        ? job.pausedAt
+        : job.pausedAt.toISOString()
+      : null,
     startedByRole:
       job.startedByRole === "designer" || job.startedByRole === "admin"
         ? job.startedByRole
@@ -423,6 +509,7 @@ export function toDesignerJobDto(job: DesignerJobRow, today = getTodayKey()): De
         : null,
     fileUrl: normalizeDesignerFileUrls(job.fileUrl, job.fileUrls)[0] ?? null,
     fileUrls: normalizeDesignerFileUrls(job.fileUrl, job.fileUrls),
+    noPost: Boolean(job.noPost),
     postingNotes: job.postingNotes,
     scheduleNote: job.scheduleNote,
     waApproved: job.waApproved,
@@ -859,6 +946,9 @@ export async function syncDesignerJobToChecklistHandoff(job: TeamDesignerJob): P
   if (!job.fileUrl) return;
   // TV calendars are not Amit story/post handoffs
   if (job.format === "calendar") return;
+  // Admin "no post" tasks: creative done in Design queue only
+  const meta = (await loadDesignerEditMetaByIds([job.id])).get(job.id);
+  if (meta?.noPost) return;
   const dayId = dayIdForYmd(job.postDate);
   const uploadedAt = job.uploadedAt?.toISOString() ?? new Date().toISOString();
   const fileUrls = (

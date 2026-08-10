@@ -11,7 +11,9 @@ import {
   loadDesignerJobLinksByIds,
   nextManualDesignerSortOrder,
   parseDesignerLinks,
-  ensureCatchUpExemptColumn,
+  bankDesignerActiveSegment,
+  ensureDesignerWorkTimingColumns,
+  pauseDesignerJobNow,
   releaseDesignerJobFromCatchUp,
   setDesignerEditRequest,
   setDesignerJobFileUrls,
@@ -22,16 +24,11 @@ import {
 } from "@/lib/team-designer-jobs";
 import { addDaysYmd, getTodayKey } from "@/lib/team-checklists";
 import {
-  catchUpMetaAfterRelease,
-  DESIGNER_DAILY_TARGET,
   isBoilerplateDesignerDescription,
   normalizeDesignerFileUrls,
   parseDesignerPriorityMode,
-  partitionOpenDesignerQueue,
-  sortDesignerJobs,
   type DesignerPriorityMode,
 } from "@/lib/team-designer-jobs-shared";
-import { computeDesignerStack } from "@/lib/team-designer-performance";
 import { deleteTeamHandoffBlobUrl } from "@/lib/team-handoff-blobs";
 import {
   getAmitReadyNudge,
@@ -53,6 +50,9 @@ async function jobDtoWithLinks(job: Parameters<typeof toDesignerJobDto>[0]) {
     pauseRequestedAt: edit?.pauseRequestedAt ?? null,
     pauseRequestNote: edit?.pauseRequestNote ?? null,
     catchUpExempt: edit?.catchUpExempt ?? false,
+    activeWorkMs: edit?.activeWorkMs ?? 0,
+    pausedAt: edit?.pausedAt ?? null,
+    noPost: edit?.noPost ?? false,
   });
 }
 
@@ -71,61 +71,6 @@ function fileUrlsFromBody(body: {
 
 async function deleteJobCreativeBlobs(urls: string[]): Promise<void> {
   await Promise.all(urls.map((u) => deleteTeamHandoffBlobUrl(u)));
-}
-
-/** Catch up first — finish unfinished count from past days before starting Today’s pack. */
-async function ensureCatchUpGate(assigneeId: string, jobId: string): Promise<void> {
-  await ensureCatchUpExemptColumn();
-  const today = getTodayKey();
-  const [stack, released, rows] = await Promise.all([
-    computeDesignerStack(assigneeId, today),
-    prisma.teamDesignerJob.count({
-      where: {
-        assigneeId,
-        catchUpExempt: true,
-        status: { not: "DESIGN_DONE" },
-      },
-    }),
-    prisma.teamDesignerJob.findMany({
-      where: {
-        assigneeId,
-        status: { in: ["READY_TO_DESIGN", "IN_PROGRESS", "PAUSED"] },
-      },
-    }),
-  ]);
-  const meta = catchUpMetaAfterRelease(stack, released);
-  if (meta.catchUpSlots <= 0) return;
-  const ids = rows.map((r) => r.id);
-  const [linksMap, editMap] = await Promise.all([
-    loadDesignerJobLinksByIds(ids),
-    loadDesignerEditMetaByIds(ids),
-  ]);
-  const jobs = sortDesignerJobs(
-    rows.map((r) =>
-      toDesignerJobDto({
-        ...r,
-        links: linksMap.get(r.id) ?? [],
-        editRequestedAt: editMap.get(r.id)?.editRequestedAt ?? null,
-        editRequestNote: editMap.get(r.id)?.editRequestNote ?? null,
-        pauseRequestedAt: editMap.get(r.id)?.pauseRequestedAt ?? null,
-        pauseRequestNote: editMap.get(r.id)?.pauseRequestNote ?? null,
-        catchUpExempt: editMap.get(r.id)?.catchUpExempt ?? false,
-      })
-    )
-  );
-  const parts = partitionOpenDesignerQueue(jobs, DESIGNER_DAILY_TARGET, {
-    catchUpSlots: meta.catchUpSlots,
-    pendingFromLabel: meta.pendingFromLabel,
-    releasedSlots: 0,
-  });
-  if (parts.effectiveCatchUpSlots <= 0) return;
-  if (parts.catchUp.some((j) => j.id === jobId)) return;
-  const from = meta.pendingFromLabel?.trim();
-  throw new Error(
-    from
-      ? `Finish Catch up first — ${parts.catchUp.length} unfinished from ${from}, then today’s tasks.`
-      : "Finish Catch up first — unfinished from earlier, then today’s tasks."
-  );
 }
 
 type Action =
@@ -189,6 +134,8 @@ export async function PATCH(
       scheduleNote?: string;
       waApproved?: boolean;
       format?: string;
+      /** Start/resume while another job is IN_PROGRESS — pause the old one */
+      confirmAutoPause?: boolean;
     };
 
     const action = body.action;
@@ -278,14 +225,17 @@ export async function PATCH(
       if (action === "brief-ready" && status === "READY_TO_DESIGN") {
         // Soft “queue changed” WA is a Send-now suggestion (last 30 min) — not auto-blast.
         if (priorityMode === "PAUSE_NOW") {
-          await prisma.teamDesignerJob.updateMany({
+          const actives = await prisma.teamDesignerJob.findMany({
             where: {
               assigneeId: job.assigneeId,
               status: "IN_PROGRESS",
               id: { not: id },
             },
-            data: { status: "PAUSED" },
+            select: { id: true },
           });
+          for (const a of actives) {
+            await pauseDesignerJobNow(a.id);
+          }
         }
       }
 
@@ -332,20 +282,25 @@ export async function PATCH(
       } catch (e) {
         console.error("[designer-jobs] clear handoff on force-clear", e);
       }
-      const updated = await prisma.teamDesignerJob.update({
-        where: { id },
-        data: {
-          status: "READY_TO_DESIGN",
-          startedAt: null,
-          startedByRole: null,
-          uploadedAt: null,
-          closedByRole: null,
-          fileUrl: null,
-          postingNotes: null,
-          scheduleNote: null,
-          waApproved: false,
-        },
-      });
+      await ensureDesignerWorkTimingColumns();
+      await prisma.$executeRawUnsafe(
+        `UPDATE "TeamDesignerJob"
+         SET status = 'READY_TO_DESIGN',
+             "startedAt" = NULL,
+             "startedByRole" = NULL,
+             "uploadedAt" = NULL,
+             "closedByRole" = NULL,
+             "fileUrl" = NULL,
+             "postingNotes" = NULL,
+             "scheduleNote" = NULL,
+             "waApproved" = false,
+             "activeWorkMs" = 0,
+             "pausedAt" = NULL,
+             "updatedAt" = NOW()
+         WHERE id = $1`,
+        id
+      );
+      const updated = await prisma.teamDesignerJob.findUniqueOrThrow({ where: { id } });
       await setDesignerJobFileUrls(id, []);
       await setDesignerEditRequest(id, { at: null, note: null });
       await setDesignerPauseRequest(id, { at: null, note: null });
@@ -450,85 +405,67 @@ export async function PATCH(
         );
       }
 
-      try {
-        await ensureCatchUpGate(job.assigneeId, job.id);
-      } catch (gateErr) {
-        const msg =
-          gateErr instanceof Error
-            ? gateErr.message
-            : "Finish Catch up before starting today’s tasks.";
-        return NextResponse.json({ error: msg }, { status: 409 });
-      }
-
+      await ensureDesignerWorkTimingColumns();
       const active = await findActiveDesignerJob(job.assigneeId);
+      const confirmAutoPause = body.confirmAutoPause === true;
       if (active && active.id !== job.id) {
-        return NextResponse.json(
-          {
-            error: `Finish or pause current job first: ${active.title}`,
-            activeJobId: active.id,
-          },
-          { status: 409 }
-        );
+        if (!confirmAutoPause) {
+          return NextResponse.json(
+            {
+              error: `Starting “${job.title}” will pause “${active.title}”. You can resume it anytime.`,
+              activeJobId: active.id,
+              activeTitle: active.title,
+              needsConfirm: true,
+            },
+            { status: 409 }
+          );
+        }
+        await pauseDesignerJobNow(active.id);
       }
+
       const startedByRole = isAdmin && !canDesignerAct ? "admin" : "designer";
-      const updated = await prisma.teamDesignerJob.update({
-        where: { id },
-        data: {
-          status: "IN_PROGRESS",
-          startedAt: new Date(),
-          startedByRole,
-        },
-      });
-      await setDesignerPauseRequest(id, { at: null, note: null });
+      const now = new Date();
+      // Resume keeps banked activeWorkMs; only the live segment clock resets.
+      await prisma.$executeRawUnsafe(
+        `UPDATE "TeamDesignerJob"
+         SET status = 'IN_PROGRESS',
+             "startedAt" = $1,
+             "startedByRole" = $2,
+             "pausedAt" = NULL,
+             "pauseRequestedAt" = NULL,
+             "pauseRequestNote" = NULL,
+             "updatedAt" = NOW()
+         WHERE id = $3`,
+        now,
+        startedByRole,
+        id
+      );
+      const updated = await prisma.teamDesignerJob.findUniqueOrThrow({ where: { id } });
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
-        message: job.status === "PAUSED" ? "Resumed — timer restarted" : "Started",
+        message:
+          job.status === "PAUSED"
+            ? "Resumed"
+            : active && active.id !== job.id
+              ? `Started — paused “${active.title}”`
+              : "Started",
+        pausedJobId: active && active.id !== job.id ? active.id : undefined,
       });
     }
 
-    // Admin pauses immediately; designer must request → admin approve
-    if (action === "pause") {
-      if (!isAdmin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      if (job.status !== "IN_PROGRESS") {
-        return NextResponse.json({ error: "Only in-progress jobs can be paused" }, { status: 400 });
-      }
-      const updated = await prisma.teamDesignerJob.update({
-        where: { id },
-        data: { status: "PAUSED" },
-      });
-      await setDesignerPauseRequest(id, { at: null, note: null });
-      return NextResponse.json({
-        job: await jobDtoWithLinks(updated),
-        message: "Paused — Start again when ready",
-      });
-    }
-
-    if (action === "request-pause") {
+    // Designer or admin can pause immediately (work time is banked).
+    if (action === "pause" || action === "request-pause") {
       if (!isAdmin && !canDesignerAct) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
       if (job.status !== "IN_PROGRESS") {
-        return NextResponse.json({ error: "Only in-progress jobs can request pause" }, { status: 400 });
+        return NextResponse.json({ error: "Only in-progress jobs can be paused" }, { status: 400 });
       }
-      if (isAdmin) {
-        const updated = await prisma.teamDesignerJob.update({
-          where: { id },
-          data: { status: "PAUSED" },
-        });
-        await setDesignerPauseRequest(id, { at: null, note: null });
-        return NextResponse.json({
-          job: await jobDtoWithLinks(updated),
-          message: "Paused",
-        });
-      }
-      const note =
-        typeof body.note === "string" && body.note.trim()
-          ? body.note.trim().slice(0, 500)
-          : null;
-      await setDesignerPauseRequest(id, { at: new Date(), note });
+      await pauseDesignerJobNow(id);
+      const updated = await prisma.teamDesignerJob.findUniqueOrThrow({ where: { id } });
       return NextResponse.json({
-        job: await jobDtoWithLinks(job),
-        message: "Pause requested — waiting on admin",
+        job: await jobDtoWithLinks(updated),
+        message: "Paused — Start again when ready",
       });
     }
 
@@ -537,11 +474,8 @@ export async function PATCH(
       if (job.status !== "IN_PROGRESS") {
         return NextResponse.json({ error: "Job is not in progress" }, { status: 400 });
       }
-      const updated = await prisma.teamDesignerJob.update({
-        where: { id },
-        data: { status: "PAUSED" },
-      });
-      await setDesignerPauseRequest(id, { at: null, note: null });
+      await pauseDesignerJobNow(id);
+      const updated = await prisma.teamDesignerJob.findUniqueOrThrow({ where: { id } });
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
         message: "Pause approved",
@@ -597,6 +531,7 @@ export async function PATCH(
 
       const uploadedAt = new Date();
       const closedByRole = isAdmin && !canDesignerAct ? "admin" : "designer";
+      await bankDesignerActiveSegment(id);
       const updated = await prisma.teamDesignerJob.update({
         where: { id },
         data: {
@@ -614,6 +549,7 @@ export async function PATCH(
           uploadedAt,
           startedAt: job.startedAt ?? uploadedAt,
           closedByRole,
+          pausedAt: null,
           ...(typeof body.format === "string" && body.format.trim()
             ? { format: body.format.trim() }
             : {}),
@@ -628,9 +564,11 @@ export async function PATCH(
         console.error("[designer-jobs] checklist sync", e);
       }
 
+      const meta = (await loadDesignerEditMetaByIds([id])).get(id);
       return NextResponse.json({
         job: await jobDtoWithLinks(updated),
-        amitNudge: await getAmitReadyNudge(),
+        amitNudge: meta?.noPost ? null : await getAmitReadyNudge(),
+        message: meta?.noPost ? "Done — no post (not sent to Amit)" : undefined,
       });
     }
 
@@ -705,6 +643,7 @@ export async function PATCH(
         );
       }
       const uploadedAt = job.uploadedAt ?? new Date();
+      await bankDesignerActiveSegment(id);
       const updated = await prisma.teamDesignerJob.update({
         where: { id },
         data: {
@@ -715,6 +654,7 @@ export async function PATCH(
           startedAt: job.startedAt ?? new Date(),
           // Admin Mark done never counts toward designer 4/day
           closedByRole: "admin",
+          pausedAt: null,
           postingNotes:
             typeof body.postingNotes === "string"
               ? body.postingNotes.trim() || null

@@ -67,6 +67,10 @@ export type DesignerJobDto = {
   /** Admin drag priority — lower first */
   sortOrder: number;
   startedAt: string | null;
+  /** Accumulated active work ms (completed segments before current Start). */
+  activeWorkMs: number;
+  /** ISO when last paused — null if not paused */
+  pausedAt: string | null;
   /** designer | admin | null */
   startedByRole: "designer" | "admin" | null;
   uploadedAt: string | null;
@@ -76,6 +80,8 @@ export type DesignerJobDto = {
   fileUrl: string | null;
   /** All creatives for this job (min 1 to close). Upload one at a time. */
   fileUrls: string[];
+  /** Upload/done only — skip Amit Daily checklist handoff */
+  noPost: boolean;
   postingNotes: string | null;
   scheduleNote: string | null;
   waApproved: boolean;
@@ -430,34 +436,40 @@ export function partitionOpenDesignerQueue(
   effectiveCatchUpSlots: number;
 } {
   const sorted = sortDesignerJobs(jobs.filter((j) => j.status !== "DESIGN_DONE"));
-  // Pin active work at the top of Catch up so it never “vanishes” into Later
-  // (e.g. catch-up Drop / outlet filter / old window dates).
-  const active = sorted.filter(
-    (j) => j.status === "IN_PROGRESS" || j.status === "PAUSED"
-  );
-  const activeIds = new Set(active.map((j) => j.id));
   const releasedFromJobs = sorted.filter((j) => j.catchUpExempt).length;
   const released = Math.max(0, opts?.releasedSlots ?? releasedFromJobs);
   const owed = Math.max(0, opts?.catchUpSlots ?? 0);
   // Each Drop forgives one slot — no backfill when the job is Unsent
   const slots = Math.max(0, owed - released);
-  const fillable = sorted.filter((j) => !j.catchUpExempt && !activeIds.has(j.id));
-  const catchUp = [...active, ...fillable.slice(0, slots)];
+  // Keep strict Q order: first N fillable jobs = Catch up, rest = Normal.
+  // In-progress / paused stay in their queue position (not pinned out of order).
+  const fillable = sorted.filter((j) => !j.catchUpExempt);
+  const catchUp = fillable.slice(0, slots);
   const catchIds = new Set(catchUp.map((j) => j.id));
-  const remaining = sorted.filter((j) => !catchIds.has(j.id));
-  // Today = due today / overdue only — do not pull tomorrow’s jobs after closes
-  const dueTodayOrLate = remaining.filter((j) => j.isDueToday || j.isOverdue);
-  const laterJobs = remaining.filter((j) => !j.isDueToday && !j.isOverdue);
-  const todayPack = dueTodayOrLate.slice(0, dailyTarget);
-  const upNext = [...dueTodayOrLate.slice(dailyTarget), ...laterJobs];
+  // Normal = everything else still open (exempt + after catch-up band)
+  const todayPack = sorted.filter((j) => !catchIds.has(j.id));
+  const upNext: DesignerJobDto[] = [];
+  void dailyTarget;
   const from = opts?.pendingFromLabel?.trim();
   const catchUpHint =
     catchUp.length > 0
       ? from
-        ? `${catchUp.length} unfinished from ${from}. Finish these first, then today’s ${dailyTarget}.`
-        : `${catchUp.length} unfinished from earlier. Finish these first, then today’s ${dailyTarget}.`
+        ? `${catchUp.length} pending from earlier (${from}). Same Q order — finish these to clear Catch up.`
+        : `${catchUp.length} pending from earlier this month. Same Q order — finish these to clear Catch up.`
       : "";
   return { catchUp, todayPack, upNext, catchUpHint, effectiveCatchUpSlots: slots };
+}
+
+/** Active work ms for display: stored segments + live segment if In progress. */
+export function designerActiveWorkMs(
+  job: Pick<DesignerJobDto, "status" | "startedAt" | "activeWorkMs">,
+  nowMs = Date.now()
+): number {
+  const base = Math.max(0, job.activeWorkMs || 0);
+  if (job.status !== "IN_PROGRESS" || !job.startedAt) return base;
+  const start = Date.parse(job.startedAt);
+  if (!Number.isFinite(start) || start > nowMs) return base;
+  return base + (nowMs - start);
 }
 
 /**
