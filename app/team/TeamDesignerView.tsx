@@ -325,18 +325,21 @@ function istYmdFromIso(iso: string | null | undefined): string | null {
   return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
-/** Group Done jobs by work day (Start day), then close day — newest first. */
+/** Group Done jobs by upload day (IST) — Mahesh first within each day. */
 function groupDoneJobsByDay(jobs: DesignerJobDto[]): {
   key: string;
   dayName: string;
   dateLabel: string;
   jobs: DesignerJobDto[];
 }[] {
+  const assigneeRank = (id: string) =>
+    id === "mahesh" ? 0 : id === "jeslyn" ? 1 : 2;
   const map = new Map<string, DesignerJobDto[]>();
   for (const j of jobs) {
+    // Match home day-strip: credit on upload day
     const key =
-      istYmdFromIso(j.startedAt) ||
       istYmdFromIso(j.uploadedAt) ||
+      istYmdFromIso(j.startedAt) ||
       istYmdFromIso(j.updatedAt) ||
       j.postDate ||
       "unknown";
@@ -351,11 +354,17 @@ function groupDoneJobsByDay(jobs: DesignerJobDto[]): {
         key === "unknown"
           ? { dayName: "Unknown", dateLabel: "" }
           : formatPostDateParts(key);
+      const sorted = [...list].sort((a, b) => {
+        const ar = assigneeRank(a.assigneeId);
+        const br = assigneeRank(b.assigneeId);
+        if (ar !== br) return ar - br;
+        return (b.uploadedAt || "").localeCompare(a.uploadedAt || "");
+      });
       return {
         key,
         dayName: parts.dayName,
         dateLabel: parts.dateLabel,
-        jobs: list,
+        jobs: sorted,
       };
     });
 }
@@ -785,8 +794,17 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       list = list.filter((j) => j.outletId === outletFilter);
     }
     if (queueView === "closed" || queueView === "expired") {
-      // Most recent done on top
+      // Mahesh first (home card order), then real uploads, then newest
+      const assigneeRank = (id: string) =>
+        id === "mahesh" ? 0 : id === "jeslyn" ? 1 : 2;
+      const creditedRank = (j: DesignerJobDto) =>
+        j.closedByRole === "designer" || j.uploadedAt ? 0 : 1;
       return [...list].sort((a, b) => {
+        const ar = assigneeRank(a.assigneeId);
+        const br = assigneeRank(b.assigneeId);
+        if (ar !== br) return ar - br;
+        const cr = creditedRank(a) - creditedRank(b);
+        if (cr !== 0) return cr;
         const au = a.uploadedAt || a.updatedAt || "";
         const bu = b.uploadedAt || b.updatedAt || "";
         if (au !== bu) return bu.localeCompare(au);
@@ -1739,7 +1757,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
 
       {queueView !== "holiday" ? (
       <>
-      <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
           onClick={() => {
@@ -3258,9 +3276,14 @@ https://instagram.com/…"
             return (
               <div className="space-y-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/50">
-                    Done · {queue.length} total
-                  </h2>
+                  <div>
+                    <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/50">
+                      Done · {queue.length} uploaded
+                    </h2>
+                    <p className="mt-0.5 text-[11px] text-white/35">
+                      Same closes as the home day strip · Mahesh listed first
+                    </p>
+                  </div>
                 </div>
                 {groups.map((g) => (
                   <div key={g.key} className="space-y-2">
@@ -3814,7 +3837,7 @@ function DesignerPerformanceCard({
         ) : null}
       </div>
 
-      <div className="-mx-0.5 mt-3 flex gap-1 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+      <div className="-mx-0.5 mt-3 flex gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]">
         {dayStrip.map((d) => (
           <div
             key={d.date}

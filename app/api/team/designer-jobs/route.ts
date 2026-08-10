@@ -149,38 +149,43 @@ export async function GET(req: NextRequest) {
     }
 
     if (view === "closed") {
-      // Look back 30 days — not the forward rolling window (fromDate = today would hide
-      // yesterday’s closes like Mahesh’s Jul 31 uploads).
+      // Look back 30 days — match home day-strip: real uploads only (not seed auto-closed).
       const closedFrom = addDaysYmd(today, -(DESIGNER_WINDOW_DAYS - 1));
       const whereClosed: {
         status: "DESIGN_DONE";
         assigneeId?: string;
-        OR: Array<
-          | { uploadedAt: { gte: Date } }
-          | { uploadedAt: null; updatedAt: { gte: Date } }
-          | { uploadedAt: null; postDate: { gte: string } }
-        >;
+        uploadedAt: { gte: Date };
       } = {
         status: "DESIGN_DONE",
-        OR: [
-          { uploadedAt: { gte: new Date(`${closedFrom}T00:00:00+05:30`) } },
-          {
-            uploadedAt: null,
-            updatedAt: { gte: new Date(`${closedFrom}T00:00:00+05:30`) },
-          },
-          { uploadedAt: null, postDate: { gte: closedFrom } },
-        ],
+        // Home "X done" only counts designer closes with an upload time
+        uploadedAt: { gte: new Date(`${closedFrom}T00:00:00+05:30`) },
       };
       if (!isAdmin) whereClosed.assigneeId = memberId;
 
       const rows = await prisma.teamDesignerJob.findMany({
         where: whereClosed,
         select: JOB_SELECT,
-        orderBy: [{ uploadedAt: "desc" }, { updatedAt: "desc" }, { postDate: "desc" }],
+        // Mahesh first, then newest upload
+        orderBy: [
+          { assigneeId: "asc" },
+          { uploadedAt: "desc" },
+          { updatedAt: "desc" },
+          { postDate: "desc" },
+        ],
         take: 200,
       });
 
-      const jobs = await jobsWithExtras(rows, today);
+      // assigneeId asc puts jeslyn before mahesh — reorder in memory
+      const jobs = (await jobsWithExtras(rows, today)).sort((a, b) => {
+        const rank = (id: string) =>
+          id === "mahesh" ? 0 : id === "jeslyn" ? 1 : 2;
+        const ar = rank(a.assigneeId);
+        const br = rank(b.assigneeId);
+        if (ar !== br) return ar - br;
+        const au = a.uploadedAt || "";
+        const bu = b.uploadedAt || "";
+        return bu.localeCompare(au);
+      });
 
       return NextResponse.json({
         view: "closed",
