@@ -49,7 +49,7 @@ import {
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { uploadTeamFile } from "@/lib/team-client-upload";
 import { teamDownloadHref } from "@/lib/team-download";
-import { teamOutletLabel } from "@/lib/team-outlets";
+import { TEAM_AD_OUTLETS, teamOutletLabel } from "@/lib/team-outlets";
 import { IconTrash, IconUnsend, IconWhatsApp } from "./TeamIcons";
 
 type QueueView = "open" | "toSend" | "closed" | "holiday" | "expired";
@@ -478,7 +478,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   } | null>(null);
   const [adhocOpen, setAdhocOpen] = useState(false);
   const [adhoc, setAdhoc] = useState({
-    outletId: "c53",
+    outletIds: ["c53"] as string[],
+    customOutlets: "",
     assigneeId: "mahesh" as "mahesh" | "jeslyn",
     title: "",
     description: "",
@@ -1277,6 +1278,14 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       setError("Title required for free task");
       return;
     }
+    const customList = adhoc.customOutlets
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (adhoc.outletIds.length === 0 && customList.length === 0) {
+      setError("Pick at least one outlet, or type a custom footlight");
+      return;
+    }
     setBusyId("adhoc");
     try {
       const res = await fetch("/api/team/designer-jobs", {
@@ -1284,7 +1293,11 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           adhoc: true,
-          outletId: adhoc.outletId,
+          outletIds: adhoc.outletIds,
+          customOutlets: adhoc.customOutlets
+            .split(/[\n,]+/)
+            .map((s) => s.trim())
+            .filter(Boolean),
           assigneeId: adhoc.assigneeId,
           title: adhoc.title.trim(),
           description: adhoc.description,
@@ -1299,7 +1312,8 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       const data = await readJson(res);
       setAdhocOpen(false);
       setAdhoc({
-        outletId: "c53",
+        outletIds: ["c53"],
+        customOutlets: "",
         assigneeId: adhoc.assigneeId,
         title: "",
         description: "",
@@ -1310,29 +1324,31 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         priorityMode: "NONE",
         noPost: false,
       });
-      const created = data.job as DesignerJobDto | undefined;
-      if (created) {
+      const createdList = (
+        Array.isArray(data.jobs) ? data.jobs : data.job ? [data.job] : []
+      ) as DesignerJobDto[];
+      if (createdList.length > 0) {
+        const createdIds = new Set(createdList.map((j) => j.id));
         const merged = [
-          created,
-          ...allJobs.filter((j) => j.id !== created.id),
+          ...createdList,
+          ...allJobs.filter((j) => !createdIds.has(j.id)),
         ];
         setAllJobs(merged);
-        if (created.priorityMode === "PAUSE_NOW" || created.priorityMode === "AFTER_CURRENT") {
-          // Jump near the top (after anything already in progress), then renumber
+        const primary = createdList[0]!;
+        if (primary.priorityMode === "PAUSE_NOW" || primary.priorityMode === "AFTER_CURRENT") {
           const open = merged.filter(
             (j) =>
-              j.assigneeId === created.assigneeId && isOpenDesignerStatus(j.status)
+              j.assigneeId === primary.assigneeId && isOpenDesignerStatus(j.status)
           );
           const active = open.filter((j) => j.status === "IN_PROGRESS");
           const rest = orderOpenJobsByDeadline(
-            open.filter((j) => j.id !== created.id && j.status !== "IN_PROGRESS")
+            open.filter((j) => !createdIds.has(j.id) && j.status !== "IN_PROGRESS")
           );
           void persistQueueOrder(
-            [...active, created, ...rest].map((j) => j.id)
+            [...active, ...createdList, ...rest].map((j) => j.id)
           );
         } else {
-          // Insert by deadline + renumber Q1…Qn for that designer
-          resyncAssigneeQueueByDeadline(created.assigneeId, merged);
+          resyncAssigneeQueueByDeadline(primary.assigneeId, merged);
         }
       }
       setDesignerTab(adhoc.assigneeId);
@@ -1785,21 +1801,52 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
               a deadline so extras land in the right place when he’s free.
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="space-y-2">
+            <p className="text-[11px] text-white/50">
+              Outlets / footlights{" "}
+              <span className="text-white/35">(pick one or more)</span>
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {TEAM_AD_OUTLETS.filter((o) => o.id !== "c53-boiler-firefly").map((o) => {
+                const on = adhoc.outletIds.includes(o.id);
+                return (
+                  <button
+                    key={o.id}
+                    type="button"
+                    onClick={() =>
+                      setAdhoc((a) => {
+                        const has = a.outletIds.includes(o.id);
+                        const outletIds = has
+                          ? a.outletIds.filter((id) => id !== o.id)
+                          : [...a.outletIds, o.id];
+                        return { ...a, outletIds };
+                      })
+                    }
+                    className={`h-8 rounded-lg px-2.5 text-[12px] font-semibold ${
+                      on
+                        ? "bg-cyan-400 text-black"
+                        : "bg-white/[0.06] text-white/70 ring-1 ring-white/10"
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
             <label className="block text-[11px] text-white/50">
-              Outlet
-              <select
-                value={adhoc.outletId}
-                onChange={(e) => setAdhoc((a) => ({ ...a, outletId: e.target.value }))}
-                className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-black/40 px-2 text-[13px] text-white"
-              >
-                {DESIGNER_MONTH_OUTLET_IDS.map((id) => (
-                  <option key={id} value={id}>
-                    {teamOutletLabel(id)}
-                  </option>
-                ))}
-              </select>
+              Other (type custom — comma or new line for several)
+              <textarea
+                value={adhoc.customOutlets}
+                onChange={(e) =>
+                  setAdhoc((a) => ({ ...a, customOutlets: e.target.value }))
+                }
+                rows={2}
+                placeholder="e.g. New footlight, Another venue"
+                className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-[13px] text-white"
+              />
             </label>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
             <label className="block text-[11px] text-white/50">
               Design deadline
               <input
@@ -1947,6 +1994,7 @@ https://instagram.com/…"
             disabled={
               !adhoc.title.trim() ||
               busyId === "adhoc" ||
+              (adhoc.outletIds.length === 0 && !adhoc.customOutlets.trim()) ||
               (adhoc.priorityMode === "NONE" && !adhoc.dueDate.trim())
             }
             onClick={() => void createAdhoc()}
@@ -2257,7 +2305,7 @@ https://instagram.com/…"
                     Design due {job.dueDate.slice(8)}/{job.dueDate.slice(5, 7)} ·{" "}
                     {(job.dueTime || "20:00").slice(0, 5)} IST
                     {job.format === "calendar"
-                      ? " (Tue before weekend)"
+                      ? " (Wed before weekend)"
                       : job.lane === "WEEKDAY"
                         ? " (day before)"
                         : " (−4 days)"}

@@ -5,8 +5,11 @@ export const TEAM_AD_OUTLETS = [
   { id: "firefly", label: "Firefly" },
   { id: "komma", label: "Komma" },
   { id: "kiik69", label: "KIIK 69" },
-  { id: "asilmandi", label: "Asil Mandi" },
-  { id: "antervedi", label: "Antervedi" },
+  { id: "anandavidi", label: "Anandavidi" },
+  { id: "asilmandi", label: "Asilmandi" },
+  { id: "antervedi", label: "Antrvadi" },
+  /** Shared weekend TV calendar (C53 + Boiler Room + Firefly). */
+  { id: "c53-boiler-firefly", label: "C53 · Boiler Room · Firefly" },
   { id: "clubrogue-jubilee-hills", label: "Jubilee Hills Clubrogue" },
   { id: "clubrogue-kondapur", label: "Kondapur Clubrogue" },
   { id: "clubrogue-gachibowli", label: "Gachibowli Clubrogue" },
@@ -16,9 +19,38 @@ export const TEAM_AD_OUTLETS = [
 
 export type TeamOutletId = (typeof TEAM_AD_OUTLETS)[number]["id"];
 
+/** Slug for a typed custom footlight / outlet name. */
+export function slugifyOutletId(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
+
+/**
+ * Accept known outlet ids, or a typed custom name (stored as a slug; label falls back to input).
+ * Returns null if empty / invalid.
+ */
+export function normalizeDesignerOutletId(raw: string): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  if (isTeamOutletId(t)) return t;
+  const slug = slugifyOutletId(t);
+  return slug || null;
+}
+
 export function teamOutletLabel(outletId: string | null | undefined): string {
   if (!outletId?.trim()) return "General";
-  return TEAM_AD_OUTLETS.find((o) => o.id === outletId)?.label ?? outletId;
+  const known = TEAM_AD_OUTLETS.find((o) => o.id === outletId)?.label;
+  if (known) return known;
+  // Custom footlights: "my-footlight" → "My Footlight"
+  return outletId
+    .split("-")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
 }
 
 /**

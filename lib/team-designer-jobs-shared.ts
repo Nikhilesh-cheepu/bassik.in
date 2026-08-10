@@ -1,8 +1,21 @@
 /** Client-safe designer job types & constants (no DB / Node imports). */
 
-export const DESIGNER_MONTH_OUTLET_IDS = ["c53", "boiler-room", "firefly", "komma"] as const;
-/** Weekly Fri–Sun TV calendar video (one per outlet per weekend). */
+export const DESIGNER_MONTH_OUTLET_IDS = [
+  "c53",
+  "boiler-room",
+  "firefly",
+  "komma",
+  "anandavidi",
+  "asilmandi",
+  "antervedi",
+  "c53-boiler-firefly",
+] as const;
+/**
+ * C53 + Boiler + Firefly share one Fri–Sat–Sun TV calendar video per weekend
+ * (single queue task, due Wednesday).
+ */
 export const DESIGNER_CALENDAR_OUTLET_IDS = ["c53", "boiler-room", "firefly"] as const;
+export const DESIGNER_CALENDAR_COMBO_OUTLET_ID = "c53-boiler-firefly" as const;
 
 export const DESIGNER_ASSIGNEE_WEEKEND = "mahesh";
 export const DESIGNER_ASSIGNEE_WEEKDAY = "jeslyn";
@@ -11,7 +24,7 @@ export const DESIGNER_ASSIGNEE_WEEKDAY = "jeslyn";
  * Designer upload deadlines (IST).
  * - Jeslyn (Mon–Thu): day before go-live @ 20:00 (Mon flyer → Sun 8 PM).
  * - Mahesh (Fri–Sat–Sun): go-live − 4 days @ 20:00 (Fri → Mon 8 PM).
- * - Weekend TV calendar: Tuesday 8 PM before that Fri–Sat–Sun weekend.
+ * - Weekend TV calendar (C53+Boiler+Firefly together): Wednesday 8 PM before that weekend.
  */
 export const DESIGNER_UPLOAD_DUE_TIME = "20:00";
 export const DESIGNER_WEEKDAY_DUE_TIME = "20:00";

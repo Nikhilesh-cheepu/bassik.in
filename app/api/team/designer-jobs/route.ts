@@ -27,7 +27,7 @@ import {
   normalizeDesignerFileUrls,
   parseDesignerPriorityMode,
 } from "@/lib/team-designer-jobs-shared";
-import { isTeamOutletId } from "@/lib/team-outlets";
+import { normalizeDesignerOutletId, teamOutletLabel } from "@/lib/team-outlets";
 
 async function jobsWithExtras(
   rows: Array<Parameters<typeof toDesignerJobDto>[0] & { id: string; fileUrl?: string | null }>,
@@ -296,6 +296,10 @@ export async function POST(req: NextRequest) {
       dueDate?: string;
       /** Upload/done only — do not send creative to Amit Daily */
       noPost?: boolean;
+      /** Multi-outlet assign (one job per outlet) */
+      outletIds?: string[];
+      /** Typed custom footlights / outlet names */
+      customOutlets?: string[];
     };
 
     if (body.action === "seed" || body.action === "seed-month") {
@@ -332,9 +336,33 @@ export async function POST(req: NextRequest) {
     }
 
     const today = getTodayKey();
-    const outletId = typeof body.outletId === "string" ? body.outletId.trim() : "";
-    if (!isTeamOutletId(outletId)) {
-      return NextResponse.json({ error: "Outlet required" }, { status: 400 });
+    const outletIdsRaw: string[] = [];
+    if (Array.isArray(body.outletIds)) {
+      for (const o of body.outletIds) {
+        if (typeof o === "string" && o.trim()) outletIdsRaw.push(o.trim());
+      }
+    }
+    if (typeof body.outletId === "string" && body.outletId.trim()) {
+      outletIdsRaw.push(body.outletId.trim());
+    }
+    if (Array.isArray(body.customOutlets)) {
+      for (const o of body.customOutlets) {
+        if (typeof o === "string" && o.trim()) outletIdsRaw.push(o.trim());
+      }
+    }
+    const outletIds: string[] = [];
+    const seenOutlet = new Set<string>();
+    for (const raw of outletIdsRaw) {
+      const id = normalizeDesignerOutletId(raw);
+      if (!id || seenOutlet.has(id)) continue;
+      seenOutlet.add(id);
+      outletIds.push(id);
+    }
+    if (outletIds.length === 0) {
+      return NextResponse.json(
+        { error: "Pick at least one outlet (or type a custom footlight)" },
+        { status: 400 }
+      );
     }
 
     const assigneeRaw =
@@ -360,7 +388,6 @@ export async function POST(req: NextRequest) {
         ? linksFromText(body.links)
         : parseDesignerLinks(body.links);
 
-    const format = `adhoc-${Date.now().toString(36)}`;
     const priorityMode = parseDesignerPriorityMode(body.priorityMode);
     const dueYmdRaw =
       typeof body.dueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.dueDate.trim())
@@ -376,42 +403,51 @@ export async function POST(req: NextRequest) {
     const postYmd = postYmdRaw ?? dueYmd;
     const urgent =
       typeof body.urgent === "boolean" ? body.urgent : priorityMode !== "NONE";
-    const sortOrder =
-      priorityMode !== "NONE"
-        ? await nextManualDesignerSortOrder(assigneeId)
-        : naturalDesignerSortOrder(dueYmd, outletId, format);
-
     const noPost = body.noPost === true;
-    const job = await prisma.teamDesignerJob.create({
-      data: {
-        monthKey: monthKeyFromYmd(postYmd),
-        postDate: postYmd,
-        dueDate: dueYmd,
-        dueTime: DESIGNER_UPLOAD_DUE_TIME,
-        outletId,
-        lane,
-        format,
-        title,
-        description: desc,
-        sortOrder,
-        assigneeId,
-        status: "READY_TO_DESIGN",
-        urgent,
-        priorityMode,
-        createdBy: session.username,
-      },
-    });
+    const stamp = Date.now().toString(36);
 
-    if (noPost) {
-      await ensureDesignerNoPostColumn();
-      await prisma.$executeRawUnsafe(
-        `UPDATE "TeamDesignerJob" SET "noPost" = true, "updatedAt" = NOW() WHERE id = $1`,
-        job.id
-      );
-    }
+    const createdJobs = [];
+    for (let i = 0; i < outletIds.length; i++) {
+      const outletId = outletIds[i]!;
+      const format = `adhoc-${stamp}-${i}-${outletId}`.slice(0, 64);
+      const sortOrder =
+        priorityMode !== "NONE"
+          ? await nextManualDesignerSortOrder(assigneeId)
+          : naturalDesignerSortOrder(dueYmd, outletId, format);
 
-    if (links.length > 0) {
-      await setDesignerJobLinks(job.id, links);
+      const job = await prisma.teamDesignerJob.create({
+        data: {
+          monthKey: monthKeyFromYmd(postYmd),
+          postDate: postYmd,
+          dueDate: dueYmd,
+          dueTime: DESIGNER_UPLOAD_DUE_TIME,
+          outletId,
+          lane,
+          format,
+          title,
+          description: desc,
+          sortOrder,
+          assigneeId,
+          status: "READY_TO_DESIGN",
+          urgent,
+          priorityMode,
+          createdBy: session.username,
+        },
+      });
+
+      if (noPost) {
+        await ensureDesignerNoPostColumn();
+        await prisma.$executeRawUnsafe(
+          `UPDATE "TeamDesignerJob" SET "noPost" = true, "updatedAt" = NOW() WHERE id = $1`,
+          job.id
+        );
+      }
+
+      if (links.length > 0) {
+        await setDesignerJobLinks(job.id, links);
+      }
+
+      createdJobs.push(toDesignerJobDto({ ...job, links, noPost }));
     }
 
     if (priorityMode === "PAUSE_NOW") {
@@ -424,13 +460,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const outletLabels = outletIds.map((id) => teamOutletLabel(id)).join(", ");
+    const who = assigneeId === "jeslyn" ? "Jeslyn" : "Mahesh";
     return NextResponse.json({
-      job: toDesignerJobDto({
-        ...job,
-        links,
-        noPost,
-      }),
-      message: `Sent to ${assigneeId === "jeslyn" ? "Jeslyn" : "Mahesh"}`,
+      job: createdJobs[0],
+      jobs: createdJobs,
+      message:
+        createdJobs.length > 1
+          ? `Sent ${createdJobs.length} tasks to ${who} (${outletLabels})`
+          : `Sent to ${who} · ${outletLabels}`,
     });
   } catch (err) {
     console.error("[team/designer-jobs] POST", err);
