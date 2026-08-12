@@ -51,10 +51,12 @@ import {
   type DesignerSuggestedNudgeDto,
 } from "@/lib/team-designer-jobs-shared";
 
-/** Per-outlet posts match exactly; weekend TV calendar counts for C53 / Boiler / Firefly. */
+/** Per-outlet posts match exactly; combo / multi-outlet tasks match any selected outlet. */
 function jobMatchesOutletFilter(job: DesignerJobDto, filter: string): boolean {
   if (filter === "all") return true;
   if (job.outletId === filter) return true;
+  const ids = splitDesignerOutletIds(job.outletId);
+  if (ids.includes(filter)) return true;
   return (
     job.format === "calendar" &&
     job.outletId === DESIGNER_CALENDAR_COMBO_OUTLET_ID &&
@@ -64,7 +66,7 @@ function jobMatchesOutletFilter(job: DesignerJobDto, filter: string): boolean {
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { uploadTeamFile } from "@/lib/team-client-upload";
 import { teamDownloadHref } from "@/lib/team-download";
-import { TEAM_AD_OUTLETS, teamOutletLabel } from "@/lib/team-outlets";
+import { TEAM_AD_OUTLETS, splitDesignerOutletIds, teamOutletLabel } from "@/lib/team-outlets";
 import {
   IconDone,
   IconDrop,
@@ -845,7 +847,14 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         }
         continue;
       }
-      map.set(j.outletId, (map.get(j.outletId) ?? 0) + 1);
+      const ids = splitDesignerOutletIds(j.outletId);
+      if (ids.length === 0) {
+        map.set(j.outletId, (map.get(j.outletId) ?? 0) + 1);
+        continue;
+      }
+      for (const id of ids) {
+        map.set(id, (map.get(id) ?? 0) + 1);
+      }
     }
     return map;
   }, [designerVisibleJobs, queueView, sendableJobs]);
@@ -1855,7 +1864,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           <div className="space-y-2">
             <p className="text-[11px] text-white/50">
               Outlets / footlights{" "}
-              <span className="text-white/35">(pick one or more)</span>
+              <span className="text-white/35">
+                (pick several = one task listing all of them, not copies)
+              </span>
             </p>
             <div className="flex flex-wrap gap-1.5">
               {TEAM_AD_OUTLETS.filter((o) => o.id !== "c53-boiler-firefly").map((o) => {

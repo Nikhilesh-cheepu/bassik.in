@@ -45,11 +45,11 @@ export const CHECKLIST_PLATFORM_LABELS: Record<ChecklistPlatformId, string> = {
 };
 
 const TZ = "Asia/Kolkata";
-/** Rolling window: today + up to 6 prior days of unfinished work (7 days total). */
-const OVERDUE_LOOKBACK_DAYS = 6;
+/** Keep unfinished stories / posts / ads on the board until marked done (not auto-closed). */
+const OVERDUE_LOOKBACK_DAYS = 30;
 /**
- * Board go-live for overdue stacking — only unfinished work from this day
- * forward stacks (7-day rolling window). Earlier synthetic backlog is ignored.
+ * Board go-live for overdue stacking — unfinished work from this day forward
+ * stays visible. Nothing is auto-marked done when the due date passes.
  */
 const OVERDUE_EPOCH_YMD = "2026-07-14";
 

@@ -15,7 +15,7 @@ import {
   type TeamChecklistItemDto,
 } from "@/lib/team-checklists";
 import { CHECKLIST_DAY_LABELS, type ChecklistDayId } from "@/lib/team-checklist-templates";
-import { teamOutletLabel } from "@/lib/team-outlets";
+import { splitDesignerOutletIds, teamOutletLabel } from "@/lib/team-outlets";
 import {
   DESIGNER_ASSIGNEE_WEEKDAY,
   DESIGNER_ASSIGNEE_WEEKEND,
@@ -996,31 +996,35 @@ export async function syncDesignerJobToChecklistHandoff(job: TeamDesignerJob): P
     await loadDesignerFileUrlsByIds([job.id])
   ).get(job.id) ?? normalizeDesignerFileUrls(job.fileUrl, null);
   if (fileUrls.length === 0) return;
-  const base = {
-    outletId: job.outletId,
-    dayId,
-    postDate: job.postDate,
-    fileUrl: fileUrls[0]!,
-    fileUrls,
-    postingNotes: job.postingNotes,
-    scheduleNote: job.scheduleNote,
-    uploadedAt,
-  };
+  const outletIds = splitDesignerOutletIds(job.outletId);
+  const ids = outletIds.length > 0 ? outletIds : [job.outletId];
 
-  if (job.lane === "WEEKEND") {
-    await Promise.all([
-      writeChecklistHandoffReady({ ...base, kind: "stories", format: "story" }),
-      writeChecklistHandoffReady({ ...base, kind: "posts", format: "post" }),
-      writeChecklistHandoffReady({ ...base, kind: "ads", format: "ad" }),
-    ]);
-    return;
+  for (const outletId of ids) {
+    const base = {
+      outletId,
+      dayId,
+      postDate: job.postDate,
+      fileUrl: fileUrls[0]!,
+      fileUrls,
+      postingNotes: job.postingNotes,
+      scheduleNote: job.scheduleNote,
+      uploadedAt,
+    };
+
+    if (job.lane === "WEEKEND") {
+      await Promise.all([
+        writeChecklistHandoffReady({ ...base, kind: "stories", format: "story" }),
+        writeChecklistHandoffReady({ ...base, kind: "posts", format: "post" }),
+        writeChecklistHandoffReady({ ...base, kind: "ads", format: "ad" }),
+      ]);
+    } else {
+      await writeChecklistHandoffReady({
+        ...base,
+        kind: "stories",
+        format: "story",
+      });
+    }
   }
-
-  await writeChecklistHandoffReady({
-    ...base,
-    kind: "stories",
-    format: "story",
-  });
 }
 
 /** Fill missing handoff.fileUrls from designer Done jobs (for jobs synced before multi-file). */
@@ -1140,18 +1144,21 @@ async function clearChecklistHandoffReady(params: {
 export async function clearDesignerJobChecklistHandoff(job: TeamDesignerJob): Promise<void> {
   if (job.format === "calendar") return;
   const dayId = dayIdForYmd(job.postDate);
-  const base = { outletId: job.outletId, dayId, postDate: job.postDate };
+  const outletIds = splitDesignerOutletIds(job.outletId);
+  const ids = outletIds.length > 0 ? outletIds : [job.outletId];
 
-  if (job.lane === "WEEKEND") {
-    await Promise.all([
-      clearChecklistHandoffReady({ ...base, kind: "stories" }),
-      clearChecklistHandoffReady({ ...base, kind: "posts" }),
-      clearChecklistHandoffReady({ ...base, kind: "ads" }),
-    ]);
-    return;
+  for (const outletId of ids) {
+    const base = { outletId, dayId, postDate: job.postDate };
+    if (job.lane === "WEEKEND") {
+      await Promise.all([
+        clearChecklistHandoffReady({ ...base, kind: "stories" }),
+        clearChecklistHandoffReady({ ...base, kind: "posts" }),
+        clearChecklistHandoffReady({ ...base, kind: "ads" }),
+      ]);
+    } else {
+      await clearChecklistHandoffReady({ ...base, kind: "stories" });
+    }
   }
-
-  await clearChecklistHandoffReady({ ...base, kind: "stories" });
 }
 
 /**

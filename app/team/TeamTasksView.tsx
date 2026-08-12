@@ -188,11 +188,12 @@ type HandoffPayload = {
 };
 
 function isItemDone(item: TeamChecklistItemDto, dateKey: string): boolean {
+  const key = item.targetDate ?? dateKey;
   if (item.kind === "posts" && item.dayOfWeek) {
-    return Boolean(item.completionsByDate[item.targetDate ?? dateKey]);
+    return Boolean(item.completionsByDate[key]);
   }
   if (item.kind === "posts") return Object.keys(item.completionsByDate).length > 0;
-  return Boolean(item.completionsByDate[dateKey]);
+  return Boolean(item.completionsByDate[key]);
 }
 
 /** Ready for Amit = marked ready after upload with a downloadable file. */

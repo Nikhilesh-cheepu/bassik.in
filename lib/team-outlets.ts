@@ -40,16 +40,34 @@ export function normalizeDesignerOutletId(raw: string): string | null {
   return slug || null;
 }
 
-export function teamOutletLabel(outletId: string | null | undefined): string {
-  if (!outletId?.trim()) return "General";
+/** Multi-outlet designer tasks store ids joined with `+` (hyphens stay inside a single slug). */
+export const DESIGNER_OUTLET_JOIN = "+";
+
+export function splitDesignerOutletIds(outletId: string | null | undefined): string[] {
+  const raw = outletId?.trim() ?? "";
+  if (!raw) return [];
+  return [...new Set(raw.split(DESIGNER_OUTLET_JOIN).map((id) => id.trim()).filter(Boolean))];
+}
+
+export function joinDesignerOutletIds(ids: string[]): string {
+  return [...new Set(ids.map((id) => id.trim()).filter(Boolean))].join(DESIGNER_OUTLET_JOIN);
+}
+
+function labelOneOutlet(outletId: string): string {
   const known = TEAM_AD_OUTLETS.find((o) => o.id === outletId)?.label;
   if (known) return known;
-  // Custom footlights: "my-footlight" → "My Footlight"
   return outletId
     .split("-")
     .filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+}
+
+export function teamOutletLabel(outletId: string | null | undefined): string {
+  if (!outletId?.trim()) return "General";
+  const parts = splitDesignerOutletIds(outletId);
+  if (parts.length > 1) return parts.map(labelOneOutlet).join(" · ");
+  return labelOneOutlet(parts[0] ?? outletId);
 }
 
 /**

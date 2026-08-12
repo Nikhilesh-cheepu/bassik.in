@@ -26,7 +26,7 @@ import {
   clampDesignerWindowDays,
   parseDesignerPriorityMode,
 } from "@/lib/team-designer-jobs-shared";
-import { normalizeDesignerOutletId, teamOutletLabel } from "@/lib/team-outlets";
+import { joinDesignerOutletIds, normalizeDesignerOutletId, teamOutletLabel } from "@/lib/team-outlets";
 import { invalidateDesignerPerformanceLiteCache } from "@/lib/team-designer-performance";
 
 /** One Prisma select — columns are in schema (no follow-up raw queries). */
@@ -255,15 +255,12 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Open queue: still-open jobs in the window. Include go-live today/future even if
-    // creative dueDate already passed (e.g. Sat/Sun posts due Tue–Wed still needed Fri).
-    // Also always include stuck IN_PROGRESS / PAUSED outside the window (one query).
+    // Open + To send: unfinished work stays until someone marks Done.
+    // Look BACK as well as forward — past due / past go-live must not vanish.
+    const lookbackFrom = addDaysYmd(today, -(days - 1));
     const assigneeFilter = isAdmin ? {} : { assigneeId: memberId };
     const windowOpen = {
-      postDate: { gte: fromDate, lte: toDate },
-      OR: [{ dueDate: { gte: today } }, { postDate: { gte: today } }] as Array<
-        { dueDate: { gte: string } } | { postDate: { gte: string } }
-      >,
+      postDate: { gte: lookbackFrom, lte: toDate },
       status: { not: "DESIGN_DONE" as const },
       ...assigneeFilter,
     };
@@ -271,11 +268,16 @@ export async function GET(req: NextRequest) {
       status: { in: ["IN_PROGRESS", "PAUSED"] as Array<"IN_PROGRESS" | "PAUSED"> },
       ...assigneeFilter,
     };
+    const openCalendars = {
+      format: "calendar",
+      status: { not: "DESIGN_DONE" as const },
+      ...assigneeFilter,
+    };
 
     let rows;
     try {
       rows = await findJobs({
-        where: { OR: [windowOpen, activeStuck] },
+        where: { OR: [windowOpen, activeStuck, openCalendars] },
         orderBy: [{ dueDate: "asc" }, { postDate: "asc" }, { outletId: "asc" }],
       });
     } catch (primaryErr) {
@@ -284,15 +286,19 @@ export async function GET(req: NextRequest) {
         where: {
           OR: [
             {
-              postDate: { gte: fromDate, lte: toDate },
-              OR: [{ dueDate: { gte: today } }, { postDate: { gte: today } }],
+              postDate: { gte: lookbackFrom, lte: toDate },
               status: {
-                in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS"],
+                in: ["WAITING_BRIEF", "READY_TO_DESIGN", "IN_PROGRESS", "PAUSED"],
               },
               ...assigneeFilter,
             },
             {
               status: { in: ["IN_PROGRESS", "PAUSED"] },
+              ...assigneeFilter,
+            },
+            {
+              format: "calendar",
+              status: { not: "DESIGN_DONE" },
               ...assigneeFilter,
             },
           ],
@@ -313,7 +319,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       view: "open",
-      window: { fromDate, toDate, days },
+      window: { fromDate: lookbackFrom, toDate, days },
       jobs,
       today,
       lastWaTime: "19:00",
@@ -474,53 +480,49 @@ export async function POST(req: NextRequest) {
     const noPost = body.noPost === true;
     const taskWeight = clampDesignerTaskWeight(body.taskWeight);
     const stamp = Date.now().toString(36);
+    const outletId = joinDesignerOutletIds(outletIds);
+    const format = `adhoc-${stamp}`.slice(0, 64);
+    const sortOrder =
+      priorityMode !== "NONE"
+        ? await nextManualDesignerSortOrder(assigneeId)
+        : naturalDesignerSortOrder(dueYmd, outletId, format);
 
-    const createdJobs = [];
-    for (let i = 0; i < outletIds.length; i++) {
-      const outletId = outletIds[i]!;
-      const format = `adhoc-${stamp}-${i}-${outletId}`.slice(0, 64);
-      const sortOrder =
-        priorityMode !== "NONE"
-          ? await nextManualDesignerSortOrder(assigneeId)
-          : naturalDesignerSortOrder(dueYmd, outletId, format);
+    const job = await prisma.teamDesignerJob.create({
+      data: {
+        monthKey: monthKeyFromYmd(postYmd),
+        postDate: postYmd,
+        dueDate: dueYmd,
+        dueTime: DESIGNER_UPLOAD_DUE_TIME,
+        outletId,
+        lane,
+        format,
+        title,
+        description: desc,
+        sortOrder,
+        assigneeId,
+        status: "READY_TO_DESIGN",
+        urgent,
+        priorityMode,
+        createdBy: session.username,
+      },
+    });
 
-      const job = await prisma.teamDesignerJob.create({
-        data: {
-          monthKey: monthKeyFromYmd(postYmd),
-          postDate: postYmd,
-          dueDate: dueYmd,
-          dueTime: DESIGNER_UPLOAD_DUE_TIME,
-          outletId,
-          lane,
-          format,
-          title,
-          description: desc,
-          sortOrder,
-          assigneeId,
-          status: "READY_TO_DESIGN",
-          urgent,
-          priorityMode,
-          createdBy: session.username,
-        },
-      });
-
-      if (noPost) {
-        await ensureDesignerNoPostColumn();
-        await prisma.$executeRawUnsafe(
-          `UPDATE "TeamDesignerJob" SET "noPost" = true, "updatedAt" = NOW() WHERE id = $1`,
-          job.id
-        );
-      }
-      if (taskWeight !== 1) {
-        await setDesignerJobTaskWeight(job.id, taskWeight);
-      }
-
-      if (links.length > 0) {
-        await setDesignerJobLinks(job.id, links);
-      }
-
-      createdJobs.push(toDesignerJobDto({ ...job, links, noPost, taskWeight }));
+    if (noPost) {
+      await ensureDesignerNoPostColumn();
+      await prisma.$executeRawUnsafe(
+        `UPDATE "TeamDesignerJob" SET "noPost" = true, "updatedAt" = NOW() WHERE id = $1`,
+        job.id
+      );
     }
+    if (taskWeight !== 1) {
+      await setDesignerJobTaskWeight(job.id, taskWeight);
+    }
+
+    if (links.length > 0) {
+      await setDesignerJobLinks(job.id, links);
+    }
+
+    const createdDto = toDesignerJobDto({ ...job, links, noPost, taskWeight });
 
     if (priorityMode === "PAUSE_NOW") {
       const actives = await prisma.teamDesignerJob.findMany({
@@ -532,15 +534,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const outletLabels = outletIds.map((id) => teamOutletLabel(id)).join(", ");
+    const outletLabels = teamOutletLabel(outletId);
     const who = assigneeId === "jeslyn" ? "Jeslyn" : "Mahesh";
     return NextResponse.json({
-      job: createdJobs[0],
-      jobs: createdJobs,
-      message:
-        createdJobs.length > 1
-          ? `Sent ${createdJobs.length} tasks to ${who} (${outletLabels})`
-          : `Sent to ${who} · ${outletLabels}`,
+      job: createdDto,
+      jobs: [createdDto],
+      message: `Sent to ${who} · ${outletLabels}`,
     });
   } catch (err) {
     console.error("[team/designer-jobs] POST", err);
