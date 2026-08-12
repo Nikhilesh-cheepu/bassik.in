@@ -235,6 +235,21 @@ export async function GET(req: NextRequest) {
         take: 300,
       });
 
+      // TV calendars often have no fileUrl (admin mark-done / not posted) — still list them.
+      const calendarDone = await findJobs({
+        where: {
+          format: "calendar",
+          status: "DESIGN_DONE",
+          ...(isAdmin ? {} : { assigneeId: memberId }),
+        },
+        orderBy: [{ postDate: "desc" }],
+        take: 50,
+      });
+      const closedSeen = new Set(rows.map((r) => r.id));
+      for (const r of calendarDone) {
+        if (!closedSeen.has(r.id)) rows.push(r);
+      }
+
       // assigneeId asc puts jeslyn before mahesh — reorder in memory
       const jobs = jobsToDto(rows, today).sort((a, b) => {
         const rank = (id: string) =>

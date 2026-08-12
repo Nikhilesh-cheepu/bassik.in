@@ -14,6 +14,16 @@ export const DESIGNER_MONTH_OUTLET_IDS = [
 export const DESIGNER_CALENDAR_OUTLET_IDS = ["c53", "boiler-room", "firefly"] as const;
 export const DESIGNER_CALENDAR_COMBO_OUTLET_ID = "c53-boiler-firefly" as const;
 
+export function isDesignerTvCalendarJob(job: {
+  format?: string | null;
+  title?: string | null;
+  outletId?: string | null;
+}): boolean {
+  if (job.format === "calendar") return true;
+  if (job.outletId === DESIGNER_CALENDAR_COMBO_OUTLET_ID) return true;
+  return /tv\s*calendar/i.test(job.title ?? "");
+}
+
 export const DESIGNER_ASSIGNEE_WEEKEND = "mahesh";
 export const DESIGNER_ASSIGNEE_WEEKDAY = "jeslyn";
 

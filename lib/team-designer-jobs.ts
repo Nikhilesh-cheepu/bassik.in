@@ -748,7 +748,7 @@ export async function seedDesignerRollingWindow(params: {
           "One TV-size calendar for C53, Boiler Room and Firefly together — covers Friday + Saturday + Sunday. Due Wednesday.",
         sortOrder: naturalDesignerSortOrder(dueDate, outletId, "calendar"),
         assigneeId: DESIGNER_ASSIGNEE_WEEKEND,
-        status: "WAITING_BRIEF",
+        status: "READY_TO_DESIGN",
         createdBy: params.createdBy,
       });
     }
