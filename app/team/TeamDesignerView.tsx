@@ -46,6 +46,7 @@ import {
   partitionOpenDesignerQueueByAssignee,
   sortDesignerJobs,
   suggestDesignerFreeDeadlineSlots,
+  tvCalendarWeekendLabel,
   type DesignerJobDto,
   type DesignerPerformanceDto,
   type DesignerPriorityMode,
@@ -2311,7 +2312,9 @@ https://instagram.com/…"
             dragHandleProps?: Record<string, unknown>,
             tone: "catchUp" | "today" | "next" | "done" = "next"
           ) => {
-          const { dayName, dateLabel } = formatPostDateParts(job.postDate);
+          const { dayName, dateLabel } = isDesignerTvCalendarJob(job)
+            ? tvCalendarWeekendLabel(job.postDate)
+            : formatPostDateParts(job.postDate);
           const designer = designerDisplayName(job.assigneeId);
           const formatLabel = designerFormatLabel(job.format);
           const canSend = isAdmin && job.status === "WAITING_BRIEF";
@@ -3285,7 +3288,9 @@ https://instagram.com/…"
                 </div>
                 <div className="space-y-2">
                   {toSendVisible.map((job) => {
-                    const { dayName, dateLabel } = formatPostDateParts(job.postDate);
+                    const { dayName, dateLabel } = isDesignerTvCalendarJob(job)
+                      ? tvCalendarWeekendLabel(job.postDate)
+                      : formatPostDateParts(job.postDate);
                     const designer = designerDisplayName(job.assigneeId);
                     const selected = selectedIds.has(job.id);
                     return (
@@ -3468,7 +3473,9 @@ https://instagram.com/…"
                       </span>
                     </h3>
                     {g.jobs.map((job) => {
-                      const { dayName, dateLabel } = formatPostDateParts(job.postDate);
+                      const { dayName, dateLabel } = isDesignerTvCalendarJob(job)
+                        ? tvCalendarWeekendLabel(job.postDate)
+                        : formatPostDateParts(job.postDate);
                       return (
                         <article
                           key={job.id}

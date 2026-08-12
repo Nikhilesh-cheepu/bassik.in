@@ -28,6 +28,8 @@ import {
   DESIGNER_WEEKEND_DUE_TIME,
   DESIGNER_WINDOW_DAYS,
   DESIGNER_MANUAL_SORT_CEILING,
+  fridayForDesignerWeekend,
+  tvCalendarJobTitle,
   isBoilerplateDesignerDescription,
   naturalDesignerSortOrder,
   normalizeDesignerFileUrls,
@@ -136,6 +138,53 @@ export function weekdayStoryDueDate(postDate: string): string {
 /** Friday of a Fri–Sat–Sun weekend → Wednesday before (2 days earlier) @ 8 PM. */
 export function weekendCalendarDueDate(fridayYmd: string): string {
   return addDaysYmd(fridayYmd, -2);
+}
+
+/** Create missing weekend TV calendars (this Friday through the queue window). */
+export async function ensureUpcomingTvCalendars(
+  createdBy = "system-seed",
+  days = DESIGNER_WINDOW_DAYS
+): Promise<number> {
+  const today = getTodayKey();
+  const start = fridayForDesignerWeekend(today);
+  const fridays = datesInRollingWindow(start, days, ["fri"]);
+  if (fridays.length === 0) return 0;
+
+  const existing = await prisma.teamDesignerJob.findMany({
+    where: {
+      format: "calendar",
+      outletId: DESIGNER_CALENDAR_COMBO_OUTLET_ID,
+      postDate: { in: fridays },
+    },
+    select: { postDate: true },
+  });
+  const have = new Set(existing.map((e) => e.postDate));
+  const missing = fridays.filter((f) => !have.has(f));
+  if (missing.length === 0) return 0;
+
+  const result = await prisma.teamDesignerJob.createMany({
+    data: missing.map((friday) => {
+      const dueDate = weekendCalendarDueDate(friday);
+      return {
+        monthKey: monthKeyFromYmd(friday),
+        postDate: friday,
+        dueDate,
+        dueTime: DESIGNER_CALENDAR_DUE_TIME,
+        outletId: DESIGNER_CALENDAR_COMBO_OUTLET_ID,
+        lane: "WEEKEND" as const,
+        format: "calendar",
+        title: tvCalendarJobTitle(friday),
+        description:
+          "One TV-size calendar for C53, Boiler Room and Firefly together — covers Friday + Saturday + Sunday. Due Wednesday.",
+        sortOrder: 0,
+        assigneeId: DESIGNER_ASSIGNEE_WEEKEND,
+        status: "READY_TO_DESIGN" as const,
+        createdBy,
+      };
+    }),
+    skipDuplicates: true,
+  });
+  return result.count;
 }
 
 /** IST due instant for a designer job (uses lane-specific clock). */
@@ -730,7 +779,11 @@ export async function seedDesignerRollingWindow(params: {
 
   // One weekly TV calendar for C53 + Boiler + Firefly (Fri–Sat–Sun together) — Mahesh, due Wednesday.
   if (lanes.includes("WEEKEND")) {
-    const fridays = datesInRollingWindow(fromDate, days, ["fri"]);
+    const fridays = datesInRollingWindow(
+      fridayForDesignerWeekend(fromDate),
+      days,
+      ["fri"]
+    );
     const outletId = DESIGNER_CALENDAR_COMBO_OUTLET_ID;
     for (const friday of fridays) {
       const dueDate = weekendCalendarDueDate(friday);
@@ -743,10 +796,10 @@ export async function seedDesignerRollingWindow(params: {
         outletId,
         lane: "WEEKEND",
         format: "calendar",
-        title: "C53 · Boiler Room · Firefly — Weekend TV Calendar (Fri–Sun)",
+        title: tvCalendarJobTitle(friday),
         description:
           "One TV-size calendar for C53, Boiler Room and Firefly together — covers Friday + Saturday + Sunday. Due Wednesday.",
-        sortOrder: naturalDesignerSortOrder(dueDate, outletId, "calendar"),
+        sortOrder: 0,
         assigneeId: DESIGNER_ASSIGNEE_WEEKEND,
         status: "READY_TO_DESIGN",
         createdBy: params.createdBy,

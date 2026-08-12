@@ -13,6 +13,7 @@ import {
   rollingWindowBounds,
   seedDesignerRollingWindow,
   ensureDesignerNoPostColumn,
+  ensureUpcomingTvCalendars,
   pauseDesignerJobNow,
   setDesignerJobLinks,
   setDesignerJobTaskWeight,
@@ -272,6 +273,13 @@ export async function GET(req: NextRequest) {
 
     // Open + To send: unfinished work stays until someone marks Done.
     // Look BACK as well as forward — past due / past go-live must not vanish.
+    // Make sure this weekend's TV calendar exists (Fri–Sun), not only later weeks.
+    try {
+      await ensureUpcomingTvCalendars(session.username, days);
+    } catch (ensureErr) {
+      console.error("[team/designer-jobs] ensure TV calendars", ensureErr);
+    }
+
     const lookbackFrom = addDaysYmd(today, -(days - 1));
     const assigneeFilter = isAdmin ? {} : { assigneeId: memberId };
     const windowOpen = {

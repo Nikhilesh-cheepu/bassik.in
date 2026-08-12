@@ -581,6 +581,46 @@ export function designerFormatLabel(format: string): string {
   return "Post";
 }
 
+/** Friday of the weekend that contains `ymd`, or the upcoming Friday (Mon–Thu). */
+export function fridayForDesignerWeekend(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y!, m! - 1, d!, 12, 0, 0));
+  const dow = dt.getUTCDay(); // 0 Sun, 5 Fri, 6 Sat
+  if (dow === 5) return ymd;
+  if (dow === 6) return addDaysYmdLocal(ymd, -1);
+  if (dow === 0) return addDaysYmdLocal(ymd, -2);
+  return addDaysYmdLocal(ymd, 5 - dow);
+}
+
+/** Card label: Fri–Sun / 14–15–16 Aug 2026 */
+export function tvCalendarWeekendLabel(fridayYmd: string): {
+  dayName: string;
+  dateLabel: string;
+} {
+  const sat = addDaysYmdLocal(fridayYmd, 1);
+  const sun = addDaysYmdLocal(fridayYmd, 2);
+  const dayNum = (ymd: string) => String(Number(ymd.slice(8, 10)));
+  const monthYear = (ymd: string) => {
+    const [y, m, d] = ymd.split("-").map(Number);
+    const dt = new Date(Date.UTC(y!, m! - 1, d!, 12, 0, 0));
+    return dt.toLocaleDateString("en-IN", {
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+  };
+  const sameMonth = fridayYmd.slice(0, 7) === sun.slice(0, 7);
+  const dateLabel = sameMonth
+    ? `${dayNum(fridayYmd)}–${dayNum(sat)}–${dayNum(sun)} ${monthYear(fridayYmd)}`
+    : `${dayNum(fridayYmd)} ${monthYear(fridayYmd)} – ${dayNum(sun)} ${monthYear(sun)}`;
+  return { dayName: "Fri–Sun", dateLabel };
+}
+
+export function tvCalendarJobTitle(fridayYmd: string): string {
+  const { dateLabel } = tvCalendarWeekendLabel(fridayYmd);
+  return `Weekend TV Calendar · ${dateLabel}`;
+}
+
 function addDaysYmdLocal(ymd: string, delta: number): string {
   const [y, m, d] = ymd.split("-").map(Number);
   const dt = new Date(Date.UTC(y!, m! - 1, d!, 12, 0, 0));
