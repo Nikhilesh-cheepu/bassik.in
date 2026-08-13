@@ -1442,28 +1442,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     return sortDesignerJobs(
       scopedJobs.filter(
         (j) =>
-          !isDesignerTvCalendarJob(j) &&
-          (j.status === "READY_TO_DESIGN" ||
-            j.status === "IN_PROGRESS" ||
-            j.status === "PAUSED")
+          j.status === "READY_TO_DESIGN" ||
+          j.status === "IN_PROGRESS" ||
+          j.status === "PAUSED"
       )
     );
   }, [scopedJobs]);
-
-  const tvCalendarJobs = useMemo(() => {
-    const list = scopedJobs.filter((j) => {
-      if (!isDesignerTvCalendarJob(j)) return false;
-      if (queueView === "closed" || queueView === "expired") {
-        return j.status === "DESIGN_DONE";
-      }
-      if (queueView === "toSend") return j.status === "WAITING_BRIEF";
-      if (queueView === "holiday") return false;
-      return j.status !== "DESIGN_DONE";
-    });
-    return sortDesignerJobs(
-      list.filter((j) => jobMatchesOutletFilter(j, outletFilter))
-    );
-  }, [scopedJobs, queueView, outletFilter]);
 
   /**
    * Catch up = unfinished count from past workdays (4/day shortfall).
@@ -1837,27 +1821,6 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
             }`}
           >
             {queueView === "toSend" ? toSendCount : designerVisibleJobs.length}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setOutletFilter(outletFilter === "calendar" ? "all" : "calendar");
-            setSelectedIds(new Set());
-          }}
-          className={`flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[12px] font-semibold ${
-            outletFilter === "calendar"
-              ? "bg-violet-400 text-black shadow-[0_0_14px_rgba(167,139,250,0.35)]"
-              : "bg-white/[0.06] text-white/70 ring-1 ring-white/10 hover:text-white"
-          }`}
-        >
-          TV calendar
-          <span
-            className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums ${
-              outletFilter === "calendar" ? "bg-black/25 text-black" : "bg-violet-400/25 text-violet-100"
-            }`}
-          >
-            {tvCalendarJobs.length}
           </span>
         </button>
         {DESIGNER_MONTH_OUTLET_IDS.map((id) => {
@@ -2292,10 +2255,7 @@ https://instagram.com/…"
       ) : null}
 
       <section className="space-y-3">
-        {queue.length === 0 &&
-        tvCalendarJobs.length === 0 &&
-        !loading &&
-        queueView !== "toSend" ? (
+        {queue.length === 0 && !loading && queueView !== "toSend" ? (
           <p className="text-[13px] text-white/35">
             {queueView === "closed"
               ? "No done jobs for this view."
@@ -3229,7 +3189,7 @@ https://instagram.com/…"
                 <p className="text-[13px] text-white/45">Admin only.</p>
               );
             }
-            if (toSendVisible.length === 0 && tvCalendarJobs.length === 0) {
+            if (toSendVisible.length === 0) {
               return (
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-6 text-center">
                   <p className="text-[14px] font-semibold text-white/80">Nothing to send</p>
@@ -3241,13 +3201,6 @@ https://instagram.com/…"
             }
             return (
               <div className="space-y-3">
-                {renderSection(
-                  "TV calendar",
-                  "C53 + Boiler + Firefly · one video per weekend. Send to put it on Open.",
-                  tvCalendarJobs,
-                  "next",
-                  "text-violet-200/90"
-                )}
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-[12px] font-semibold uppercase tracking-wide text-amber-200/90">
                     To send ({toSendVisible.length})
@@ -3454,13 +3407,6 @@ https://instagram.com/…"
             const groups = groupDoneJobsByDay(queue);
             return (
               <div className="space-y-5">
-                {renderSection(
-                  "TV calendar",
-                  "Finished weekend TV calendars.",
-                  tvCalendarJobs,
-                  "done",
-                  "text-violet-200/90"
-                )}
                 <h2 className="text-[12px] font-semibold uppercase tracking-wide text-white/50">
                   Done · {queue.length}
                 </h2>
@@ -3555,13 +3501,6 @@ https://instagram.com/…"
                     </ul>
                   </div>
                 ) : null}
-                {renderSection(
-                  "TV calendar",
-                  "C53 + Boiler + Firefly · one video per weekend (due Wednesday).",
-                  tvCalendarJobs,
-                  "today",
-                  "text-violet-200/90"
-                )}
                 {catchUpDebt > openParts.catchUp.length &&
                 catchUpDebt > 0 &&
                 isAdmin ? (
@@ -3627,13 +3566,6 @@ https://instagram.com/…"
                     </ul>
                   </div>
                 ) : null}
-                {renderSection(
-                  "TV calendar",
-                  "C53 + Boiler + Firefly · one video per weekend (due Wednesday).",
-                  tvCalendarJobs,
-                  "today",
-                  "text-violet-200/90"
-                )}
                 {renderSection(
                   "Catch up",
                   openParts.catchUpHint ||
