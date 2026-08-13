@@ -510,7 +510,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   /** Who's queue you're looking at — filters instantly (no refetch). */
   const [designerTab, setDesignerTab] = useState<"all" | "mahesh" | "jeslyn">("all");
   const [queueView, setQueueView] = useState<QueueView>("open");
-  const [outletFilter, setOutletFilter] = useState<"all" | "calendar" | string>("all");
+  const [outletFilter, setOutletFilter] = useState<"all" | string>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [allJobs, setAllJobs] = useState<DesignerJobDto[]>([]);
   const [windowMeta, setWindowMeta] = useState<WindowMeta | null>(null);
