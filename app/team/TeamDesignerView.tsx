@@ -71,7 +71,9 @@ import { teamDownloadHref } from "@/lib/team-download";
 import { TEAM_AD_OUTLETS, splitDesignerOutletIds, teamOutletLabel } from "@/lib/team-outlets";
 import {
   IconDone,
+  IconDownload,
   IconDrop,
+  IconEdit,
   IconStart,
   IconTrash,
   IconUnsend,
@@ -1253,7 +1255,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     setUploadForm({
       postingNotes: job.postingNotes ?? "",
       scheduleNote: job.scheduleNote ?? "",
-      waApproved: isAdmin,
+      waApproved: isAdmin || job.status === "DESIGN_DONE",
       fileUrls: existing,
     });
   };
@@ -3422,11 +3424,15 @@ https://instagram.com/…"
                       const { dayName, dateLabel } = isDesignerTvCalendarJob(job)
                         ? tvCalendarWeekendLabel(job.postDate)
                         : formatPostDateParts(job.postDate);
+                      const files = designerJobFileUrls(job);
+                      const canEditDone = isAdmin || job.assigneeId === memberId;
+                      const editing = uploadJobId === job.id;
                       return (
                         <article
                           key={job.id}
-                          className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5"
+                          className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3.5 py-2.5"
                         >
+                          <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
                             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/40">
                               {dayName} · {dateLabel}
@@ -3437,7 +3443,38 @@ https://instagram.com/…"
                               {job.title}
                             </p>
                           </div>
-                          {isAdmin ? (
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={files.length === 0}
+                              title={
+                                files.length === 0
+                                  ? "No file to download"
+                                  : files.length > 1
+                                    ? `Download ${files.length} files`
+                                    : "Download"
+                              }
+                              aria-label="Download"
+                              onClick={() => promptDownloadFiles(job)}
+                              className={`${iconActionBtn} border border-emerald-400/35 bg-emerald-400/15 text-emerald-100`}
+                            >
+                              <IconDownload className="h-3.5 w-3.5" />
+                            </button>
+                            {canEditDone ? (
+                              <button
+                                type="button"
+                                disabled={busyId === job.id}
+                                title="Edit upload"
+                                aria-label="Edit"
+                                onClick={() =>
+                                  tryOpenUpload(job, isAdmin ? "attach" : "close")
+                                }
+                                className={`${iconActionBtn} border border-amber-400/35 bg-amber-400/15 text-amber-100`}
+                              >
+                                <IconEdit className="h-3.5 w-3.5" />
+                              </button>
+                            ) : null}
+                            {isAdmin ? (
                             <button
                               type="button"
                               disabled={busyId === job.id}
@@ -3456,6 +3493,96 @@ https://instagram.com/…"
                             >
                               <IconUnsend className="h-3.5 w-3.5" />
                             </button>
+                            ) : null}
+                          </div>
+                          </div>
+                          {editing ? (
+                            <div className="mt-3 space-y-2 border-t border-white/[0.08] pt-3">
+                              <p className="text-[11px] text-emerald-100/90">
+                                Replace the file — Amit Ready uses the first one.
+                              </p>
+                              {uploadForm.fileUrls.length > 0 ? (
+                                <ul className="space-y-1">
+                                  {uploadForm.fileUrls.map((url, i) => (
+                                    <li
+                                      key={url}
+                                      className="flex items-center gap-2 text-[11px] text-cyan-200/90"
+                                    >
+                                      <a
+                                        href={url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="min-w-0 flex-1 truncate text-cyan-300"
+                                      >
+                                        File {i + 1} ready
+                                      </a>
+                                      <button
+                                        type="button"
+                                        disabled={uploading || busyId === job.id}
+                                        onClick={() =>
+                                          setUploadForm((f) => ({
+                                            ...f,
+                                            fileUrls: f.fileUrls.filter((u) => u !== url),
+                                          }))
+                                        }
+                                        className="shrink-0 text-white/40 hover:text-red-300 disabled:opacity-40"
+                                      >
+                                        Remove
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                              <label className="block text-[11px] text-white/55">
+                                {uploadForm.fileUrls.length === 0
+                                  ? "Choose file"
+                                  : "Add another file"}
+                                <input
+                                  type="file"
+                                  accept="image/*,video/*,.pdf"
+                                  disabled={uploading}
+                                  onChange={(e) => {
+                                    const input = e.currentTarget;
+                                    void onFile(input.files?.[0] ?? null, input);
+                                  }}
+                                  className="mt-1 block w-full text-[11px] text-white/60"
+                                />
+                              </label>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  disabled={
+                                    busyId === job.id ||
+                                    uploading ||
+                                    uploadForm.fileUrls.length === 0
+                                  }
+                                  onClick={() => void closeUpload()}
+                                  className="h-9 rounded-lg bg-emerald-400 px-3.5 text-[12px] font-semibold text-black disabled:opacity-40"
+                                >
+                                  {uploading
+                                    ? "Uploading…"
+                                    : busyId === job.id
+                                      ? "Saving…"
+                                      : "Save"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={busyId === job.id || uploading}
+                                  onClick={() => {
+                                    setUploadJobId(null);
+                                    setUploadForm({
+                                      postingNotes: "",
+                                      scheduleNote: "",
+                                      waApproved: false,
+                                      fileUrls: [],
+                                    });
+                                  }}
+                                  className="h-9 px-2 text-[12px] text-white/45 disabled:opacity-40"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
                           ) : null}
                         </article>
                       );
