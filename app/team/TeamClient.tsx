@@ -688,9 +688,19 @@ export default function TeamClient() {
       );
       const data = await readTeamApiJson(res);
       if (!res.ok) throw new Error(teamApiError(data, "Save failed"));
-      setNoteForm(emptyNoteForm());
-      setEditingNoteId(null);
-      setNoteComposeKey(0);
+      const saved = data.note as TeamPersonalNoteDto | undefined;
+      if (saved?.id) {
+        setEditingNoteId(saved.id);
+        setNoteForm({
+          title: saved.title ?? "",
+          body: saved.body,
+          outletId: saved.outletId ?? "",
+          category: saved.category ?? "",
+          aiSummary: saved.aiSummary ?? "",
+          attachments: saved.attachments ?? [],
+          sharedWith: saved.sharedWith ?? [],
+        });
+      }
       await loadPersonalNotes(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
@@ -841,6 +851,24 @@ export default function TeamClient() {
       await loadVaultEntries(true);
     }
   };
+
+  const sharePersonalNote = useCallback(async (noteId: string, sharedWith: string[]) => {
+    setError(null);
+    const res = await fetch(`/api/team/notes/${noteId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sharedWith }),
+    });
+    const data = await readTeamApiJson(res);
+    if (!res.ok) throw new Error(teamApiError(data, "Could not share note"));
+    const saved = data.note as TeamPersonalNoteDto | undefined;
+    if (saved?.id) {
+      setPersonalNotes((prev) => prev.map((n) => (n.id === saved.id ? saved : n)));
+      setNoteForm((f) => ({ ...f, sharedWith: saved.sharedWith ?? sharedWith }));
+    } else {
+      await loadPersonalNotes(true);
+    }
+  }, [loadPersonalNotes]);
 
   const shareVaultEntry = useCallback(async (entryId: string, sharedWith: string[]) => {
     setError(null);
@@ -1428,6 +1456,9 @@ export default function TeamClient() {
             onUploadFile={(file) => void uploadNoteFile(file)}
             onEdit={openEditNote}
             onDelete={(n) => void deletePersonalNote(n)}
+            onShareNote={async (noteId, sharedWith) => {
+              await sharePersonalNote(noteId, sharedWith);
+            }}
           />
         ) : tab === "vault" && !isViewer ? (
           <TeamVaultView

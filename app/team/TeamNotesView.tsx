@@ -373,12 +373,16 @@ function ShareSheet({
   selected,
   onChange,
   onClose,
+  saving,
+  onConfirm,
 }: {
   open: boolean;
   targets: Member[];
   selected: string[];
   onChange: (ids: string[]) => void;
   onClose: () => void;
+  saving?: boolean;
+  onConfirm: () => void;
 }) {
   if (!open) return null;
   const toggle = (id: string) => {
@@ -388,32 +392,43 @@ function ShareSheet({
     <div className={TEAM_SHEET_OVERLAY} onClick={onClose}>
       <div className={`${TEAM_SHEET_PANEL} max-w-md`} onClick={(e) => e.stopPropagation()}>
         <h2 className="text-base font-semibold text-white">Share note</h2>
-        <p className="mt-1 text-[12px] text-white/40">Teammates will see this in their Notes → Shared</p>
+        <p className="mt-1 text-[12px] text-white/40">
+          Teammates will see this in Notes → Shared as soon as you tap Share.
+        </p>
         <ul className="mt-4 max-h-[50vh] space-y-1 overflow-y-auto">
-          {targets.map((m) => {
-            const on = selected.includes(m.id);
-            return (
-              <li key={m.id}>
-                <button
-                  type="button"
-                  onClick={() => toggle(m.id)}
-                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm ${
-                    on ? "bg-violet-500/15 text-white ring-1 ring-violet-400/20" : "text-white/70 hover:bg-white/[0.04]"
-                  }`}
-                >
-                  {m.name}
-                  <span className={`h-4 w-4 rounded border ${on ? "border-violet-400 bg-violet-500" : "border-white/20"}`} />
-                </button>
-              </li>
-            );
-          })}
+          {targets.length === 0 ? (
+            <li className="px-2 py-4 text-center text-sm text-white/35">No teammates to share with</li>
+          ) : (
+            targets.map((m) => {
+              const on = selected.includes(m.id);
+              return (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggle(m.id)}
+                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm ${
+                      on ? "bg-violet-500/15 text-white ring-1 ring-violet-400/20" : "text-white/70 hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    {m.name}
+                    <span className={`h-4 w-4 rounded border ${on ? "border-violet-400 bg-violet-500" : "border-white/20"}`} />
+                  </button>
+                </li>
+              );
+            })
+          )}
         </ul>
         <button
           type="button"
-          onClick={onClose}
-          className="mt-4 w-full rounded-xl bg-white/[0.09] py-2.5 text-sm font-medium text-white ring-1 ring-white/10"
+          disabled={saving}
+          onClick={onConfirm}
+          className="mt-4 w-full rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
         >
-          Done
+          {saving
+            ? "Sharing…"
+            : selected.length > 0
+              ? `Share with ${selected.length}`
+              : "Done"}
         </button>
       </div>
     </div>
@@ -483,6 +498,7 @@ function NoteEditor({
   showBack,
   bodyRef,
   titleRef,
+  onShare,
 }: {
   form: NoteForm;
   editingId: string | null;
@@ -500,10 +516,12 @@ function NoteEditor({
   showBack?: boolean;
   bodyRef?: RefObject<HTMLTextAreaElement>;
   titleRef?: RefObject<HTMLInputElement>;
+  onShare?: (noteId: string, sharedWith: string[]) => Promise<void>;
 }) {
   const canSave = Boolean(form.body.trim() || form.attachments.length) && !saving && !readOnly;
   const [ai, setAi] = useState<NoteAiState>(emptyAi);
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareSaving, setShareSaving] = useState(false);
   const aiRequestRef = useRef(0);
   const formRef = useRef(form);
   formRef.current = form;
@@ -778,8 +796,26 @@ function NoteEditor({
         open={shareOpen}
         targets={shareTargets}
         selected={form.sharedWith}
-        onChange={(sharedWith) => onFormChange({ ...form, sharedWith })}
+        onChange={(sharedWith) => onFormChange({ ...formRef.current, sharedWith })}
         onClose={() => setShareOpen(false)}
+        saving={shareSaving || saving}
+        onConfirm={() => {
+          void (async () => {
+            const sharedWith = formRef.current.sharedWith;
+            if (editingId && onShare) {
+              setShareSaving(true);
+              try {
+                await onShare(editingId, sharedWith);
+                setShareOpen(false);
+              } finally {
+                setShareSaving(false);
+              }
+              return;
+            }
+            setShareOpen(false);
+            if (!editingId) onSave();
+          })();
+        }}
       />
 
       {moreOpen ? (
@@ -866,6 +902,7 @@ export default function TeamNotesView({
   onUploadFile,
   onEdit,
   onDelete,
+  onShareNote,
 }: {
   notes: TeamPersonalNoteDto[];
   ready: boolean;
@@ -889,6 +926,7 @@ export default function TeamNotesView({
   onUploadFile: (file: File) => void;
   onEdit: (note: TeamPersonalNoteDto) => void;
   onDelete: (note: TeamPersonalNoteDto) => void;
+  onShareNote?: (noteId: string, sharedWith: string[]) => Promise<void>;
 }) {
   const titleRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -1069,6 +1107,7 @@ export default function TeamNotesView({
       showBack
       bodyRef={bodyRef}
       titleRef={titleRef}
+      onShare={onShareNote}
     />
   ) : (
     <div className="hidden h-full flex-col items-center justify-center px-8 text-center xl:flex">

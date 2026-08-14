@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { getTeamFromRequest } from "@/lib/team-auth";
 import { prisma } from "@/lib/db";
 import {
@@ -81,24 +82,37 @@ export async function PATCH(
   }
 
   try {
-    if (body.sharedWith !== undefined) {
-      const memberIds = parseShareMemberIds(body.sharedWith).filter((id) => id !== viewerOwnerId);
-      await prisma.teamNoteShare.deleteMany({ where: { noteId } });
-      if (memberIds.length) {
-        await prisma.teamNoteShare.createMany({
-          data: memberIds.map((memberId) => ({
-            noteId,
-            memberId,
-            sharedBy: viewerOwnerId,
-          })),
+    const memberIds =
+      body.sharedWith !== undefined
+        ? parseShareMemberIds(body.sharedWith).filter((id) => id !== viewerOwnerId)
+        : null;
+
+    const row = await prisma.$transaction(async (tx) => {
+      if (memberIds) {
+        await tx.teamNoteShare.deleteMany({ where: { noteId } });
+        if (memberIds.length) {
+          await tx.teamNoteShare.createMany({
+            data: memberIds.map((memberId) => ({
+              noteId,
+              memberId,
+              sharedBy: viewerOwnerId,
+            })),
+          });
+        }
+      }
+
+      if (Object.keys(data).length === 0) {
+        return tx.teamPersonalNote.findUniqueOrThrow({
+          where: { id: noteId },
+          include: { shares: true },
         });
       }
-    }
 
-    const row = await prisma.teamPersonalNote.update({
-      where: { id: noteId },
-      data,
-      include: { shares: true },
+      return tx.teamPersonalNote.update({
+        where: { id: noteId },
+        data: data as Prisma.TeamPersonalNoteUpdateInput,
+        include: { shares: true },
+      });
     });
 
     return NextResponse.json({ note: toTeamPersonalNoteDto(row, viewerOwnerId) });
