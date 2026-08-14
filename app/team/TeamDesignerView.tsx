@@ -69,6 +69,8 @@ import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { uploadTeamFile } from "@/lib/team-client-upload";
 import { teamDownloadHref } from "@/lib/team-download";
 import { TEAM_AD_OUTLETS, splitDesignerOutletIds, teamOutletLabel } from "@/lib/team-outlets";
+import { designerWaPhone } from "@/lib/team-wa-cloud";
+import { whatsAppShareUrl } from "@/lib/team-whatsapp-report";
 import {
   IconDone,
   IconDownload,
@@ -451,6 +453,46 @@ function designerDisplayName(assigneeId: string): string {
   return assigneeId;
 }
 
+function designerQueueLink(): string {
+  const base =
+    (typeof window !== "undefined" ? window.location.origin : "") ||
+    "https://bassik.in";
+  return `${base.replace(/\/$/, "")}/team?tab=designer`;
+}
+
+function buildDesignerTaskWhatsAppMessage(
+  job: DesignerJobDto,
+  kind: "ready" | "updated"
+): string {
+  const when = isDesignerTvCalendarJob(job)
+    ? tvCalendarWeekendLabel(job.postDate)
+    : formatPostDateParts(job.postDate);
+  const dateLine = `${when.dayName} · ${when.dateLabel}`;
+  const formatLabel = designerFormatLabel(job.format);
+  const intro =
+    kind === "updated"
+      ? [
+          "Hey Amit —",
+          "",
+          "This task is updated. Please change the posting accordingly.",
+          "If you already downloaded the old file, replace it with this new one.",
+        ]
+      : [
+          "Hey Amit —",
+          "",
+          "This task is ready. Please post accordingly.",
+        ];
+  return [
+    ...intro,
+    "",
+    `${job.outletLabel} · ${job.title}`,
+    `${formatLabel} · ${dateLine}`,
+    `Designer: ${designerDisplayName(job.assigneeId)}`,
+    "",
+    designerQueueLink(),
+  ].join("\n");
+}
+
 class DesignerApiError extends Error {
   activeJobId?: string;
   activeTitle?: string;
@@ -582,6 +624,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     title: string;
     urls: string[];
     filenameBase: string;
+  } | null>(null);
+  const [waPing, setWaPing] = useState<{
+    headline: string;
+    message: string;
+    url: string;
+    fallbackUrl: string | null;
   } | null>(null);
   const [adhocOpen, setAdhocOpen] = useState(false);
   const [adhoc, setAdhoc] = useState({
@@ -1314,9 +1362,6 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
       } else {
         setAllJobs((prev) => prev.filter((j) => j.id !== id));
       }
-      if (typeof data.message === "string") {
-        setError(data.message);
-      }
       void loadPerformanceLite();
       setUploadJobId(null);
       setUploadForm({
@@ -1325,6 +1370,24 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         waApproved: false,
         fileUrls: [],
       });
+      const pingJob = updated ?? current;
+      if (pingJob) {
+        const kind = replacing ? "updated" : "ready";
+        const message = buildDesignerTaskWhatsAppMessage(pingJob, kind);
+        const url = whatsAppShareUrl(message, designerWaPhone("amit"));
+        setError(null);
+        setWaPing({
+          headline:
+            kind === "updated"
+              ? "File updated — send WhatsApp?"
+              : "Uploaded — send WhatsApp?",
+          message,
+          url,
+          fallbackUrl: null,
+        });
+      } else if (typeof data.message === "string") {
+        setError(data.message);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Close failed";
       const waitMatch = /wait (\d+)s/i.exec(msg);
@@ -2177,6 +2240,79 @@ https://instagram.com/…"
                 }`}
               >
                 OK
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {waPing ? (
+        <div
+          className="fixed inset-0 z-[85] flex items-end justify-center bg-black/65 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="designer-wa-ping-title"
+          onClick={() => setWaPing(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-white/15 bg-[#141414] p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/15 ring-1 ring-emerald-400/30">
+                <IconWhatsApp className="h-6 w-6 text-emerald-300" />
+              </div>
+              <div className="min-w-0">
+                <p
+                  id="designer-wa-ping-title"
+                  className="text-[15px] font-semibold text-white"
+                >
+                  {waPing.headline}
+                </p>
+                <p className="mt-0.5 text-[12px] text-white/45">
+                  WhatsApp Amit about this task only
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 max-h-[32vh] overflow-y-auto rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06] px-3.5 py-3">
+              <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-white/80">
+                {waPing.message}
+              </p>
+            </div>
+            {waPing.fallbackUrl ? (
+              <a
+                href={waPing.fallbackUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 block text-center text-[13px] font-medium text-emerald-300 underline"
+              >
+                Tap here if WhatsApp didn&apos;t open
+              </a>
+            ) : null}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setWaPing(null)}
+                className="h-10 px-3 text-[13px] text-white/50 hover:text-white/80"
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const result = openWhatsAppShareUrl(waPing.url);
+                  if (result === "popup-blocked" || result === false) {
+                    setWaPing((cur) =>
+                      cur ? { ...cur, fallbackUrl: cur.url } : cur
+                    );
+                  } else {
+                    setWaPing(null);
+                  }
+                }}
+                className="flex h-10 flex-1 items-center justify-center gap-2 rounded-lg bg-[#25D366] px-3 text-[13px] font-semibold text-black sm:flex-none sm:px-5"
+              >
+                <IconWhatsApp className="h-4 w-4" />
+                Send WhatsApp
               </button>
             </div>
           </div>
