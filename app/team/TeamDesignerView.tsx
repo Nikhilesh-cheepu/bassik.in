@@ -1114,37 +1114,86 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const onQueueDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    // Catch up stays pinned at top — only Today + Later are sortable
-    const sortableList = [...openParts.todayPack, ...openParts.upNext];
+    
     const activeId = String(active.id);
     const overId = String(over.id);
-    const activeJob = sortableList.find((j) => j.id === activeId);
-    const overJob = sortableList.find((j) => j.id === overId);
-    if (!activeJob || !overJob) return;
-    if (activeJob.assigneeId !== overJob.assigneeId) return;
+    
+    // Check if both jobs are in catch-up section
+    const catchUpList = openParts.catchUp;
+    const catchUpIds = new Set(catchUpList.map((j) => j.id));
+    const bothInCatchUp = catchUpIds.has(activeId) && catchUpIds.has(overId);
+    
+    // Check if both jobs are in normal section
+    const normalList = [...openParts.todayPack, ...openParts.upNext];
+    const normalIds = new Set(normalList.map((j) => j.id));
+    const bothInNormal = normalIds.has(activeId) && normalIds.has(overId);
+    
+    // Don't allow mixing between catch-up and normal sections
+    if (!bothInCatchUp && !bothInNormal) return;
+    
+    if (bothInCatchUp) {
+      // Handle reordering within catch-up section
+      const activeJob = catchUpList.find((j) => j.id === activeId);
+      const overJob = catchUpList.find((j) => j.id === overId);
+      if (!activeJob || !overJob) return;
+      if (activeJob.assigneeId !== overJob.assigneeId) return;
 
-    const fullAssignee = sortDesignerJobs(
-      openJobsForPartition.filter((j) => j.assigneeId === activeJob.assigneeId)
-    );
-    const catchIds = new Set(
-      openPartsRaw.catchUp
-        .filter((j) => j.assigneeId === activeJob.assigneeId)
-        .map((j) => j.id)
-    );
-    const pinnedCatch = fullAssignee.filter((j) => catchIds.has(j.id));
-    const restFull = fullAssignee.filter((j) => !catchIds.has(j.id));
-    const visibleSet = new Set(sortableList.map((j) => j.id));
-    const visibleInRest = restFull.filter((j) => visibleSet.has(j.id));
-    const oldIndex = visibleInRest.findIndex((j) => j.id === activeId);
-    const newIndex = visibleInRest.findIndex((j) => j.id === overId);
-    if (oldIndex < 0 || newIndex < 0) return;
+      const fullAssignee = sortDesignerJobs(
+        openJobsForPartition.filter((j) => j.assigneeId === activeJob.assigneeId)
+      );
+      const assigneeCatchIds = new Set(
+        openPartsRaw.catchUp
+          .filter((j) => j.assigneeId === activeJob.assigneeId)
+          .map((j) => j.id)
+      );
+      const assigneeCatchList = fullAssignee.filter((j) => assigneeCatchIds.has(j.id));
+      const assigneeRestList = fullAssignee.filter((j) => !assigneeCatchIds.has(j.id));
+      
+      const visibleCatchSet = new Set(catchUpList.map((j) => j.id));
+      const visibleCatch = assigneeCatchList.filter((j) => visibleCatchSet.has(j.id));
+      
+      const oldIndex = visibleCatch.findIndex((j) => j.id === activeId);
+      const newIndex = visibleCatch.findIndex((j) => j.id === overId);
+      if (oldIndex < 0 || newIndex < 0) return;
 
-    const nextVisible = arrayMove(visibleInRest, oldIndex, newIndex);
-    let vi = 0;
-    const nextRest = restFull.map((j) =>
-      visibleSet.has(j.id) ? nextVisible[vi++]! : j
-    );
-    void persistQueueOrder([...pinnedCatch, ...nextRest].map((j) => j.id));
+      const nextVisibleCatch = arrayMove(visibleCatch, oldIndex, newIndex);
+      let vi = 0;
+      const nextCatch = assigneeCatchList.map((j) =>
+        visibleCatchSet.has(j.id) ? nextVisibleCatch[vi++]! : j
+      );
+      
+      // Keep catch-up at top, followed by normal tasks
+      void persistQueueOrder([...nextCatch, ...assigneeRestList].map((j) => j.id));
+    } else {
+      // Handle reordering within normal section (existing logic)
+      const activeJob = normalList.find((j) => j.id === activeId);
+      const overJob = normalList.find((j) => j.id === overId);
+      if (!activeJob || !overJob) return;
+      if (activeJob.assigneeId !== overJob.assigneeId) return;
+
+      const fullAssignee = sortDesignerJobs(
+        openJobsForPartition.filter((j) => j.assigneeId === activeJob.assigneeId)
+      );
+      const catchIds = new Set(
+        openPartsRaw.catchUp
+          .filter((j) => j.assigneeId === activeJob.assigneeId)
+          .map((j) => j.id)
+      );
+      const pinnedCatch = fullAssignee.filter((j) => catchIds.has(j.id));
+      const restFull = fullAssignee.filter((j) => !catchIds.has(j.id));
+      const visibleSet = new Set(normalList.map((j) => j.id));
+      const visibleInRest = restFull.filter((j) => visibleSet.has(j.id));
+      const oldIndex = visibleInRest.findIndex((j) => j.id === activeId);
+      const newIndex = visibleInRest.findIndex((j) => j.id === overId);
+      if (oldIndex < 0 || newIndex < 0) return;
+
+      const nextVisible = arrayMove(visibleInRest, oldIndex, newIndex);
+      let vi = 0;
+      const nextRest = restFull.map((j) =>
+        visibleSet.has(j.id) ? nextVisible[vi++]! : j
+      );
+      void persistQueueOrder([...pinnedCatch, ...nextRest].map((j) => j.id));
+    }
   };
 
   const sendSelected = async () => {
@@ -3829,14 +3878,33 @@ https://instagram.com/…"
                     </ul>
                   </div>
                 ) : null}
-                {renderSection(
-                  "Catch up",
-                  openParts.catchUpHint ||
-                    "Pending from earlier — same Q order as Normal.",
-                  openParts.catchUp,
-                  "catchUp",
-                  "text-amber-200/90"
-                )}
+                <SortableContext
+                  items={openParts.catchUp.map((j) => j.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {openParts.catchUp.length > 0 ? (
+                    <div className="space-y-2">
+                      <div>
+                        <h2 className="text-[12px] font-semibold uppercase tracking-wide text-amber-200/90">
+                          Catch up ({openParts.catchUp.length})
+                        </h2>
+                        <p className="mt-0.5 text-[12px] leading-snug text-white/55">
+                          {openParts.catchUpHint ||
+                            "Pending from earlier — same Q order as Normal. Drag ≡ to reorder"}
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {openParts.catchUp.map((job) => (
+                          <SortableDesignerJob key={job.id} id={job.id}>
+                            {(dragHandleProps) =>
+                              renderJob(job, dragHandleProps, "catchUp")
+                            }
+                          </SortableDesignerJob>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </SortableContext>
                 <SortableContext
                   items={[...openParts.todayPack, ...openParts.upNext].map((j) => j.id)}
                   strategy={verticalListSortingStrategy}
