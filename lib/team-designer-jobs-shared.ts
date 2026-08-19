@@ -355,6 +355,19 @@ export type DesignerDaySeriesPoint = {
   target: number;
   firstStart: string | null;
   lastEnd: string | null;
+  /** Admin manual +/- on this day (included in closed). */
+  manualDelta?: number;
+};
+
+/** Admin manual done credit — no task row, adjusts strip & catch-up. */
+export type DesignerDoneAdjustmentDto = {
+  id: string;
+  assigneeId: string;
+  creditDate: string;
+  delta: number;
+  note: string | null;
+  createdBy: string;
+  createdAt: string;
 };
 
 /** One under-target workday for miss copy. */
@@ -780,6 +793,8 @@ export type DesignerPerformanceDto = {
   series: DesignerDaySeriesPoint[];
   /** Cumulative stack from 1 Aug 2026 */
   stack: DesignerStackDto;
+  /** Recent admin manual done credits (strip window). */
+  doneAdjustments: DesignerDoneAdjustmentDto[];
 };
 
 export type DesignerPriorityMode = "NONE" | "AFTER_CURRENT" | "PAUSE_NOW";

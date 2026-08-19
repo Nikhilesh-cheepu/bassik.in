@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/db";
 import { addDaysYmd, dayIdForYmd, getTodayKey } from "@/lib/team-checklists";
+import {
+  loadDoneAdjustmentsByDay,
+  listDesignerDoneAdjustments,
+  mergeDoneAdjustmentsIntoMap,
+} from "@/lib/team-designer-done-adjustments";
 import { teamOutletLabel } from "@/lib/team-outlets";
 import {
   DESIGNER_ASSIGNEE_WEEKDAY,
@@ -19,6 +24,7 @@ import {
   type DesignerHolidaySundayDto,
   type DesignerMissedDayDto,
   type DesignerMetricsDto,
+  type DesignerDoneAdjustmentDto,
   type DesignerPerformanceDto,
   type DesignerStackDto,
 } from "@/lib/team-designer-jobs-shared";
@@ -562,6 +568,12 @@ export async function computeDesignerStack(
     wideFrom,
     effectiveToday
   );
+  const stackAdjustments = await loadDoneAdjustmentsByDay(
+    assigneeId,
+    wideFrom,
+    effectiveToday
+  );
+  mergeDoneAdjustmentsIntoMap(byDay, stackAdjustments);
 
   const workDaysSoFar =
     scoreThrough < rangeStart
@@ -719,12 +731,14 @@ export async function listReadyToStartJobs(assigneeId: string): Promise<ReadyJob
   });
 }
 
-/** Designer closes credited to a workday (by start day, Sunday → prior Sat). */
+/** Designer closes credited to a workday (finish day + manual admin credits). */
 export async function designerClosesOnDay(
   assigneeId: string,
   ymd: string
 ): Promise<number> {
   const byDay = await loadClosesByCreditDay(assigneeId, ymd, ymd);
+  const adj = await loadDoneAdjustmentsByDay(assigneeId, ymd, ymd);
+  mergeDoneAdjustmentsIntoMap(byDay, adj);
   return byDay.get(ymd) ?? 0;
 }
 
@@ -819,6 +833,9 @@ async function buildSeries(
     );
   }
 
+  const adjustments = await loadDoneAdjustmentsByDay(assigneeId, from, today);
+  mergeDoneAdjustmentsIntoMap(closedByCreditDay, adjustments);
+
   const firstStartByDay = new Map<string, Date>();
   const lastEndByDay = new Map<string, Date>();
 
@@ -858,6 +875,7 @@ async function buildSeries(
       target: workday ? DESIGNER_DAILY_TARGET : 0,
       firstStart: firstStartByDay.get(cur)?.toISOString() ?? null,
       lastEnd: lastEndByDay.get(cur)?.toISOString() ?? null,
+      manualDelta: adjustments.get(cur) ?? 0,
     });
     cur = addDaysYmd(cur, 1);
   }
@@ -880,6 +898,7 @@ function decoratePerformance(
     lastEndedAt: string | null;
     series: DesignerDaySeriesPoint[];
     stack: DesignerStackDto;
+    doneAdjustments: DesignerDoneAdjustmentDto[];
   }
 ): DesignerPerformanceDto {
   const hour = istHourNow();
@@ -930,6 +949,7 @@ function decoratePerformance(
     onPace,
     series: parts.series,
     stack: parts.stack,
+    doneAdjustments: parts.doneAdjustments,
   };
 }
 
@@ -941,7 +961,11 @@ export async function computeDesignerPerformanceLite(
   const today = getTodayKey();
   const isSunday = dayIdForYmd(today) === "sun";
   const days = clampDesignerWindowDays(windowDays);
-  const [series, stack, inProgress, closedTodayRaw] = await Promise.all([
+  const windowFrom = addDaysYmd(today, -(days - 1));
+  const seriesFrom =
+    windowFrom < DESIGNER_STACK_START_DATE ? DESIGNER_STACK_START_DATE : windowFrom;
+  const [series, stack, inProgress, closedTodayRaw, doneAdjustments] =
+    await Promise.all([
     buildSeries(assigneeId, today, { includeStarts: false, windowDays: days }),
     computeDesignerStack(assigneeId, today),
     prisma.teamDesignerJob.count({
@@ -950,6 +974,12 @@ export async function computeDesignerPerformanceLite(
     isSunday
       ? Promise.resolve(0)
       : designerClosesOnDay(assigneeId, today),
+    listDesignerDoneAdjustments({
+      assigneeId,
+      fromYmd: seriesFrom,
+      toYmd: today,
+      limit: 12,
+    }),
   ]);
   const uploadedToday = series.find((p) => p.date === today)?.closed ?? 0;
   const uploadedTotal = series.reduce((n, p) => n + p.closed, 0);
@@ -966,6 +996,7 @@ export async function computeDesignerPerformanceLite(
     lastEndedAt: null,
     series,
     stack,
+    doneAdjustments,
   });
 }
 
@@ -975,7 +1006,10 @@ export async function computeDesignerPerformance(
 ): Promise<DesignerPerformanceDto> {
   const today = getTodayKey();
   const days = clampDesignerWindowDays(windowDays);
-  const [metrics, activity, readyToStart, readyDueRows, series, stack] =
+  const windowFrom = addDaysYmd(today, -(days - 1));
+  const seriesFrom =
+    windowFrom < DESIGNER_STACK_START_DATE ? DESIGNER_STACK_START_DATE : windowFrom;
+  const [metrics, activity, readyToStart, readyDueRows, series, stack, doneAdjustments] =
     await Promise.all([
       computeDesignerMetrics(assigneeId),
       dayActivity(assigneeId, today),
@@ -988,6 +1022,12 @@ export async function computeDesignerPerformance(
       }),
       buildSeries(assigneeId, today, { windowDays: days }),
       computeDesignerStack(assigneeId, today),
+      listDesignerDoneAdjustments({
+        assigneeId,
+        fromYmd: seriesFrom,
+        toYmd: today,
+        limit: 12,
+      }),
     ]);
   const overdueReady = readyDueRows.filter((r) =>
     isDesignerJobPastDue({
@@ -1014,6 +1054,7 @@ export async function computeDesignerPerformance(
     lastEndedAt: activity.lastEnd?.toISOString() ?? null,
     series,
     stack,
+    doneAdjustments,
   });
 }
 

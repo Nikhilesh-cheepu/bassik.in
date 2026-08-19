@@ -1797,6 +1797,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
               isAdmin={isAdmin}
               nudgeBusy={nudgeBusy}
               onNudge={() => void sendDesignerSummaryWa(p.assigneeId)}
+              onAdjustSaved={() => {
+                void loadPerformanceLite().catch(() => undefined);
+              }}
             />
           ))
         : null}
@@ -4146,12 +4149,184 @@ function dayOfMonthLabel(ymd: string): string {
   return String(Number(ymd.slice(8, 10)));
 }
 
+function DesignerDoneAdjustPanel({
+  perf,
+  onSaved,
+}: {
+  perf: DesignerPerformanceDto;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [creditDate, setCreditDate] = useState(perf.today);
+  const [delta, setDelta] = useState<number>(1);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCreditDate(perf.today);
+  }, [perf.today]);
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/team/designer-done-adjustments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assigneeId: perf.assigneeId,
+          creditDate,
+          delta,
+          note,
+        }),
+      });
+      const data = (await readJson(res)) as { error?: string };
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "Save failed"
+        );
+      }
+      setNote("");
+      setOpen(false);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const undo = async (id: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/team/designer-done-adjustments?id=${encodeURIComponent(id)}`,
+        { method: "DELETE" }
+      );
+      const data = (await readJson(res)) as { error?: string };
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === "string" ? data.error : "Undo failed"
+        );
+      }
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Undo failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deltas = [-4, -3, -2, -1, 1, 2, 3, 4] as const;
+
+  return (
+    <div className="mt-2 border-t border-white/[0.06] pt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-[11px] font-semibold text-amber-200/90 hover:text-amber-100"
+      >
+        {open ? "Close adjust" : "+ Adjust done count"}
+      </button>
+      {open ? (
+        <div className="mt-2 space-y-2 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] p-2.5">
+          <p className="text-[11px] leading-snug text-white/55">
+            Add or remove finished slots for a day — no tasks created or deleted.
+            Updates the day strip and catch-up.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-[10px] text-white/45">
+              Day
+              <input
+                type="date"
+                value={creditDate}
+                onChange={(e) => setCreditDate(e.target.value)}
+                className="ml-1.5 rounded border border-white/15 bg-black/40 px-2 py-1 text-[12px] text-white"
+              />
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {deltas.map((n) => (
+              <button
+                key={n}
+                type="button"
+                disabled={busy}
+                onClick={() => setDelta(n)}
+                className={`min-w-[2.25rem] rounded-md px-2 py-1 text-[12px] font-bold tabular-nums ${
+                  delta === n
+                    ? n > 0
+                      ? "bg-emerald-400 text-black"
+                      : "bg-red-400/90 text-black"
+                    : "bg-white/10 text-white/70"
+                }`}
+              >
+                {n > 0 ? `+${n}` : n}
+              </button>
+            ))}
+          </div>
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Note (optional) — e.g. extra covers offline"
+            className="w-full rounded-md border border-white/10 bg-black/35 px-2 py-1.5 text-[12px] text-white outline-none"
+          />
+          {error ? <p className="text-[11px] text-red-300">{error}</p> : null}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void submit()}
+            className="h-8 rounded-lg bg-amber-400 px-3 text-[12px] font-semibold text-black disabled:opacity-40"
+          >
+            {busy
+              ? "Saving…"
+              : `Apply ${delta > 0 ? "+" : ""}${delta} on ${creditDate}`}
+          </button>
+        </div>
+      ) : null}
+      {(perf.doneAdjustments ?? []).length > 0 ? (
+        <ul className="mt-2 space-y-1">
+          {(perf.doneAdjustments ?? []).slice(0, 6).map((a) => (
+            <li
+              key={a.id}
+              className="flex items-center justify-between gap-2 text-[10px] text-white/45"
+            >
+              <span className="min-w-0 truncate">
+                <span
+                  className={
+                    a.delta > 0 ? "font-semibold text-emerald-300/90" : "font-semibold text-red-300/90"
+                  }
+                >
+                  {a.delta > 0 ? `+${a.delta}` : a.delta}
+                </span>
+                {" · "}
+                {a.creditDate}
+                {a.note ? ` · ${a.note}` : ""}
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void undo(a.id)}
+                className="shrink-0 text-white/35 hover:text-red-300 disabled:opacity-40"
+              >
+                Undo
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function DesignerPerformanceCard({
   perf,
   forgivenSlots = 0,
   isAdmin,
   nudgeBusy,
   onNudge,
+  onAdjustSaved,
 }: {
   perf: DesignerPerformanceDto;
   /** Admin Drop catch-up — slots no longer owed */
@@ -4159,6 +4334,7 @@ function DesignerPerformanceCard({
   isAdmin: boolean;
   nudgeBusy: string | null;
   onNudge: () => void;
+  onAdjustSaved?: () => void;
 }) {
   const sunday = Boolean(perf.isSundayHoliday);
   const catchMeta = catchUpMetaAfterRelease(perf.stack, forgivenSlots);
@@ -4269,10 +4445,18 @@ function DesignerPerformanceCard({
             }`}
             title={
               d.isSunday
-                ? `${d.date} · Sunday off${d.closed > 0 ? ` · ${d.closed} extra` : ""}`
+                ? `${d.date} · Sunday off${d.closed > 0 ? ` · ${d.closed} extra` : ""}${
+                    d.manualDelta
+                      ? ` (${d.manualDelta > 0 ? "+" : ""}${d.manualDelta} manual)`
+                      : ""
+                  }`
                 : d.isOff
                   ? `${d.date} · off`
-                  : `${d.date} · finished ${d.closed} of ${DESIGNER_DAILY_TARGET}`
+                  : `${d.date} · finished ${d.closed} of ${DESIGNER_DAILY_TARGET}${
+                      d.manualDelta
+                        ? ` (${d.manualDelta > 0 ? "+" : ""}${d.manualDelta} manual)`
+                        : ""
+                    }`
             }
           >
             <p
@@ -4313,6 +4497,9 @@ function DesignerPerformanceCard({
           </div>
         ))}
       </div>
+      {isAdmin && onAdjustSaved ? (
+        <DesignerDoneAdjustPanel perf={perf} onSaved={onAdjustSaved} />
+      ) : null}
     </div>
   );
 }

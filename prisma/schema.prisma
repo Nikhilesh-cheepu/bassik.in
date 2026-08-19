@@ -629,6 +629,22 @@ model TeamDesignerJob {
   @@index([pauseRequestedAt])
 }
 
+/// Admin manual +/- done count for a designer on a day (no fake tasks — adjusts strip & catch-up).
+model TeamDesignerDoneAdjustment {
+  id          String   @id @default(cuid())
+  assigneeId  String
+  /// IST calendar day the credit applies to (YYYY-MM-DD)
+  creditDate  String
+  /// +1..+4 extra done, −1..−4 correction (no tasks created/deleted)
+  delta       Int
+  note        String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@index([assigneeId, creditDate])
+  @@index([creditDate])
+}
+
 /// Auto / manual WhatsApp nudges for designer daily target (Meta Cloud API).
 model TeamDesignerReminderLog {
   id             String   @id @default(cuid())
