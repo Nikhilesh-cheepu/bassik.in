@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTeamFromRequest } from "@/lib/team-auth";
+import {
+  mimeFromFileUrl,
+  resolveTeamDownloadFilename,
+} from "@/lib/team-download";
 
 export const runtime = "nodejs";
 
@@ -23,7 +27,10 @@ function filenameFromUrl(url: string): string {
   try {
     const path = new URL(url).pathname;
     const base = path.split("/").pop() || "download";
-    return decodeURIComponent(base).replace(/[^\w.\-()+ ]+/g, "_").slice(0, 120) || "download";
+    return (
+      decodeURIComponent(base).replace(/[^\w.\-()+ ]+/g, "_").slice(0, 120) ||
+      "download"
+    );
   } catch {
     return "download";
   }
@@ -46,10 +53,7 @@ export async function GET(req: NextRequest) {
   }
 
   const nameParam = req.nextUrl.searchParams.get("filename")?.trim();
-  const filename =
-    nameParam && nameParam.length > 0
-      ? nameParam.replace(/[^\w.\-()+ ]+/g, "_").slice(0, 120)
-      : filenameFromUrl(url);
+  const urlFallback = filenameFromUrl(url);
 
   try {
     const upstream = await fetch(url, { cache: "no-store" });
@@ -60,13 +64,22 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const upstreamType = upstream.headers.get("content-type") || "";
+    const upstreamMime = upstreamType.split(";")[0]?.trim().toLowerCase() ?? "";
     const contentType =
-      upstream.headers.get("content-type") || "application/octet-stream";
+      upstreamMime && upstreamMime !== "application/octet-stream"
+        ? upstreamType
+        : (mimeFromFileUrl(url) ?? upstreamType) || "application/octet-stream";
+    const finalFilename = resolveTeamDownloadFilename(
+      nameParam && nameParam.length > 0 ? nameParam : urlFallback,
+      url,
+      contentType
+    );
     const headers = new Headers();
     headers.set("Content-Type", contentType);
     headers.set(
       "Content-Disposition",
-      `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+      `attachment; filename="${finalFilename}"; filename*=UTF-8''${encodeURIComponent(finalFilename)}`
     );
     const len = upstream.headers.get("content-length");
     if (len) headers.set("Content-Length", len);

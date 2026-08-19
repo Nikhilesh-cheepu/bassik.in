@@ -67,7 +67,7 @@ function jobMatchesOutletFilter(job: DesignerJobDto, filter: string): boolean {
 }
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { uploadTeamFile } from "@/lib/team-client-upload";
-import { teamDownloadHref } from "@/lib/team-download";
+import { downloadTeamFile, downloadTeamFiles, teamDownloadHref } from "@/lib/team-download";
 import { TEAM_AD_OUTLETS, splitDesignerOutletIds, teamOutletLabel } from "@/lib/team-outlets";
 import { designerWaPhone } from "@/lib/team-wa-cloud";
 import { whatsAppShareUrl } from "@/lib/team-whatsapp-report";
@@ -288,21 +288,11 @@ function designerJobFileUrls(job: Pick<DesignerJobDto, "fileUrl" | "fileUrls">):
   return job.fileUrl ? [job.fileUrl] : [];
 }
 
-function openTeamDownloads(
+async function openTeamDownloads(
   urls: string[],
   filenameBase: string
-): void {
-  urls.forEach((url, i) => {
-    const name =
-      urls.length > 1 ? `${filenameBase}-${i + 1}` : filenameBase;
-    const a = document.createElement("a");
-    a.href = teamDownloadHref(url, name);
-    a.target = "_blank";
-    a.rel = "noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  });
+): Promise<void> {
+  await downloadTeamFiles(urls, filenameBase);
 }
 
 function todayYmdLocal(): string {
@@ -1620,10 +1610,15 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const promptDownloadFiles = (job: DesignerJobDto) => {
     const urls = designerJobFileUrls(job);
     if (urls.length === 0) return;
+    const filenameBase = `${job.outletLabel}-${job.postDate}`;
+    if (urls.length === 1) {
+      downloadTeamFile(urls[0]!, filenameBase);
+      return;
+    }
     setDownloadNotice({
       title: `${job.outletLabel} · ${job.title}`,
       urls,
-      filenameBase: `${job.outletLabel}-${job.postDate}`,
+      filenameBase,
     });
   };
 
@@ -2354,8 +2349,6 @@ https://instagram.com/…"
                         url,
                         `${downloadNotice.filenameBase}-${i + 1}`
                       )}
-                      target="_blank"
-                      rel="noreferrer"
                       className="block truncate rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-[12px] font-medium text-cyan-300 hover:bg-white/[0.07]"
                     >
                       File {i + 1} of {downloadNotice.urls.length}
@@ -2368,11 +2361,16 @@ https://instagram.com/…"
               <button
                 type="button"
                 onClick={() => {
-                  openTeamDownloads(
+                  void openTeamDownloads(
                     downloadNotice.urls,
                     downloadNotice.filenameBase
-                  );
-                  setDownloadNotice(null);
+                  )
+                    .then(() => setDownloadNotice(null))
+                    .catch((e) =>
+                      alert(
+                        e instanceof Error ? e.message : "Download failed"
+                      )
+                    );
                 }}
                 className="h-10 flex-1 rounded-lg bg-emerald-400 px-3 text-[13px] font-semibold text-black sm:flex-none"
               >

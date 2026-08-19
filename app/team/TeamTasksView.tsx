@@ -18,7 +18,7 @@ import {
 } from "@/lib/team-checklists";
 import { CHECKLIST_DEFAULT_OWNER_ID } from "@/lib/team-checklist-templates";
 import { uploadTeamFile } from "@/lib/team-client-upload";
-import { teamDownloadHref } from "@/lib/team-download";
+import { downloadTeamFiles, teamDownloadHref } from "@/lib/team-download";
 import { TEAM_AD_OUTLETS, outletKindTitle, teamOutletLabel } from "@/lib/team-outlets";
 import { openWhatsAppShareUrl } from "@/lib/open-whatsapp";
 import { designerWaPhone } from "@/lib/team-wa-cloud";
@@ -360,17 +360,11 @@ function readDownloadAt(itemId: string, dateKey: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function openChecklistDownloads(urls: string[], filenameBase: string): void {
-  urls.forEach((url, i) => {
-    const name = urls.length > 1 ? `${filenameBase}-${i + 1}` : filenameBase;
-    const a = document.createElement("a");
-    a.href = teamDownloadHref(url, name);
-    a.target = "_blank";
-    a.rel = "noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  });
+async function openChecklistDownloads(
+  urls: string[],
+  filenameBase: string
+): Promise<void> {
+  await downloadTeamFiles(urls, filenameBase);
 }
 
 function markDownloaded(itemId: string, dateKey: string): void {
@@ -404,12 +398,17 @@ function HandoffDetails({
             onRequestDownload(item, dk);
             return;
           }
-          if (dk) markDownloaded(item.id, dk);
-          openChecklistDownloads(
+          void openChecklistDownloads(
             urls,
             `${item.outletId ?? "file"}-${dk || "creative"}`
-          );
-          onDownloaded?.();
+          )
+            .then(() => {
+              if (dk) markDownloaded(item.id, dk);
+              onDownloaded?.();
+            })
+            .catch((e) =>
+              alert(e instanceof Error ? e.message : "Download failed")
+            );
         }}
         className="rounded-md bg-cyan-500 px-2.5 py-1 text-[12px] font-bold text-black"
       >
@@ -1233,12 +1232,21 @@ export default function TeamTasksView({
   const promptDownloadFiles = (item: TeamChecklistItemDto, dateKey: string) => {
     const urls = handoffCreativeUrls(item.handoff);
     if (urls.length === 0) return;
+    const filenameBase = `${item.outletId ?? "file"}-${dateKey}`;
+    if (urls.length === 1) {
+      void downloadTeamFiles(urls, filenameBase)
+        .then(() => markDownloaded(item.id, dateKey))
+        .catch((e) =>
+          alert(e instanceof Error ? e.message : "Download failed")
+        );
+      return;
+    }
     setDownloadNotice({
       itemId: item.id,
       dateKey,
       title: item.outletTitle || item.title,
       urls,
-      filenameBase: `${item.outletId ?? "file"}-${dateKey}`,
+      filenameBase,
     });
   };
 
@@ -1801,8 +1809,6 @@ export default function TeamTasksView({
                         url,
                         `${downloadNotice.filenameBase}-${i + 1}`
                       )}
-                      target="_blank"
-                      rel="noreferrer"
                       onClick={() => {
                         markDownloaded(
                           downloadNotice.itemId,
@@ -1821,12 +1827,22 @@ export default function TeamTasksView({
               <button
                 type="button"
                 onClick={() => {
-                  markDownloaded(downloadNotice.itemId, downloadNotice.dateKey);
-                  openChecklistDownloads(
+                  void openChecklistDownloads(
                     downloadNotice.urls,
                     downloadNotice.filenameBase
-                  );
-                  setDownloadNotice(null);
+                  )
+                    .then(() => {
+                      markDownloaded(
+                        downloadNotice.itemId,
+                        downloadNotice.dateKey
+                      );
+                      setDownloadNotice(null);
+                    })
+                    .catch((e) =>
+                      alert(
+                        e instanceof Error ? e.message : "Download failed"
+                      )
+                    );
                 }}
                 className="h-10 flex-1 rounded-lg bg-cyan-400 px-3 text-[13px] font-semibold text-black sm:flex-none"
               >
