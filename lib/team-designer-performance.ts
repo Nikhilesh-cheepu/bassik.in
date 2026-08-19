@@ -12,7 +12,9 @@ import {
   DESIGNER_WEEKLY_TARGET,
   DESIGNER_WINDOW_DAYS,
   clampDesignerTaskWeight,
+  clampDesignerWindowDays,
   designerDisplayName,
+  designerJobCreditYmd,
   type DesignerDaySeriesPoint,
   type DesignerHolidaySundayDto,
   type DesignerMissedDayDto,
@@ -109,9 +111,38 @@ function previousStackWorkday(ymd: string): string {
 type CloseRow = {
   startedAt: Date | null;
   uploadedAt: Date | null;
+  updatedAt?: Date;
   dueDate: string;
   taskWeight?: number | null;
+  closedByRole?: string | null;
 };
+
+function creditYmdFromCloseRow(row: CloseRow): string | null {
+  return designerJobCreditYmd({
+    uploadedAt: row.uploadedAt?.toISOString() ?? null,
+    startedAt: row.startedAt?.toISOString() ?? null,
+    updatedAt: row.updatedAt?.toISOString() ?? null,
+  });
+}
+
+/** Day strip + Done tab: count finishes on upload/start/update day (IST). */
+function closesByCreditDayFromRows(
+  assigneeId: string,
+  rows: CloseRow[],
+  fromYmd: string,
+  toYmd: string
+): Map<string, number> {
+  const byDay = new Map<string, number>();
+  if (fromYmd > toYmd) return byDay;
+  for (const r of rows) {
+    const creditYmd = creditYmdFromCloseRow(r);
+    if (!creditYmd || creditYmd < fromYmd || creditYmd > toYmd) continue;
+    if (!isStackWorkday(assigneeId, creditYmd)) continue;
+    const weight = clampDesignerTaskWeight(r.taskWeight);
+    byDay.set(creditYmd, (byDay.get(creditYmd) ?? 0) + weight);
+  }
+  return byDay;
+}
 
 type ClassifiedClose =
   | { kind: "workday"; creditYmd: string; sameDay: boolean }
@@ -201,25 +232,29 @@ async function fetchCloseRows(
     Array<{
       startedAt: Date | null;
       uploadedAt: Date | null;
+      updatedAt: Date;
       dueDate: string;
       taskWeight: number | null;
+      closedByRole: string | null;
     }>
   >`
-    SELECT "startedAt", "uploadedAt", "dueDate", "taskWeight"
+    SELECT "startedAt", "uploadedAt", "updatedAt", "dueDate", "taskWeight", "closedByRole"
     FROM "TeamDesignerJob"
     WHERE "assigneeId" = ${assigneeId}
       AND status = 'DESIGN_DONE'
-      AND "closedByRole" = 'designer'
       AND (
         ("startedAt" IS NOT NULL AND "startedAt" >= ${start} AND "startedAt" <= ${end})
         OR ("uploadedAt" IS NOT NULL AND "uploadedAt" >= ${start} AND "uploadedAt" <= ${end})
+        OR ("updatedAt" >= ${start} AND "updatedAt" <= ${end})
       )
   `;
   return rows.map((r) => ({
     startedAt: r.startedAt,
     uploadedAt: r.uploadedAt,
+    updatedAt: r.updatedAt,
     dueDate: r.dueDate,
     taskWeight: clampDesignerTaskWeight(r.taskWeight),
+    closedByRole: r.closedByRole,
   }));
 }
 
@@ -269,8 +304,9 @@ async function computeCloseLedger(
 
   const rows =
     prefetched ?? (await fetchCloseRows(assigneeId, fromYmd, toYmd));
+  const designerRows = rows.filter((r) => r.closedByRole === "designer");
   // Chronological: earlier finishes apply to catch-up debt first
-  rows.sort((a, b) => {
+  designerRows.sort((a, b) => {
     const at = (a.uploadedAt ?? a.startedAt)?.getTime() ?? 0;
     const bt = (b.uploadedAt ?? b.startedAt)?.getTime() ?? 0;
     return at - bt;
@@ -280,7 +316,7 @@ async function computeCloseLedger(
   type Pending = { creditYmd: string; sameDay: boolean; dueDate: string };
   const pendingWorkdays: Pending[] = [];
 
-  for (const r of rows) {
+  for (const r of designerRows) {
     const c = classifyDesignerClose(r);
     if (c.kind === "skip") continue;
     const weight = clampDesignerTaskWeight(r.taskWeight);
@@ -347,10 +383,7 @@ async function computeCloseLedger(
 }
 
 /**
- * Closes counted on the day the designer actually started them (IST).
- * Does NOT re-slot work onto older shortfall days — that was making Mon look like 0
- * while Sat showed 4/4 after Monday’s closes filled Saturday’s hole.
- * Holiday-point ledger still uses computeCloseLedger separately.
+ * @deprecated — use closesByCreditDayFromRows (upload/start/update day, matches Done tab).
  */
 function closesByStartDayFromRows(
   assigneeId: string,
@@ -358,24 +391,7 @@ function closesByStartDayFromRows(
   fromYmd: string,
   toYmd: string
 ): Map<string, number> {
-  const byWorkday = new Map<string, number>();
-  if (fromYmd > toYmd) return byWorkday;
-  for (const r of rows) {
-    const c = classifyDesignerClose(r);
-    const weight = clampDesignerTaskWeight(r.taskWeight);
-    if (c.kind === "workday") {
-      if (c.creditYmd < fromYmd || c.creditYmd > toYmd) continue;
-      if (!isStackWorkday(assigneeId, c.creditYmd)) continue;
-      byWorkday.set(c.creditYmd, (byWorkday.get(c.creditYmd) ?? 0) + weight);
-      continue;
-    }
-    if (c.kind === "sunday_work") {
-      // Show on Sunday strip as extras; does not fill Mon–Sat 4/day target
-      if (c.sundayYmd < fromYmd || c.sundayYmd > toYmd) continue;
-      byWorkday.set(c.sundayYmd, (byWorkday.get(c.sundayYmd) ?? 0) + weight);
-    }
-  }
-  return byWorkday;
+  return closesByCreditDayFromRows(assigneeId, rows, fromYmd, toYmd);
 }
 
 async function loadClosesByStartDay(
@@ -540,7 +556,7 @@ export async function computeDesignerStack(
     .filter(Boolean)
     .sort()[0]!;
   const closeRows = await fetchCloseRows(assigneeId, wideFrom, effectiveToday);
-  const byDay = closesByStartDayFromRows(
+  const byDay = closesByCreditDayFromRows(
     assigneeId,
     closeRows,
     wideFrom,
@@ -773,82 +789,72 @@ async function dayActivity(assigneeId: string, ymd: string): Promise<{
 async function buildSeries(
   assigneeId: string,
   today: string,
-  opts?: { includeStarts?: boolean }
+  opts?: { includeStarts?: boolean; windowDays?: number }
 ): Promise<DesignerDaySeriesPoint[]> {
-  // Same rolling window as the queue seed (30d), clipped to stack start (1 Aug)
-  const windowFrom = addDaysYmd(today, -(DESIGNER_WINDOW_DAYS - 1));
+  const windowDays = clampDesignerWindowDays(opts?.windowDays ?? DESIGNER_WINDOW_DAYS);
+  const windowFrom = addDaysYmd(today, -(windowDays - 1));
   const from =
     windowFrom < DESIGNER_STACK_START_DATE ? DESIGNER_STACK_START_DATE : windowFrom;
   const { start } = istDayBounds(from);
   const { end } = istDayBounds(today);
   const includeStarts = opts?.includeStarts !== false;
 
-  // Home strip = everything finished (upload day IST) — Sunday, admin mark-done, old/new.
-  // Catch-up / 4-per-day stack still uses the credit ledger separately.
-  // Counts are weighted by taskWeight (1–4).
-  const [starts, uploads] = await Promise.all([
-    includeStarts
-      ? prisma.teamDesignerJob.findMany({
-          where: {
-            assigneeId,
-            startedAt: { gte: start, lte: end },
-          },
-          select: { startedAt: true },
-        })
-      : Promise.resolve([] as Array<{ startedAt: Date | null }>),
-    prisma.$queryRaw<
-      Array<{
-        uploadedAt: Date | null;
-        updatedAt: Date;
-        fileUrl: string | null;
-        taskWeight: number | null;
-      }>
-    >`
-      SELECT "uploadedAt", "updatedAt", "fileUrl", "taskWeight"
-      FROM "TeamDesignerJob"
-      WHERE "assigneeId" = ${assigneeId}
-        AND status = 'DESIGN_DONE'
-        AND (
-          ("uploadedAt" IS NOT NULL AND "uploadedAt" >= ${start} AND "uploadedAt" <= ${end})
-          OR (
-            "uploadedAt" IS NULL
-            AND "fileUrl" IS NOT NULL
-            AND "updatedAt" >= ${start}
-            AND "updatedAt" <= ${end}
-          )
-        )
-    `,
-  ]);
+  const rows = await fetchCloseRows(assigneeId, from, today);
+  const closedByCreditDay = closesByCreditDayFromRows(
+    assigneeId,
+    rows,
+    from,
+    today
+  );
+
+  // Sunday extras (any finish credited to Sunday)
+  for (const r of rows) {
+    const creditYmd = creditYmdFromCloseRow(r);
+    if (!creditYmd || creditYmd < from || creditYmd > today) continue;
+    if (dayIdForYmd(creditYmd) !== "sun") continue;
+    const weight = clampDesignerTaskWeight(r.taskWeight);
+    closedByCreditDay.set(
+      creditYmd,
+      (closedByCreditDay.get(creditYmd) ?? 0) + weight
+    );
+  }
 
   const firstStartByDay = new Map<string, Date>();
   const lastEndByDay = new Map<string, Date>();
-  const closedByUploadDay = new Map<string, number>();
 
-  for (const u of uploads) {
-    const when = u.uploadedAt ?? u.updatedAt;
-    if (!when) continue;
-    const key = istYmd(when);
-    if (key < from || key > today) continue;
-    const weight = clampDesignerTaskWeight(u.taskWeight);
-    closedByUploadDay.set(key, (closedByUploadDay.get(key) ?? 0) + weight);
-    const prev = lastEndByDay.get(key);
-    if (!prev || when > prev) lastEndByDay.set(key, when);
+  for (const r of rows) {
+    const creditYmd = creditYmdFromCloseRow(r);
+    if (!creditYmd || creditYmd < from || creditYmd > today) continue;
+    const when = r.uploadedAt ?? r.startedAt ?? r.updatedAt;
+    if (when) {
+      const prev = lastEndByDay.get(creditYmd);
+      if (!prev || when > prev) lastEndByDay.set(creditYmd, when);
+    }
   }
-  for (const s of starts) {
-    if (!s.startedAt) continue;
-    const key = istYmd(s.startedAt);
-    const prev = firstStartByDay.get(key);
-    if (!prev || s.startedAt < prev) firstStartByDay.set(key, s.startedAt);
+
+  if (includeStarts) {
+    const starts = await prisma.teamDesignerJob.findMany({
+      where: {
+        assigneeId,
+        startedAt: { gte: start, lte: end },
+      },
+      select: { startedAt: true },
+    });
+    for (const s of starts) {
+      if (!s.startedAt) continue;
+      const key = istYmd(s.startedAt);
+      const prev = firstStartByDay.get(key);
+      if (!prev || s.startedAt < prev) firstStartByDay.set(key, s.startedAt);
+    }
   }
 
   const series: DesignerDaySeriesPoint[] = [];
   let cur = from;
-  for (let i = 0; i < DESIGNER_WINDOW_DAYS + 7 && cur <= today; i++) {
+  for (let i = 0; i < windowDays + 7 && cur <= today; i++) {
     const workday = isStackWorkday(assigneeId, cur);
-    // Real finishes on that calendar day (incl. Sunday)
     series.push({
       date: cur,
-      closed: closedByUploadDay.get(cur) ?? 0,
+      closed: closedByCreditDay.get(cur) ?? 0,
       target: workday ? DESIGNER_DAILY_TARGET : 0,
       firstStart: firstStartByDay.get(cur)?.toISOString() ?? null,
       lastEnd: lastEndByDay.get(cur)?.toISOString() ?? null,
@@ -929,12 +935,14 @@ function decoratePerformance(
 
 /** Home cards: stack + day strip + in-progress — skips heavy metrics counts. */
 export async function computeDesignerPerformanceLite(
-  assigneeId: string
+  assigneeId: string,
+  windowDays = DESIGNER_WINDOW_DAYS
 ): Promise<DesignerPerformanceDto> {
   const today = getTodayKey();
   const isSunday = dayIdForYmd(today) === "sun";
+  const days = clampDesignerWindowDays(windowDays);
   const [series, stack, inProgress, closedTodayRaw] = await Promise.all([
-    buildSeries(assigneeId, today, { includeStarts: false }),
+    buildSeries(assigneeId, today, { includeStarts: false, windowDays: days }),
     computeDesignerStack(assigneeId, today),
     prisma.teamDesignerJob.count({
       where: { assigneeId, status: "IN_PROGRESS" },
@@ -962,9 +970,11 @@ export async function computeDesignerPerformanceLite(
 }
 
 export async function computeDesignerPerformance(
-  assigneeId: string
+  assigneeId: string,
+  windowDays = DESIGNER_WINDOW_DAYS
 ): Promise<DesignerPerformanceDto> {
   const today = getTodayKey();
+  const days = clampDesignerWindowDays(windowDays);
   const [metrics, activity, readyToStart, readyDueRows, series, stack] =
     await Promise.all([
       computeDesignerMetrics(assigneeId),
@@ -976,7 +986,7 @@ export async function computeDesignerPerformance(
         where: { assigneeId, status: "READY_TO_DESIGN" },
         select: { dueDate: true, dueTime: true },
       }),
-      buildSeries(assigneeId, today),
+      buildSeries(assigneeId, today, { windowDays: days }),
       computeDesignerStack(assigneeId, today),
     ]);
   const overdueReady = readyDueRows.filter((r) =>
@@ -1008,18 +1018,27 @@ export async function computeDesignerPerformance(
 }
 
 const LITE_CACHE_TTL_MS = 15_000;
-let litePerfCache: { at: number; data: DesignerPerformanceDto[] } | null = null;
+let litePerfCache: {
+  at: number;
+  windowDays: number;
+  data: DesignerPerformanceDto[];
+} | null = null;
 
-export async function computeAllDesignerPerformanceLite(): Promise<
-  DesignerPerformanceDto[]
-> {
-  if (litePerfCache && Date.now() - litePerfCache.at < LITE_CACHE_TTL_MS) {
+export async function computeAllDesignerPerformanceLite(
+  windowDays = DESIGNER_WINDOW_DAYS
+): Promise<DesignerPerformanceDto[]> {
+  const days = clampDesignerWindowDays(windowDays);
+  if (
+    litePerfCache &&
+    Date.now() - litePerfCache.at < LITE_CACHE_TTL_MS &&
+    litePerfCache.windowDays === days
+  ) {
     return litePerfCache.data;
   }
   const data = await Promise.all(
-    DESIGNER_PERFORMANCE_IDS.map((id) => computeDesignerPerformanceLite(id))
+    DESIGNER_PERFORMANCE_IDS.map((id) => computeDesignerPerformanceLite(id, days))
   );
-  litePerfCache = { at: Date.now(), data };
+  litePerfCache = { at: Date.now(), windowDays: days, data };
   return data;
 }
 

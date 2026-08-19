@@ -3,6 +3,7 @@ import { getTeamFromRequest } from "@/lib/team-auth";
 import { isTeamDesignerMember } from "@/lib/team-members";
 import {
   DESIGNER_PERFORMANCE_IDS,
+  clampDesignerWindowDays,
   type DesignerNudgeKind,
 } from "@/lib/team-designer-jobs-shared";
 import {
@@ -41,7 +42,10 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ ok: true, reminders, suggested });
       }
       if (lite) {
-        const designers = await computeAllDesignerPerformanceLite();
+        const windowDays = clampDesignerWindowDays(
+          req.nextUrl.searchParams.get("days")
+        );
+        const designers = await computeAllDesignerPerformanceLite(windowDays);
         return NextResponse.json({
           ok: true,
           designers,
@@ -69,9 +73,12 @@ export async function GET(req: NextRequest) {
 
     // Designers hit ?lite=1 too — full recompute was hanging their Open tab (20–40s).
     const lite = req.nextUrl.searchParams.get("lite") === "1";
+    const windowDays = clampDesignerWindowDays(
+      req.nextUrl.searchParams.get("days")
+    );
     const me = lite
-      ? await computeDesignerPerformanceLite(memberId)
-      : await computeDesignerPerformance(memberId);
+      ? await computeDesignerPerformanceLite(memberId, windowDays)
+      : await computeDesignerPerformance(memberId, windowDays);
     return NextResponse.json({ ok: true, designers: [me], reminders: [], suggested: [] });
   } catch (err) {
     console.error("[team/designer-performance] GET", err);

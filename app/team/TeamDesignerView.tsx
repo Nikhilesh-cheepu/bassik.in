@@ -41,6 +41,8 @@ import {
   clampDesignerWindowDays,
   designerActiveWorkMs,
   designerFormatLabel,
+  designerJobCreditYmd,
+  istYmdFromIso,
   isBoilerplateDesignerDescription,
   isDesignerTvCalendarJob,
   partitionOpenDesignerQueueByAssignee,
@@ -386,14 +388,7 @@ function formatPostDateParts(ymd: string): { dayName: string; dateLabel: string 
   };
 }
 
-function istYmdFromIso(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-}
-
-/** Group Done jobs by upload day (IST) — Mahesh first within each day. */
+/** Group Done jobs by finish day (IST) — matches the day strip above. */
 function groupDoneJobsByDay(jobs: DesignerJobDto[]): {
   key: string;
   dayName: string;
@@ -404,13 +399,7 @@ function groupDoneJobsByDay(jobs: DesignerJobDto[]): {
     id === "mahesh" ? 0 : id === "jeslyn" ? 1 : 2;
   const map = new Map<string, DesignerJobDto[]>();
   for (const j of jobs) {
-    // Match home day-strip: credit on upload day
-    const key =
-      istYmdFromIso(j.uploadedAt) ||
-      istYmdFromIso(j.startedAt) ||
-      istYmdFromIso(j.updatedAt) ||
-      j.postDate ||
-      "unknown";
+    const key = designerJobCreditYmd(j) ?? "unknown";
     const list = map.get(key) ?? [];
     list.push(j);
     map.set(key, list);
@@ -661,11 +650,15 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     const showSpinner = !perfReadyRef.current;
     if (showSpinner) setPerfLoading(true);
     try {
-      const res = await fetch("/api/team/designer-performance?lite=1", {
-        cache: "no-store",
-        // Hung DB must not leave the Open tab on a spinner forever
-        signal: fetchTimeoutSignal(10_000),
-      });
+      const days = windowDaysRef.current;
+      const res = await fetch(
+        `/api/team/designer-performance?lite=1&days=${days}`,
+        {
+          cache: "no-store",
+          // Hung DB must not leave the Open tab on a spinner forever
+          signal: fetchTimeoutSignal(10_000),
+        }
+      );
       const data = await readJson(res);
       applyPerformancePayload(data);
     } catch {
@@ -932,7 +925,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         return true;
       }
       const updated = data.job as DesignerJobDto | undefined;
-      if (updated) {
+        if (updated) {
         setAllJobs((prev) => {
           if (
             isOpenQueueView(queueViewRef.current) &&
@@ -945,6 +938,9 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
           }
           return prev.map((j) => (j.id === id ? updated : j));
         });
+        if (updated.status === "DESIGN_DONE") {
+          void loadPerformanceLite().catch(() => undefined);
+        }
         if (updated.status !== "WAITING_BRIEF") {
           setSelectedIds((prev) => {
             if (!prev.has(id)) return prev;
@@ -1792,7 +1788,7 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
         </div>
       ) : null}
 
-      {queueView === "open" || queueView === "toSend"
+      {queueView === "open" || queueView === "toSend" || queueView === "closed"
         ? visiblePerf.map((p) => (
             <DesignerPerformanceCard
               key={p.assigneeId}
@@ -4174,13 +4170,9 @@ function DesignerPerformanceCard({
   const dayStripAll = perf.series.map((pt) => {
     const isSunday = dayShortLabel(pt.date) === "Sun";
     const isOff = pt.target <= 0;
-    const closed =
-      pt.date === perf.today
-        ? Math.max(pt.closed, perf.uploadedToday ?? 0, sunday ? 0 : perf.closedToday)
-        : pt.closed;
     return {
       ...pt,
-      closed,
+      closed: pt.closed,
       isSunday,
       isOff,
       isToday: pt.date === perf.today,
@@ -4207,9 +4199,7 @@ function DesignerPerformanceCard({
     return dayStripAll.slice(-CLEAR_STRIP_DAYS);
   })();
 
-  const todayDone = sunday
-    ? perf.uploadedToday ?? 0
-    : Math.max(perf.uploadedToday ?? 0, perf.closedToday);
+  const todayDone = perf.series.find((p) => p.date === perf.today)?.closed ?? 0;
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3">

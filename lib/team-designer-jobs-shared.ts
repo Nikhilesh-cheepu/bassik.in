@@ -70,6 +70,33 @@ export function clampDesignerWindowDays(n: unknown): number {
 }
 /** Cumulative 4/day stack starts here (IST). Misses carry forward. Sunday = break. */
 export const DESIGNER_STACK_START_DATE = "2026-08-01";
+
+const DESIGNER_IST = "Asia/Kolkata";
+
+/** IST calendar day from an ISO timestamp (matches server day strip). */
+export function istYmdFromIso(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-CA", { timeZone: DESIGNER_IST });
+}
+
+/**
+ * Which day a finished job counts toward (Done tab + day strip).
+ * Upload day first, then start day, then last update — never post date.
+ */
+export function designerJobCreditYmd(job: {
+  uploadedAt?: string | null;
+  startedAt?: string | null;
+  updatedAt?: string | null;
+}): string | null {
+  return (
+    istYmdFromIso(job.uploadedAt) ||
+    istYmdFromIso(job.startedAt) ||
+    istYmdFromIso(job.updatedAt) ||
+    null
+  );
+}
 /**
  * Weekend posts target due = go-live − 4 days (Fri→Mon).
  * Absolute last comfort slip for a Friday pack: +2 days (Mon→Wed). Prefer never.
