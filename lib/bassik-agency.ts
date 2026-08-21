@@ -28,6 +28,41 @@ export function bassikPackageWhatsAppUrl(packageName: string): string {
   );
 }
 
+/** /grow lead page — open chat with captured details. */
+export function bassikGrowLeadWhatsAppUrl(params: {
+  name: string;
+  phone: string;
+  business?: string;
+}): string {
+  const name = params.name.trim() || "there";
+  const phone = params.phone.trim();
+  const business = params.business?.trim();
+  const biz = business ? ` Business: ${business}.` : "";
+  return bassikAgencyWhatsAppUrl(
+    `Hi Bassik — I'm ${name}, ${phone}.${biz} I struggle with marketing vs growth. Let's talk 360° marketing.`
+  );
+}
+
+export const BASSIK_GROW_WA_SHORT =
+  "Hi Bassik — I want a free growth chat about 360° marketing for my business.";
+
+export function bassikGrowShortWhatsAppUrl(): string {
+  return bassikAgencyWhatsAppUrl(BASSIK_GROW_WA_SHORT);
+}
+
+export const GROW_SEO = {
+  title: "Bassik | Stuck between marketing and growing the business?",
+  description:
+    "Bassik helps clubs, cafés and local brands with 360° marketing, lead generation and conversion — so you can run the room while we handle the rest. Free growth chat on WhatsApp.",
+} as const;
+
+export const GROW_STACK: ReadonlyArray<{ title: string; body: string }> = [
+  { title: "Brand & story", body: "We learn who you are, then build what guests feel." },
+  { title: "360° marketing", body: "Planning, shoots, content, social, ads, artists & events." },
+  { title: "Lead generation", body: "Campaigns that bring enquiries and footfall — not vanity likes." },
+  { title: "Conversion", body: "Pages, offers and paths that turn interest into bookings." },
+];
+
 /** Unique client marks for portfolio (one logo per Club Rogue family). */
 export function getAgencyPortfolioBrands(): Brand[] {
   const seen = new Set<string>();
