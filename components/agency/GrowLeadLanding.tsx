@@ -5,14 +5,21 @@ import Image from "next/image";
 import {
   GROW_STACK,
   AGENCY_PROOF_LINE,
-  bassikGrowLeadWhatsAppUrl,
+  bassikGrowNumberWhatsAppUrl,
   bassikGrowShortWhatsAppUrl,
   getAgencyPortfolioBrands,
 } from "@/lib/bassik-agency";
 
-type Step = "hook" | "form" | "skip" | "done";
+type Step = "hook" | "hi" | "skip" | "done";
 
-function logoPath(brandId: string, override?: string) {
+const TRUST_POINTS = [
+  "We’re here to grow your business — not just fill the feed.",
+  "Full 360° marketing: story, shoots, content, ads, leads.",
+  "Lead generation + conversion so interest becomes footfall.",
+  "You run the floor. We handle the rest.",
+] as const;
+
+function logoSrc(brandId: string, override?: string) {
   if (override) return override;
   if (brandId.startsWith("club-rogue")) return "/logos/club-rogue.png";
   return `/logos/${brandId}.png`;
@@ -50,45 +57,39 @@ export default function GrowLeadLanding() {
   const shortWa = bassikGrowShortWhatsAppUrl();
 
   const [step, setStep] = useState<Step>("hook");
-  const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
-  const [business, setBusiness] = useState("");
+  const [showNumber, setShowNumber] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [waHref, setWaHref] = useState(shortWa);
 
-  function openLeadWhatsApp() {
+  function sayHi() {
+    setError(null);
+    setWaHref(shortWa);
+    window.open(shortWa, "_blank", "noopener,noreferrer");
+    setStep("done");
+  }
+
+  function submitNumber(e: FormEvent) {
+    e.preventDefault();
     const cleaned = digitsOnlyPhone(phone);
-    if (!name.trim()) {
-      setError("Please enter your name.");
-      return false;
-    }
     if (cleaned.length !== 10) {
       setError("Enter a valid 10-digit WhatsApp number.");
-      return false;
+      return;
     }
     setError(null);
-    const href = bassikGrowLeadWhatsAppUrl({
-      name: name.trim(),
-      phone: cleaned,
-      business: business.trim() || undefined,
-    });
+    const href = bassikGrowNumberWhatsAppUrl(cleaned);
     setWaHref(href);
     window.open(href, "_blank", "noopener,noreferrer");
     setStep("done");
-    return true;
-  }
-
-  function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    openLeadWhatsApp();
   }
 
   return (
     <div className="min-h-screen bg-[#F7F5F8] text-[#12131A] pb-[4.75rem] sm:pb-0">
       <nav className="relative z-20 mx-auto flex max-w-lg items-center justify-between px-4 py-4 sm:max-w-xl sm:px-6">
         <div className="flex items-center gap-2.5">
-          <div className="relative h-9 w-9 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/5">
-            <Image src="/logos/bassik.png" alt="" fill sizes="36px" className="object-contain p-0.5" priority />
+          {/* Dark chip so white Bassik mark stays visible */}
+          <div className="relative h-9 w-9 overflow-hidden rounded-xl bg-[#12131A] shadow-sm ring-1 ring-black/10">
+            <Image src="/logos/bassik.png" alt="" fill sizes="36px" className="object-contain p-1.5" priority />
           </div>
           <span className="font-[family-name:var(--font-agency-display)] text-[15px] font-semibold tracking-tight">
             Bassik
@@ -128,7 +129,7 @@ export default function GrowLeadLanding() {
               <div className="mt-8 flex flex-col gap-3">
                 <button
                   type="button"
-                  onClick={() => setStep("form")}
+                  onClick={() => setStep("hi")}
                   className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#12131A] px-6 text-[14px] font-semibold text-white transition hover:bg-black"
                 >
                   Yes — that’s me
@@ -147,108 +148,113 @@ export default function GrowLeadLanding() {
                 {portfolio.slice(0, 8).map((brand) => (
                   <li
                     key={brand.id}
-                    className="flex shrink-0 items-center gap-1.5 rounded-full border border-[#E6E1E8] bg-white px-2.5 py-1"
+                    className="flex shrink-0 items-center gap-1.5 rounded-full border border-[#12131A]/15 bg-[#12131A] px-2.5 py-1.5"
                   >
-                    <div className="relative h-5 w-5 overflow-hidden rounded-md bg-[#F7F5F8]">
+                    <div className="relative h-5 w-5 overflow-hidden rounded-md bg-[#1C1B24]">
                       <Image
-                        src={logoPath(brand.id, brand.logoPath)}
+                        src={logoSrc(brand.id, brand.logoPath)}
                         alt=""
                         fill
                         sizes="20px"
                         className="object-contain p-0.5"
                       />
                     </div>
-                    <span className="text-[10px] font-medium text-[#4A4550]">{brand.shortName}</span>
+                    <span className="text-[10px] font-medium text-white/90">{brand.shortName}</span>
                   </li>
                 ))}
               </ul>
             </section>
           ) : null}
 
-          {step === "form" ? (
-            <section aria-labelledby="grow-form-title">
+          {step === "hi" ? (
+            <section aria-labelledby="grow-hi-title">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8B8494]">
                 Step 2 of 2
               </p>
               <h2
-                id="grow-form-title"
-                className="mt-2 font-[family-name:var(--font-agency-display)] text-[clamp(1.65rem,6vw,2.2rem)] font-semibold tracking-tight"
+                id="grow-hi-title"
+                className="mt-2 font-[family-name:var(--font-agency-display)] text-[clamp(1.65rem,6vw,2.25rem)] font-semibold tracking-tight"
               >
-                Let’s build a solution together.
+                We’re here to grow your business.
               </h2>
-              <p className="mt-2 text-[14px] leading-relaxed text-[#6B6570]">
-                Share your name and WhatsApp number. We’ll discuss your brand and how 360° marketing can help —
-                no spam.
+
+              <ul className="mt-5 space-y-3">
+                {TRUST_POINTS.map((point) => (
+                  <li key={point} className="flex gap-3 text-[14px] leading-snug text-[#4A4550]">
+                    <span
+                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                      style={{ background: "linear-gradient(135deg,#FFB4A2,#C4B5FD)" }}
+                      aria-hidden
+                    />
+                    <span>{point}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <p className="mt-6 text-[13px] font-medium text-[#6B6570]">
+                Tap Hi — we’ll handle the rest on WhatsApp.
               </p>
 
-              <form onSubmit={onSubmit} className="mt-6 space-y-3">
-                <label className="block">
-                  <span className="text-[12px] font-semibold text-[#4A4550]">Your name</span>
-                  <input
-                    type="text"
-                    name="name"
-                    autoComplete="name"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="mt-1.5 w-full rounded-2xl border border-[#E6E1E8] bg-white px-4 py-3 text-[15px] text-[#12131A] outline-none ring-[#C4B5FD] placeholder:text-[#B0AAB6] focus:ring-2"
-                    placeholder="e.g. Rahul"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-[12px] font-semibold text-[#4A4550]">WhatsApp number</span>
-                  <input
-                    type="tel"
-                    name="phone"
-                    autoComplete="tel"
-                    inputMode="numeric"
-                    required
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="mt-1.5 w-full rounded-2xl border border-[#E6E1E8] bg-white px-4 py-3 text-[15px] text-[#12131A] outline-none ring-[#C4B5FD] placeholder:text-[#B0AAB6] focus:ring-2"
-                    placeholder="10-digit mobile"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-[12px] font-semibold text-[#4A4550]">
-                    Business / venue <span className="font-normal text-[#8B8494]">(optional)</span>
-                  </span>
-                  <input
-                    type="text"
-                    name="business"
-                    value={business}
-                    onChange={(e) => setBusiness(e.target.value)}
-                    className="mt-1.5 w-full rounded-2xl border border-[#E6E1E8] bg-white px-4 py-3 text-[15px] text-[#12131A] outline-none ring-[#C4B5FD] placeholder:text-[#B0AAB6] focus:ring-2"
-                    placeholder="Club, café, clinic…"
-                  />
-                </label>
-
-                {error ? <p className="text-[13px] font-medium text-[#B42318]">{error}</p> : null}
-
-                <button
-                  type="submit"
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#12131A] px-6 text-[14px] font-semibold text-white transition hover:bg-black"
-                >
-                  Get a free growth chat
-                </button>
-              </form>
-
-              <a
-                href={shortWa}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-[#E6E1E8] bg-white/80 text-[13px] font-semibold text-[#12131A]"
+              <button
+                type="button"
+                onClick={sayHi}
+                className="relative mt-4 inline-flex min-h-[3.5rem] w-full items-center justify-center overflow-hidden rounded-full bg-[#12131A] px-6 text-[17px] font-semibold text-white shadow-[0_16px_40px_-18px_rgba(80,60,140,0.55)] transition hover:bg-black"
               >
-                Or message on WhatsApp
-              </a>
+                <span
+                  className="pointer-events-none absolute inset-0 opacity-40"
+                  style={{
+                    background:
+                      "radial-gradient(120% 80% at 20% 0%, #FFB4A2 0%, transparent 45%), radial-gradient(100% 80% at 90% 100%, #C4B5FD 0%, transparent 50%)",
+                  }}
+                  aria-hidden
+                />
+                <span className="relative">Hi — let’s talk</span>
+              </button>
+
+              <p className="mt-3 text-center text-[12px] text-[#8B8494]">No forms. No spam. Just a real chat.</p>
+
+              {!showNumber ? (
+                <button
+                  type="button"
+                  onClick={() => setShowNumber(true)}
+                  className="mt-5 w-full text-center text-[12px] font-medium text-[#8B8494] underline-offset-2 hover:text-[#12131A] hover:underline"
+                >
+                  Prefer we message you first? Share your number
+                </button>
+              ) : (
+                <form onSubmit={submitNumber} className="mt-5 space-y-3 rounded-2xl border border-[#E6E1E8] bg-white/80 p-4">
+                  <label className="block">
+                    <span className="text-[12px] font-semibold text-[#4A4550]">WhatsApp number</span>
+                    <input
+                      type="tel"
+                      name="phone"
+                      autoComplete="tel"
+                      inputMode="numeric"
+                      required
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="mt-1.5 w-full rounded-2xl border border-[#E6E1E8] bg-white px-4 py-3 text-[15px] text-[#12131A] outline-none ring-[#C4B5FD] placeholder:text-[#B0AAB6] focus:ring-2"
+                      placeholder="10-digit mobile"
+                    />
+                  </label>
+                  {error ? <p className="text-[13px] font-medium text-[#B42318]">{error}</p> : null}
+                  <button
+                    type="submit"
+                    className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-[#12131A] px-5 text-[13px] font-semibold text-white"
+                  >
+                    Share number — we’ll get back
+                  </button>
+                </form>
+              )}
 
               <button
                 type="button"
                 onClick={() => {
                   setError(null);
+                  setShowNumber(false);
                   setStep("hook");
                 }}
-                className="mt-4 w-full text-center text-[12px] font-medium text-[#8B8494] hover:text-[#12131A]"
+                className="mt-5 w-full text-center text-[12px] font-medium text-[#8B8494] hover:text-[#12131A]"
               >
                 ← Back
               </button>
@@ -263,10 +269,6 @@ export default function GrowLeadLanding() {
               >
                 No pressure. We’re here when you are.
               </h2>
-              <p className="mt-3 text-[14px] leading-relaxed text-[#6B6570]">
-                Bassik is 360° marketing with no artificial ceiling — story, content, ads, lead gen, and
-                conversion. WhatsApp anytime, or jump back in when you’re ready.
-              </p>
 
               <ul className="mt-6 grid grid-cols-2 gap-2.5">
                 {GROW_STACK.map((item, i) => (
@@ -292,17 +294,16 @@ export default function GrowLeadLanding() {
               </ul>
 
               <div className="mt-7 flex flex-col gap-3">
-                <a
-                  href={shortWa}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#12131A] px-6 text-[14px] font-semibold text-white"
-                >
-                  WhatsApp us anytime
-                </a>
                 <button
                   type="button"
-                  onClick={() => setStep("form")}
+                  onClick={sayHi}
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#12131A] px-6 text-[14px] font-semibold text-white"
+                >
+                  Hi — let’s talk
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep("hi")}
                   className="inline-flex min-h-12 w-full items-center justify-center rounded-full border border-[#E6E1E8] bg-white px-6 text-[14px] font-semibold text-[#12131A]"
                 >
                   Actually yes, help me
@@ -331,8 +332,7 @@ export default function GrowLeadLanding() {
                 WhatsApp is opening…
               </h2>
               <p className="mx-auto mt-3 max-w-sm text-[14px] leading-relaxed text-[#6B6570]">
-                Your details are ready in the chat. If nothing opened, tap below — we’ll talk through your brand
-                and next steps together.
+                Just say hi — we’ll take it from there. If nothing opened, tap below.
               </p>
               <a
                 href={waHref}
@@ -354,7 +354,7 @@ export default function GrowLeadLanding() {
             <>
               <button
                 type="button"
-                onClick={() => setStep("form")}
+                onClick={() => setStep("hi")}
                 className="inline-flex min-h-11 flex-[1.35] items-center justify-center rounded-full bg-[#12131A] text-[13px] font-semibold text-white"
               >
                 Yes, help me
@@ -368,24 +368,14 @@ export default function GrowLeadLanding() {
                 WhatsApp
               </a>
             </>
-          ) : step === "form" ? (
-            <>
-              <button
-                type="button"
-                onClick={() => openLeadWhatsApp()}
-                className="inline-flex min-h-11 flex-[1.45] items-center justify-center rounded-full bg-[#12131A] text-[13px] font-semibold text-white"
-              >
-                Free growth chat
-              </button>
-              <a
-                href={shortWa}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full border border-[#E6E1E8] bg-white text-[13px] font-semibold"
-              >
-                WhatsApp
-              </a>
-            </>
+          ) : step === "hi" ? (
+            <button
+              type="button"
+              onClick={sayHi}
+              className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-[#12131A] text-[14px] font-semibold text-white"
+            >
+              Hi — let’s talk
+            </button>
           ) : (
             <a
               href={waHref}

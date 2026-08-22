@@ -44,10 +44,18 @@ export function bassikGrowLeadWhatsAppUrl(params: {
 }
 
 export const BASSIK_GROW_WA_SHORT =
-  "Hi Bassik — I want a free growth chat about 360° marketing for my business.";
+  "Hi Bassik — I want help growing my business with 360° marketing. Let's talk.";
 
 export function bassikGrowShortWhatsAppUrl(): string {
   return bassikAgencyWhatsAppUrl(BASSIK_GROW_WA_SHORT);
+}
+
+/** Prefill when they only shared a callback number. */
+export function bassikGrowNumberWhatsAppUrl(phone: string): string {
+  const cleaned = phone.replace(/\D/g, "").slice(-10);
+  return bassikAgencyWhatsAppUrl(
+    `Hi Bassik — please get back to me on WhatsApp: ${cleaned}. I want help with 360° marketing / business growth.`
+  );
 }
 
 export const GROW_SEO = {
