@@ -327,12 +327,13 @@ export default function GrowLeadLanding() {
               </div>
               <h2
                 id="grow-done-title"
-                className="mt-5 font-[family-name:var(--font-agency-display)] text-[clamp(1.65rem,6vw,2.2rem)] font-semibold tracking-tight"
+                className="mt-5 font-[family-name:var(--font-agency-display)] text-[clamp(1.75rem,6.5vw,2.35rem)] font-semibold tracking-tight"
               >
-                WhatsApp is opening…
+                We’ll get back to you soon.
               </h2>
               <p className="mx-auto mt-3 max-w-sm text-[14px] leading-relaxed text-[#6B6570]">
-                Just say hi — we’ll take it from there. If nothing opened, tap below.
+                WhatsApp should be open with a short message ready — just send it. Our team will reply and take it
+                from there.
               </p>
               <a
                 href={waHref}
@@ -342,7 +343,7 @@ export default function GrowLeadLanding() {
               >
                 Open WhatsApp again
               </a>
-              <p className="mt-4 text-[12px] text-[#8B8494]">We’ll reply soon — usually the same day.</p>
+              <p className="mt-4 text-[12px] text-[#8B8494]">Usually same day · Hyderabad</p>
             </section>
           ) : null}
         </div>
