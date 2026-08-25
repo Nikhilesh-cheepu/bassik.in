@@ -450,12 +450,12 @@ export default function GrowthSalesDoc({ showPrivatePricing = false }: Props) {
         </section>
       </main>
 
-      <footer className="border-t border-[#E6E1E8] bg-white/80 px-4 py-4 backdrop-blur-md sm:px-8 sm:py-5">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2">
-          <p className="font-[family-name:var(--font-agency-display)] text-sm font-semibold">Bassik</p>
-          <p className="text-[11px] text-[#8B8494]">
-            {showPrivatePricing ? "Unlisted · partner pricing" : "We help you grow. Together."}
-          </p>
+      <footer className="border-t border-[#E6E1E8]/80 px-4 py-2.5 sm:px-8">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 text-[11px] text-[#8B8494]">
+          <span className="font-medium text-[#6B6570]">Bassik</span>
+          <a href="/privacy" className="hover:text-[#12131A] hover:underline underline-offset-2">
+            Privacy Policy
+          </a>
         </div>
       </footer>
 

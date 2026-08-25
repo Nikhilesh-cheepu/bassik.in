@@ -9,6 +9,7 @@ import {
   bassikGrowShortWhatsAppUrl,
   getAgencyPortfolioBrands,
 } from "@/lib/bassik-agency";
+import { SiteFooter } from "@/components/agency/SiteFooter";
 
 type Step = "hook" | "hi" | "skip" | "done";
 
@@ -348,6 +349,8 @@ export default function GrowLeadLanding() {
           ) : null}
         </div>
       </main>
+
+      <SiteFooter className="pb-[4.75rem] sm:pb-2.5" />
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#E6E1E8]/80 bg-[#F7F5F8]/92 px-3 py-2.5 backdrop-blur-xl sm:hidden">
         <div className="mx-auto flex max-w-lg gap-2">
