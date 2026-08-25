@@ -9,7 +9,6 @@ import {
   bassikGrowShortWhatsAppUrl,
   getAgencyPortfolioBrands,
 } from "@/lib/bassik-agency";
-import { SiteFooter } from "@/components/agency/SiteFooter";
 
 type Step = "hook" | "hi" | "skip" | "done";
 
@@ -350,12 +349,16 @@ export default function GrowLeadLanding() {
         </div>
       </main>
 
-      <SiteFooter className="pb-[4.75rem] sm:pb-2.5" />
-
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#E6E1E8]/80 bg-[#F7F5F8]/92 px-3 py-2.5 backdrop-blur-xl sm:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#E6E1E8]/80 bg-[#F7F5F8]/95 px-3 py-2.5 backdrop-blur-xl sm:hidden">
         <div className="mx-auto flex max-w-lg gap-2">
           {step === "hook" || step === "skip" ? (
             <>
+              <a
+                href="/privacy"
+                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#E6E1E8] bg-white px-3 text-[12px] font-semibold text-[#12131A]"
+              >
+                Privacy
+              </a>
               <button
                 type="button"
                 onClick={() => setStep("hi")}
@@ -373,22 +376,38 @@ export default function GrowLeadLanding() {
               </a>
             </>
           ) : step === "hi" ? (
-            <button
-              type="button"
-              onClick={sayHi}
-              className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-[#12131A] text-[14px] font-semibold text-white"
-            >
-              Hi — let’s talk
-            </button>
+            <>
+              <a
+                href="/privacy"
+                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#E6E1E8] bg-white px-3 text-[12px] font-semibold text-[#12131A]"
+              >
+                Privacy
+              </a>
+              <button
+                type="button"
+                onClick={sayHi}
+                className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full bg-[#12131A] text-[14px] font-semibold text-white"
+              >
+                Hi — let’s talk
+              </button>
+            </>
           ) : (
-            <a
-              href={waHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-[#12131A] text-[13px] font-semibold text-white"
-            >
-              Open WhatsApp
-            </a>
+            <>
+              <a
+                href="/privacy"
+                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#E6E1E8] bg-white px-3 text-[12px] font-semibold text-[#12131A]"
+              >
+                Privacy
+              </a>
+              <a
+                href={waHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full bg-[#12131A] text-[13px] font-semibold text-white"
+              >
+                Open WhatsApp
+              </a>
+            </>
           )}
         </div>
       </div>

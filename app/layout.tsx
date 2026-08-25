@@ -3,6 +3,7 @@ import { Syne, DM_Sans } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import RouteProgressBar from "@/components/RouteProgressBar";
+import { SiteFooter } from "@/components/agency/SiteFooter";
 import { AGENCY_SEO } from "@/lib/bassik-agency";
 import { isPublicVenueBookingLive } from "@/lib/site-mode";
 
@@ -79,6 +80,7 @@ export default function RootLayout({
       >
         <RouteProgressBar />
         {children}
+        <SiteFooter />
         <Analytics />
       </body>
     </html>

@@ -450,24 +450,23 @@ export default function GrowthSalesDoc({ showPrivatePricing = false }: Props) {
         </section>
       </main>
 
-      <footer className="border-t border-[#E6E1E8]/80 px-4 py-2.5 sm:px-8">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 text-[11px] text-[#8B8494]">
-          <span className="font-medium text-[#6B6570]">Bassik</span>
-          <a href="/privacy" className="hover:text-[#12131A] hover:underline underline-offset-2">
-            Privacy Policy
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#E6E1E8]/80 bg-[#F7F5F8]/95 px-3 py-2.5 backdrop-blur-xl sm:hidden print:hidden">
+        <div className="mx-auto flex max-w-lg items-center gap-2">
+          <a
+            href="/privacy"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#E6E1E8] bg-white px-3.5 text-[12px] font-semibold text-[#12131A]"
+          >
+            Privacy
+          </a>
+          <a
+            href={talkUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full bg-[#12131A] text-[13px] font-semibold text-white"
+          >
+            WhatsApp Bassik
           </a>
         </div>
-      </footer>
-
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#E6E1E8]/80 bg-[#F7F5F8]/92 px-3 py-2.5 backdrop-blur-xl sm:hidden print:hidden">
-        <a
-          href={talkUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mx-auto flex min-h-11 max-w-lg items-center justify-center rounded-full bg-[#12131A] text-[13px] font-semibold text-white"
-        >
-          WhatsApp Bassik
-        </a>
       </div>
     </div>
   );

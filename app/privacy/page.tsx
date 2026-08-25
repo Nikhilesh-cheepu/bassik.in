@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { SiteFooter } from "@/components/agency/SiteFooter";
 import { bassikAgencyWhatsAppUrl, BASSIK_HQ_PHONE } from "@/lib/bassik-agency";
 import { getFullPhoneNumber } from "@/lib/outlet-contacts";
 
@@ -261,8 +260,6 @@ export default function PrivacyPage() {
           </Section>
         </div>
       </main>
-
-      <SiteFooter />
     </div>
   );
 }

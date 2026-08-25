@@ -673,6 +673,10 @@ export default function ClubRogueOutletPage({
               </a>
             </>
           ) : null}
+          <span aria-hidden>·</span>
+          <a href="/privacy" className="hover:text-white/55">
+            Privacy
+          </a>
         </footer>
       </div>
 
