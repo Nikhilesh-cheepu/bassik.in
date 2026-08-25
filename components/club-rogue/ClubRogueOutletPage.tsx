@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "framer-motion";
 import { BRANDS } from "@/lib/brands";
@@ -674,9 +675,9 @@ export default function ClubRogueOutletPage({
             </>
           ) : null}
           <span aria-hidden>·</span>
-          <a href="/privacy" className="hover:text-white/55">
+          <Link href="/privacy" className="hover:text-white/55">
             Privacy
-          </a>
+          </Link>
         </footer>
       </div>
 

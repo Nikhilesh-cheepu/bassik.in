@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   GROW_STACK,
   AGENCY_PROOF_LINE,
@@ -353,12 +354,12 @@ export default function GrowLeadLanding() {
         <div className="mx-auto flex max-w-lg gap-2">
           {step === "hook" || step === "skip" ? (
             <>
-              <a
+              <Link
                 href="/privacy"
                 className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#E6E1E8] bg-white px-3 text-[12px] font-semibold text-[#12131A]"
               >
                 Privacy
-              </a>
+              </Link>
               <button
                 type="button"
                 onClick={() => setStep("hi")}
@@ -377,12 +378,12 @@ export default function GrowLeadLanding() {
             </>
           ) : step === "hi" ? (
             <>
-              <a
+              <Link
                 href="/privacy"
                 className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#E6E1E8] bg-white px-3 text-[12px] font-semibold text-[#12131A]"
               >
                 Privacy
-              </a>
+              </Link>
               <button
                 type="button"
                 onClick={sayHi}
@@ -393,12 +394,12 @@ export default function GrowLeadLanding() {
             </>
           ) : (
             <>
-              <a
+              <Link
                 href="/privacy"
                 className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#E6E1E8] bg-white px-3 text-[12px] font-semibold text-[#12131A]"
               >
                 Privacy
-              </a>
+              </Link>
               <a
                 href={waHref}
                 target="_blank"
