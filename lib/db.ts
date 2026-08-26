@@ -1,28 +1,33 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { Pool } from "pg";
+import { Pool, type PoolConfig } from "pg";
 
 /** Bump when Prisma models/fields change so HMR drops a stale global client. */
-const PRISMA_CLIENT_GENERATION = 12;
+const PRISMA_CLIENT_GENERATION = 13;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
   prismaGeneration?: number;
+  pgPool?: Pool;
 };
+
+function looksLikeInternalOnlyEnv(url: string): boolean {
+  return url.includes("railway.internal") || /\.internal(?::|\/)?/i.test(url);
+}
+
+function onRailwayRuntime(): boolean {
+  return Boolean(process.env.RAILWAY_ENVIRONMENT);
+}
 
 function resolveDatabaseUrl(): string {
   const privateUrl = process.env.DATABASE_URL?.trim() ?? "";
   const publicUrl = process.env.DATABASE_PUBLIC_URL?.trim() ?? "";
-  const onRailwayRuntime = Boolean(process.env.RAILWAY_ENVIRONMENT);
 
-  // Private *.railway.internal (and similar) only resolves inside Railway's network.
-  const looksLikeInternalOnly =
-    privateUrl.includes("railway.internal") || /\.internal(?::|\/)?/i.test(privateUrl);
-
+  // Private *.railway.internal only resolves inside Railway's network.
   if (process.env.VERCEL && publicUrl) {
     return publicUrl;
   }
-  if (looksLikeInternalOnly && publicUrl && !onRailwayRuntime) {
+  if (looksLikeInternalOnlyEnv(privateUrl) && publicUrl && !onRailwayRuntime()) {
     return publicUrl;
   }
   if (privateUrl) {
@@ -31,37 +36,59 @@ function resolveDatabaseUrl(): string {
   return publicUrl;
 }
 
-const connectionString = resolveDatabaseUrl();
+function withSslParams(url: string): string {
+  if (!url || url.includes("localhost") || url.includes("127.0.0.1")) return url;
+  if (/[?&]sslmode=/i.test(url)) return url;
+  return url.includes("?") ? `${url}&sslmode=require` : `${url}?sslmode=require`;
+}
+
+const connectionString = withSslParams(resolveDatabaseUrl());
 
 if (!connectionString?.trim()) {
   throw new Error(
-    "Database URL is missing. Set DATABASE_URL. If it uses postgres.railway.internal, also set DATABASE_PUBLIC_URL for local dev and Vercel."
+    "Database URL is missing. Set DATABASE_URL. If it uses postgres.railway.internal, also set DATABASE_PUBLIC_URL for local and Vercel."
   );
 }
 
-if (looksLikeInternalOnlyEnv() && !process.env.DATABASE_PUBLIC_URL?.trim() && !onRailwayRuntime()) {
+if (
+  looksLikeInternalOnlyEnv(process.env.DATABASE_URL ?? "") &&
+  !process.env.DATABASE_PUBLIC_URL?.trim() &&
+  !onRailwayRuntime()
+) {
   console.warn(
-    "[db] DATABASE_URL points to an internal host (.internal). Local dev and Vercel cannot reach it. Add DATABASE_PUBLIC_URL (Railway dashboard → Postgres → Connect → public URL)."
+    "[db] DATABASE_URL points to an internal host (.internal). Local and Vercel cannot reach it. Add DATABASE_PUBLIC_URL from Railway → Postgres → Connect → public URL."
   );
 }
 
-function looksLikeInternalOnlyEnv(): boolean {
-  const u = process.env.DATABASE_URL ?? "";
-  return u.includes("railway.internal") || /\.internal(?::|\/)?/i.test(u);
+function createPool(): Pool {
+  const config: PoolConfig = {
+    connectionString,
+    // Serverless: tiny pool. Local: a few connections.
+    max: process.env.VERCEL || process.env.RAILWAY_ENVIRONMENT ? 1 : 5,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 12_000,
+    allowExitOnIdle: true,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
+  };
+
+  // Railway public proxy expects TLS; local docker usually does not.
+  if (!/localhost|127\.0\.0\.1/.test(connectionString)) {
+    config.ssl = { rejectUnauthorized: false };
+  }
+
+  const nextPool = new Pool(config);
+  nextPool.on("error", (err) => {
+    console.error("[db] idle client error:", err.message);
+  });
+  return nextPool;
 }
 
-function onRailwayRuntime(): boolean {
-  return Boolean(process.env.RAILWAY_ENVIRONMENT);
+const pool = globalForPrisma.pgPool ?? createPool();
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.pgPool = pool;
 }
 
-// Serverless: keep pool tiny. Local/dev: allow a few so a long seed can't starve GETs.
-const pool = new Pool({
-  connectionString,
-  max: process.env.VERCEL || process.env.RAILWAY_ENVIRONMENT ? 1 : 5,
-  idleTimeoutMillis: 20000,
-});
-
-// Create Prisma adapter
 const adapter = new PrismaPg(pool);
 
 function createPrismaClient() {
@@ -88,4 +115,15 @@ export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
   globalForPrisma.prismaGeneration = PRISMA_CLIENT_GENERATION;
+}
+
+/** Lightweight probe for ops / debugging. */
+export async function pingDatabase(): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await pool.query("select 1");
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg.slice(0, 240) };
+  }
 }
