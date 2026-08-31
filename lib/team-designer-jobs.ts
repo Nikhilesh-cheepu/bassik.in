@@ -145,6 +145,9 @@ export async function ensureUpcomingTvCalendars(
   createdBy = "system-seed",
   days = DESIGNER_WINDOW_DAYS
 ): Promise<number> {
+  const { isTeamDesignerQueueFrozen } = await import("@/lib/team-maintenance");
+  if (isTeamDesignerQueueFrozen()) return 0;
+
   const today = getTodayKey();
   const start = fridayForDesignerWeekend(today);
   const fridays = datesInRollingWindow(start, days, ["fri"]);

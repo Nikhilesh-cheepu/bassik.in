@@ -23,6 +23,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -4341,6 +4342,8 @@ function DesignerPerformanceCard({
   const catchUpN = catchMeta.catchUpSlots;
   /** Once catch-up is clear, only keep a short recent strip (not the whole history). */
   const CLEAR_STRIP_DAYS = 20;
+  const stripRef = useRef<HTMLDivElement>(null);
+  const todayRef = useRef<HTMLDivElement>(null);
 
   // Day-by-day finishes (Sun included)
   const dayStripAll = perf.series.map((pt) => {
@@ -4357,7 +4360,7 @@ function DesignerPerformanceCard({
   });
 
   // Catch-up open → show from first short day so debt is visible.
-  // Catch-up clear → last ~20 days only (stops endless old zeros).
+  // Catch-up clear → last ~20 days ending on today (today always visible + selected).
   const dayStrip = (() => {
     if (catchUpN > 0) {
       const firstShort = dayStripAll.find(
@@ -4372,8 +4375,21 @@ function DesignerPerformanceCard({
       }
       return dayStripAll;
     }
+    const todayIdx = dayStripAll.findIndex((d) => d.date === perf.today);
+    if (todayIdx >= 0) {
+      const start = Math.max(0, todayIdx - CLEAR_STRIP_DAYS + 1);
+      return dayStripAll.slice(start, todayIdx + 1);
+    }
     return dayStripAll.slice(-CLEAR_STRIP_DAYS);
   })();
+
+  useLayoutEffect(() => {
+    todayRef.current?.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  }, [perf.today, perf.assigneeId, dayStrip.length]);
 
   const todayDone = perf.series.find((p) => p.date === perf.today)?.closed ?? 0;
 
@@ -4430,15 +4446,19 @@ function DesignerPerformanceCard({
           ? "Day strip stays open from the first short day until catch-up is clear."
           : "Catch-up clear — showing last 20 days only."}
       </p>
-      <div className="-mx-0.5 mt-1.5 flex gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]">
+      <div
+        ref={stripRef}
+        className="-mx-0.5 mt-1.5 flex gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [-webkit-overflow-scrolling:touch]"
+      >
         {dayStrip.map((d) => (
           <div
             key={d.date}
+            ref={d.isToday ? todayRef : undefined}
             className={`w-[3.15rem] shrink-0 rounded-lg px-1 py-1.5 text-center ${
               d.isSunday || d.isOff
                 ? "bg-violet-400/[0.07] ring-1 ring-violet-400/20"
                 : d.isToday
-                  ? "bg-cyan-400/15 ring-1 ring-cyan-400/35"
+                  ? "bg-cyan-400/25 ring-2 ring-cyan-400/70 shadow-[0_0_0_1px_rgba(34,211,238,0.15)]"
                   : d.closed >= DESIGNER_DAILY_TARGET
                     ? "bg-emerald-400/10"
                     : "bg-white/[0.03]"
@@ -4461,10 +4481,10 @@ function DesignerPerformanceCard({
           >
             <p
               className={`text-[9px] font-semibold uppercase tracking-wide ${
-                d.isToday ? "text-cyan-100" : "text-white/40"
+                d.isToday ? "text-cyan-50" : "text-white/40"
               }`}
             >
-              {d.label}
+              {d.isToday ? "Today" : d.label}
             </p>
             <p className="text-[9px] text-white/30">{dayOfMonthLabel(d.date)}</p>
             {d.isSunday || d.isOff ? (
