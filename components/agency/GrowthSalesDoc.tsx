@@ -3,15 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import PublicMarketingHome from "@/components/agency/PublicMarketingHome";
 import {
-  GROWTH_MARKETING_BLOCKS,
   GROWTH_PATHS,
   GROWTH_PRIVATE_PRICES,
-  GROWTH_PROOF_LINE,
   GROWTH_VERTICALS,
   bassikGrowthWhatsAppUrl,
   getGrowthVertical,
-  type GrowthMarketingBlock,
   type GrowthPathId,
   type GrowthVerticalId,
 } from "@/lib/bassik-growth";
@@ -127,66 +125,6 @@ const STORY_STEPS = [
     wash: "from-[#A5C8FF]/45 to-[#C4B5FD]/30",
   },
 ] as const;
-
-function MarketingBlock({ block }: { block: GrowthMarketingBlock }) {
-  return (
-    <article className="rounded-[1.25rem] border border-[#E6E1E8]/80 bg-white/70 p-5 shadow-sm ring-1 ring-black/[0.04] backdrop-blur-md sm:p-6">
-      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#8B8494]">Question</p>
-      <h2 className="mt-1.5 font-[family-name:var(--font-agency-display)] text-[1.2rem] font-semibold leading-snug tracking-tight text-[#12131A] sm:text-[1.45rem]">
-        {block.question}
-      </h2>
-
-      <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-[#8B7BB8]">Answer</p>
-      <p className="mt-1.5 text-[14px] leading-relaxed text-[#12131A] sm:text-[15px]">{block.answer}</p>
-
-      <figure className="mt-4 rounded-xl border border-[#C4B5FD]/25 bg-gradient-to-br from-[#F3EEFF]/80 to-[#FFF5F2]/60 px-4 py-3.5">
-        <blockquote className="text-[13px] font-medium leading-relaxed text-[#4A4550] sm:text-[14px]">
-          &ldquo;{block.voice}&rdquo;
-        </blockquote>
-        <figcaption className="mt-2 text-[11px] font-semibold text-[#8B8494]">— {block.voiceBy}</figcaption>
-      </figure>
-    </article>
-  );
-}
-
-function PublicMarketingHome({ talkUrl }: { talkUrl: string }) {
-  return (
-    <>
-      <header className="relative isolate overflow-hidden px-4 pb-2 pt-2 sm:px-8 sm:pb-4 sm:pt-4">
-        <SiriGlow />
-        <div className="relative mx-auto max-w-lg">
-          <h1 className="font-[family-name:var(--font-agency-display)] text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.03em] text-[#12131A] sm:text-[2.25rem]">
-            We care about your growth.
-          </h1>
-          <p className="mt-2 text-[14px] leading-relaxed text-[#6B6570] sm:text-[15px]">
-            Clubs, restaurants, hotels, education, healthcare — scroll and read. No forms. Nothing to
-            pick or tap except WhatsApp when you&apos;re ready.
-          </p>
-        </div>
-      </header>
-
-      <main className="relative px-4 pb-8 sm:px-8 sm:pb-14">
-        <div className="relative mx-auto flex max-w-lg flex-col gap-4 sm:gap-5">
-          {GROWTH_MARKETING_BLOCKS.map((block) => (
-            <MarketingBlock key={block.id} block={block} />
-          ))}
-        </div>
-
-        <div className="relative mx-auto mt-8 max-w-lg text-center">
-          <p className="text-[12px] leading-relaxed text-[#6B6570] sm:text-[13px]">{GROWTH_PROOF_LINE}</p>
-          <a
-            href={talkUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 hidden min-h-11 w-full items-center justify-center rounded-full bg-[#12131A] text-[14px] font-semibold text-white shadow-sm sm:inline-flex"
-          >
-            Say hi on WhatsApp
-          </a>
-        </div>
-      </main>
-    </>
-  );
-}
 
 function PathCarousel({
   verticalId,

@@ -256,55 +256,120 @@ export function getGrowthVertical(id: GrowthVerticalId): GrowthVertical {
   return GROWTH_VERTICALS.find((v) => v.id === id) ?? GROWTH_VERTICALS[0];
 }
 
-/** Public homepage — linear Q → A → voice blocks. No tabs, no pricing. */
+/** Public homepage — Q + visual answer lines + voice. No pricing. */
 export type GrowthMarketingBlock = {
   id: string;
   question: string;
-  answer: string;
+  answerLines: readonly string[];
   voice: string;
   voiceBy: string;
+  /** Portrait for voice card (Unsplash or local). */
+  portrait: string;
+  accent: "peach" | "lilac" | "sky" | "rose" | "mint";
+  visual: "floor" | "calendar" | "signal" | "crew" | "proof";
 };
+
+const ACCENT: Record<GrowthMarketingBlock["accent"], { wash: string; ring: string; dot: string }> = {
+  peach: { wash: "from-[#FFE8E0] to-[#FFF5F2]", ring: "ring-[#FFB4A2]/40", dot: "bg-[#FFB4A2]" },
+  lilac: { wash: "from-[#F0EBFF] to-[#F7F5FF]", ring: "ring-[#C4B5FD]/45", dot: "bg-[#C4B5FD]" },
+  sky: { wash: "from-[#E8F2FF] to-[#F5FAFF]", ring: "ring-[#A5C8FF]/50", dot: "bg-[#A5C8FF]" },
+  rose: { wash: "from-[#FFE8F0] to-[#FFF5F8]", ring: "ring-[#F5A3C7]/45", dot: "bg-[#F5A3C7]" },
+  mint: { wash: "from-[#E8FFF5] to-[#F5FFFA]", ring: "ring-[#86EFAC]/40", dot: "bg-[#86EFAC]" },
+};
+
+export function growthBlockAccent(block: GrowthMarketingBlock) {
+  return ACCENT[block.accent];
+}
+
+export const GROWTH_360_LAYERS = [
+  "Brand story",
+  "Creatives & shoots",
+  "Social posting",
+  "Meta & Google ads",
+  "Lead generation",
+  "Conversion paths",
+] as const;
 
 export const GROWTH_MARKETING_BLOCKS: readonly GrowthMarketingBlock[] = [
   {
     id: "who-runs-marketing",
     question: "You're running the business. Who's running the marketing?",
-    answer:
-      "Bassik does. Strategy, creatives, social, Meta and Google — and a clear path from scroll to enquiry. You stay on the floor; we handle demand.",
+    answerLines: [
+      "Strategy + calendar — owned by Bassik",
+      "Flyers, reels, social — done for you",
+      "Meta & Google — live and optimised",
+      "Scroll → enquiry — clear path",
+    ],
     voice: "I was approving flyers at midnight. Now I run the room — they run the marketing.",
-    voiceBy: "Club owner, Hyderabad",
+    voiceBy: "Club owner · Hyderabad",
+    portrait:
+      "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=240&h=240&q=80",
+    accent: "peach",
+    visual: "floor",
   },
   {
     id: "weekends-only",
     question: "Weekends are packed. Why are the other days still dead?",
-    answer:
-      "Random posts don't build weekday habit. We plan the week like a launch calendar — so the right people see you on the right days, not just when someone famous shares a story.",
+    answerLines: [
+      "Week planned like a launch — not random posts",
+      "Right day, right creative, right audience",
+      "Weekday demand — built on purpose",
+      "Footfall you can read on the calendar",
+    ],
     voice: "Footfall used to depend on luck. Now quiet nights have a plan behind them.",
     voiceBy: "Restaurant owner",
+    portrait:
+      "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?auto=format&fit=crop&w=240&h=240&q=80",
+    accent: "lilac",
+    visual: "calendar",
   },
   {
     id: "looks-good-feels-dead",
     question: "The place looks great in person. Why doesn't the phone ring?",
-    answer:
-      "Because online trust is a different job. We build the story, proof, and ads that turn 'I saw you on Instagram' into calls, bookings, and walk-ins.",
-    voice: "Guests said we looked premium live but cheap on Google. Bassik fixed how we show up online.",
+    answerLines: [
+      "Online story matches how guests feel in person",
+      "Proof, reviews, atmosphere — visible",
+      "Ads that push calls & bookings",
+      "Not likes — enquiries",
+    ],
+    voice: "We looked premium live but cheap on Google. Bassik fixed how we show up online.",
     voiceBy: "Hotel · banquets",
+    portrait:
+      "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=240&h=240&q=80",
+    accent: "sky",
+    visual: "signal",
   },
   {
     id: "freelancer-chaos",
     question: "Tired of chasing freelancers for every drop?",
-    answer:
-      "One partner owns the calendar — flyers, reels, events, ads, and where leads land. No more last-minute panic every time something is announced.",
-    voice: "Artist confirmed Tuesday, poster needed Wednesday. That cycle stopped when Bassik took over.",
+    answerLines: [
+      "One team owns the full calendar",
+      "Event drops — planned, not panicked",
+      "Creatives + ads + handoff — together",
+      "You announce — we’re already ready",
+    ],
+    voice: "Artist confirmed Tuesday, poster needed Wednesday. That cycle stopped.",
     voiceBy: "Events · nightlife",
+    portrait:
+      "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=240&h=240&q=80",
+    accent: "rose",
+    visual: "crew",
   },
   {
     id: "will-it-work",
     question: "Will this actually move the business?",
-    answer:
-      "We care about enquiries, bookings, and footfall — not vanity likes. Club Rogue, Firefly, C53, and Boiler Room work with us in Hyderabad because the work shows up in real numbers.",
+    answerLines: [
+      "Enquiries, bookings, footfall — our scorecard",
+      "Club Rogue · Firefly · C53 · Boiler Room",
+      "Hyderabad hospitality — we know the floor",
+      "Growth partner — not a post vendor",
+    ],
     voice: "They don't sell posts. They show up like a team that wants your business to grow.",
     voiceBy: "Partner brand",
+    portrait:
+      "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=240&h=240&q=80",
+    accent: "mint",
+    visual: "proof",
   },
 ];
 
