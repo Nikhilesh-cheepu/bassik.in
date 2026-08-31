@@ -74,7 +74,7 @@ async function main() {
     deletedOutletChecklists: deletedChecklists.count,
   });
   console.log(
-    "\nSet TEAM_DESIGNER_QUEUE_FROZEN=1 on Vercel until you re-enable outlets and re-seed."
+    "\nDesigner queue is frozen by default. Set TEAM_DESIGNER_QUEUE_FROZEN=0 when re-seeding."
   );
 
   await prisma.$disconnect();
