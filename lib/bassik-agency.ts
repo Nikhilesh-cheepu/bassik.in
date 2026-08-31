@@ -71,6 +71,51 @@ export const GROW_STACK: ReadonlyArray<{ title: string; body: string }> = [
   { title: "Conversion", body: "Pages, offers and paths that turn interest into bookings." },
 ];
 
+/** Homepage — what Bassik owns so the owner can focus on the business. */
+export const BASSIK_WE_HANDLE: readonly string[] = [
+  "Brand story & positioning",
+  "Flyers, reels & shoots",
+  "Social posting — every week",
+  "Meta & Google ads",
+  "Lead gen & handoff",
+  "Enquiry → booking paths",
+];
+
+/** Two-friend chat on the homepage — ends at Bassik. */
+export const BASSIK_FRIEND_CHAT: ReadonlyArray<{
+  from: "arjun" | "riya";
+  text: string;
+}> = [
+  {
+    from: "arjun",
+    text: "Bro… kitchen, staff, accounts — and they still want reels every day?",
+  },
+  {
+    from: "riya",
+    text: "You're running the business. You're not supposed to be the marketing team too.",
+  },
+  {
+    from: "arjun",
+    text: "So who handles all that? Freelancers ghost me after one flyer.",
+  },
+  {
+    from: "riya",
+    text: "That's Bassik. Full 360° — story, content, ads, leads. You run the floor. They run demand.",
+  },
+  {
+    from: "arjun",
+    text: "Club Rogue and those guys use them?",
+  },
+  {
+    from: "riya",
+    text: "Yeah. Firefly, C53, Boiler Room — Hyderabad lot. Just WhatsApp Bassik. One hi. They get hospitality.",
+  },
+  {
+    from: "arjun",
+    text: "Done. I'd rather grow the business than fight Canva at 1am.",
+  },
+];
+
 /** Unique client marks for portfolio (one logo per Club Rogue family). */
 export function getAgencyPortfolioBrands(): Brand[] {
   const seen = new Set<string>();
