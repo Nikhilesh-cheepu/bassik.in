@@ -36,13 +36,16 @@ function resolveDatabaseUrl(): string {
   return publicUrl;
 }
 
-function withSslParams(url: string): string {
-  if (!url || url.includes("localhost") || url.includes("127.0.0.1")) return url;
-  if (/[?&]sslmode=/i.test(url)) return url;
-  return url.includes("?") ? `${url}&sslmode=require` : `${url}?sslmode=require`;
+/** Strip sslmode from URL — pg v8 treats require as verify-full and rejects Railway's cert. */
+function cleanConnectionString(url: string): string {
+  if (!url || /localhost|127\.0\.0\.1/.test(url)) return url;
+  return url
+    .replace(/([?&])sslmode=[^&]*(&|$)/gi, (_, sep, tail) => (tail === "&" ? sep : ""))
+    .replace(/\?&/g, "?")
+    .replace(/[?&]$/, "");
 }
 
-const connectionString = withSslParams(resolveDatabaseUrl());
+const connectionString = cleanConnectionString(resolveDatabaseUrl());
 
 if (!connectionString?.trim()) {
   throw new Error(

@@ -29,6 +29,7 @@ import {
 } from "@/lib/team-designer-jobs-shared";
 import { joinDesignerOutletIds, normalizeDesignerOutletId, teamOutletLabel } from "@/lib/team-outlets";
 import { invalidateDesignerPerformanceLiteCache } from "@/lib/team-designer-performance";
+import { isTeamDesignerQueueFrozen } from "@/lib/team-maintenance";
 
 /** One Prisma select — columns are in schema (no follow-up raw queries). */
 const JOB_SELECT = {
@@ -274,10 +275,12 @@ export async function GET(req: NextRequest) {
     // Open + To send: unfinished work stays until someone marks Done.
     // Look BACK as well as forward — past due / past go-live must not vanish.
     // Make sure this weekend's TV calendar exists (Fri–Sun), not only later weeks.
-    try {
-      await ensureUpcomingTvCalendars(session.username, days);
-    } catch (ensureErr) {
-      console.error("[team/designer-jobs] ensure TV calendars", ensureErr);
+    if (!isTeamDesignerQueueFrozen()) {
+      try {
+        await ensureUpcomingTvCalendars(session.username, days);
+      } catch (ensureErr) {
+        console.error("[team/designer-jobs] ensure TV calendars", ensureErr);
+      }
     }
 
     const lookbackFrom = addDaysYmd(today, -(days - 1));
@@ -399,6 +402,12 @@ export async function POST(req: NextRequest) {
     };
 
     if (body.action === "seed" || body.action === "seed-month") {
+      if (isTeamDesignerQueueFrozen()) {
+        return NextResponse.json(
+          { error: "Designer queue is frozen for maintenance" },
+          { status: 503 }
+        );
+      }
       const seedDays = clampDesignerWindowDays(body.days ?? DESIGNER_WINDOW_DAYS);
       const result = await seedDesignerRollingWindow({
         createdBy: session.username,

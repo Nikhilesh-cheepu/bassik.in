@@ -103,7 +103,12 @@ export async function GET(req: NextRequest) {
     } catch (driveErr) {
       console.error("[team/checklists] ensureDailyDriveHabit:", driveErr);
     }
-    const didBackfill = await backfillMissingOutletExtras(raw, ownerId, createdBy);
+    let didBackfill = false;
+    try {
+      didBackfill = await backfillMissingOutletExtras(raw, ownerId, createdBy);
+    } catch (backfillErr) {
+      console.error("[team/checklists] backfillMissingOutletExtras:", backfillErr);
+    }
     if (didDrive || didBackfill) {
       raw = await loadOwnerChecklists(ownerId);
     }
