@@ -71,15 +71,6 @@ export const GROW_STACK: ReadonlyArray<{ title: string; body: string }> = [
   { title: "Conversion", body: "Pages, offers and paths that turn interest into bookings." },
 ];
 
-/** Short friend chat — plain English, 2 lines. */
-export const BASSIK_FRIEND_CHAT: ReadonlyArray<{
-  from: "friend" | "buddy";
-  text: string;
-}> = [
-  { from: "friend", text: "I run my business. Who will do my ads and Instagram?" },
-  { from: "buddy", text: "Call Bassik. They do all marketing. You focus on your work." },
-];
-
 /** Unique client marks for portfolio (one logo per Club Rogue family). */
 export function getAgencyPortfolioBrands(): Brand[] {
   const seen = new Set<string>();
@@ -101,7 +92,7 @@ export function getAgencyPortfolioBrands(): Brand[] {
 export const AGENCY_SEO = {
   title: "Bassik | We care about your growth",
   description:
-    "Bassik is a growth marketing partner for clubs, restaurants, hotels, education and healthcare — real stories, real problems, real help. Talk to us on WhatsApp. Hyderabad.",
+    "Bassik is a growth partner for clubs, restaurants, hotels, education and healthcare — attention, trust, enquiries and footfall. Talk to us on WhatsApp. Hyderabad.",
   keywords: [
     "growth marketing Hyderabad",
     "hospitality marketing partner",

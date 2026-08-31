@@ -1,6 +1,6 @@
 import GrowthSalesDoc from "@/components/agency/GrowthSalesDoc";
 
-/** Public homepage — linear Q / A / voice blocks, no pricing or choices. */
+/** Public homepage — growth story + paths, no exact prices. */
 export default function AgencyHome() {
   return <GrowthSalesDoc showPrivatePricing={false} />;
 }
