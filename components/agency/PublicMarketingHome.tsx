@@ -1,13 +1,23 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
-import { GROWTH_360_LAYERS, GROWTH_PROOF_LINE } from "@/lib/bassik-growth";
+import { useState } from "react";
+import GrowthPathCarousel from "@/components/agency/GrowthPathCarousel";
 import {
-  BASSIK_FRIEND_CHAT,
-  BASSIK_WE_HANDLE,
-  getAgencyPortfolioBrands,
-} from "@/lib/bassik-agency";
+  GROWTH_PROOF_LINE,
+  GROWTH_SOFT_RANGE,
+  GROWTH_VERTICALS,
+  type GrowthVerticalId,
+} from "@/lib/bassik-growth";
+import { BASSIK_FRIEND_CHAT, getAgencyPortfolioBrands } from "@/lib/bassik-agency";
+
+const VERTICAL_ICON: Record<GrowthVerticalId, string> = {
+  clubs: "♪",
+  restaurants: "◎",
+  hotels: "⌂",
+  education: "✦",
+  healthcare: "+",
+};
 
 function SiriGlow() {
   return (
@@ -28,212 +38,11 @@ function SiriGlow() {
   );
 }
 
-function useInView(threshold = 0.12) {
-  const ref = useRef<HTMLElement>(null);
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([e]) => {
-        if (e?.isIntersecting) setVisible(true);
-      },
-      { threshold, rootMargin: "0px 0px -6% 0px" }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [threshold]);
-  return { ref, visible };
-}
-
-/** Friend voice opens the page — 360° marketing first. */
-function FriendVoiceHero() {
-  return (
-    <header className="relative isolate overflow-hidden px-4 pb-8 pt-2 sm:px-8 sm:pb-12">
-      <SiriGlow />
-      <div className="relative mx-auto max-w-lg sm:max-w-xl">
-        <div className="flex items-start gap-3">
-          <div
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#C4B5FD] to-[#A5C8FF] text-[13px] font-bold text-white shadow-md ring-2 ring-white"
-            aria-hidden
-          >
-            B
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold text-[#8B8494]">Bassik</p>
-            <div className="marketing-voice-glow mt-1 inline-block max-w-[95%] rounded-[1.25rem] rounded-tl-md bg-white/90 px-4 py-3 shadow-md ring-1 ring-[#C4B5FD]/30 backdrop-blur-md">
-              <p className="font-[family-name:var(--font-agency-display)] text-[clamp(1.35rem,5.5vw,1.75rem)] font-semibold leading-tight tracking-tight text-[#12131A]">
-                360° marketing.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function StruggleSection() {
-  const { ref, visible } = useInView();
-  return (
-    <section
-      ref={ref}
-      className={`marketing-reveal ${visible ? "marketing-reveal-visible" : ""} px-4 pb-8 sm:px-8`}
-      aria-labelledby="struggle-heading"
-    >
-      <div className="mx-auto max-w-lg sm:max-w-xl">
-        <h1
-          id="struggle-heading"
-          className="font-[family-name:var(--font-agency-display)] text-[clamp(1.5rem,6vw,2.1rem)] font-semibold leading-[1.15] tracking-[-0.03em] text-[#12131A]"
-        >
-          Stuck between your business and marketing?
-        </h1>
-        <p className="mt-3 text-[clamp(1.05rem,4vw,1.25rem)] font-semibold leading-snug text-[#6B6570]">
-          Leave the marketing to us.
-        </p>
-        <p className="mt-2 text-[14px] leading-relaxed text-[#8B8494]">
-          You run the room, the kitchen, the team. We run everything that brings people in.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-const HANDLE_ICONS = ["◎", "▣", "↗", "◆", "☎", "→"] as const;
-
-function WeHandleSection() {
-  const { ref, visible } = useInView();
-  return (
-    <section
-      ref={ref}
-      className={`marketing-reveal ${visible ? "marketing-reveal-visible" : ""} px-4 pb-10 sm:px-8`}
-      aria-labelledby="we-handle-heading"
-    >
-      <div className="mx-auto max-w-lg rounded-[1.35rem] bg-gradient-to-br from-[#F3EEFF]/90 to-[#FFF5F2]/80 p-[1px] shadow-sm ring-1 ring-[#C4B5FD]/25 sm:max-w-xl">
-        <div className="rounded-[1.32rem] bg-white/75 p-5 backdrop-blur-md sm:p-6">
-          <h2
-            id="we-handle-heading"
-            className="font-[family-name:var(--font-agency-display)] text-[1.15rem] font-semibold text-[#12131A] sm:text-[1.25rem]"
-          >
-            We handle
-          </h2>
-          <ul className="mt-4 space-y-3">
-            {BASSIK_WE_HANDLE.map((line, i) => (
-              <li
-                key={line}
-                className="flex items-center gap-3 border-b border-[#E6E1E8]/60 pb-3 last:border-0 last:pb-0"
-                style={{ transitionDelay: `${i * 50}ms` }}
-              >
-                <span
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#12131A] text-[12px] text-[#C4B5FD]"
-                  aria-hidden
-                >
-                  {HANDLE_ICONS[i % HANDLE_ICONS.length]}
-                </span>
-                <span className="text-[14px] font-medium text-[#12131A] sm:text-[15px]">{line}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-4 text-center text-[12px] font-semibold text-[#8B7BB8]">
-            You focus on the business → we focus on growth
-          </p>
-        </div>
-      </div>
-
-      <div className="mx-auto mt-6 flex max-w-lg flex-wrap justify-center gap-1.5 sm:max-w-xl">
-        {GROWTH_360_LAYERS.map((label) => (
-          <span
-            key={label}
-            className="rounded-full border border-[#E6E1E8] bg-white/70 px-2.5 py-1 text-[10px] font-semibold text-[#6B6570] ring-1 ring-black/[0.03]"
-          >
-            {label}
-          </span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function FriendChatSection({ talkUrl }: { talkUrl: string }) {
-  const { ref, visible } = useInView(0.08);
-  const [shown, setShown] = useState(0);
-
-  useEffect(() => {
-    if (!visible) return;
-    setShown(1);
-    let count = 1;
-    const interval = window.setInterval(() => {
-      count += 1;
-      if (count >= BASSIK_FRIEND_CHAT.length) {
-        setShown(BASSIK_FRIEND_CHAT.length);
-        window.clearInterval(interval);
-      } else {
-        setShown(count);
-      }
-    }, 700);
-    return () => window.clearInterval(interval);
-  }, [visible]);
-
-  return (
-    <section
-      ref={ref}
-      className="px-4 pb-10 sm:px-8"
-      aria-labelledby="chat-heading"
-    >
-      <div className="mx-auto max-w-lg sm:max-w-xl">
-        <p id="chat-heading" className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#8B8494]">
-          Overheard
-        </p>
-        <p className="mt-1 font-[family-name:var(--font-agency-display)] text-[1.1rem] font-semibold text-[#12131A] sm:text-[1.2rem]">
-          Two friends. One owns the place.
-        </p>
-
-        <div className="mt-5 space-y-3 rounded-[1.35rem] border border-[#E6E1E8]/80 bg-white/50 p-4 ring-1 ring-black/[0.03] backdrop-blur-sm sm:p-5">
-          {BASSIK_FRIEND_CHAT.slice(0, shown).map((msg, i) => {
-            const isRiya = msg.from === "riya";
-            return (
-              <div
-                key={i}
-                className={`marketing-chat-in flex ${isRiya ? "justify-end" : "justify-start"}`}
-                style={{ animationDelay: "0ms" }}
-              >
-                <div
-                  className={`max-w-[88%] rounded-[1.1rem] px-3.5 py-2.5 sm:max-w-[85%] ${
-                    isRiya
-                      ? "rounded-br-md bg-[#12131A] text-white"
-                      : "rounded-bl-md bg-white text-[#12131A] shadow-sm ring-1 ring-black/[0.06]"
-                  }`}
-                >
-                  {!isRiya && i === 0 ? (
-                    <p className="mb-0.5 text-[10px] font-semibold text-[#8B8494]">Arjun · owns a spot</p>
-                  ) : null}
-                  {isRiya && i === 1 ? (
-                    <p className="mb-0.5 text-[10px] font-semibold text-white/50">Riya</p>
-                  ) : null}
-                  <p className="text-[13px] leading-snug sm:text-[14px]">{msg.text}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {shown >= BASSIK_FRIEND_CHAT.length ? (
-          <div className="marketing-chat-in mt-6 text-center">
-            <p className="text-[13px] text-[#6B6570]">Sound like your week?</p>
-            <a
-              href={talkUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#12131A] px-6 text-[15px] font-semibold text-white shadow-lg sm:w-auto sm:min-w-[16rem]"
-            >
-              Hi Bassik — let&apos;s talk
-            </a>
-          </div>
-        ) : null}
-      </div>
-    </section>
-  );
-}
+const PATH_STEPS = [
+  { title: "Get seen", body: "People notice you", wash: "from-[#FFB4A2]/50 to-[#F5A3C7]/30", icon: "◎" },
+  { title: "Get trusted", body: "People believe you", wash: "from-[#C4B5FD]/45 to-[#A5C8FF]/30", icon: "♡" },
+  { title: "Get customers", body: "Calls & visits", wash: "from-[#A5C8FF]/45 to-[#C4B5FD]/30", icon: "→" },
+] as const;
 
 function logoSrc(brandId: string, logoPath?: string) {
   if (logoPath) return logoPath;
@@ -242,25 +51,135 @@ function logoSrc(brandId: string, logoPath?: string) {
 }
 
 export default function PublicMarketingHome({ talkUrl }: { talkUrl: string }) {
+  const [verticalId, setVerticalId] = useState<GrowthVerticalId>("clubs");
   const portfolio = getAgencyPortfolioBrands();
 
   return (
     <>
-      <FriendVoiceHero />
-      <StruggleSection />
-      <WeHandleSection />
-      <FriendChatSection talkUrl={talkUrl} />
+      {/* 360° friend voice */}
+      <header className="relative isolate overflow-hidden px-4 pb-4 pt-1 sm:px-8 sm:pb-6">
+        <SiriGlow />
+        <div className="relative mx-auto max-w-5xl">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#C4B5FD] to-[#A5C8FF] text-[13px] font-bold text-white shadow-md ring-2 ring-white">
+              B
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-[#8B8494]">Bassik · Hyderabad</p>
+              <div className="marketing-voice-glow mt-1 inline-block rounded-[1.2rem] rounded-tl-md bg-white/90 px-4 py-2.5 shadow-md ring-1 ring-[#C4B5FD]/30">
+                <p className="font-[family-name:var(--font-agency-display)] text-[1.4rem] font-semibold leading-tight sm:text-[1.55rem]">
+                  360° marketing.
+                </p>
+              </div>
+            </div>
+          </div>
 
-      <section className="border-t border-[#E6E1E8]/70 px-4 pb-10 pt-8 sm:px-8 sm:pb-16" aria-label="Trusted by">
-        <div className="mx-auto max-w-lg sm:max-w-xl">
-          <p className="text-center text-[10px] font-bold uppercase tracking-[0.2em] text-[#8B8494]">
-            Trusted in Hyderabad
+          <h1 className="mt-5 font-[family-name:var(--font-agency-display)] text-[clamp(1.45rem,5.5vw,2rem)] font-semibold leading-[1.15] tracking-tight text-[#12131A]">
+            Running business and marketing both?
+          </h1>
+          <p className="mt-2 text-[15px] font-semibold text-[#6B6570]">Leave marketing to us.</p>
+          <p className="mt-1 text-[13px] text-[#8B8494]">You run your shop. We bring customers.</p>
+        </div>
+      </header>
+
+      {/* 2-line friend chat */}
+      <section className="px-4 pb-5 sm:px-8" aria-label="Friend chat">
+        <div className="mx-auto max-w-5xl space-y-2">
+          {BASSIK_FRIEND_CHAT.map((msg) => (
+            <div key={msg.text} className={`flex ${msg.from === "buddy" ? "justify-end" : "justify-start"}`}>
+              <p
+                className={`max-w-[90%] rounded-[1rem] px-3.5 py-2 text-[13px] leading-snug sm:text-[14px] ${
+                  msg.from === "buddy"
+                    ? "rounded-br-sm bg-[#12131A] text-white"
+                    : "rounded-bl-sm bg-white text-[#12131A] shadow-sm ring-1 ring-black/[0.06]"
+                }`}
+              >
+                {msg.text}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 3 steps */}
+      <section className="px-4 pb-6 sm:px-8" aria-label="How it works">
+        <div className="mx-auto grid max-w-5xl grid-cols-3 gap-2 sm:gap-3">
+          {PATH_STEPS.map((step) => (
+            <div
+              key={step.title}
+              className={`rounded-2xl border border-white/60 bg-gradient-to-br ${step.wash} p-3 text-center shadow-sm ring-1 ring-black/5 sm:p-4`}
+            >
+              <span className="text-lg text-[#8B7BB8]" aria-hidden>
+                {step.icon}
+              </span>
+              <p className="mt-1.5 font-[family-name:var(--font-agency-display)] text-[12px] font-semibold sm:text-[13px]">
+                {step.title}
+              </p>
+              <p className="mt-0.5 text-[9px] text-[#6B6570] sm:text-[10px]">{step.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Packages — original card design */}
+      <section
+        id="paths"
+        className="relative isolate border-t border-[#E6E1E8]/70 px-4 py-6 sm:px-8 sm:py-10"
+        aria-labelledby="paths-heading"
+      >
+        <SiriGlow />
+        <div className="relative mx-auto max-w-5xl">
+          <h2
+            id="paths-heading"
+            className="font-[family-name:var(--font-agency-display)] text-[1.35rem] font-semibold tracking-tight sm:text-[1.75rem]"
+          >
+            Care · Growth · Revenue
+          </h2>
+          <p className="mt-1 text-[12px] text-[#6B6570] sm:text-[13px]">Pick what fits you. Swipe on phone.</p>
+
+          <div className="mt-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Business type">
+            {GROWTH_VERTICALS.map((v) => {
+              const active = v.id === verticalId;
+              return (
+                <button
+                  key={v.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setVerticalId(v.id)}
+                  className={`inline-flex min-h-8 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold sm:min-h-9 sm:px-3.5 sm:text-[13px] ${
+                    active
+                      ? "bg-[#12131A] text-white shadow-sm"
+                      : "border border-[#E6E1E8] bg-white/75 text-[#6B6570] ring-1 ring-black/5"
+                  }`}
+                >
+                  <span className={active ? "text-[#C4B5FD]" : "text-[#A89EB8]"} aria-hidden>
+                    {VERTICAL_ICON[v.id]}
+                  </span>
+                  {v.shortLabel}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 sm:mt-5">
+            <GrowthPathCarousel verticalId={verticalId} showFromPricing />
+          </div>
+
+          <p className="mt-3 text-center text-[10px] leading-snug text-[#8B8494] sm:text-[12px]">
+            {GROWTH_SOFT_RANGE}
           </p>
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+        </div>
+      </section>
+
+      {/* Proof */}
+      <section className="px-4 pb-8 sm:px-8 sm:pb-12" aria-label="Trusted by">
+        <div className="mx-auto max-w-5xl text-center">
+          <div className="flex flex-wrap items-center justify-center gap-2">
             {portfolio.slice(0, 8).map((brand) => (
               <div
                 key={brand.id}
-                className="flex h-9 items-center justify-center rounded-xl bg-[#12131A] px-3 shadow-sm ring-1 ring-black/10"
+                className="flex h-9 items-center justify-center rounded-xl bg-[#12131A] px-3 shadow-sm"
               >
                 <Image
                   src={logoSrc(brand.id, brand.logoPath)}
@@ -272,14 +191,14 @@ export default function PublicMarketingHome({ talkUrl }: { talkUrl: string }) {
               </div>
             ))}
           </div>
-          <p className="mt-4 text-center text-[12px] leading-relaxed text-[#6B6570]">{GROWTH_PROOF_LINE}</p>
+          <p className="mt-3 text-[11px] leading-relaxed text-[#6B6570] sm:text-[12px]">{GROWTH_PROOF_LINE}</p>
           <a
             href={talkUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-5 hidden min-h-12 w-full items-center justify-center rounded-full bg-[#12131A] text-[15px] font-semibold text-white shadow-lg sm:inline-flex"
+            className="mt-4 hidden min-h-11 w-full max-w-md items-center justify-center rounded-full bg-[#12131A] text-[14px] font-semibold text-white shadow-sm sm:mx-auto sm:inline-flex"
           >
-            Talk to Bassik on WhatsApp
+            WhatsApp Bassik
           </a>
         </div>
       </section>
