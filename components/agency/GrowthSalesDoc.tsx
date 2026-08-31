@@ -89,20 +89,6 @@ function IconBolt({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
-function IconCheck() {
-  return (
-    <svg className="h-3 w-3 shrink-0" viewBox="0 0 16 16" fill="none" aria-hidden>
-      <path
-        d="M3.5 8.5 6.5 11.5 12.5 4.5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 const STORY_STEPS = [
   {
     id: "see",
