@@ -1,6 +1,6 @@
 import GrowthSalesDoc from "@/components/agency/GrowthSalesDoc";
 
-/** Public homepage — persona stories + marketing, no pricing. */
+/** Public homepage — linear Q / A / voice blocks, no pricing or choices. */
 export default function AgencyHome() {
   return <GrowthSalesDoc showPrivatePricing={false} />;
 }

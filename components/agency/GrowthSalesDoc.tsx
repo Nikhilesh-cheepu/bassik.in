@@ -4,16 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
+  GROWTH_MARKETING_BLOCKS,
   GROWTH_PATHS,
   GROWTH_PRIVATE_PRICES,
   GROWTH_PROOF_LINE,
   GROWTH_VERTICALS,
-  bassikGrowthPersonaWhatsAppUrl,
   bassikGrowthWhatsAppUrl,
   getGrowthVertical,
-  growthPersonaStoriesFor,
+  type GrowthMarketingBlock,
   type GrowthPathId,
-  type GrowthPersonaStory,
   type GrowthVerticalId,
 } from "@/lib/bassik-growth";
 
@@ -129,142 +128,63 @@ const STORY_STEPS = [
   },
 ] as const;
 
-function PersonaStoryCarousel({ verticalId }: { verticalId: GrowthVerticalId }) {
-  const stories = growthPersonaStoriesFor(verticalId);
-  const scrollerRef = useRef<HTMLUListElement>(null);
-  const [active, setActive] = useState(0);
-  const nudged = useRef(false);
-
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      const card = el.querySelector("li");
-      const step = card ? card.getBoundingClientRect().width + 10 : el.clientWidth * 0.82;
-      const i = Math.round(el.scrollLeft / step);
-      setActive(Math.max(0, Math.min(stories.length - 1, i)));
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [verticalId, stories.length]);
-
-  useEffect(() => {
-    setActive(0);
-    scrollerRef.current?.scrollTo({ left: 0 });
-  }, [verticalId]);
-
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el || nudged.current || stories.length < 2) return;
-    if (typeof window !== "undefined" && window.matchMedia("(min-width: 640px)").matches) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    nudged.current = true;
-    const t1 = window.setTimeout(() => el.scrollTo({ left: 48, behavior: "smooth" }), 800);
-    const t2 = window.setTimeout(() => el.scrollTo({ left: 0, behavior: "smooth" }), 1500);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, [verticalId, stories.length]);
-
-  const scrollToIndex = (i: number) => {
-    const el = scrollerRef.current;
-    const card = el?.querySelectorAll("li")[i] as HTMLElement | undefined;
-    card?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
-  };
-
+function MarketingBlock({ block }: { block: GrowthMarketingBlock }) {
   return (
-    <div className="relative">
-      <div
-        className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-10 bg-gradient-to-l from-[#F7F5F8] to-transparent sm:hidden"
-        aria-hidden
-      />
-      <ul
-        ref={scrollerRef}
-        className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto pb-1 pr-8 [-ms-overflow-style:none] [scrollbar-width:none] sm:grid sm:snap-none sm:grid-cols-2 sm:gap-3 sm:overflow-visible sm:pr-0 [&::-webkit-scrollbar]:hidden"
-        aria-label="Persona stories — swipe sideways"
-      >
-        {stories.map((story) => (
-          <PersonaStoryCard key={story.id} story={story} />
-        ))}
-      </ul>
+    <article className="rounded-[1.25rem] border border-[#E6E1E8]/80 bg-white/70 p-5 shadow-sm ring-1 ring-black/[0.04] backdrop-blur-md sm:p-6">
+      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#8B8494]">Question</p>
+      <h2 className="mt-1.5 font-[family-name:var(--font-agency-display)] text-[1.2rem] font-semibold leading-snug tracking-tight text-[#12131A] sm:text-[1.45rem]">
+        {block.question}
+      </h2>
 
-      <div className="mt-2.5 flex items-center justify-center gap-2.5 sm:hidden">
-        <div className="flex items-center gap-1.5" role="tablist" aria-label="Story pages">
-          {stories.map((story, i) => (
-            <button
-              key={story.id}
-              type="button"
-              role="tab"
-              aria-selected={active === i}
-              aria-label={`Show ${story.name}'s story`}
-              onClick={() => scrollToIndex(i)}
-              className={`h-1.5 rounded-full transition-all ${
-                active === i ? "w-5 bg-[#12131A]" : "w-1.5 bg-[#12131A]/25"
-              }`}
-            />
-          ))}
-        </div>
-        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-[#8B8494]">
-          Swipe
-          <span className="path-swipe-hint inline-block" aria-hidden>
-            →
-          </span>
-        </span>
-      </div>
-    </div>
+      <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.16em] text-[#8B7BB8]">Answer</p>
+      <p className="mt-1.5 text-[14px] leading-relaxed text-[#12131A] sm:text-[15px]">{block.answer}</p>
+
+      <figure className="mt-4 rounded-xl border border-[#C4B5FD]/25 bg-gradient-to-br from-[#F3EEFF]/80 to-[#FFF5F2]/60 px-4 py-3.5">
+        <blockquote className="text-[13px] font-medium leading-relaxed text-[#4A4550] sm:text-[14px]">
+          &ldquo;{block.voice}&rdquo;
+        </blockquote>
+        <figcaption className="mt-2 text-[11px] font-semibold text-[#8B8494]">— {block.voiceBy}</figcaption>
+      </figure>
+    </article>
   );
 }
 
-function PersonaStoryCard({ story }: { story: GrowthPersonaStory }) {
-  const waUrl = bassikGrowthPersonaWhatsAppUrl(story);
+function PublicMarketingHome({ talkUrl }: { talkUrl: string }) {
   return (
-    <li
-      className={`relative w-[82%] shrink-0 snap-start sm:w-auto sm:min-w-0 rounded-[1.2rem] border border-white/70 bg-gradient-to-br ${story.wash} shadow-sm ring-1 ring-black/5 backdrop-blur-md`}
-    >
-      <a
-        href={waUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex h-full flex-col p-4 sm:p-5"
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8B8494]">
-              Sounds like…
-            </p>
-            <h3 className="mt-0.5 font-[family-name:var(--font-agency-display)] text-[1.15rem] font-semibold leading-tight sm:text-xl">
-              {story.name}
-            </h3>
-            <p className="mt-0.5 text-[11px] font-medium text-[#6B6570]">{story.role}</p>
-          </div>
-          <span className="rounded-full bg-white/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#8B7BB8] ring-1 ring-black/5">
-            Story
-          </span>
+    <>
+      <header className="relative isolate overflow-hidden px-4 pb-2 pt-2 sm:px-8 sm:pb-4 sm:pt-4">
+        <SiriGlow />
+        <div className="relative mx-auto max-w-lg">
+          <h1 className="font-[family-name:var(--font-agency-display)] text-[1.75rem] font-semibold leading-[1.1] tracking-[-0.03em] text-[#12131A] sm:text-[2.25rem]">
+            We care about your growth.
+          </h1>
+          <p className="mt-2 text-[14px] leading-relaxed text-[#6B6570] sm:text-[15px]">
+            Clubs, restaurants, hotels, education, healthcare — scroll and read. No forms. Nothing to
+            pick or tap except WhatsApp when you&apos;re ready.
+          </p>
+        </div>
+      </header>
+
+      <main className="relative px-4 pb-8 sm:px-8 sm:pb-14">
+        <div className="relative mx-auto flex max-w-lg flex-col gap-4 sm:gap-5">
+          {GROWTH_MARKETING_BLOCKS.map((block) => (
+            <MarketingBlock key={block.id} block={block} />
+          ))}
         </div>
 
-        <p className="mt-3 rounded-xl bg-white/55 px-3 py-2 text-[13px] font-semibold leading-snug text-[#12131A] ring-1 ring-black/5">
-          “{story.hook}”
-        </p>
-
-        <div className="mt-3 space-y-2.5 flex-1">
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#8B8494]">The problem</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-[#4A4550] sm:text-[12px]">{story.problem}</p>
-          </div>
-          <div>
-            <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#8B7BB8]">How Bassik helps</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-[#12131A] sm:text-[12px]">{story.bassikHelp}</p>
-          </div>
-          <div className="rounded-lg bg-[#12131A]/[0.04] px-2.5 py-2">
-            <p className="text-[10px] font-semibold leading-snug text-[#12131A]">{story.outcome}</p>
-          </div>
+        <div className="relative mx-auto mt-8 max-w-lg text-center">
+          <p className="text-[12px] leading-relaxed text-[#6B6570] sm:text-[13px]">{GROWTH_PROOF_LINE}</p>
+          <a
+            href={talkUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 hidden min-h-11 w-full items-center justify-center rounded-full bg-[#12131A] text-[14px] font-semibold text-white shadow-sm sm:inline-flex"
+          >
+            Say hi on WhatsApp
+          </a>
         </div>
-
-        <p className="mt-3 text-[11px] font-semibold text-[#12131A]">This sounds like me → WhatsApp</p>
-      </a>
-    </li>
+      </main>
+    </>
   );
 }
 
@@ -410,9 +330,53 @@ function PathCarousel({
 
 export default function GrowthSalesDoc({ showPrivatePricing = false }: Props) {
   const [verticalId, setVerticalId] = useState<GrowthVerticalId>("clubs");
+  const talkUrl = bassikGrowthWhatsAppUrl();
   const vertical = getGrowthVertical(verticalId);
-  const prices = showPrivatePricing ? GROWTH_PRIVATE_PRICES[verticalId] : null;
-  const talkUrl = bassikGrowthWhatsAppUrl(verticalId);
+  const prices = GROWTH_PRIVATE_PRICES[verticalId];
+  const partnerTalkUrl = bassikGrowthWhatsAppUrl(verticalId);
+
+  if (!showPrivatePricing) {
+    return (
+      <div className="agency-home min-h-screen bg-[#F7F5F8] text-[#12131A] pb-[4rem] sm:pb-0">
+        <nav className="relative z-20 mx-auto flex max-w-lg items-center gap-2.5 px-4 py-3 sm:px-8 sm:py-4">
+          <div className="relative h-8 w-8 overflow-hidden rounded-xl bg-white/90 shadow-sm ring-1 ring-black/10 backdrop-blur-md sm:h-9 sm:w-9">
+            <Image
+              src="/logos/bassik.png"
+              alt="Bassik"
+              fill
+              sizes="36px"
+              className="object-contain p-0.5 brightness-0"
+              priority
+            />
+          </div>
+          <span className="font-[family-name:var(--font-agency-display)] text-[14px] font-semibold tracking-tight sm:text-[15px]">
+            Bassik
+          </span>
+        </nav>
+
+        <PublicMarketingHome talkUrl={talkUrl} />
+
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#E6E1E8]/80 bg-[#F7F5F8]/95 px-3 py-2.5 backdrop-blur-xl sm:hidden print:hidden">
+          <div className="mx-auto flex max-w-lg items-center gap-2">
+            <Link
+              href="/privacy"
+              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full border border-[#E6E1E8] bg-white px-3.5 text-[12px] font-semibold text-[#12131A]"
+            >
+              Privacy
+            </Link>
+            <a
+              href={talkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full bg-[#12131A] text-[13px] font-semibold text-white"
+            >
+              WhatsApp Bassik
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="agency-home min-h-screen bg-[#F7F5F8] text-[#12131A] pb-[4rem] sm:pb-0">
@@ -440,20 +404,12 @@ export default function GrowthSalesDoc({ showPrivatePricing = false }: Props) {
       <header className="relative isolate overflow-hidden px-4 pb-5 pt-2 sm:px-8 sm:pb-10 sm:pt-5">
         <SiriGlow />
         <div className="relative mx-auto max-w-5xl">
-          <p className="inline-flex items-center gap-1.5 rounded-full bg-white/75 px-3 py-1 text-[11px] font-semibold text-[#6B6570] shadow-sm ring-1 ring-black/5 backdrop-blur-md">
-            <span className="text-[#C4B5FD]" aria-hidden>
-              ✦
-            </span>
-            hey — you’re here
-          </p>
-
           <h1 className="mt-3 max-w-xl font-[family-name:var(--font-agency-display)] text-[1.9rem] font-semibold leading-[1.08] tracking-[-0.035em] text-[#12131A] sm:mt-4 sm:text-[clamp(2.35rem,7vw,3.6rem)]">
-            {showPrivatePricing ? "Wanna grow your business?" : "Your growth story starts here."}
+            Wanna grow your business?
           </h1>
           <p className="mt-2.5 max-w-md text-[14px] leading-snug text-[#6B6570] sm:mt-3 sm:text-[16px] sm:leading-relaxed">
-            {showPrivatePricing
-              ? "Then you need this. Bassik helps you get seen, trusted, and chosen — clubs, restaurants, hotels, education, healthcare. We’re with you."
-              : "Real people. Real problems. Bassik is a marketing partner — we help you get seen, trusted, and chosen. Swipe the stories. If one feels like your week, say hi."}
+            Bassik helps you get seen, trusted, and chosen — clubs, restaurants, hotels, education,
+            healthcare. We&apos;re with you.
           </p>
         </div>
       </header>
@@ -490,46 +446,28 @@ export default function GrowthSalesDoc({ showPrivatePricing = false }: Props) {
             ))}
           </ol>
           <p className="mt-3 text-center text-[12px] text-[#6B6570] sm:text-[13px]">
-            {showPrivatePricing
-              ? "Pick a package — we run this path with you."
-              : "Attention → trust → action. That’s the marketing path we run with you."}
+            Pick a package — we run this path with you.
           </p>
         </div>
       </section>
 
       <main>
         <section
-          id={showPrivatePricing ? "paths" : "stories"}
+          id="paths"
           className="relative isolate border-t border-[#E6E1E8]/70 px-4 py-6 sm:px-8 sm:py-12"
-          aria-labelledby={showPrivatePricing ? "paths-heading" : "stories-heading"}
+          aria-labelledby="paths-heading"
         >
           <SiriGlow />
           <div className="relative mx-auto max-w-5xl">
-            {showPrivatePricing ? (
-              <>
-                <h2
-                  id="paths-heading"
-                  className="font-[family-name:var(--font-agency-display)] text-[1.4rem] font-semibold tracking-tight sm:text-[clamp(1.65rem,4vw,2.25rem)]"
-                >
-                  Care · Growth · Revenue
-                </h2>
-                <p className="mt-1 text-[12px] text-[#6B6570] sm:text-[13px]">
-                  Clear deliverables — pick the path that fits your world.
-                </p>
-              </>
-            ) : (
-              <>
-                <h2
-                  id="stories-heading"
-                  className="font-[family-name:var(--font-agency-display)] text-[1.4rem] font-semibold tracking-tight sm:text-[clamp(1.65rem,4vw,2.25rem)]"
-                >
-                  Does this sound like you?
-                </h2>
-                <p className="mt-1 text-[12px] text-[#6B6570] sm:text-[13px]">
-                  Swipe sideways — different people, same feeling. Tap a story to WhatsApp us.
-                </p>
-              </>
-            )}
+            <h2
+              id="paths-heading"
+              className="font-[family-name:var(--font-agency-display)] text-[1.4rem] font-semibold tracking-tight sm:text-[clamp(1.65rem,4vw,2.25rem)]"
+            >
+              Care · Growth · Revenue
+            </h2>
+            <p className="mt-1 text-[12px] text-[#6B6570] sm:text-[13px]">
+              Clear deliverables — pick the path that fits your world.
+            </p>
 
             <div className="mt-3.5 flex flex-wrap gap-1.5" role="tablist" aria-label="Industry">
               {GROWTH_VERTICALS.map((v) => {
@@ -556,59 +494,37 @@ export default function GrowthSalesDoc({ showPrivatePricing = false }: Props) {
               })}
             </div>
             <p className="mt-2 max-w-lg text-[11px] leading-snug text-[#6B6570] sm:text-[13px]">
-              {showPrivatePricing ? vertical.growthMeans : vertical.weHelp}
+              {vertical.growthMeans}
             </p>
 
             <div className="mt-4 sm:mt-5">
-              {showPrivatePricing ? (
-                <PathCarousel verticalId={verticalId} prices={prices} />
-              ) : (
-                <PersonaStoryCarousel verticalId={verticalId} />
-              )}
+              <PathCarousel verticalId={verticalId} prices={prices} />
             </div>
 
-            {showPrivatePricing ? (
-              <div className="mt-5 overflow-x-auto rounded-2xl border border-[#E6E1E8] bg-white/80 p-3.5 backdrop-blur-md sm:p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8B8494]">
-                  Pricing · {vertical.label}
-                </p>
-                <table className="mt-2 w-full min-w-[240px] text-left text-[12px] sm:text-[13px]">
-                  <thead>
-                    <tr className="border-b border-[#E6E1E8] text-[#8B8494]">
-                      <th className="py-1.5 pr-3 font-medium">Path</th>
-                      <th className="py-1.5 font-medium">Retainer / mo</th>
+            <div className="mt-5 overflow-x-auto rounded-2xl border border-[#E6E1E8] bg-white/80 p-3.5 backdrop-blur-md sm:p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8B8494]">
+                Pricing · {vertical.label}
+              </p>
+              <table className="mt-2 w-full min-w-[240px] text-left text-[12px] sm:text-[13px]">
+                <thead>
+                  <tr className="border-b border-[#E6E1E8] text-[#8B8494]">
+                    <th className="py-1.5 pr-3 font-medium">Path</th>
+                    <th className="py-1.5 font-medium">Retainer / mo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {GROWTH_PATHS.map((path) => (
+                    <tr key={path.id} className="border-b border-[#E6E1E8]/80">
+                      <td className="py-2 pr-3 font-semibold">{path.name}</td>
+                      <td className="py-2 font-[family-name:var(--font-agency-display)] font-semibold">
+                        {prices[path.id as GrowthPathId]}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {GROWTH_PATHS.map((path) => (
-                      <tr key={path.id} className="border-b border-[#E6E1E8]/80">
-                        <td className="py-2 pr-3 font-semibold">{path.name}</td>
-                        <td className="py-2 font-[family-name:var(--font-agency-display)] font-semibold">
-                          {prices?.[path.id as GrowthPathId]}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p className="mt-2 text-[10px] text-[#8B8494]">Ad spend always client-paid, separate.</p>
-              </div>
-            ) : (
-              <>
-                <p className="mt-4 text-center text-[11px] leading-snug text-[#8B8494] sm:text-[12px]">
-                  {GROWTH_PROOF_LINE}
-                </p>
-                <div className="mt-4 flex justify-center">
-                  <a
-                    href={talkUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hidden min-h-11 items-center justify-center rounded-full bg-[#12131A] px-8 text-[14px] font-semibold text-white shadow-sm sm:inline-flex"
-                  >
-                    Let&apos;s talk on WhatsApp
-                  </a>
-                </div>
-              </>
-            )}
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-2 text-[10px] text-[#8B8494]">Ad spend always client-paid, separate.</p>
+            </div>
           </div>
         </section>
       </main>
@@ -622,7 +538,7 @@ export default function GrowthSalesDoc({ showPrivatePricing = false }: Props) {
             Privacy
           </Link>
           <a
-            href={talkUrl}
+            href={partnerTalkUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex min-h-11 flex-1 items-center justify-center rounded-full bg-[#12131A] text-[13px] font-semibold text-white"
