@@ -92,7 +92,7 @@ export function getAgencyPortfolioBrands(): Brand[] {
 export const AGENCY_SEO = {
   title: "Bassik | We care about your growth",
   description:
-    "Bassik is a growth partner for clubs, restaurants, hotels, education and healthcare — attention, trust, enquiries and footfall. Talk to us on WhatsApp. Hyderabad.",
+    "Bassik is a growth marketing partner for clubs, restaurants, hotels, education and healthcare — real stories, real problems, real help. Talk to us on WhatsApp. Hyderabad.",
   keywords: [
     "growth marketing Hyderabad",
     "hospitality marketing partner",

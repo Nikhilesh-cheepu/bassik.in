@@ -1,6 +1,6 @@
 import GrowthSalesDoc from "@/components/agency/GrowthSalesDoc";
 
-/** Public homepage — growth story + paths, no exact prices. */
+/** Public homepage — persona stories + marketing, no pricing. */
 export default function AgencyHome() {
   return <GrowthSalesDoc showPrivatePricing={false} />;
 }
