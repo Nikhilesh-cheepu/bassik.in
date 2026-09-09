@@ -1101,8 +1101,12 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
   const onQueueDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    // Catch up stays pinned at top — only Today + Later are sortable
-    const sortableList = [...openParts.todayPack, ...openParts.upNext];
+    // Full open Q (Catch up + Normal) — drag anywhere sets priority
+    const sortableList = [
+      ...openParts.catchUp,
+      ...openParts.todayPack,
+      ...openParts.upNext,
+    ];
     const activeId = String(active.id);
     const overId = String(over.id);
     const activeJob = sortableList.find((j) => j.id === activeId);
@@ -1113,25 +1117,18 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     const fullAssignee = sortDesignerJobs(
       openJobsForPartition.filter((j) => j.assigneeId === activeJob.assigneeId)
     );
-    const catchIds = new Set(
-      openPartsRaw.catchUp
-        .filter((j) => j.assigneeId === activeJob.assigneeId)
-        .map((j) => j.id)
-    );
-    const pinnedCatch = fullAssignee.filter((j) => catchIds.has(j.id));
-    const restFull = fullAssignee.filter((j) => !catchIds.has(j.id));
     const visibleSet = new Set(sortableList.map((j) => j.id));
-    const visibleInRest = restFull.filter((j) => visibleSet.has(j.id));
-    const oldIndex = visibleInRest.findIndex((j) => j.id === activeId);
-    const newIndex = visibleInRest.findIndex((j) => j.id === overId);
+    const visibleInFull = fullAssignee.filter((j) => visibleSet.has(j.id));
+    const oldIndex = visibleInFull.findIndex((j) => j.id === activeId);
+    const newIndex = visibleInFull.findIndex((j) => j.id === overId);
     if (oldIndex < 0 || newIndex < 0) return;
 
-    const nextVisible = arrayMove(visibleInRest, oldIndex, newIndex);
+    const nextVisible = arrayMove(visibleInFull, oldIndex, newIndex);
     let vi = 0;
-    const nextRest = restFull.map((j) =>
+    const nextFull = fullAssignee.map((j) =>
       visibleSet.has(j.id) ? nextVisible[vi++]! : j
     );
-    void persistQueueOrder([...pinnedCatch, ...nextRest].map((j) => j.id));
+    void persistQueueOrder(nextFull.map((j) => j.id));
   };
 
   const sendSelected = async () => {
@@ -1619,10 +1616,13 @@ export default function TeamDesignerView({ isAdmin, memberId }: Props) {
     });
   };
 
+  const openQueueDragList = [
+    ...openParts.catchUp,
+    ...openParts.todayPack,
+    ...openParts.upNext,
+  ];
   const canDragQueue =
-    isAdmin &&
-    queueView === "open" &&
-    openParts.todayPack.length + openParts.upNext.length > 1;
+    isAdmin && queueView === "open" && openQueueDragList.length > 1;
   const toSendCount = sendableJobs.length;
   const toSendVisible = useMemo(
     () =>
@@ -3827,20 +3827,29 @@ https://instagram.com/…"
                     </ul>
                   </div>
                 ) : null}
-                {renderSection(
-                  "Catch up",
-                  openParts.catchUpHint ||
-                    "Pending from earlier — same Q order as Normal.",
-                  openParts.catchUp,
-                  "catchUp",
-                  "text-amber-200/90"
-                )}
+                {catchUpDebt > openParts.catchUp.length &&
+                catchUpDebt > 0 &&
+                isAdmin ? (
+                  <p className="rounded-lg border border-white/15 bg-white/[0.04] px-3 py-2 text-[12px] text-white/60">
+                    Owed {catchUpDebt} · showing {openParts.catchUp.length}
+                    {outletFilter !== "all" ? " in this outlet — switch to All" : ""}.
+                  </p>
+                ) : null}
                 <SortableContext
-                  items={[...openParts.todayPack, ...openParts.upNext].map((j) => j.id)}
+                  items={openQueueDragList.map((j) => j.id)}
                   strategy={verticalListSortingStrategy}
                 >
                   {(
                     [
+                      [
+                        "Catch up",
+                        (openParts.catchUpHint ||
+                          "Pending from earlier — same Q order as Normal.") +
+                          " Drag ≡ to reorder priority.",
+                        openParts.catchUp,
+                        "catchUp",
+                        "text-amber-200/90",
+                      ],
                       [
                         "Normal",
                         "Rest of the queue in order — drag ≡ to reorder",
