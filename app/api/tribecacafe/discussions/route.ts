@@ -85,3 +85,8 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Could not save discussion" }, { status: 500 });
   }
 }
+
+/** Same as PATCH — used by keepalive / sendBeacon on page leave. */
+export async function POST(req: NextRequest) {
+  return PATCH(req);
+}
