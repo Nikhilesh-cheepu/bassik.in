@@ -402,54 +402,42 @@ export default function ClientProposalDoc({ proposal }: Props) {
                 title={isInstitute ? "IHM Hyderabad Campaign Plan" : "Campaign Framework"}
               >
                 <Body>{proposal.campaigns.intro}</Body>
-                <div className="grid gap-3 lg:gap-4">
-                  {proposal.campaigns.items.map((campaign, i) => (
-                    <Card key={campaign.title} accent={i % 2 === 0}>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className="rounded-full px-2.5 py-1 text-[11px] font-bold text-[#0b0c10]"
-                          style={{ background: SCOPE_COLORS[i % SCOPE_COLORS.length] }}
+                <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#12141a]">
+                  <table className="w-full min-w-[640px] border-collapse text-left">
+                    <thead>
+                      <tr className="border-b border-white/10 bg-black/40 text-[10px] font-extrabold uppercase tracking-wide text-white/40">
+                        <th className="px-3 py-2.5 lg:px-4">#</th>
+                        <th className="px-3 py-2.5 lg:px-4">Campaign</th>
+                        <th className="px-3 py-2.5 lg:px-4">Focus</th>
+                        <th className="px-3 py-2.5 lg:px-4">Channels</th>
+                        <th className="px-3 py-2.5 lg:px-4">Outcome</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {proposal.campaigns.items.map((campaign, i) => (
+                        <tr
+                          key={campaign.title}
+                          className="border-b border-white/5 last:border-b-0"
                         >
-                          {String(i + 1).padStart(2, "0")}
-                        </span>
-                        <p className="font-[family-name:var(--font-agency-display)] text-[16px] font-bold text-white lg:text-[18px]">
-                          {campaign.title}
-                        </p>
-                      </div>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
-                        <div>
-                          <p className="proposal-label">
-                            {isInstitute ? "What we will do" : "What we can run"}
-                          </p>
-                          <p className="mt-1 text-[13px] font-semibold leading-relaxed text-white/75 lg:text-[14px]">
+                          <td className="px-3 py-3 align-top text-[12px] font-extrabold text-[#B8FF3C] lg:px-4">
+                            {String(i + 1).padStart(2, "0")}
+                          </td>
+                          <td className="px-3 py-3 align-top text-[13px] font-extrabold text-white lg:px-4 lg:text-[14px]">
+                            {campaign.title}
+                          </td>
+                          <td className="px-3 py-3 align-top text-[12px] font-semibold leading-snug text-white/60 lg:px-4 lg:text-[13px]">
                             {campaign.whatWeRun}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="proposal-label">
-                            {isInstitute ? "What we will create" : "Content we can create"}
-                          </p>
-                          <p className="mt-1 text-[13px] font-semibold leading-relaxed text-white/75 lg:text-[14px]">
-                            {campaign.content}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="proposal-label">Channels</p>
-                          <div className="mt-1.5">
-                            <Chips items={campaign.where} />
-                          </div>
-                        </div>
-                        <div>
-                          <p className="proposal-label">
-                            {isInstitute ? "Outcome for IHM" : "Expected result"}
-                          </p>
-                          <p className="mt-1 text-[13px] font-semibold leading-relaxed text-[#B8FF3C]/90 lg:text-[14px]">
+                          </td>
+                          <td className="px-3 py-3 align-top text-[12px] font-bold leading-snug text-white/75 lg:px-4 lg:text-[13px]">
+                            {campaign.where.join(" · ")}
+                          </td>
+                          <td className="px-3 py-3 align-top text-[12px] font-semibold leading-snug text-[#B8FF3C]/85 lg:px-4 lg:text-[13px]">
                             {campaign.result}
-                          </p>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
                 <p className="text-[13px] font-semibold italic leading-relaxed text-white/50 lg:text-[14px]">
                   {proposal.campaigns.closing}

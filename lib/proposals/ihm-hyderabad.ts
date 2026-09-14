@@ -150,72 +150,58 @@ export const ihmHyderabadProposal: ClientProposal = {
   },
   campaigns: {
     intro:
-      "IHM Hyderabad Campaign Plan — seven workstreams Bassik will execute. This is the structured programme for visibility, admissions, reputation, industry connections and community growth. The target is not only admissions: it is to grow the network, build reputation and create a stronger student community.",
+      "Seven workstreams Bassik will execute for IHM Hyderabad — visibility, admissions, reputation, industry connect and community.",
     closing:
-      "Each month we will prioritise 1–2 primary workstreams based on the institute calendar (admissions windows, campus events, placement season, workshops), while keeping always-on reputation and community content live.",
+      "Each month we prioritise 1–2 primary workstreams against the institute calendar, while always-on reputation and community stay live.",
     items: [
       {
         title: "Admissions",
-        whatWeRun:
-          "We will run search, lead-generation, remarketing and course-specific campaigns timed to counselling and application windows.",
-        content:
-          "We will produce course, career, campus-life, student-journey, FAQ and counselling creatives that move people from interest to enquiry and campus visit.",
+        whatWeRun: "Search, lead-gen, remarketing, course campaigns",
+        content: "Course, career, campus-life, FAQ and counselling creatives",
         where: ["Google", "Meta", "YouTube"],
-        result: "Qualified enquiries, counselling conversations, campus visits and applications.",
+        result: "Enquiries, counselling, campus visits, applications",
       },
       {
         title: "Brand & Reputation",
-        whatWeRun:
-          "We will run always-on awareness and video-reach campaigns, and amplify achievements as they happen.",
-        content:
-          "We will build proof assets around awards, competitions, faculty, alumni, infrastructure, industry exposure and student success.",
+        whatWeRun: "Always-on awareness + amplify achievements",
+        content: "Awards, faculty, alumni, campus and student-success proof",
         where: ["Meta", "YouTube", "Google"],
-        result: "Stronger recognition, credibility and parent/student trust.",
+        result: "Recognition, credibility, parent/student trust",
       },
       {
         title: "Events & Campus",
-        whatWeRun:
-          "We will plan pre-event awareness, registrations, countdowns, live coverage and post-event remarketing for every major campus moment.",
-        content:
-          "We will create teasers, reels, highlights, winners’ stories, workshop coverage and behind-the-scenes content that becomes reusable proof.",
+        whatWeRun: "Pre-event → register → cover → remarket",
+        content: "Teasers, reels, highlights, workshop and BTS content",
         where: ["Meta", "YouTube", "Google"],
-        result: "Higher participation, wider reach and stronger campus engagement.",
+        result: "Participation, reach, campus engagement",
       },
       {
         title: "Industry & Sponsors",
-        whatWeRun:
-          "We will support partner visibility, targeted outreach and sponsor remarketing tied to real collaborations.",
-        content:
-          "We will document industry collaborations, hotel partnerships, sponsor moments and event impact stories for digital and outreach use.",
-        where: ["Meta", "LinkedIn / Outreach", "YouTube"],
-        result: "Stronger partnerships, sponsorship interest and industry network.",
+        whatWeRun: "Partner visibility and sponsor outreach",
+        content: "Collaboration, hotel and sponsor impact stories",
+        where: ["Meta", "LinkedIn", "YouTube"],
+        result: "Partnerships, sponsors, industry network",
       },
       {
         title: "Placements & Careers",
-        whatWeRun:
-          "We will run placement-reputation and recruiter-visibility campaigns around internship and placement seasons.",
-        content:
-          "We will produce recruiter-visit stories, internship journeys, skill showcases, placement outcomes and alumni career narratives.",
-        where: ["LinkedIn / Outreach", "Meta", "YouTube"],
-        result: "Stronger placement image and better employer relationships.",
+        whatWeRun: "Placement reputation + recruiter visibility",
+        content: "Recruiter visits, internships, outcomes, alumni careers",
+        where: ["LinkedIn", "Meta", "YouTube"],
+        result: "Stronger placement image, employer relations",
       },
       {
         title: "Workshops & Revenue",
-        whatWeRun:
-          "We will promote masterclasses, certifications, skill programmes and executive education with registration-focused campaigns.",
-        content:
-          "We will create chef-workshop assets, programme explainers, faculty expertise pieces and participant-outcome stories.",
+        whatWeRun: "Masterclasses, certifications, skill programmes",
+        content: "Workshop assets, explainers, faculty and outcomes",
         where: ["Google", "Meta", "YouTube"],
-        result: "Paid registrations, wider professional reach and additional revenue opportunities.",
+        result: "Registrations, professional reach, revenue",
       },
       {
         title: "Alumni & Community",
-        whatWeRun:
-          "We will run alumni engagement, community remarketing and referral-led network campaigns.",
-        content:
-          "We will share alumni stories, mentorship moments, guest sessions, achievements and community updates across Meta, WhatsApp/email and video.",
-        where: ["Meta", "WhatsApp / Email", "YouTube"],
-        result: "Stronger alumni network, referrals, mentorship and student community.",
+        whatWeRun: "Alumni engagement and referral campaigns",
+        content: "Alumni stories, mentorship, community updates",
+        where: ["Meta", "WhatsApp", "YouTube"],
+        result: "Network, referrals, mentorship, community",
       },
     ],
   },
@@ -262,7 +248,7 @@ export const ihmHyderabadProposal: ClientProposal = {
     points: [
       "A structured monthly operating rhythm for digital growth",
       "Seven campaign workstreams planned against the institute calendar",
-      "Paid media discussed and sized to need — never forced",
+      "Paid media sized to need — separate from the service fee",
       "Hospitality network access for industry connect and student opportunity",
       "Creatives and posts are execution layers of the plan — not the product itself",
     ],
@@ -291,15 +277,6 @@ export const ihmHyderabadProposal: ClientProposal = {
     ],
     complimentaryShootNote:
       "Shoot days are scheduled against live workstreams so assets feed admissions, events and reputation campaigns immediately.",
-  },
-  advertisingBudget: {
-    total: "To be discussed — kept practical, not forced",
-    note: "Paid media is separate from Bassik’s ₹65,000/- service fee. Monthly ad amounts and platform mix will be decided together against the campaign plan — heavier in admissions/event months when useful, lighter when always-on work is enough.",
-    allocation: [
-      { label: "Approach", amount: "Mutual discussion every month" },
-      { label: "Sizing", amount: "Aligned to season and workstream" },
-      { label: "Our fee vs ads", amount: "₹65,000 service is separate from media" },
-    ],
   },
   taxation: {
     intro:
@@ -335,7 +312,7 @@ export const ihmHyderabadProposal: ClientProposal = {
       "90-day campaign calendar against institute milestones",
       "Primary workstream sequence for months 1–3",
       "Creative formats and publishing rhythm",
-      "Paid-media discussion framework by season",
+      "Paid-media plan by season (separate from service fee)",
       "Enquiry handling support checklist",
       "Industry collaboration calendar with Bassik network",
       "KPI dashboard and monthly review cadence",
