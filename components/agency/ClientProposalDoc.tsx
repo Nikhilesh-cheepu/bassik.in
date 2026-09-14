@@ -278,7 +278,7 @@ export default function ClientProposalDoc({ proposal }: Props) {
               </Section>
             ) : null}
 
-            <Section num={nextNum()} title={isInstitute ? "Who Leads This" : "Leadership"}>
+            <Section num={nextNum()} title="Leadership">
               <div className="grid gap-3 lg:grid-cols-2 lg:gap-4">
                 {proposal.leadership.map((person, idx) => {
                   const listIntroIdx = person.bio.findIndex((line) => line.trim().endsWith(":"));
@@ -358,7 +358,7 @@ export default function ClientProposalDoc({ proposal }: Props) {
               >
                 <Body>{proposal.engagement.intro}</Body>
                 <p className="text-[13px] font-bold text-white/55 lg:text-[14px]">
-                  The service covers:
+                  What we do for IHM Hyderabad:
                 </p>
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:gap-4">
                   {proposal.engagement.categories.map((cat, i) => (
@@ -381,7 +381,7 @@ export default function ClientProposalDoc({ proposal }: Props) {
                 </div>
                 <Card accent>
                   <p className="font-[family-name:var(--font-agency-display)] text-[15px] font-bold lg:text-[17px]">
-                    Platforms we work on
+                    Platforms
                   </p>
                   <p className="mt-1 text-[13px] font-semibold text-white/60 lg:text-[14px]">
                     Management, creatives and campaign optimisation across:

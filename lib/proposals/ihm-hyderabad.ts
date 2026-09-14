@@ -103,10 +103,10 @@ export const ihmHyderabadProposal: ClientProposal = {
       description: "Music-led hospitality built around sound, atmosphere and programming.",
     },
   ],
-  engagementTitle: "How We Will Work for IHM Hyderabad",
+  engagementTitle: "The Plan for IHM Hyderabad",
   engagement: {
     intro:
-      "Bassik will own the monthly operating system for IHM Hyderabad’s digital marketing. Below is what we will deliver every month as structured service — not one-off activity.",
+      "Bassik will own the monthly operating system for IHM Hyderabad’s digital marketing. Below is what we do for the institute every month as structured service — not one-off activity.",
     categories: [
       {
         title: "1. Plan",
