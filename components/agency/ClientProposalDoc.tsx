@@ -172,29 +172,29 @@ export default function ClientProposalDoc({ proposal }: Props) {
 
   return (
     <div className="proposal-doc min-h-screen text-white">
-      <div className="mx-auto w-full max-w-[430px] pb-24 lg:max-w-6xl lg:pb-16">
+      <div className="mx-auto w-full max-w-[430px] pb-24 lg:max-w-7xl lg:pb-20">
         {/* Hero */}
-        <header className="relative overflow-hidden px-4 pb-7 pt-9 sm:px-6 lg:px-8 lg:pb-12 lg:pt-14">
-          <div className="absolute right-5 top-8 opacity-90 lg:right-10 lg:top-12" aria-hidden>
-            <Star className="h-4 w-4 lg:h-6 lg:w-6" />
+        <header className="relative overflow-hidden px-4 pb-8 pt-9 sm:px-6 lg:px-10 lg:pb-14 lg:pt-16">
+          <div className="absolute right-5 top-8 opacity-90 lg:right-12 lg:top-14" aria-hidden>
+            <Star className="h-4 w-4 lg:h-7 lg:w-7" />
           </div>
 
-          <div className="lg:grid lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.85fr)] lg:items-end lg:gap-10">
+          <div className="lg:grid lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.9fr)] lg:items-end lg:gap-12">
             <div>
               <p className="proposal-label">Proposal</p>
-              <h1 className="proposal-glow-strong mt-2 font-[family-name:var(--font-agency-display)] text-[1.85rem] font-bold leading-[1.08] lg:text-[clamp(2.4rem,4vw,3.25rem)]">
+              <h1 className="proposal-glow-strong mt-2 font-[family-name:var(--font-agency-display)] text-[1.85rem] font-bold leading-[1.08] sm:text-[2.1rem] lg:text-[clamp(2.5rem,4.2vw,3.4rem)]">
                 {proposal.documentTitle}
               </h1>
               <div className="proposal-underline" />
-              <p className="mt-3 text-[16px] font-bold text-white lg:mt-4 lg:text-[20px]">
+              <p className="mt-3 text-[16px] font-bold text-white lg:mt-4 lg:text-[22px]">
                 {proposal.clientName} {proposal.clientLocation}
               </p>
-              <p className="mt-2 max-w-xl text-[14px] font-semibold leading-relaxed text-white/60 lg:text-[16px]">
+              <p className="mt-2 max-w-2xl text-[14px] font-semibold leading-relaxed text-white/60 lg:text-[16px] lg:leading-[1.7]">
                 {proposal.tagline}
               </p>
             </div>
 
-            <div className="mt-5 grid gap-2.5 sm:grid-cols-2 lg:mt-0 lg:grid-cols-1">
+            <div className="mt-5 grid gap-2.5 sm:grid-cols-2 lg:mt-0 lg:grid-cols-1 lg:gap-3">
               <Card>
                 <p className="proposal-label">Submitted to</p>
                 <p className="mt-1.5 text-[15px] font-bold text-white lg:text-[17px]">
@@ -219,8 +219,8 @@ export default function ClientProposalDoc({ proposal }: Props) {
         </header>
 
         {/* Body + desktop sidebar */}
-        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start lg:gap-10 lg:px-8">
-          <main className="space-y-11 px-4 sm:px-6 lg:space-y-14 lg:px-0">
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-12 lg:px-10">
+          <main className="space-y-12 px-4 sm:px-6 lg:space-y-16 lg:px-0">
             <Section id="intro" num="01" title="Introduction">
               <Card>
                 {proposal.introduction.map((para, i) => (
@@ -236,7 +236,14 @@ export default function ClientProposalDoc({ proposal }: Props) {
 
             <Section num="02" title="About Bassik Hospitality Services Pvt. Ltd.">
               <Card>
-                <Body>{proposal.aboutBassik.intro}</Body>
+                {proposal.aboutBassik.paragraphs.map((para, i) => (
+                  <p
+                    key={para.slice(0, 40)}
+                    className={`text-[14px] font-semibold leading-[1.65] text-white/75 lg:text-[15px] lg:leading-[1.7] ${i > 0 ? "mt-3 lg:mt-4" : ""}`}
+                  >
+                    {para}
+                  </p>
+                ))}
                 <p className="proposal-label mt-4 lg:mt-5">Our expertise includes</p>
                 <div className="mt-2">
                   <Chips items={proposal.aboutBassik.expertise} />
@@ -249,47 +256,71 @@ export default function ClientProposalDoc({ proposal }: Props) {
 
             <Section num="03" title="Leadership">
               <div className="grid gap-3 lg:grid-cols-2 lg:gap-4">
-                {proposal.leadership.map((person, idx) => (
-                  <Card key={person.name} accent={idx === 0}>
-                    <div className="flex items-center gap-3">
-                      <span
-                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-[14px] font-bold text-[#0b0c10] lg:h-14 lg:w-14 lg:text-[15px]"
-                        style={{ background: idx === 0 ? "#B8FF3C" : "#A855F7" }}
-                      >
-                        {person.name
-                          .split(" ")
-                          .map((w) => w[0])
-                          .join("")
-                          .slice(0, 2)}
-                      </span>
-                      <div>
-                        <p className="font-[family-name:var(--font-agency-display)] text-[16px] font-bold uppercase tracking-wide lg:text-[18px]">
-                          {person.name}
-                        </p>
-                        <p className="text-[12px] font-bold text-white/55 lg:text-[13px]">{person.title}</p>
+                {proposal.leadership.map((person, idx) => {
+                  const listIntroIdx = person.bio.findIndex((line) => line.trim().endsWith(":"));
+                  const beforeList = listIntroIdx >= 0 ? person.bio.slice(0, listIntroIdx + 1) : person.bio;
+                  const afterList = listIntroIdx >= 0 ? person.bio.slice(listIntroIdx + 1) : [];
+                  return (
+                    <Card key={person.name} accent={idx === 0}>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-[14px] font-bold text-[#0b0c10] lg:h-14 lg:w-14 lg:text-[15px]"
+                          style={{ background: idx === 0 ? "#B8FF3C" : "#A855F7" }}
+                        >
+                          {person.name
+                            .split(" ")
+                            .map((w) => w[0])
+                            .join("")
+                            .slice(0, 2)}
+                        </span>
+                        <div>
+                          <p className="font-[family-name:var(--font-agency-display)] text-[16px] font-bold uppercase tracking-wide lg:text-[18px]">
+                            {person.name}
+                          </p>
+                          <p className="text-[12px] font-bold text-white/55 lg:text-[13px]">{person.title}</p>
+                        </div>
                       </div>
-                    </div>
-                    {person.bio.map((line) => (
-                      <p
-                        key={line.slice(0, 40)}
-                        className="mt-3 text-[13px] font-semibold leading-relaxed text-white/72 lg:text-[14px]"
-                      >
-                        {line}
-                      </p>
-                    ))}
-                    <p className="proposal-label mt-4">
-                      {person.name === "Venkat Kc" ? "Concepts shaped" : "Operational experience"}
-                    </p>
-                    <div className="mt-2">
-                      <Chips items={person.highlights} />
-                    </div>
-                  </Card>
-                ))}
+                      {beforeList.map((line) => (
+                        <p
+                          key={line.slice(0, 40)}
+                          className="mt-3 text-[13px] font-semibold leading-relaxed text-white/72 lg:text-[14px]"
+                        >
+                          {line}
+                        </p>
+                      ))}
+                      <div className="mt-2">
+                        <Chips items={person.highlights} />
+                      </div>
+                      {afterList.map((line) => (
+                        <p
+                          key={line.slice(0, 40)}
+                          className="mt-3 text-[13px] font-semibold leading-relaxed text-white/72 lg:text-[14px]"
+                        >
+                          {line}
+                        </p>
+                      ))}
+                    </Card>
+                  );
+                })}
               </div>
               <Body>{proposal.leadershipClosing}</Body>
             </Section>
 
-            <Section id="brands" num="04" title="Brands We Worked With">
+            <Section id="portfolio" num="04" title="Our Portfolio">
+              <Body>{proposal.portfolioIntro}</Body>
+              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-3">
+                {proposal.portfolio.map((brand) => (
+                  <Card key={brand.name} className="!p-3.5 lg:!p-5">
+                    <p className="font-[family-name:var(--font-agency-display)] text-[14px] font-bold uppercase tracking-wide text-white lg:text-[15px]">
+                      {brand.name}
+                    </p>
+                    <p className="mt-1.5 text-[13px] font-semibold leading-relaxed text-white/65 lg:text-[14px]">
+                      {brand.description}
+                    </p>
+                  </Card>
+                ))}
+              </div>
+              <p className="proposal-label mt-2">Brands we worked with</p>
               <div className="proposal-glass overflow-hidden rounded-[1.35rem] py-4 lg:rounded-[1.5rem] lg:py-6">
                 <ProposalBrandMarquee />
               </div>
@@ -338,7 +369,9 @@ export default function ClientProposalDoc({ proposal }: Props) {
             <Section id="pricing" num="06" title="Digital Marketing Management Fee">
               <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr] lg:gap-4">
                 <Card accent>
-                  <p className="proposal-label">Professional fee</p>
+                  <p className="text-[13px] font-semibold text-white/65 lg:text-[14px]">
+                    The professional digital marketing management fee will be:
+                  </p>
                   <p className="proposal-lime mt-1 font-[family-name:var(--font-agency-display)] text-[1.85rem] font-bold lg:text-[2.25rem]">
                     {proposal.digitalMarketingFee.amount}
                   </p>
@@ -595,7 +628,7 @@ export default function ClientProposalDoc({ proposal }: Props) {
                       key={obj}
                       className="rounded-xl border border-[#B8FF3C]/25 bg-[#B8FF3C]/10 px-4 py-3 text-center lg:py-4"
                     >
-                      <p className="font-[family-name:var(--font-agency-display)] text-[13px] font-bold uppercase tracking-wide text-white lg:text-[14px]">
+                      <p className="font-[family-name:var(--font-agency-display)] text-[12px] font-bold uppercase tracking-wide text-white sm:text-[13px] lg:text-[14px]">
                         {obj}
                       </p>
                     </div>

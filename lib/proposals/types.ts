@@ -10,6 +10,11 @@ export type ProposalLeadership = {
   highlights: string[];
 };
 
+export type ProposalPortfolioItem = {
+  name: string;
+  description: string;
+};
+
 export type ProposalScopeCategory = {
   title: string;
   items: string[];
@@ -53,12 +58,14 @@ export type ClientProposal = {
   };
   introduction: string[];
   aboutBassik: {
-    intro: string;
+    paragraphs: string[];
     expertise: string[];
     closing: string;
   };
   leadership: ProposalLeadership[];
   leadershipClosing: string;
+  portfolioIntro: string;
+  portfolio: ProposalPortfolioItem[];
   engagement: {
     intro: string;
     categories: ProposalScopeCategory[];

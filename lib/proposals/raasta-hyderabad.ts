@@ -27,8 +27,10 @@ export const raastaHyderabadProposal: ClientProposal = {
     "The detailed strategy, including menu development, beverage concepts, music programming, event formats, brand-recall initiatives and other operational recommendations, will be developed as the next stage of the engagement following management approval.",
   ],
   aboutBassik: {
-    intro:
-      "Bassik Hospitality Services Pvt. Ltd. is a premier hospitality management, nightlife curation and brand consulting company headquartered in Hyderabad. Operating at the intersection of hospitality, entertainment, culinary craft and strategic business development, Bassik brings extensive practical experience in creating, managing, positioning and growing food, beverage and nightlife destinations.",
+    paragraphs: [
+      "Bassik Hospitality Services Pvt. Ltd. is a premier hospitality management, nightlife curation and brand consulting company headquartered in Hyderabad.",
+      "Operating at the intersection of hospitality, entertainment, culinary craft and strategic business development, Bassik brings extensive practical experience in creating, managing, positioning and growing food, beverage and nightlife destinations.",
+    ],
     expertise: [
       "Hospitality consulting",
       "Restaurant, bar & nightclub consulting",
@@ -55,6 +57,7 @@ export const raastaHyderabadProposal: ClientProposal = {
       bio: [
         "Venkat Kc is a hospitality and nightlife entrepreneur with over 25 years of hands-on industry experience.",
         "He has played a pioneering role in shaping Hyderabad’s nightlife and craft beer culture, including introducing the city to the microbrewery movement through HyLife Brewing Company, Hyderabad’s first microbrewery.",
+        "Over his career, he has been associated with and has shaped multiple hospitality and nightlife concepts, including:",
         "His experience covers hospitality operations, business development, nightlife, food & beverage, brand positioning, marketing and revenue growth.",
       ],
       highlights: [
@@ -75,6 +78,7 @@ export const raastaHyderabadProposal: ClientProposal = {
       bio: [
         "Anthony Lawrence brings 30+ years of experience in the food and beverage industry.",
         "He has been associated with 10 Downing Street for more than 25 years, including his role as Franchise Head of Operations.",
+        "His extensive operational experience includes:",
       ],
       highlights: [
         "F&B operations",
@@ -90,6 +94,35 @@ export const raastaHyderabadProposal: ClientProposal = {
   ],
   leadershipClosing:
     "The combined experience of Bassik’s leadership enables the company to approach hospitality businesses from both creative and operational perspectives.",
+  portfolioIntro:
+    "Bassik Hospitality owns, operates and partners with distinct hospitality concepts catering to varied market segments.",
+  portfolio: [
+    {
+      name: "Alehouse",
+      description:
+        "A dedicated taproom and craft beer destination focused on fresh beer, tavern dining and beer culture.",
+    },
+    {
+      name: "Boiler Room",
+      description:
+        "A high-energy nightlife destination focused on electronic music, sound engineering and immersive experiences.",
+    },
+    {
+      name: "C53 World Cuisine",
+      description:
+        "An upscale multi-cuisine dining destination combining global culinary influences with refined casual dining.",
+    },
+    {
+      name: "KiiK 69 Sports Bar",
+      description:
+        "An entertainment-led sports bar combining live sports, pub food, draught beer and competitive social gaming.",
+    },
+    {
+      name: "Club Rogue India",
+      description:
+        "Official franchise partners supporting the expansion, operations and brand consistency of a recognised high-energy club brand.",
+    },
+  ],
   engagement: {
     intro:
       "Bassik proposes to work with Raasta Hyderabad as a strategic marketing, brand and business-growth partner.",
@@ -188,7 +221,7 @@ export const raastaHyderabadProposal: ClientProposal = {
   },
   influencerBudget: {
     amount: "₹6,00,000/-",
-    periodLabel: "For the initial brand-revival phase, proposed for the following three months:",
+    periodLabel: "is proposed for the following three months:",
     months: ["October", "November", "December"],
     separateFrom: [
       "Digital marketing management fees",
@@ -294,10 +327,10 @@ export const raastaHyderabadProposal: ClientProposal = {
       "We look forward to the opportunity to partner with Raasta Hyderabad.",
     ],
     objectives: [
-      "Build a stronger brand.",
-      "Create a better customer experience.",
-      "Drive higher revenue.",
-      "Make Raasta a destination again.",
+      "BUILD A STRONGER BRAND.",
+      "CREATE A BETTER CUSTOMER EXPERIENCE.",
+      "DRIVE HIGHER REVENUE.",
+      "MAKE RAASTA A DESTINATION AGAIN.",
     ],
   },
 };
