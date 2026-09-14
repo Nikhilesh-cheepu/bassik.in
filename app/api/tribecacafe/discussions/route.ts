@@ -1,9 +1,63 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getTribecaFromRequest } from "@/lib/tribeca-auth";
-import { currentYearMonth } from "@/lib/tribeca";
+import { TRIBECA_DISCUSSION_KEY, currentYearMonth } from "@/lib/tribeca";
 import { ensureTribecaMonthId } from "@/lib/tribeca-db";
 import { prismaSchemaErrorResponse } from "@/lib/prisma-schema-error";
+
+/** One shared discussion notes doc for Tribeca (not per calendar month). */
+async function getOrMigrateDiscussionNotes() {
+  const discussionId = await ensureTribecaMonthId(TRIBECA_DISCUSSION_KEY);
+  const discussion = await prisma.tribecaMonth.findUnique({
+    where: { id: discussionId },
+    select: { id: true, notes: true, updatedAt: true },
+  });
+
+  let notes = discussion?.notes ?? "";
+
+  // One-time rescue: if the shared doc is empty, pull notes saved on the current month row.
+  if (!notes.trim()) {
+    const ym = currentYearMonth();
+    const monthRow = await prisma.tribecaMonth.findUnique({
+      where: { yearMonth: ym },
+      select: { notes: true },
+    });
+    const legacy = monthRow?.notes?.trim() || "";
+    if (legacy) {
+      const updated = await prisma.tribecaMonth.update({
+        where: { id: discussionId },
+        data: { notes: legacy },
+        select: { id: true, notes: true, updatedAt: true },
+      });
+      return updated;
+    }
+  }
+
+  return {
+    id: discussionId,
+    notes,
+    updatedAt: discussion?.updatedAt ?? null,
+  };
+}
+
+export async function GET(req: NextRequest) {
+  if (!(await getTribecaFromRequest(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const row = await getOrMigrateDiscussionNotes();
+    return NextResponse.json({
+      notes: row.notes ?? "",
+      updatedAt: row.updatedAt,
+    });
+  } catch (error) {
+    const schema = prismaSchemaErrorResponse(error);
+    if (schema) return schema;
+    console.error("[tribeca discussions GET]", error);
+    return NextResponse.json({ error: "Could not load discussion" }, { status: 500 });
+  }
+}
 
 export async function PATCH(req: NextRequest) {
   if (!(await getTribecaFromRequest(req))) {
@@ -11,20 +65,19 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const yearMonth =
-    typeof body.yearMonth === "string" && body.yearMonth.trim()
-      ? body.yearMonth.trim()
-      : currentYearMonth();
-  const notes = typeof body.notes === "string" ? body.notes : null;
+  const notes = typeof body.notes === "string" ? body.notes : "";
 
   try {
-    const monthId = await ensureTribecaMonthId(yearMonth);
-    const month = await prisma.tribecaMonth.update({
-      where: { id: monthId },
+    const discussionId = await ensureTribecaMonthId(TRIBECA_DISCUSSION_KEY);
+    const row = await prisma.tribecaMonth.update({
+      where: { id: discussionId },
       data: { notes },
-      select: { id: true, yearMonth: true, notes: true },
+      select: { notes: true, updatedAt: true },
     });
-    return NextResponse.json({ month });
+    return NextResponse.json({
+      notes: row.notes ?? "",
+      updatedAt: row.updatedAt,
+    });
   } catch (error) {
     const schema = prismaSchemaErrorResponse(error);
     if (schema) return schema;

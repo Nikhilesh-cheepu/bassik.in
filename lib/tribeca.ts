@@ -30,6 +30,9 @@ export const ACCESS_CREDENTIAL_KEYS = new Set<string>([
   "youtube",
 ]);
 
+/** Singleton TribecaMonth.yearMonth key for shared discussion notes (not a calendar month). */
+export const TRIBECA_DISCUSSION_KEY = "discussion";
+
 export function categoryLabel(kind: string, category: string | null | undefined): string | null {
   if (!category) return null;
   if (kind === "event") {

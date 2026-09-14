@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   SHOOT_CATEGORIES,
   EVENT_CATEGORIES,
@@ -107,12 +108,17 @@ type TabId = "credentials" | "calendar" | "todo" | "budget" | "plan";
 type StatusTone = "idle" | "syncing" | "saving" | "ok" | "error";
 type UiStatus = { tone: StatusTone; message: string };
 
-/** Bottom + desktop nav — Plan stays header-only. */
-const TABS: { id: Exclude<TabId, "plan">; label: string }[] = [
+type NavTab =
+  | { id: Exclude<TabId, "plan">; label: string; href?: undefined }
+  | { id: "discussion"; label: string; href: "/tribecacafe/discussions" };
+
+/** Bottom + desktop nav — Plan stays header-only. Discussion opens its own page. */
+const TABS: NavTab[] = [
   { id: "credentials", label: "Credentials" },
   { id: "calendar", label: "Calendar" },
   { id: "todo", label: "Todo" },
   { id: "budget", label: "Ad budget" },
+  { id: "discussion", label: "Discussion", href: "/tribecacafe/discussions" },
 ];
 
 const KIND_COLOR: Record<CalendarKind, string> = {
@@ -315,6 +321,7 @@ function DayRow({
 }
 
 export default function TribecaCafeClient() {
+  const searchParams = useSearchParams();
   const todayKey = useMemo(() => toDateKey(), []);
   const todayMeta = useMemo(() => formatStripDay(todayKey), [todayKey]);
   const dateList = useMemo(() => buildDateStrip(todayKey, PAST_DAYS, FUTURE_DAYS), [todayKey]);
@@ -458,6 +465,19 @@ export default function TribecaCafeClient() {
     document.body.classList.add("proposal-active");
     return () => document.body.classList.remove("proposal-active");
   }, []);
+
+  useEffect(() => {
+    const raw = searchParams.get("tab");
+    if (
+      raw === "credentials" ||
+      raw === "calendar" ||
+      raw === "todo" ||
+      raw === "budget" ||
+      raw === "plan"
+    ) {
+      setTab(raw);
+    }
+  }, [searchParams]);
 
   // Fast auth → show calendar immediately; data loads in background
   useEffect(() => {
@@ -1012,24 +1032,34 @@ export default function TribecaCafeClient() {
           </div>
 
           <nav className="mt-4 hidden gap-2 lg:flex">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => {
-                  setTab(t.id);
-                  if (t.id === "calendar") pinnedOnce.current = false;
-                }}
-                className={`rounded-full px-4 py-2 text-[12px] font-bold ${
-                  tab === t.id
-                    ? "bg-[#B8FF3C] text-[#0b0c10]"
-                    : "border border-[#2c2e38] text-white/55"
-                }`}
-              >
-                {t.label}
-                {t.id === "todo" && openTodos.length ? ` (${openTodos.length})` : ""}
-              </button>
-            ))}
+            {TABS.map((t) =>
+              t.href ? (
+                <Link
+                  key={t.id}
+                  href={t.href}
+                  className="rounded-full border border-[#2c2e38] px-4 py-2 text-[12px] font-bold text-white/55"
+                >
+                  {t.label}
+                </Link>
+              ) : (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    setTab(t.id);
+                    if (t.id === "calendar") pinnedOnce.current = false;
+                  }}
+                  className={`rounded-full px-4 py-2 text-[12px] font-bold ${
+                    tab === t.id
+                      ? "bg-[#B8FF3C] text-[#0b0c10]"
+                      : "border border-[#2c2e38] text-white/55"
+                  }`}
+                >
+                  {t.label}
+                  {t.id === "todo" && openTodos.length ? ` (${openTodos.length})` : ""}
+                </button>
+              )
+            )}
           </nav>
         </header>
 
@@ -1485,15 +1515,6 @@ export default function TribecaCafeClient() {
                 </div>
                 <p className="mt-2 text-[12px] font-bold text-white/60">{TRIBECA_PLAN.leadershipLine}</p>
               </div>
-
-              <div className="pt-1 text-center">
-                <Link
-                  href="/tribecacafe/discussions"
-                  className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/35 underline-offset-4 hover:text-white/55 hover:underline"
-                >
-                  Discussion
-                </Link>
-              </div>
             </div>
           ) : null}
 
@@ -1863,22 +1884,32 @@ export default function TribecaCafeClient() {
 
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#22242c] bg-[#0b0c10] px-2 py-2.5 lg:hidden">
         <div className="mx-auto flex max-w-[430px] gap-1">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => {
-                setTab(t.id);
-                if (t.id === "calendar") pinnedOnce.current = false;
-              }}
-              className={`min-h-11 flex-1 rounded-full px-1 text-[11px] font-bold ${
-                tab === t.id ? "bg-[#B8FF3C] text-[#0b0c10]" : "text-white/45"
-              }`}
-            >
-              {t.label}
-              {t.id === "todo" && openTodos.length ? ` ${openTodos.length}` : ""}
-            </button>
-          ))}
+          {TABS.map((t) =>
+            t.href ? (
+              <Link
+                key={t.id}
+                href={t.href}
+                className="flex min-h-11 flex-1 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white/45"
+              >
+                {t.label}
+              </Link>
+            ) : (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  setTab(t.id);
+                  if (t.id === "calendar") pinnedOnce.current = false;
+                }}
+                className={`min-h-11 flex-1 rounded-full px-1 text-[10px] font-bold ${
+                  tab === t.id ? "bg-[#B8FF3C] text-[#0b0c10]" : "text-white/45"
+                }`}
+              >
+                {t.label}
+                {t.id === "todo" && openTodos.length ? ` ${openTodos.length}` : ""}
+              </button>
+            )
+          )}
         </div>
       </div>
     </div>
