@@ -3,7 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool, type PoolConfig } from "pg";
 
 /** Bump when Prisma models/fields change so HMR drops a stale global client. */
-const PRISMA_CLIENT_GENERATION = 13;
+const PRISMA_CLIENT_GENERATION = 15;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -104,7 +104,8 @@ function createPrismaClient() {
 function prismaClientIsStale(client: PrismaClient | undefined): boolean {
   if (!client) return false;
   if (globalForPrisma.prismaGeneration !== PRISMA_CLIENT_GENERATION) return true;
-  return typeof (client as PrismaClient & { teamNoteShare?: unknown }).teamNoteShare === "undefined";
+  const c = client as PrismaClient & { teamNoteShare?: unknown; tribecaMonth?: unknown };
+  return typeof c.teamNoteShare === "undefined" || typeof c.tribecaMonth === "undefined";
 }
 
 if (process.env.NODE_ENV !== "production" && prismaClientIsStale(globalForPrisma.prisma)) {

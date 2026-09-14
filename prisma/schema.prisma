@@ -1020,3 +1020,113 @@ model TeamChecklistCompletion {
   @@index([date])
   @@index([completedBy])
 }
+
+/// Tribeca Cafe monthly ops board ( /tribeca-cafe ).
+model TribecaMonth {
+  id        String   @id @default(cuid())
+  /// YYYY-MM
+  yearMonth String   @unique
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  setupItems TribecaSetupItem[]
+  channels   TribecaChannel[]
+  campaigns  TribecaCampaign[]
+  events     TribecaEvent[]
+  requests   TribecaRequest[]
+}
+
+model TribecaSetupItem {
+  id        String   @id @default(cuid())
+  monthId   String
+  /// onboarding | credentials
+  groupKey  String
+  itemKey   String
+  label     String
+  /// todo | doing | done | blocked
+  status    String   @default("todo")
+  notes     String?
+  sortOrder Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  month TribecaMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
+
+  @@unique([monthId, itemKey])
+  @@index([monthId, groupKey])
+}
+
+model TribecaChannel {
+  id        String   @id @default(cuid())
+  monthId   String
+  /// instagram | youtube | google_business | meta_ads
+  platform  String
+  label     String
+  /// todo | doing | live | blocked
+  status    String   @default("todo")
+  notes     String?
+  sortOrder Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  month TribecaMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
+
+  @@unique([monthId, platform])
+  @@index([monthId])
+}
+
+model TribecaCampaign {
+  id        String   @id @default(cuid())
+  monthId   String
+  /// breakfast | lunch | ambience | dinner | live_sessions | workshops
+  type      String
+  label     String
+  /// plan | shoot | edit | done
+  stage     String   @default("plan")
+  notes     String?
+  sortOrder Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  month TribecaMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
+
+  @@unique([monthId, type])
+  @@index([monthId])
+}
+
+model TribecaEvent {
+  id          String   @id @default(cuid())
+  monthId     String
+  /// workshop | live_music
+  type        String
+  title       String
+  eventDate   String?
+  notes       String?
+  /// needed | briefing | design | approved | posted
+  flyerStatus String   @default("needed")
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  month TribecaMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
+
+  @@index([monthId])
+  @@index([eventDate])
+}
+
+model TribecaRequest {
+  id        String   @id @default(cuid())
+  monthId   String
+  title     String
+  body      String?
+  /// open | answered | done
+  status    String   @default("open")
+  /// bassik | owner
+  fromRole  String   @default("bassik")
+  answer    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  month TribecaMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
+
+  @@index([monthId])
+  @@index([status])
+}
