@@ -320,10 +320,7 @@ export default function ClientProposalDoc({ proposal }: Props) {
                   </Card>
                 ))}
               </div>
-              <p className="proposal-label mt-2">Brands we worked with</p>
-              <div className="proposal-glass overflow-hidden rounded-[1.35rem] py-4 lg:rounded-[1.5rem] lg:py-6">
-                <ProposalBrandMarquee />
-              </div>
+              <ProposalBrandMarquee />
             </Section>
 
             <Section id="engagement" num="05" title="Proposed Engagement with Raasta">

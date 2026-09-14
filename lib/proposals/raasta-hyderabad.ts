@@ -70,6 +70,8 @@ export const raastaHyderabadProposal: ClientProposal = {
         "C53 World Cuisine",
         "KiiK 69 Sports Bar",
         "Club Rogue India",
+        "HyLife Brewing Co.",
+        "Sip of Sky",
       ],
     },
     {
@@ -118,9 +120,14 @@ export const raastaHyderabadProposal: ClientProposal = {
         "An entertainment-led sports bar combining live sports, pub food, draught beer and competitive social gaming.",
     },
     {
-      name: "Club Rogue India",
+      name: "SkyHy Live",
       description:
-        "Official franchise partners supporting the expansion, operations and brand consistency of a recognised high-energy club brand.",
+        "A rooftop lounge destination focused on city views, live energy and refined nightlife experiences.",
+    },
+    {
+      name: "Sound of Soul",
+      description:
+        "A music-led hospitality concept built around immersive sound, atmosphere and nightlife programming.",
     },
   ],
   engagement: {
@@ -245,8 +252,8 @@ export const raastaHyderabadProposal: ClientProposal = {
       },
     ],
     examples: [
-      { revenue: "₹1.80 Crore", retainer: "₹8,00,000/-" },
-      { revenue: "₹2.00 Crore or above", retainer: "₹10,00,000/-" },
+      { revenue: "₹1.50 Crore", retainer: "₹3,75,000/-" },
+      { revenue: "₹2.00 Crore", retainer: "₹8,75,000/-" },
     ],
     note: "The exact calculation methodology, revenue definition, reporting period and payment terms will be clearly defined in the formal agreement.",
   },
