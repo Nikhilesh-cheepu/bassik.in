@@ -4,30 +4,25 @@ import {
   createTribecaToken,
   getTribecaFromRequest,
   isTribecaAuthRequired,
-  resolveTribecaLogin,
+  resolveTribecaPassword,
 } from "@/lib/tribeca-auth";
 
 export async function GET(req: NextRequest) {
   if (!isTribecaAuthRequired()) {
-    return NextResponse.json({ authenticated: true, authRequired: false, role: "bassik" });
+    return NextResponse.json({ authenticated: true, authRequired: false });
   }
-  const session = await getTribecaFromRequest(req);
-  return NextResponse.json({
-    authenticated: Boolean(session),
-    authRequired: true,
-    role: session?.role ?? null,
-  });
+  const ok = await getTribecaFromRequest(req);
+  return NextResponse.json({ authenticated: ok, authRequired: true });
 }
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const password = typeof body.password === "string" ? body.password : "";
-  const role = resolveTribecaLogin(password);
-  if (!role) {
+  if (!resolveTribecaPassword(password)) {
     return NextResponse.json({ error: "Invalid password" }, { status: 401 });
   }
-  const token = await createTribecaToken(role);
-  const res = NextResponse.json({ success: true, role });
+  const token = await createTribecaToken();
+  const res = NextResponse.json({ success: true });
   res.cookies.set(TRIBECA_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

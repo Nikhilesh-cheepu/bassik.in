@@ -9,7 +9,6 @@ import {
   monthIndexLabel,
   type TribecaPhaseId,
 } from "@/lib/tribeca";
-import type { TribecaRole } from "@/lib/tribeca-auth";
 
 type SetupItem = {
   id: string;
@@ -108,7 +107,6 @@ function StatusChip({ status }: { status: string }) {
 export default function TribecaCafeClient() {
   const [authChecked, setAuthChecked] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
-  const [role, setRole] = useState<TribecaRole>("bassik");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [yearMonth, setYearMonth] = useState(currentYearMonth());
@@ -125,7 +123,6 @@ export default function TribecaCafeClient() {
   const [reqTitle, setReqTitle] = useState("");
   const [reqBody, setReqBody] = useState("");
 
-  const isBassik = role === "bassik";
   const monthLabel = formatYearMonthLabel(yearMonth);
   const monthTag = monthIndexLabel(yearMonth, firstMonth);
 
@@ -161,7 +158,6 @@ export default function TribecaCafeClient() {
       const res = await fetch("/api/tribeca-cafe/auth");
       const data = await res.json();
       setAuthenticated(Boolean(data.authenticated));
-      if (data.role) setRole(data.role);
       setAuthChecked(true);
       if (data.authenticated) await loadMonth(currentYearMonth());
     })();
@@ -180,7 +176,6 @@ export default function TribecaCafeClient() {
       setAuthError(data.error || "Login failed");
       return;
     }
-    setRole(data.role || "bassik");
     setAuthenticated(true);
     setPassword("");
     await loadMonth(currentYearMonth());
@@ -328,7 +323,7 @@ export default function TribecaCafeClient() {
           </h1>
           <div className="proposal-underline" />
           <p className="mt-3 text-[13px] font-semibold text-white/55">
-            Bassik team and cafe owners — same board, shared progress.
+            Shared board for Bassik and Tribeca Cafe — one password.
           </p>
           <input
             type="password"
@@ -358,7 +353,7 @@ export default function TribecaCafeClient() {
               </h1>
               <div className="proposal-underline" />
               <p className="mt-2 text-[13px] font-semibold text-white/55">
-                {monthTag} · {monthLabel} · signed in as {role}
+                {monthTag} · {monthLabel}
               </p>
             </div>
             <button
@@ -505,7 +500,6 @@ export default function TribecaCafeClient() {
                   <SetupRow
                     key={item.id}
                     item={item}
-                    canEdit={isBassik}
                     busy={busyId === item.id}
                     onStatus={patchSetup}
                   />
@@ -517,7 +511,6 @@ export default function TribecaCafeClient() {
                   <SetupRow
                     key={item.id}
                     item={item}
-                    canEdit={isBassik}
                     busy={busyId === item.id}
                     onStatus={patchSetup}
                   />
@@ -535,23 +528,21 @@ export default function TribecaCafeClient() {
                     </p>
                     <StatusChip status={ch.status} />
                   </div>
-                  {isBassik ? (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {["todo", "doing", "live", "blocked"].map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          disabled={busyId === ch.id}
-                          onClick={() => patchChannel(ch.id, s)}
-                          className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
-                            ch.status === s ? "bg-[#B8FF3C] text-[#0b0c10]" : "border border-white/15 text-white/55"
-                          }`}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {["todo", "doing", "live", "blocked"].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        disabled={busyId === ch.id}
+                        onClick={() => patchChannel(ch.id, s)}
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
+                          ch.status === s ? "bg-[#B8FF3C] text-[#0b0c10]" : "border border-white/15 text-white/55"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
                 </Card>
               ))}
             </div>
@@ -583,7 +574,7 @@ export default function TribecaCafeClient() {
                     <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-white/40">
                       Plan → Shoot → Edit → Done
                     </p>
-                    {isBassik && c.stage !== "done" ? (
+                    {c.stage !== "done" ? (
                       <button
                         type="button"
                         disabled={busyId === c.id}
@@ -601,8 +592,7 @@ export default function TribecaCafeClient() {
 
           {tab === "events" && month ? (
             <>
-              {isBassik ? (
-                <Card accent>
+              <Card accent>
                   <p className="proposal-label">Add workshop / live music</p>
                   <form onSubmit={addEvent} className="mt-3 space-y-2">
                     <input
@@ -636,7 +626,6 @@ export default function TribecaCafeClient() {
                     </button>
                   </form>
                 </Card>
-              ) : null}
               {month.events.length === 0 ? (
                 <Card>
                   <p className="text-[13px] font-semibold text-white/55">No events this month yet.</p>
@@ -669,7 +658,7 @@ export default function TribecaCafeClient() {
                       <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-white/40">
                         Needed → Briefing → Design → Approved → Posted
                       </p>
-                      {isBassik && ev.flyerStatus !== "posted" ? (
+                      {ev.flyerStatus !== "posted" ? (
                         <button
                           type="button"
                           disabled={busyId === ev.id}
@@ -718,9 +707,7 @@ export default function TribecaCafeClient() {
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-[14px] font-bold text-white">{r.title}</p>
-                      <p className="mt-0.5 text-[11px] font-semibold text-white/45">
-                        From {r.fromRole}
-                      </p>
+                      <p className="mt-0.5 text-[11px] font-semibold text-white/45">Request</p>
                     </div>
                     <StatusChip status={r.status} />
                   </div>
@@ -774,12 +761,10 @@ export default function TribecaCafeClient() {
 
 function SetupRow({
   item,
-  canEdit,
   busy,
   onStatus,
 }: {
   item: SetupItem;
-  canEdit: boolean;
   busy: boolean;
   onStatus: (id: string, status: string) => void;
 }) {
@@ -789,23 +774,21 @@ function SetupRow({
         <p className="text-[14px] font-bold text-white">{item.label}</p>
         <StatusChip status={item.status} />
       </div>
-      {canEdit ? (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {["todo", "doing", "done", "blocked"].map((s) => (
-            <button
-              key={s}
-              type="button"
-              disabled={busy}
-              onClick={() => onStatus(item.id, s)}
-              className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
-                item.status === s ? "bg-[#B8FF3C] text-[#0b0c10]" : "border border-white/15 text-white/55"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {["todo", "doing", "done", "blocked"].map((s) => (
+          <button
+            key={s}
+            type="button"
+            disabled={busy}
+            onClick={() => onStatus(item.id, s)}
+            className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
+              item.status === s ? "bg-[#B8FF3C] text-[#0b0c10]" : "border border-white/15 text-white/55"
+            }`}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
     </Card>
   );
 }

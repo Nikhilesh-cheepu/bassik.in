@@ -4,8 +4,9 @@ import { getTribecaFromRequest } from "@/lib/tribeca-auth";
 import { prismaSchemaErrorResponse } from "@/lib/prisma-schema-error";
 
 export async function POST(req: NextRequest) {
-  const session = await getTribecaFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await getTribecaFromRequest(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const monthId = typeof body.monthId === "string" ? body.monthId : "";
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
         monthId,
         title,
         body: bodyText,
-        fromRole: session.role,
+        fromRole: "team",
       },
     });
     return NextResponse.json({ request: row });
@@ -34,8 +35,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const session = await getTribecaFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await getTribecaFromRequest(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const id = typeof body.id === "string" ? body.id : "";

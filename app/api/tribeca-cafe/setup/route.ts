@@ -6,10 +6,8 @@ import { prismaSchemaErrorResponse } from "@/lib/prisma-schema-error";
 const STATUSES = new Set(["todo", "doing", "done", "blocked"]);
 
 export async function PATCH(req: NextRequest) {
-  const session = await getTribecaFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role !== "bassik") {
-    return NextResponse.json({ error: "Only Bassik can update setup" }, { status: 403 });
+  if (!(await getTribecaFromRequest(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await req.json().catch(() => ({}));

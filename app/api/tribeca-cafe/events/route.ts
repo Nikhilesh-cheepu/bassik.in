@@ -5,10 +5,8 @@ import { FLYER_STATUSES, nextFlyerStatus } from "@/lib/tribeca";
 import { prismaSchemaErrorResponse } from "@/lib/prisma-schema-error";
 
 export async function POST(req: NextRequest) {
-  const session = await getTribecaFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role !== "bassik") {
-    return NextResponse.json({ error: "Only Bassik can add events" }, { status: 403 });
+  if (!(await getTribecaFromRequest(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await req.json().catch(() => ({}));
@@ -35,10 +33,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const session = await getTribecaFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role !== "bassik") {
-    return NextResponse.json({ error: "Only Bassik can update events" }, { status: 403 });
+  if (!(await getTribecaFromRequest(req))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await req.json().catch(() => ({}));
