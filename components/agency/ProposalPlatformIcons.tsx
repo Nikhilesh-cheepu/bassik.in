@@ -85,6 +85,38 @@ export function EazyDinerIcon({ className = "h-6 w-6" }: IconProps) {
   );
 }
 
+export function YouTubeIcon({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden>
+      <rect x="2" y="5" width="20" height="14" rx="4" fill="#FF0000" />
+      <path fill="white" d="M10 9.2v5.6l5-2.8-5-2.8Z" />
+    </svg>
+  );
+}
+
+export function LinkedInIcon({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden>
+      <rect x="2" y="2" width="20" height="20" rx="4" fill="#0A66C2" />
+      <path
+        fill="white"
+        d="M7.2 9.4h2.1v7.2H7.2V9.4Zm1-3.2a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4ZM11 9.4h2v1h.1c.3-.5 1-1.1 2.1-1.1 2.2 0 2.6 1.5 2.6 3.4v3.9h-2.1v-3.5c0-.8 0-1.9-1.2-1.9s-1.3.9-1.3 1.8v3.6H11V9.4Z"
+      />
+    </svg>
+  );
+}
+
+export function WhatsAppIcon({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="#25D366"
+        d="M12 2.1A9.9 9.9 0 0 0 3.4 17l-1.1 4 4.1-1.1A9.9 9.9 0 1 0 12 2.1Zm5.5 14.1c-.2.7-1.3 1.2-2.1 1.4-.6.1-1.3.2-3.8-.8-3.2-1.3-5.2-4.6-5.4-4.8-.2-.2-1.5-2-1.5-3.8s1-2.7 1.3-3.1c.3-.4.7-.5 1-.5h.7c.2 0 .5 0 .7.6.3.7.9 2.3 1 2.4.1.2.1.4 0 .6-.1.2-.2.4-.3.5-.2.2-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.2 1.4 2.5 1.5.3.1.5.1.7-.1.2-.2.7-.8.9-1.1.2-.3.4-.2.7-.1.3.1 1.9.9 2.2 1.1.3.2.5.3.6.4.1.2.1.9-.1 1.6Z"
+      />
+    </svg>
+  );
+}
+
 const PLATFORM_MAP: Record<string, ComponentType<IconProps>> = {
   Instagram: InstagramIcon,
   Meta: MetaIcon,
@@ -93,6 +125,9 @@ const PLATFORM_MAP: Record<string, ComponentType<IconProps>> = {
   Swiggy: SwiggyIcon,
   Zomato: ZomatoIcon,
   EazyDiner: EazyDinerIcon,
+  YouTube: YouTubeIcon,
+  LinkedIn: LinkedInIcon,
+  WhatsApp: WhatsAppIcon,
 };
 
 const PLATFORM_BORDER: Record<string, string> = {
@@ -103,6 +138,9 @@ const PLATFORM_BORDER: Record<string, string> = {
   Swiggy: "#FC8019",
   Zomato: "#E23744",
   EazyDiner: "#F5C518",
+  YouTube: "#FF0000",
+  LinkedIn: "#0A66C2",
+  WhatsApp: "#25D366",
 };
 
 export function PlatformIcon({ name, className }: { name: string; className?: string }) {
@@ -151,11 +189,11 @@ export function PlatformTileCard({ tile }: { tile: PlatformTile }) {
 
 export function DigitalPlatformGrid({ platforms }: { platforms: string[] }) {
   const withMeta = platforms.includes("Instagram")
-    ? ["Instagram", "Meta", ...platforms.filter((p) => p !== "Instagram")]
+    ? ["Instagram", "Meta", ...platforms.filter((p) => p !== "Instagram" && p !== "Meta")]
     : platforms;
 
   return (
-    <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-7 lg:gap-4">
+    <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6 lg:gap-4">
       {withMeta.map((platform) => (
         <li key={platform} className="flex flex-col items-center gap-2 text-center">
           <div

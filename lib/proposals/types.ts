@@ -40,8 +40,35 @@ export type ProposalCommercialRow = {
   value: string;
 };
 
+export type ProposalCampaign = {
+  title: string;
+  whatWeRun: string;
+  content: string;
+  where: string[];
+  result: string;
+};
+
+export type ProposalAboutClient = {
+  title: string;
+  paragraphs: string[];
+  highlights: string[];
+};
+
+export type ProposalCollaborationPillar = {
+  title: string;
+  items: string[];
+};
+
+export type ProposalInvestmentFraming = {
+  headline: string;
+  paragraphs: string[];
+  points: string[];
+};
+
 export type ClientProposal = {
   slug: string;
+  /** Defaults to venue-style sections when omitted. */
+  variant?: "venue" | "institute";
   clientName: string;
   clientLocation: string;
   documentTitle: string;
@@ -57,6 +84,7 @@ export type ClientProposal = {
     location: string;
   };
   introduction: string[];
+  aboutClient?: ProposalAboutClient;
   aboutBassik: {
     paragraphs: string[];
     expertise: string[];
@@ -66,33 +94,46 @@ export type ClientProposal = {
   leadershipClosing: string;
   portfolioIntro: string;
   portfolio: ProposalPortfolioItem[];
+  /** Override default engagement section title. */
+  engagementTitle?: string;
   engagement: {
     intro: string;
     categories: ProposalScopeCategory[];
     digitalPlatforms: string[];
     note: string;
   };
+  campaigns?: {
+    intro: string;
+    closing: string;
+    items: ProposalCampaign[];
+  };
+  collaboration?: {
+    intro: string;
+    pillars: ProposalCollaborationPillar[];
+    closing: string;
+  };
+  investmentFraming?: ProposalInvestmentFraming;
   digitalMarketingFee: {
     amount: string;
     paymentTerms: string;
     includes: string[];
-    complimentaryShootIntro: string;
-    complimentaryShootItems: string[];
-    complimentaryShootNote: string;
+    complimentaryShootIntro?: string;
+    complimentaryShootItems?: string[];
+    complimentaryShootNote?: string;
   };
-  advertisingBudget: {
+  advertisingBudget?: {
     total: string;
     note: string;
     allocation: ProposalBudgetLine[];
   };
-  influencerBudget: {
+  influencerBudget?: {
     amount: string;
     periodLabel: string;
     months: string[];
     separateFrom: string[];
     note: string;
   };
-  performanceRetainer: {
+  performanceRetainer?: {
     intro: string;
     tiers: ProposalPerformanceTier[];
     examples: ProposalExample[];
