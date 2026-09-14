@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <rect width="120" height="120" rx="24" fill="#0C4A6E"/>
+  <path d="M30 78c12-28 48-28 60 0" stroke="#7DD3FC" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <circle cx="60" cy="42" r="14" fill="#38BDF8"/>
+  <text x="60" y="98" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="700" fill="#E0F2FE">SIP OF SKY</text>
+</svg>
