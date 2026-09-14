@@ -67,6 +67,11 @@ export const TRIBECA_PLAN = {
       what: "Near me, area reach, maps",
       channels: "Google",
     },
+    {
+      name: "Influencer marketing",
+      what: "Creators, collabs, reach",
+      channels: "Meta (Instagram, Facebook) · YouTube",
+    },
   ],
 
   alwaysTitle: "Always on",
