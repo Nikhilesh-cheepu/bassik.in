@@ -325,7 +325,7 @@ export const ihmHyderabadProposal: ClientProposal = {
     { label: "Payment", value: "100% advance upon agreement signing" },
     { label: "Includes", value: "Plan, create, campaign, convert, review + industry bridge" },
     { label: "Campaign plan", value: "7 workstreams structured for IHM Hyderabad" },
-    { label: "Ad / media budget", value: "Discussed monthly — sized to need" },
+    { label: "Ad / media budget", value: "Separate from service fee" },
     { label: "Framing", value: "Investment in a growth system — not ‘posts’" },
     { label: "GST", value: "Applicable as per law" },
     { label: "TDS", value: "Applicable statutory TDS to be deducted" },
