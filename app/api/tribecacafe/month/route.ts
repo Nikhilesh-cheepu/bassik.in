@@ -11,10 +11,23 @@ export async function GET(req: NextRequest) {
 
   const yearMonth = req.nextUrl.searchParams.get("month")?.trim() || currentYearMonth();
   try {
-    const { month, progress } = await ensureTribecaMonth(yearMonth);
+    const { month, shootProgress, budget } = await ensureTribecaMonth(yearMonth);
     const months = await listTribecaYearMonths();
-    const firstMonth = months[0] ?? yearMonth;
-    return NextResponse.json({ month, progress, months, firstMonth });
+    return NextResponse.json({
+      month: {
+        id: month.id,
+        yearMonth: month.yearMonth,
+        setupItems: month.setupItems,
+        calendarItems: month.calendarItems,
+        budgetEntries: month.budgetEntries.map((e) => ({
+          ...e,
+          amountInr: Number(e.amountInr),
+        })),
+      },
+      shootProgress,
+      budget,
+      months: months.length ? months : [yearMonth],
+    });
   } catch (error) {
     const schema = prismaSchemaErrorResponse(error);
     if (schema) return schema;

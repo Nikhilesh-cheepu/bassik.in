@@ -1,64 +1,81 @@
 import { prisma } from "@/lib/db";
 import {
-  CAMPAIGN_SEED,
-  CHANNEL_SEED,
-  SETUP_SEED,
-  computePhaseProgress,
+  CREDENTIAL_SEED,
+  computeBudgetTotals,
+  computeShootCategoryProgress,
   currentYearMonth,
 } from "@/lib/tribeca";
+
+function mapBudget(entries: { type: string; amountInr: unknown }[]) {
+  return computeBudgetTotals(
+    entries.map((e) => ({
+      type: e.type,
+      amountInr: Number(e.amountInr),
+    }))
+  );
+}
 
 export async function ensureTribecaMonth(yearMonth = currentYearMonth()) {
   const existing = await prisma.tribecaMonth.findUnique({
     where: { yearMonth },
     include: {
       setupItems: { orderBy: { sortOrder: "asc" } },
-      channels: { orderBy: { sortOrder: "asc" } },
-      campaigns: { orderBy: { sortOrder: "asc" } },
-      events: { orderBy: [{ eventDate: "asc" }, { createdAt: "asc" }] },
-      requests: { orderBy: { createdAt: "desc" } },
+      calendarItems: { orderBy: [{ date: "asc" }, { createdAt: "asc" }] },
+      budgetEntries: { orderBy: { createdAt: "desc" } },
     },
   });
+
   if (existing) {
-    const progress = computePhaseProgress(existing);
-    return { month: existing, progress };
+    // Backfill credentials if an old month only had onboarding items
+    const credKeys = new Set(
+      existing.setupItems.filter((i) => i.groupKey === "credentials").map((i) => i.itemKey)
+    );
+    const missing = CREDENTIAL_SEED.filter((s) => !credKeys.has(s.itemKey));
+    if (missing.length) {
+      await prisma.tribecaSetupItem.createMany({
+        data: missing.map((item) => ({
+          monthId: existing.id,
+          groupKey: "credentials",
+          itemKey: item.itemKey,
+          label: item.label,
+          sortOrder: item.sortOrder,
+        })),
+      });
+      return ensureTribecaMonth(yearMonth);
+    }
+
+    const credentials = existing.setupItems.filter((i) => i.groupKey === "credentials");
+    return {
+      month: { ...existing, setupItems: credentials },
+      shootProgress: computeShootCategoryProgress(existing.calendarItems),
+      budget: mapBudget(existing.budgetEntries),
+    };
   }
 
   const month = await prisma.tribecaMonth.create({
     data: {
       yearMonth,
       setupItems: {
-        create: SETUP_SEED.map((item) => ({
-          groupKey: item.groupKey,
+        create: CREDENTIAL_SEED.map((item) => ({
+          groupKey: "credentials",
           itemKey: item.itemKey,
           label: item.label,
           sortOrder: item.sortOrder,
         })),
       },
-      channels: {
-        create: CHANNEL_SEED.map((c) => ({
-          platform: c.platform,
-          label: c.label,
-          sortOrder: c.sortOrder,
-        })),
-      },
-      campaigns: {
-        create: CAMPAIGN_SEED.map((c) => ({
-          type: c.type,
-          label: c.label,
-          sortOrder: c.sortOrder,
-        })),
-      },
     },
     include: {
       setupItems: { orderBy: { sortOrder: "asc" } },
-      channels: { orderBy: { sortOrder: "asc" } },
-      campaigns: { orderBy: { sortOrder: "asc" } },
-      events: { orderBy: [{ eventDate: "asc" }, { createdAt: "asc" }] },
-      requests: { orderBy: { createdAt: "desc" } },
+      calendarItems: { orderBy: [{ date: "asc" }, { createdAt: "asc" }] },
+      budgetEntries: { orderBy: { createdAt: "desc" } },
     },
   });
 
-  return { month, progress: computePhaseProgress(month) };
+  return {
+    month,
+    shootProgress: computeShootCategoryProgress(month.calendarItems),
+    budget: mapBudget(month.budgetEntries),
+  };
 }
 
 export async function listTribecaYearMonths() {

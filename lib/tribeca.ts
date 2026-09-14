@@ -1,64 +1,59 @@
-export const TRIBECA_PHASES = [
-  { id: "setup", label: "Setup" },
-  { id: "credentials", label: "Credentials" },
-  { id: "channels", label: "Channels" },
-  { id: "content", label: "Content" },
-  { id: "events", label: "Events" },
+export const SHOOT_CATEGORIES = [
+  { id: "breakfast", label: "Breakfast" },
+  { id: "lunch", label: "Lunch" },
+  { id: "ambience", label: "Ambience" },
+  { id: "dinner", label: "Dinner" },
+  { id: "live_sessions", label: "Live sessions" },
+  { id: "workshops", label: "Workshops" },
 ] as const;
 
-export type TribecaPhaseId = (typeof TRIBECA_PHASES)[number]["id"];
+export type ShootCategoryId = (typeof SHOOT_CATEGORIES)[number]["id"];
 
-export const SETUP_SEED = [
-  { itemKey: "kickoff", label: "Kickoff / onboarding call", groupKey: "onboarding", sortOrder: 1 },
-  { itemKey: "poc", label: "Point of contact confirmed", groupKey: "onboarding", sortOrder: 2 },
-  { itemKey: "brand", label: "Brand assets / guidelines shared", groupKey: "onboarding", sortOrder: 3 },
-  { itemKey: "menu", label: "Menu / offers sheet shared", groupKey: "onboarding", sortOrder: 4 },
-  {
-    itemKey: "ig_access",
-    label: "Instagram login / access",
-    groupKey: "credentials",
-    sortOrder: 10,
-  },
-  {
-    itemKey: "meta_access",
-    label: "Meta Business / Ads access",
-    groupKey: "credentials",
-    sortOrder: 11,
-  },
-  {
-    itemKey: "gmb_access",
-    label: "Google Business Profile access",
-    groupKey: "credentials",
-    sortOrder: 12,
-  },
-  {
-    itemKey: "yt_access",
-    label: "YouTube channel access",
-    groupKey: "credentials",
-    sortOrder: 13,
-  },
+export const CREDENTIAL_SEED = [
+  { itemKey: "ig_access", label: "Instagram login / access", sortOrder: 1 },
+  { itemKey: "meta_access", label: "Meta Business / Ads access", sortOrder: 2 },
+  { itemKey: "gmb_access", label: "Google Business Profile access", sortOrder: 3 },
+  { itemKey: "yt_access", label: "YouTube channel access", sortOrder: 4 },
+  { itemKey: "drive_assets", label: "Drive / brand assets shared", sortOrder: 5 },
 ] as const;
 
-export const CHANNEL_SEED = [
-  { platform: "instagram", label: "Instagram", sortOrder: 1 },
-  { platform: "youtube", label: "YouTube", sortOrder: 2 },
-  { platform: "google_business", label: "Google Business", sortOrder: 3 },
-  { platform: "meta_ads", label: "Meta Ads", sortOrder: 4 },
-] as const;
+/** event: creative pending → done */
+export const EVENT_STAGES = ["creative_pending", "done"] as const;
+/** shoot: shoot → production (editing) → done */
+export const SHOOT_STAGES = ["shoot", "production", "done"] as const;
+export const OTHER_STAGES = ["pending", "done"] as const;
 
-export const CAMPAIGN_SEED = [
-  { type: "breakfast", label: "Breakfast", sortOrder: 1 },
-  { type: "lunch", label: "Lunch", sortOrder: 2 },
-  { type: "ambience", label: "Ambience", sortOrder: 3 },
-  { type: "dinner", label: "Dinner", sortOrder: 4 },
-  { type: "live_sessions", label: "Live sessions", sortOrder: 5 },
-  { type: "workshops", label: "Workshops", sortOrder: 6 },
-] as const;
+export type CalendarKind = "shoot" | "event" | "other";
 
-export const CAMPAIGN_STAGES = ["plan", "shoot", "edit", "done"] as const;
-export type TribecaCampaignStage = (typeof CAMPAIGN_STAGES)[number];
+export function defaultStageForKind(kind: CalendarKind): string {
+  if (kind === "shoot") return "shoot";
+  if (kind === "event") return "creative_pending";
+  return "pending";
+}
 
-export const FLYER_STATUSES = ["needed", "briefing", "design", "approved", "posted"] as const;
+export function stagesForKind(kind: CalendarKind): readonly string[] {
+  if (kind === "shoot") return SHOOT_STAGES;
+  if (kind === "event") return EVENT_STAGES;
+  return OTHER_STAGES;
+}
+
+export function nextStageForKind(kind: CalendarKind, stage: string): string {
+  const stages = stagesForKind(kind);
+  const idx = stages.indexOf(stage);
+  if (idx < 0 || idx >= stages.length - 1) return "done";
+  return stages[idx + 1];
+}
+
+export function stageLabel(stage: string): string {
+  const map: Record<string, string> = {
+    creative_pending: "Creative pending",
+    shoot: "Shoot",
+    production: "Production",
+    pending: "Pending",
+    done: "Done",
+  };
+  return map[stage] ?? stage;
+}
 
 export function currentYearMonth(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -70,89 +65,42 @@ export function formatYearMonthLabel(yearMonth: string): string {
   return new Date(y, m - 1, 1).toLocaleString("en-IN", { month: "long", year: "numeric" });
 }
 
-export function monthIndexLabel(yearMonth: string, firstYearMonth?: string): string {
-  if (!firstYearMonth) return "Month";
-  const [y1, m1] = firstYearMonth.split("-").map(Number);
-  const [y2, m2] = yearMonth.split("-").map(Number);
-  const idx = (y2 - y1) * 12 + (m2 - m1) + 1;
-  return `Month ${Math.max(1, idx)}`;
+export function daysInMonth(yearMonth: string): number {
+  const [y, m] = yearMonth.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
 }
 
-type ProgressInput = {
-  setupItems: { groupKey: string; status: string }[];
-  channels: { status: string }[];
-  campaigns: { stage: string }[];
-  events: { flyerStatus: string }[];
-};
+export function monthGridStartWeekday(yearMonth: string): number {
+  const [y, m] = yearMonth.split("-").map(Number);
+  return new Date(y, m - 1, 1).getDay(); // 0 Sun
+}
 
-export function computePhaseProgress(data: ProgressInput): {
-  phases: { id: TribecaPhaseId; label: string; done: number; total: number; complete: boolean }[];
-  percent: number;
-  activePhaseId: TribecaPhaseId;
-} {
-  const onboarding = data.setupItems.filter((i) => i.groupKey === "onboarding");
-  const credentials = data.setupItems.filter((i) => i.groupKey === "credentials");
+export function dateKey(yearMonth: string, day: number): string {
+  return `${yearMonth}-${String(day).padStart(2, "0")}`;
+}
 
-  const phases = TRIBECA_PHASES.map((phase) => {
-    if (phase.id === "setup") {
-      const done = onboarding.filter((i) => i.status === "done").length;
-      const total = Math.max(onboarding.length, 1);
-      return { ...phase, done, total, complete: done >= total };
-    }
-    if (phase.id === "credentials") {
-      const done = credentials.filter((i) => i.status === "done").length;
-      const total = Math.max(credentials.length, 1);
-      return { ...phase, done, total, complete: done >= total };
-    }
-    if (phase.id === "channels") {
-      const done = data.channels.filter((c) => c.status === "live" || c.status === "doing").length;
-      const total = Math.max(data.channels.length, 1);
-      const complete = data.channels.every((c) => c.status === "live");
-      return { ...phase, done, total, complete };
-    }
-    if (phase.id === "content") {
-      const done = data.campaigns.filter((c) => c.stage === "done").length;
-      const total = Math.max(data.campaigns.length, 1);
-      return { ...phase, done, total, complete: done >= total };
-    }
-    const total = Math.max(data.events.length, 1);
-    const done =
-      data.events.length === 0
-        ? 0
-        : data.events.filter((e) => e.flyerStatus === "posted" || e.flyerStatus === "approved")
-            .length;
-    const complete =
-      data.events.length === 0
-        ? false
-        : data.events.every((e) => e.flyerStatus === "posted" || e.flyerStatus === "approved");
-    return { ...phase, done, total: data.events.length === 0 ? 0 : total, complete };
+export function computeShootCategoryProgress(
+  items: { kind: string; category: string | null; stage: string }[]
+): { id: string; label: string; total: number; done: number }[] {
+  return SHOOT_CATEGORIES.map((cat) => {
+    const inCat = items.filter((i) => i.kind === "shoot" && i.category === cat.id);
+    return {
+      id: cat.id,
+      label: cat.label,
+      total: inCat.length,
+      done: inCat.filter((i) => i.stage === "done").length,
+    };
   });
-
-  const weighted = phases.reduce(
-    (acc, p) => {
-      const t = p.total || (p.id === "events" ? 0 : 1);
-      if (t === 0) return acc;
-      return { done: acc.done + p.done, total: acc.total + t };
-    },
-    { done: 0, total: 0 }
-  );
-  const percent =
-    weighted.total === 0 ? 0 : Math.round((weighted.done / weighted.total) * 100);
-
-  const active =
-    phases.find((p) => !p.complete && !(p.id === "events" && p.total === 0))?.id ?? "events";
-
-  return { phases, percent, activePhaseId: active };
 }
 
-export function nextCampaignStage(stage: string): TribecaCampaignStage {
-  const idx = CAMPAIGN_STAGES.indexOf(stage as TribecaCampaignStage);
-  if (idx < 0 || idx >= CAMPAIGN_STAGES.length - 1) return "done";
-  return CAMPAIGN_STAGES[idx + 1];
-}
-
-export function nextFlyerStatus(status: string): string {
-  const idx = FLYER_STATUSES.indexOf(status as (typeof FLYER_STATUSES)[number]);
-  if (idx < 0 || idx >= FLYER_STATUSES.length - 1) return "posted";
-  return FLYER_STATUSES[idx + 1];
+export function computeBudgetTotals(entries: { type: string; amountInr: number | string }[]) {
+  let added = 0;
+  let used = 0;
+  for (const e of entries) {
+    const n = typeof e.amountInr === "string" ? Number(e.amountInr) : Number(e.amountInr);
+    if (!Number.isFinite(n)) continue;
+    if (e.type === "add") added += n;
+    else if (e.type === "use") used += n;
+  }
+  return { added, used, remaining: added - used };
 }

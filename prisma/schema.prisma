@@ -1021,7 +1021,7 @@ model TeamChecklistCompletion {
   @@index([completedBy])
 }
 
-/// Tribeca Cafe monthly ops board ( /tribeca-cafe ).
+/// Tribeca Cafe monthly ops board ( /tribecacafe ).
 model TribecaMonth {
   id        String   @id @default(cuid())
   /// YYYY-MM
@@ -1030,17 +1030,19 @@ model TribecaMonth {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  setupItems TribecaSetupItem[]
-  channels   TribecaChannel[]
-  campaigns  TribecaCampaign[]
-  events     TribecaEvent[]
-  requests   TribecaRequest[]
+  setupItems    TribecaSetupItem[]
+  channels      TribecaChannel[]
+  campaigns     TribecaCampaign[]
+  events        TribecaEvent[]
+  requests      TribecaRequest[]
+  calendarItems TribecaCalendarItem[]
+  budgetEntries TribecaBudgetEntry[]
 }
 
 model TribecaSetupItem {
   id        String   @id @default(cuid())
   monthId   String
-  /// onboarding | credentials
+  /// credentials
   groupKey  String
   itemKey   String
   label     String
@@ -1059,10 +1061,8 @@ model TribecaSetupItem {
 model TribecaChannel {
   id        String   @id @default(cuid())
   monthId   String
-  /// instagram | youtube | google_business | meta_ads
   platform  String
   label     String
-  /// todo | doing | live | blocked
   status    String   @default("todo")
   notes     String?
   sortOrder Int      @default(0)
@@ -1077,10 +1077,8 @@ model TribecaChannel {
 model TribecaCampaign {
   id        String   @id @default(cuid())
   monthId   String
-  /// breakfast | lunch | ambience | dinner | live_sessions | workshops
   type      String
   label     String
-  /// plan | shoot | edit | done
   stage     String   @default("plan")
   notes     String?
   sortOrder Int      @default(0)
@@ -1095,12 +1093,10 @@ model TribecaCampaign {
 model TribecaEvent {
   id          String   @id @default(cuid())
   monthId     String
-  /// workshop | live_music
   type        String
   title       String
   eventDate   String?
   notes       String?
-  /// needed | briefing | design | approved | posted
   flyerStatus String   @default("needed")
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
@@ -1117,9 +1113,7 @@ model TribecaRequest {
   monthId   String
   title     String
   body      String?
-  /// open | answered | done
   status    String   @default("open")
-  /// bassik | owner
   fromRole  String   @default("bassik")
   answer    String?
   createdAt DateTime @default(now())
@@ -1129,4 +1123,48 @@ model TribecaRequest {
 
   @@index([monthId])
   @@index([status])
+}
+
+/// Calendar entry: shoot, event, or other — drives todo pipeline.
+model TribecaCalendarItem {
+  id        String   @id @default(cuid())
+  monthId   String
+  /// YYYY-MM-DD
+  date      String
+  /// shoot | event | other
+  kind      String
+  title     String
+  /// breakfast | lunch | ambience | dinner | live_sessions | workshops (shoots)
+  category  String?
+  /// event: creative_pending | done
+  /// shoot: shoot | production | done
+  /// other: pending | done
+  stage     String
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  month TribecaMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
+
+  @@index([monthId])
+  @@index([date])
+  @@index([kind])
+}
+
+/// Ad budget ledger — money added vs used.
+model TribecaBudgetEntry {
+  id        String   @id @default(cuid())
+  monthId   String
+  /// add | use
+  type      String
+  amountInr Decimal  @db.Decimal(12, 2)
+  note      String?
+  entryDate String?
+  createdAt DateTime @default(now())
+
+  month TribecaMonth @relation(fields: [monthId], references: [id], onDelete: Cascade)
+
+  @@index([monthId])
+  @@index([type])
+  @@index([createdAt])
 }
