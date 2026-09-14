@@ -22,6 +22,18 @@ export function InstagramIcon({ className = "h-6 w-6" }: IconProps) {
   );
 }
 
+export function FacebookIcon({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#1877F2" />
+      <path
+        fill="white"
+        d="M13.4 19.2v-6.1h2.1l.3-2.4h-2.4V9.2c0-.7.2-1.2 1.2-1.2h1.3V5.9c-.2 0-1-.1-1.9-.1-1.9 0-3.2 1.2-3.2 3.3v1.8H8.6v2.4h2.2v6.1h2.6Z"
+      />
+    </svg>
+  );
+}
+
 export function MetaIcon({ className = "h-6 w-6" }: IconProps) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden>
@@ -29,6 +41,26 @@ export function MetaIcon({ className = "h-6 w-6" }: IconProps) {
         fill="#0081FB"
         d="M13.2 5.5c-1.4 0-2.5 1.1-3.4 2.9-.9-1.8-2-2.9-3.4-2.9C4.2 5.5 2 9.1 2 13.1c0 2.2 1.1 3.7 2.7 3.7 1.2 0 2.1-.7 3.6-3.2.1-.2.3-.4.5-.4s.4.2.5.4c1.5 2.5 2.4 3.2 3.6 3.2 1.6 0 2.7-1.5 2.7-3.7 0-4-2.2-7.6-5.6-7.6Z"
       />
+    </svg>
+  );
+}
+
+export function GoogleMapsIcon({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden>
+      <path fill="#EA4335" d="M12 2c-3.6 0-6.5 2.9-6.5 6.5 0 4.9 6.5 12.3 6.5 12.3S18.5 13.4 18.5 8.5C18.5 4.9 15.6 2 12 2z" />
+      <circle cx="12" cy="8.5" r="2.6" fill="white" />
+      <circle cx="12" cy="8.5" r="1.5" fill="#4285F4" />
+    </svg>
+  );
+}
+
+export function GoogleAdsIcon({ className = "h-6 w-6" }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden>
+      <path fill="#FBBC04" d="M3.6 18.2 10.2 4.8a2.2 2.2 0 0 1 3.9 0l2.1 4.2-3.4 6.9a3.2 3.2 0 0 0-5.6 0l-3.6 2.3Z" />
+      <path fill="#4285F4" d="M14.2 9 17.8 16a3.2 3.2 0 1 0 5.5-3.2L16.7 4.8A2.2 2.2 0 0 0 14.2 9Z" />
+      <circle cx="6.2" cy="18.2" r="3.2" fill="#34A853" />
     </svg>
   );
 }
@@ -119,8 +151,11 @@ export function WhatsAppIcon({ className = "h-6 w-6" }: IconProps) {
 
 const PLATFORM_MAP: Record<string, ComponentType<IconProps>> = {
   Instagram: InstagramIcon,
+  Facebook: FacebookIcon,
   Meta: MetaIcon,
   Google: GoogleIcon,
+  "Google Ads": GoogleAdsIcon,
+  "Google Maps": GoogleMapsIcon,
   Website: WebsiteIcon,
   Swiggy: SwiggyIcon,
   Zomato: ZomatoIcon,
@@ -132,8 +167,11 @@ const PLATFORM_MAP: Record<string, ComponentType<IconProps>> = {
 
 const PLATFORM_BORDER: Record<string, string> = {
   Instagram: "#E1306C",
+  Facebook: "#1877F2",
   Meta: "#0081FB",
   Google: "#4285F4",
+  "Google Ads": "#FBBC04",
+  "Google Maps": "#EA4335",
   Website: "#22D3EE",
   Swiggy: "#FC8019",
   Zomato: "#E23744",

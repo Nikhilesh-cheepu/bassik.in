@@ -202,6 +202,25 @@ body {
     box-shadow: 0 0 18px color-mix(in srgb, currentColor 25%, transparent);
   }
 
+  @keyframes tribeca-glow-push {
+    0%,
+    100% {
+      box-shadow: 0 0 10px color-mix(in srgb, currentColor 18%, transparent);
+      transform: translateY(0);
+    }
+    50% {
+      box-shadow: 0 0 22px color-mix(in srgb, currentColor 42%, transparent);
+      transform: translateY(-1px);
+    }
+  }
+
+  .tribeca-platform-glow {
+    background: #12141a;
+    border: 1.5px solid;
+    border-radius: 1rem;
+    animation: tribeca-glow-push 4.2s ease-in-out infinite;
+  }
+
   .proposal-cta-lime {
     background: var(--p-lime);
     color: #0b0c10;

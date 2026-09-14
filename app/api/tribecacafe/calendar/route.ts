@@ -3,14 +3,31 @@ import { prisma } from "@/lib/db";
 import { getTribecaFromRequest } from "@/lib/tribeca-auth";
 import {
   SHOOT_CATEGORIES,
+  EVENT_CATEGORIES,
   defaultStageForKind,
   nextStageForKind,
+  stagesForKind,
+  isStageBackward,
+  TRIBECA_STAGE_BACK_PASSWORD,
+  yearMonthFromDateKey,
   type CalendarKind,
 } from "@/lib/tribeca";
+import { ensureTribecaMonthId } from "@/lib/tribeca-db";
 import { prismaSchemaErrorResponse } from "@/lib/prisma-schema-error";
 
 const KINDS = new Set(["shoot", "event", "other"]);
-const CATEGORY_IDS = new Set(SHOOT_CATEGORIES.map((c) => c.id));
+const SHOOT_IDS = new Set<string>(SHOOT_CATEGORIES.map((c) => c.id));
+const EVENT_IDS = new Set<string>(EVENT_CATEGORIES.map((c) => c.id));
+
+function resolveCategory(kind: string, rawCat: unknown): string | null | undefined {
+  if (rawCat === undefined) return undefined;
+  if (rawCat === null || rawCat === "") return null;
+  if (typeof rawCat !== "string") return undefined;
+  if (kind === "shoot" && SHOOT_IDS.has(rawCat)) return rawCat;
+  if (kind === "event" && EVENT_IDS.has(rawCat)) return rawCat;
+  if (kind === "other") return null;
+  return undefined;
+}
 
 export async function POST(req: NextRequest) {
   if (!(await getTribecaFromRequest(req))) {
@@ -18,34 +35,44 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const monthId = typeof body.monthId === "string" ? body.monthId : "";
   const date = typeof body.date === "string" ? body.date : "";
   const kind = (typeof body.kind === "string" ? body.kind : "") as CalendarKind;
   const title = typeof body.title === "string" ? body.title.trim() : "";
-  const category =
-    typeof body.category === "string" && CATEGORY_IDS.has(body.category) ? body.category : null;
+  const rawCat = typeof body.category === "string" ? body.category : null;
   const notes = typeof body.notes === "string" ? body.notes : null;
 
-  if (!monthId || !date || !title || !KINDS.has(kind)) {
-    return NextResponse.json({ error: "monthId, date, kind, title required" }, { status: 400 });
+  if (!date || !title || !KINDS.has(kind)) {
+    return NextResponse.json({ error: "date, kind, title required" }, { status: 400 });
   }
-  if (kind === "shoot" && !category) {
-    return NextResponse.json({ error: "Shoot needs a category" }, { status: 400 });
+
+  let category: string | null = null;
+  if (kind === "shoot") {
+    if (!rawCat || !SHOOT_IDS.has(rawCat)) {
+      return NextResponse.json({ error: "Shoot needs a category" }, { status: 400 });
+    }
+    category = rawCat;
+  } else if (kind === "event") {
+    if (!rawCat || !EVENT_IDS.has(rawCat)) {
+      return NextResponse.json({ error: "Event needs a type (live / workshop)" }, { status: 400 });
+    }
+    category = rawCat;
   }
 
   try {
+    const ym = yearMonthFromDateKey(date);
+    const monthId = await ensureTribecaMonthId(ym);
     const row = await prisma.tribecaCalendarItem.create({
       data: {
         monthId,
         date,
         kind,
         title,
-        category: kind === "shoot" ? category : null,
+        category,
         stage: defaultStageForKind(kind),
         notes,
       },
     });
-    return NextResponse.json({ item: row });
+    return NextResponse.json({ item: row, yearMonth: ym });
   } catch (error) {
     const schema = prismaSchemaErrorResponse(error);
     if (schema) return schema;
@@ -70,14 +97,47 @@ export async function PATCH(req: NextRequest) {
     let stage = typeof body.stage === "string" ? body.stage : current.stage;
     if (body.advance === true) {
       stage = nextStageForKind(current.kind as CalendarKind, current.stage);
+    } else if (typeof body.stage === "string") {
+      const kind = current.kind as CalendarKind;
+      const allowed = stagesForKind(kind);
+      if (!allowed.includes(body.stage)) {
+        return NextResponse.json({ error: "Invalid stage" }, { status: 400 });
+      }
+      if (isStageBackward(kind, current.stage, body.stage)) {
+        const pass =
+          typeof body.stageBackPassword === "string" ? body.stageBackPassword.trim() : "";
+        if (pass !== TRIBECA_STAGE_BACK_PASSWORD) {
+          return NextResponse.json(
+            { error: "Password required to move stage back" },
+            { status: 403 }
+          );
+        }
+      }
+      stage = body.stage;
+    }
+
+    const title =
+      typeof body.title === "string" ? body.title.trim() : undefined;
+    const category = resolveCategory(current.kind, body.category);
+    const nextDate =
+      typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date.trim())
+        ? body.date.trim()
+        : undefined;
+
+    let monthId: string | undefined;
+    if (nextDate && nextDate !== current.date) {
+      monthId = await ensureTribecaMonthId(yearMonthFromDateKey(nextDate));
     }
 
     const row = await prisma.tribecaCalendarItem.update({
       where: { id },
       data: {
         stage,
-        ...(typeof body.title === "string" ? { title: body.title.trim() } : {}),
+        ...(title !== undefined ? { title } : {}),
+        ...(category !== undefined ? { category } : {}),
         ...(typeof body.notes === "string" ? { notes: body.notes } : {}),
+        ...(nextDate ? { date: nextDate } : {}),
+        ...(monthId ? { monthId } : {}),
       },
     });
     return NextResponse.json({ item: row });
