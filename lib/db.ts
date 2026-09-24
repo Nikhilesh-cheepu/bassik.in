@@ -3,7 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool, type PoolConfig } from "pg";
 
 /** Bump when Prisma models/fields change so HMR drops a stale global client. */
-const PRISMA_CLIENT_GENERATION = 16;
+const PRISMA_CLIENT_GENERATION = 17;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;

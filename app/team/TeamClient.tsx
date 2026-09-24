@@ -32,6 +32,7 @@ import TeamVaultView, { emptyVaultForm, type VaultForm } from "./TeamVaultView";
 import TeamCalendarView from "./TeamCalendarView";
 import TeamShootsView from "./TeamShootsView";
 import TeamContentFilesView from "./TeamContentFilesView";
+import TeamDriveLinksView from "./TeamDriveLinksView";
 import TeamTasksView from "./TeamTasksView";
 import TeamDesignerView from "./TeamDesignerView";
 import TeamBrainView from "./TeamBrainView";
@@ -291,6 +292,7 @@ export default function TeamClient() {
   const [calendarAddSignal, setCalendarAddSignal] = useState(0);
   const [shootAddSignal, setShootAddSignal] = useState(0);
   const [contentFilesAddSignal, setContentFilesAddSignal] = useState(0);
+  const [driveLinksAddSignal, setDriveLinksAddSignal] = useState(0);
   const [noteForm, setNoteForm] = useState<NoteForm>(emptyNoteForm());
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [notesSearch, setNotesSearch] = useState("");
@@ -520,6 +522,7 @@ export default function TeamClient() {
         tab === "shoots" ||
         tab === "raw-files" ||
         tab === "edit-files" ||
+        tab === "drive" ||
         tab === "tasks" ||
         tab === "designer")
     ) {
@@ -1218,6 +1221,14 @@ export default function TeamClient() {
         >
           {tab === "raw-files" ? "+ Raw file" : "+ Edit file"}
         </button>
+      ) : tab === "drive" && !isViewer ? (
+        <button
+          type="button"
+          onClick={() => setDriveLinksAddSignal((n) => n + 1)}
+          className="rounded-xl bg-cyan-600 px-4 py-2 text-sm font-semibold text-white"
+        >
+          + Drive link
+        </button>
       ) : tab === "vault" ? (
         <button
           type="button"
@@ -1256,6 +1267,14 @@ export default function TeamClient() {
       >
         + Add
       </button>
+    ) : tab === "drive" && !isViewer ? (
+      <button
+        type="button"
+        onClick={() => setDriveLinksAddSignal((n) => n + 1)}
+        className="rounded-xl bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white"
+      >
+        + Add
+      </button>
     ) : isContent && tab === "vault" ? (
       <button
         type="button"
@@ -1278,6 +1297,7 @@ export default function TeamClient() {
         hideShoots={!isContent}
         hideRawFiles={!isContent}
         hideEditFiles={!isContent}
+        hideDrive={isViewer}
         hideAds={isContent}
         hideDesigner={
           isViewer ||
@@ -1325,6 +1345,7 @@ export default function TeamClient() {
           tab === "shoots" ||
           tab === "raw-files" ||
           tab === "edit-files" ||
+          tab === "drive" ||
           tab === "tasks" ||
           tab === "designer"
             ? "flex flex-col overflow-hidden py-0 max-xl:px-0 max-xl:max-w-none md:py-4"
@@ -1419,6 +1440,8 @@ export default function TeamClient() {
             canEdit={canCreateShoots(user)}
             addSignal={contentFilesAddSignal}
           />
+        ) : tab === "drive" && !isViewer ? (
+          <TeamDriveLinksView canEdit={!isViewer} addSignal={driveLinksAddSignal} />
         ) : tab === "calendar" && !isViewer ? (
           <TeamCalendarView
             members={members}
@@ -1510,6 +1533,10 @@ export default function TeamClient() {
             setContentFilesAddSignal((n) => n + 1);
             return;
           }
+          if (tab === "drive" && !isViewer) {
+            setDriveLinksAddSignal((n) => n + 1);
+            return;
+          }
           if (tab === "reminders" && !isViewer) {
             focusNoteComposer();
             return;
@@ -1532,6 +1559,9 @@ export default function TeamClient() {
         open={showActionSheet}
         onClose={() => setShowActionSheet(false)}
         actions={[
+          ...(!isViewer
+            ? [{ label: "Drive links", onClick: () => setTab("drive"), tone: "default" as const }]
+            : []),
           ...(user.role === "admin"
             ? [{ label: "New ad task", onClick: openCreateTask, tone: "accent" as const }]
             : []),
@@ -1568,6 +1598,7 @@ export default function TeamClient() {
         onReminders={!isContent ? () => setTab("reminders") : undefined}
         onRawFiles={isContent ? () => setTab("raw-files") : undefined}
         onEditFiles={isContent ? () => setTab("edit-files") : undefined}
+        onDrive={!isViewer ? () => setTab("drive") : undefined}
         onVault={!isViewer && !isContent ? () => setTab("vault") : undefined}
         onCalendar={!isViewer && !isContent ? () => setTab("calendar") : undefined}
         onChecklists={!isViewer ? () => setTab("tasks") : undefined}

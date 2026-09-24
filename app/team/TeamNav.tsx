@@ -8,6 +8,7 @@ export const TEAM_TABS = [
   { id: "shoots", label: "Shoots", short: "Shoots" },
   { id: "raw-files", label: "Raw", short: "Raw files" },
   { id: "edit-files", label: "Edit", short: "Editing files" },
+  { id: "drive", label: "Drive", short: "Drive links" },
   { id: "calendar", label: "Calendar", short: "Calendar" },
   { id: "reminders", label: "Notes", short: "Notes" },
   { id: "vault", label: "Passwords", short: "Passwords" },
@@ -26,6 +27,7 @@ type NavProps = {
   hideShoots?: boolean;
   hideRawFiles?: boolean;
   hideEditFiles?: boolean;
+  hideDrive?: boolean;
   hideAds?: boolean;
   hideDesigner?: boolean;
   hideTasks?: boolean;
@@ -45,6 +47,7 @@ function visibleTabs({
   hideShoots,
   hideRawFiles,
   hideEditFiles,
+  hideDrive,
   hideAds,
   hideDesigner,
   hideTasks,
@@ -58,6 +61,7 @@ function visibleTabs({
   | "hideShoots"
   | "hideRawFiles"
   | "hideEditFiles"
+  | "hideDrive"
   | "hideAds"
   | "hideDesigner"
   | "hideTasks"
@@ -71,6 +75,7 @@ function visibleTabs({
     if (hideShoots && t.id === "shoots") return false;
     if (hideRawFiles && t.id === "raw-files") return false;
     if (hideEditFiles && t.id === "edit-files") return false;
+    if (hideDrive && t.id === "drive") return false;
     if (hideAds && t.id === "ads") return false;
     if (hideDesigner && t.id === "designer") return false;
     if (hideTasks && t.id === "tasks") return false;
@@ -89,6 +94,7 @@ export function TeamSidebarNav({
   hideShoots,
   hideRawFiles,
   hideEditFiles,
+  hideDrive,
   hideAds,
   hideDesigner,
   hideTasks,
@@ -104,6 +110,7 @@ export function TeamSidebarNav({
     hideShoots,
     hideRawFiles,
     hideEditFiles,
+    hideDrive,
     hideAds,
     hideDesigner,
     hideTasks,
@@ -162,6 +169,7 @@ export default function TeamBottomNav({
   hideShoots,
   hideRawFiles,
   hideEditFiles,
+  hideDrive,
   hideAds,
   hideDesigner,
   hideTasks,
@@ -175,6 +183,7 @@ export default function TeamBottomNav({
     hideShoots,
     hideRawFiles,
     hideEditFiles,
+    hideDrive,
     hideAds,
     hideDesigner,
     hideTasks,

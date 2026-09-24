@@ -13,6 +13,7 @@ const TAB_TITLES: Record<TeamTab, string> = {
   shoots: "Shoots",
   "raw-files": "Raw files",
   "edit-files": "Editing files",
+  drive: "Drive links",
   calendar: "Calendar",
   reminders: "Notes",
   vault: "Passwords",
@@ -27,6 +28,7 @@ const MOBILE_TITLES: Record<TeamTab, string> = {
   shoots: "Shoots",
   "raw-files": "Raw files",
   "edit-files": "Editing files",
+  drive: "Drive links",
   calendar: "Calendar",
   reminders: "Notes",
   vault: "Passwords",
@@ -132,6 +134,8 @@ export default function TeamPageHeader({
     <p className="mt-0.5 text-[11px] text-white/35">Title, link, and description</p>
   ) : tab === "edit-files" ? (
     <p className="mt-0.5 text-[11px] text-white/35">Title, link, description — To edit or Already edited</p>
+  ) : tab === "drive" ? (
+    <p className="mt-0.5 text-[11px] text-white/35">Title, link, auto date — optional description</p>
   ) : tab !== "ai" && !isMemberHub && tab !== "reminders" && tab !== "calendar" ? (
     <p className="mt-0.5 text-[11px] text-white/35 xl:hidden">{userLabel}</p>
   ) : isMemberHub || tab === "reminders" ? (

@@ -97,7 +97,7 @@ export default function TeamDock({
             <IconKey className="h-[20px] w-[20px]" />
             Pass
           </button>
-          <button type="button" onClick={onMore} className={dockItem(tab === "raw-files" || tab === "edit-files")}>
+          <button type="button" onClick={onMore} className={dockItem(tab === "raw-files" || tab === "edit-files" || tab === "drive")}>
             <IconMore className="h-[20px] w-[20px]" />
             More
           </button>
@@ -212,7 +212,7 @@ export default function TeamDock({
         <button
           type="button"
           onClick={onMore}
-          className={dockItem(tab === "ai")}
+          className={dockItem(tab === "ai" || tab === "drive")}
         >
           <IconMore className="h-[22px] w-[22px]" />
           More
@@ -269,6 +269,7 @@ export function TeamMoreSheet({
   onReminders,
   onRawFiles,
   onEditFiles,
+  onDrive,
   onVault,
   onCalendar,
   onChecklists,
@@ -283,6 +284,7 @@ export function TeamMoreSheet({
   onReminders?: () => void;
   onRawFiles?: () => void;
   onEditFiles?: () => void;
+  onDrive?: () => void;
   onVault?: () => void;
   onCalendar?: () => void;
   onChecklists?: () => void;
@@ -296,6 +298,7 @@ export function TeamMoreSheet({
   const items = [
     ...(onRawFiles ? [{ label: "Raw files", icon: IconFilm, onClick: onRawFiles }] : []),
     ...(onEditFiles ? [{ label: "Editing files", icon: IconScissors, onClick: onEditFiles }] : []),
+    ...(onDrive ? [{ label: "Drive links", icon: IconFilm, onClick: onDrive }] : []),
     ...(onCalendar ? [{ label: "Calendar", icon: IconCalendar, onClick: onCalendar }] : []),
     ...(onDesigner ? [{ label: "Design queue", icon: IconEdit, onClick: onDesigner }] : []),
     ...(onChecklists ? [{ label: "Daily", icon: IconPlan, onClick: onChecklists }] : []),
