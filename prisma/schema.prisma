@@ -524,6 +524,20 @@ enum TeamContentEditStatus {
   EDITED
 }
 
+/// Shared Google Drive (and other) links for the whole team.
+model TeamDriveLink {
+  id          String   @id @default(cuid())
+  ownerId     String
+  title       String
+  url         String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdAt])
+  @@index([ownerId])
+}
+
 /// Organized raw footage or edit pipeline items for content creators.
 model TeamContentFile {
   id         String                 @id @default(cuid())
